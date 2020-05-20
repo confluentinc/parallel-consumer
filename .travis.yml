@@ -1,0 +1,37 @@
+language: java
+jdk:
+  - openjdk11
+
+sudo: required
+
+# docker and docker in docker setup. disabled for faster builds until needed
+#services:
+#  - docker
+#
+#before_cache:
+#  - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
+#  - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
+#cache:
+#  directories:
+#    - "$HOME/.gradle/caches/"
+#    - "$HOME/.gradle/wrapper/"
+#
+#before_install:
+#  - sudo rm /usr/local/bin/docker-compose
+#  - curl -L https://github.com/docker/compose/releases/download/1.24.1/docker-compose-Linux-x86_64 > docker-compose
+#  - chmod +x docker-compose
+#  - sudo mv docker-compose /usr/local/bin
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
+
+addons:
+  sonarcloud:
+    organization: "astubbs"
+    token:
+      secure: "zUbcZgSuBEi1j8nboM6y5Eoj7Go6OdcW4h9IYk7iYbHVlSwTCzq1Tez0FG2moSvyxgwaXD+ySd4XvbH1hT04R59b2fumFt2eWO3FbSHFrE3dXdOxliz47FLXkqpg8MvEWNkF4hPHwsi9LTXl4u7UuFRTqOCLilA5RUBZyzQ03AExMQJdZgdlestarlys40thISEGHNmNd4nr+EEekkaekN+1iE3v4HZpXXv8COLdp10Hehl6RPg9ooCZ3g8B++IOI5MdRxMf3HeERyKapMN1xGT6ZpeCkaFd/GbbAjzjlhKHIJ37Mmo2l9nJs/9dpBml62SFb1WdpG+7610e49vQbHuy1yb9h1XOJPdw45AZw+g61/6LTmGuNNlkUTstELQEN0iDoo0GqEMtIlVplKUcnzVAXtldvKU4Ph7Satdk4wdA3K+4E+zhaMaJhzUBNluChF5JldOOQDV5odt9K0rZCH/4zGbmsR0nev+g6JW1DX96laqLkuA4Am1aDistZSjt3T3HqhAXcpf/8VW4p1HKtYhsmMybnOuqoOH7sBpwxXoR0Myvj6FMrh4On/t+/vYQSJm+vyiyLShP/Bouk+azygIcjG3ZUmaFpumRpKesK6C9EYCA2d59vnsYU0/Ob+IwvrDVY40HQl41A+ooC+WVQf8scvvFAIJpYH6V/0TCWXg="
+
+script:
+  # the following command line builds the project, runs the tests with coverage and then execute the SonarCloud analysis
+  # - mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install sonar:sonar versions:display-dependency-updates
+  - mvn clean verify versions:display-dependency-updates
