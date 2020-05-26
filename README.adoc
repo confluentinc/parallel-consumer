@@ -90,7 +90,8 @@ Consider using libraries to manage concurrent resource management, like https://
 
 ## Using with Kafka Streams
 
-Kafka Streams (KS) doesn't yet have async processing of messages.
+Kafka Streams (KS) doesn't yet (https://cwiki.apache.org/confluence/display/KAFKA/KIP-311%3A+Async+processing+with+dynamic+scheduling+in+Kafka+Streams[KIP-311],
+https://cwiki.apache.org/confluence/display/KAFKA/KIP-408%3A+Add+Asynchronous+Processing+To+Kafka+Streams[KIP-408]) have async processing of messages.
 However, any given preprocessing can be done in KS, preparing the messages.
 One can then use this library to consume from an input topic, produced by KS to process the messages in parallel.
 
@@ -111,7 +112,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 ** TX tests
 ** Volume & ordering tests
 ** Avro test
-* Exponential back off optional with optional max
+* Exponential back off optional with an optional max
 * Transactions optional
 
 ### Medium Term - What's up next. ⏲
@@ -120,6 +121,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 
 * DLQ
 * Max in flight global, per partition, pre topic
+* Non-blocking I/O work management
 
 ### Long Term - The future ☁️
 
