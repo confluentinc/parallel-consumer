@@ -1,0 +1,133 @@
+# async-consumer
+:icons:
+:toc: macro
+:toclevels: 3
+:numbered: 1
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"]
+
+An asynchronous messaging processing library for the Apache Kafka consumer
+
+toc::[]
+
+## Per Client Asynchronous AK Message Processing
+
+This library will process messages consumed from Apache Kafka (AK) in parallel.
+It correctly enforces the order of committed offsets in the source partition, such that upon system failure, messages will be retried.
+
+CAUTION: Beware of third party systems which are not idempotent, or are key order sensitive.
+
+### Order enforced commit sync per partition
+
+The user has the option to either choose ordered, or unordered message processing.
+
+Either in `ordered` or `unordered` processing, the system will only commit offsets for messages which have been successfully processed.
+
+Choose either, `ordered` processing means that processing of a given partition won't advance until each message has been successfully process.
+This can hold up a partition, but ensures process order matches partition order.
+
+TIP: `Unordered` processing is highly concurrent processing per partition, `ordered` is not.
+
+CAUTION: `Unordered` processing could cause problems for third party integration where ordering by key is required.
+
+#### Unordered
+
+Unordered processing is where there is no such restriction on there being multiple messages being processed per partition.
+However, regardless of how far along the partition the processing progresses, the earliest outstanding message will block committing of offsets.
+
+WARNING: If the system fails with many messages processed ahead of a single old message, ALL these messages will be rpocessed again.
+
+#### Ordered by Partition
+
+At most only one message from any given input partition will be in flight at any given time.
+This means that concurrent processing is restricted to the number of input partitions.
+
+The advantage of ordered processing mode, is that for an input of 1000 partitions, you do not need to run 1000 application instances or threads, to process the partitions in parallel.
+
+#### Ordered by Key (coming next)
+
+Most similar to ordered by partition, this mode ensures process ordering by key.
+
+The advantage of this mode, is that a given input topic may not have many partitions, it may have a ~large number of keys.
+Each of these key/message sets can actually possibly be processed concurrently, bringing concurrent processing to a per key level, without having to increase the number of input partitions, whilst keeping key ordering for the integrated systems.
+
+And as usual, the order of offset commit's will be correct such that under failure, the system will resume from the most recently committed message in the input partitions.
+
+CAUTION: Beware of retries, idempotency and roll backs
+
+## Retries and Ordering
+
+Even during retries, offsets will always be committed only after successful processing, and in order.
+
+During `ordered` processing, retries will cause a partitions messages to be held up either until the message is given up on and sent to the DLQ.
+
+### Result Consumption Models
+
+* Void
+
+* Streaming User Results
+
+* Streaming Message Publishing Results
+
+## AK EoS Transaction Model
+
+Optionally, the user can enable AK EoE mode.
+This causes all messages produced as a result of processing a message to be committed within a transaction.
+This means that even under failure, at least for the Kafka output topic, the results will exist exactly once.
+
+CAUTION: This cannot be true for any externally integrated third party system, unless that system is Idempotent.
+
+## Your Function
+
+Consider using libraries to manage concurrent resource management, like https://github.com/resilience4j/resilience4j[resilience4j]'s.
+
+## Using with Kafka Streams
+
+Kafka Streams (KS) doesn't yet have async processing of messages.
+However, any given preprocessing can be done in KS, preparing the messages.
+One can then use this library to consume from an input topic, produced by KS to process the messages in parallel.
+
+## Roadmap
+
+### Short Term - What we're working on now. ⏰
+
+---
+
+* Per `key` concurrent processing instead of per partition
+* Close consumer producer 
+* Can’t call async consumer methods more than once, must shutdown, create new
+* Make a “KafkaConsumer” which delegates, but create async. So only have to change package name to import.
+* Remove comparable 
+* Test retries
+* Producer is optional 
+* Integration tests
+** TX tests
+** Volume & ordering tests
+** Avro test
+* Exponential back off optional with optional max
+* Transactions optional
+
+### Medium Term - What's up next. ⏲
+
+---
+
+* DLQ
+* Max in flight global, per partition, pre topic
+
+### Long Term - The future ☁️
+
+---
+
+* Apache Kafka KIP
+* Call backs only after offset has been committed
+* resilience4j example
+* Kafka Streams integration example
+
+---
