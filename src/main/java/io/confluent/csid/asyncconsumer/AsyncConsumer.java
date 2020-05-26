@@ -158,6 +158,11 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         internalPool.shutdown();
         log.debug("Awaiting controller termination...");
         boolean internalShutdown = internalPool.awaitTermination(10L, SECONDS);
+
+        log.debug("Closing producer and consumer...");
+        this.consumer.close(defaultTimeout);
+        this.producer.close(defaultTimeout);
+
         supervisorThread.get(); // throws exception if supervisor saw one
     }
 
