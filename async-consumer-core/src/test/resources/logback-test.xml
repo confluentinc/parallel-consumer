@@ -1,0 +1,27 @@
+<configuration packagingData="true">
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- encoders are assigned the type
+             ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
+        <encoder>
+<!--            <pattern>%d{mm:ss.SSS} [%thread] %-5level (%class{0}.java:%line\)#%M - %msg%n</pattern>-->
+<!--            <pattern>[%thread] %-5level .\(%class{0}.java:%line\)#%M - %msg%n</pattern>-->
+<!--            <pattern>[%thread] %-5level .\(%file:%line\)#%M - %msg%n</pattern>-->
+<!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%class{0}.java:%line\)) %msg%n</pattern>-->
+<!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%file:%line\)) %msg%n</pattern>-->
+<!--            <pattern>%highlight(%-5level) %yellow([%thread]) %blue(\(%file:%line\)) %cyan(#%M) %msg%n</pattern>-->
+            <pattern>%highlight(%-5level) %yellow([%thread]) %cyan(\(%file:%line#%M\))  %msg%n</pattern>
+<!--            <pattern>%highlight(%-5level) %yellow([%thread]) %cyan(\(%logger{36}:%line#%M\))  %msg%n</pattern>-->
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+    <logger name="io.confluent.csid" level="trace" />
+
+    <logger name="io.vertx" level="debug" />
+    <logger name="io.netty" level="info" />
+
+</configuration>

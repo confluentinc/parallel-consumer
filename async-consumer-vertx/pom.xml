@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>async-consumer-parent</artifactId>
+        <groupId>io.confluent.csig.asyncconsumer</groupId>
+        <version>0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>async-consumer-vertx</artifactId>
+    <name>Async Consumer Vert.x</name>
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <properties>
+        <vertx.version>4.0.0-milestone4</vertx.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.confluent.csig.asyncconsumer</groupId>
+            <artifactId>async-consumer-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.confluent.csig.asyncconsumer</groupId>
+            <artifactId>async-consumer-core</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <scope>test</scope>
+        </dependency>
+        <!-- External-->
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web-client</artifactId>
+            <version>${vertx.version}</version>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-junit5</artifactId>
+            <version>${vertx.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.tomakehurst</groupId>
+            <artifactId>wiremock</artifactId>
+            <version>2.26.3</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

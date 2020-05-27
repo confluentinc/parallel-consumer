@@ -122,6 +122,9 @@ One can then use this library to consume from an input topic, produced by KS to 
 * DLQ
 * Max in flight global, per partition, pre topic
 * Non-blocking I/O work management
+** Change to process HTTP result and indicate success or failure
+** Chance to batch multiple consumer records into a single or multiple http request objects
+* Support https://jitpack.io/ version
 
 ### Long Term - The future ☁️
 
