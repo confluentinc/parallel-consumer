@@ -1,6 +1,6 @@
 package io.confluent.csid.asyncconsumer;
 
-import io.confluent.csid.utils.KafkaUtils;
+import io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder;
 import io.confluent.csid.utils.WallClock;
 import lombok.Getter;
 import lombok.Setter;
@@ -11,7 +11,6 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.*;
 
-import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static lombok.AccessLevel.PACKAGE;
 
 /**
@@ -23,9 +22,10 @@ import static lombok.AccessLevel.PACKAGE;
 @Slf4j
 public class WorkManager<K, V> {
 
-    Map<TopicPartition, TreeMap<Long, WorkContainer<K, V>>> partitionMap = new HashMap<>();
+    @Getter
+    private final AsyncConsumerOptions options;
 
-    private boolean orderedProcessing = false;
+    Map<Object, TreeMap<Long, WorkContainer<K, V>>> shardMap = new HashMap<>();
 
     private int maxInFlight;
 
@@ -36,34 +36,39 @@ public class WorkManager<K, V> {
     @Setter(PACKAGE)
     private WallClock clock = new WallClock();
 
-    public WorkManager() {
-        this(1000);
-    }
-
-    public WorkManager(int max) {
+    public WorkManager(int max, AsyncConsumerOptions options) {
         this.maxInFlight = max;
+        this.options = options;
     }
 
     public <R> void registerWork(ConsumerRecords<K, V> records) {
         for (ConsumerRecord<K, V> rec : records) {
-            var tp = new TopicPartition(rec.topic(), rec.partition());
+            Object shardKey = computeShardKey(rec);
             long offset = rec.offset();
             var wc = new WorkContainer<K, V>(rec);
 
-            partitionMap.computeIfAbsent(tp, (ignore) -> new TreeMap<>())
+            shardMap.computeIfAbsent(shardKey, (ignore) -> new TreeMap<>())
                     .put(offset, wc);
         }
     }
 
+    private Object computeShardKey(ConsumerRecord<K, V> rec) {
+        var key = switch (options.getOrdering()) {
+            case KEY -> rec.key();
+            case PARTITION, NONE -> new TopicPartition(rec.topic(), rec.partition());
+        };
+        return key;
+    }
+
     public <R> List<WorkContainer<K, V>> getWork() {
-        return getWork(orderedProcessing, maxInFlight);
+        return getWork(maxInFlight);
     }
 
     // todo make fair, esp when in no order
-    public <R> List<WorkContainer<K, V>> getWork(boolean ordered, int max) {
+    public <R> List<WorkContainer<K, V>> getWork(int max) {
         List<WorkContainer<K, V>> work = new ArrayList<>();
 
-        for (var e : partitionMap.entrySet()) {
+        for (var e : shardMap.entrySet()) {
             if (work.size() >= max)
                 break;
 
@@ -82,13 +87,13 @@ public class WorkManager<K, V> {
                     partitionWork.add(wc);
                 }
 
-                if (ordered) {
+                if (options.getOrdering() == ProcessingOrder.NONE) {
+                    // take it - we don't care about processing order, check the next message
+                    continue;
+                } else {
                     // can't take any more from this partition until this work is finished
                     // processing blocked on this partition, continue to next partition
                     break;
-                } else {
-                    // take it - we don't care about processing order, check the next message
-                    continue;
                 }
             }
             work.addAll(partitionWork);
@@ -99,8 +104,9 @@ public class WorkManager<K, V> {
     public void success(WorkContainer<K, V> wc) {
         log.debug("Work success, removing from queue");
         wc.succeed();
-        ConsumerRecord<?, ?> cr = wc.getCr();
-        partitionMap.get(toTP(cr)).remove(cr.offset());
+        ConsumerRecord<K, V> cr = wc.getCr();
+        Object key = computeShardKey(cr);
+        shardMap.get(key).remove(cr.offset());
         successfulWork.add(wc);
     }
 
@@ -115,24 +121,24 @@ public class WorkManager<K, V> {
 
     private void putBack(WorkContainer<K, V> wc) {
         log.debug("Work FAILED, returning to queue");
-        ConsumerRecord<?, ?> cr = wc.getCr();
-        var tp = toTP(cr);
-        var queue = partitionMap.get(tp);
+        ConsumerRecord<K, V> cr = wc.getCr();
+        Object key = computeShardKey(cr);
+        var queue = shardMap.get(key);
         long offset = wc.getCr().offset();
         queue.put(offset, wc);
     }
 
     int workRemainingCount() {
         int count = 0;
-        for (var e : this.partitionMap.entrySet()) {
+        for (var e : this.shardMap.entrySet()) {
             count += e.getValue().size();
         }
         return count;
     }
 
     public WorkContainer<K, V> getWorkContainerForRecord(ConsumerRecord<K, V> rec) {
-        TopicPartition topicPartition = toTP(rec);
-        TreeMap<Long, WorkContainer<K, V>> longWorkContainerTreeMap = this.partitionMap.get(topicPartition);
+        Object key = computeShardKey(rec);
+        TreeMap<Long, WorkContainer<K, V>> longWorkContainerTreeMap = this.shardMap.get(key);
         long offset = rec.offset();
         WorkContainer<K, V> wc = longWorkContainerTreeMap.get(offset);
         return wc;

@@ -37,6 +37,8 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
 
     private final int numberOfThreads = 3;
 
+    private final AsyncConsumerOptions asyncConmerOptions;
+
     private boolean shouldPoll = true;
 
     // TODO configurable number of threads
@@ -50,7 +52,7 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
 
     private final Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
 
-    protected WorkManager<K, V> wm = new WorkManager<>();
+    protected WorkManager<K, V> wm;
 
     @Setter
     @Getter
@@ -64,9 +66,11 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
 
     private final Queue<WorkContainer<K, V>> mailBox = new ConcurrentLinkedQueue<>(); // Thread safe, highly performant, non blocking
 
-    public AsyncConsumer(Consumer<K, V> consumer, Producer<K, V> producer) {
+    public AsyncConsumer(Consumer<K, V> consumer, Producer<K, V> producer, AsyncConsumerOptions asyncConsumerOptions) {
         this.consumer = consumer;
         this.producer = producer;
+        this.asyncConmerOptions = asyncConsumerOptions;
+        wm = new WorkManager<>(1000, asyncConsumerOptions);
     }
 
     public void asyncVoidPoll(java.util.function.Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
@@ -437,7 +441,9 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
                 } else {
                     // can't commit this offset or beyond, as this is the latest offset that is incomplete
                     // i.e. only commit offsets that come before the current one, and stop looking for more
-                    log.debug("Offset {} is incomplete, holding up the queue. Ending partition scan.", container.getCr().offset());
+                    log.debug("Offset {} is incomplete, holding up the queue ({}). Ending partition scan.",
+                            container.getCr().offset(),
+                            inFlightInPartition.getKey());
                     break;
                 }
             }
