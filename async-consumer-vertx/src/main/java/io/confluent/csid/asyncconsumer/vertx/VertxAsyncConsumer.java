@@ -1,6 +1,7 @@
 package io.confluent.csid.asyncconsumer.vertx;
 
 import io.confluent.csid.asyncconsumer.AsyncConsumer;
+import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.asyncconsumer.WorkContainer;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -38,11 +39,11 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
     private WebClient webClient;
 
     public VertxAsyncConsumer(Consumer consumer, Producer producer) {
-        this(consumer, producer, Vertx.vertx(), null);
+        this(consumer, producer, Vertx.vertx(), null, null);
     }
 
-    public VertxAsyncConsumer(Consumer consumer, Producer producer, Vertx vertx, WebClient webClient) {
-        super(consumer, producer);
+    public VertxAsyncConsumer(Consumer consumer, Producer producer, Vertx vertx, WebClient webClient, AsyncConsumerOptions options) {
+        super(consumer, producer, options);
         if (vertx == null)
             vertx = Vertx.vertx();
         this.vertx = vertx;

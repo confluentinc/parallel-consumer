@@ -3,6 +3,7 @@ package io.confluent.csid.asyncconsumer.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.csid.asyncconsumer.AsyncConsumer.Tuple;
+import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
 import io.vertx.core.AsyncResult;
@@ -22,7 +23,6 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -64,7 +64,8 @@ public class VertxTest extends AsyncConsumerTestBase {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
-        vertxAsync = new VertxAsyncConsumer<>(consumerSpy, producerSpy, vertx, wc);
+        AsyncConsumerOptions build = AsyncConsumerOptions.builder().build();
+        vertxAsync = new VertxAsyncConsumer<>(consumerSpy, producerSpy, vertx, wc, build);
         vertxAsync.setLongPollTimeout(ofMillis(100));
         vertxAsync.setTimeBetweenCommits(ofMillis(100));
     }

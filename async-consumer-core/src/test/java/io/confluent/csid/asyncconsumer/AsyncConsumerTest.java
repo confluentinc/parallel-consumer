@@ -1,10 +1,8 @@
 package io.confluent.csid.asyncconsumer;
 
-import io.confluent.csid.utils.KafkaUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
-import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -14,16 +12,12 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 
-import java.lang.invoke.VarHandle;
-import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
@@ -50,11 +44,15 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
     @BeforeEach
     public void setupAsyncConsumerTest() {
-        asyncConsumer = new AsyncConsumer<MyKey, MyInput>(consumerSpy, producerSpy);
-        asyncConsumer.setLongPollTimeout(ofMillis(100));
-        asyncConsumer.setTimeBetweenCommits(ofMillis(100));
+        setupAsyncConsumerInstance(AsyncConsumerOptions.builder().build());
 
         wait = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
+    }
+
+    private void setupAsyncConsumerInstance(AsyncConsumerOptions asyncConsumerOptions) {
+        asyncConsumer = new AsyncConsumer<MyKey, MyInput>(consumerSpy, producerSpy, asyncConsumerOptions);
+        asyncConsumer.setLongPollTimeout(ofMillis(100));
+        asyncConsumer.setTimeBetweenCommits(ofMillis(100));
     }
 
     @Test
@@ -315,6 +313,9 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         });
         reentrantLock.await(defaultTimeoutSeconds, SECONDS);
         asyncConsumer.close(defaultTimeout);
+
+        assertCommits(of(1));
+
         verify(myRecordProcessingAction, times(expected)).apply(any());
         verify(producerSpy).commitTransaction();
         verify(producerSpy).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
@@ -399,7 +400,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
     @Test
     @Disabled
-    public void userSucceedsButProduceFails() {
+    public void userSucceedsButProduceToBrokerFails() {
     }
 
     @Test
@@ -427,6 +428,81 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @Test
     @Disabled
     public void ifTooManyMessagesAreInFlightDontPollBrokerForMore() {
+    }
+
+    @Test
+    public void processInKeyOrder() {
+//        AsyncConsumerOptions asyncConsumerOptions = new AsyncConsumerOptions();
+        AsyncConsumerOptions options = AsyncConsumerOptions.builder().ordering(KEY).build();
+        setupAsyncConsumerInstance(options);
+
+        // 0,1 previously sent to partition 0
+        // send two more to part 0 - 2,3,
+        consumer.addRecord(makeRecord("key-1", "v2")); // 2
+        consumer.addRecord(makeRecord("key-1", "v3")); // 3
+
+        // and 3,4 to another partition
+        consumer.addRecord(makeRecord(1, "key-3", "v4")); // 4
+        consumer.addRecord(makeRecord(1, "key-4", "v5")); // 5
+
+        // so 3 and 4 will block each other only
+        // and 0,1,2,3 will all block each other (part 0)
+
+        var msg0Lock = new CountDownLatch(1);
+        var msg1Lock = new CountDownLatch(1);
+        var msg2Lock = new CountDownLatch(1);
+        var msg3Lock = new CountDownLatch(1);
+        var msg4Lock = new CountDownLatch(1);
+        var msg5Lock = new CountDownLatch(1);
+
+        List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock, msg4Lock, msg5Lock);
+
+        asyncConsumer.asyncVoidPoll((ignore) -> {
+            int offset = (int) ignore.offset();
+            CountDownLatch latchForMsg = locks.get(offset);
+            try {
+                latchForMsg.await();
+            } catch (InterruptedException e) {
+                // ignore
+            }
+            log.debug("{} proceeding after waking...", offset);
+        });
+
+        // finish processing 1
+        msg1Lock.countDown();
+
+        // make sure no offsets are committed
+        assertCommits(of());
+
+        // finish 2
+        log.debug("Finishing 2...");
+        msg2Lock.countDown();
+
+        // still nothing - 0 blocks 1 and 2 (part 0)
+        verify(producerSpy, after(wait).never()).commitTransaction();
+        assertCommits(of());
+
+        // finish 0 - releases pending
+        msg0Lock.countDown();
+
+        // make sure offset 0 and 1 is committed
+        verify(producerSpy, after(wait).times(1)).commitTransaction();
+        assertCommits(of(2));
+
+        // finish 3 & 5
+        msg3Lock.countDown();
+        msg5Lock.countDown();
+
+        // 5 still blocks 5
+        verify(producerSpy, after(wait).times(2)).commitTransaction();
+        assertCommits(of(2, 3));
+
+        // finish 4
+        msg4Lock.countDown();
+
+        // 4 now unblocked 5
+        verify(producerSpy, after(wait).times(3)).commitTransaction();
+        assertCommits(of(2, 3, 5));
     }
 
 }
