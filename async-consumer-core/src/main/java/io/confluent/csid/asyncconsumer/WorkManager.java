@@ -55,7 +55,7 @@ public class WorkManager<K, V> {
     private Object computeShardKey(ConsumerRecord<K, V> rec) {
         var key = switch (options.getOrdering()) {
             case KEY -> rec.key();
-            case PARTITION, NONE -> new TopicPartition(rec.topic(), rec.partition());
+            case PARTITION, UNORDERED -> new TopicPartition(rec.topic(), rec.partition());
         };
         return key;
     }
@@ -87,7 +87,7 @@ public class WorkManager<K, V> {
                     partitionWork.add(wc);
                 }
 
-                if (options.getOrdering() == ProcessingOrder.NONE) {
+                if (options.getOrdering() == ProcessingOrder.UNORDERED) {
                     // take it - we don't care about processing order, check the next message
                     continue;
                 } else {

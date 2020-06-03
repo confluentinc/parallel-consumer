@@ -2,8 +2,11 @@ package io.confluent.csid.asyncconsumer;
 
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.*;
-import org.apache.kafka.clients.producer.Producer;
+
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -13,10 +16,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
+import static io.confluent.csid.asyncconsumer.AsyncConsumer.Tuple.pairOf;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -29,15 +32,15 @@ import static org.awaitility.Awaitility.waitAtMost;
 @Slf4j
 public class AsyncConsumer<K, V> implements Closeable { // TODO generics for produce vs consume, different produce topics may need different generics
 
-    final private Consumer<K, V> consumer;
+    final private org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
-    final private Producer<K, V> producer;
+    final private org.apache.kafka.clients.producer.Producer<K, V> producer;
 
     protected final Duration defaultTimeout = Duration.ofSeconds(10); // increase if debugging
 
     private final int numberOfThreads = 3;
 
-    private final AsyncConsumerOptions asyncConmerOptions;
+    private final AsyncConsumerOptions asyncConsumerOptions;
 
     private boolean shouldPoll = true;
 
@@ -66,45 +69,59 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
 
     private final Queue<WorkContainer<K, V>> mailBox = new ConcurrentLinkedQueue<>(); // Thread safe, highly performant, non blocking
 
-    public AsyncConsumer(Consumer<K, V> consumer, Producer<K, V> producer, AsyncConsumerOptions asyncConsumerOptions) {
+    public AsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                         org.apache.kafka.clients.producer.Producer<K, V> producer,
+                         AsyncConsumerOptions asyncConsumerOptions) {
         this.consumer = consumer;
         this.producer = producer;
-        this.asyncConmerOptions = asyncConsumerOptions;
+        this.asyncConsumerOptions = asyncConsumerOptions;
         wm = new WorkManager<>(1000, asyncConsumerOptions);
     }
 
-    public void asyncVoidPoll(java.util.function.Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
-        this.asyncPollAndStream((record) -> {
+    /**
+     * todo
+     *
+     * @param usersVoidConsumptionFunction
+     */
+    public void asyncPoll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
+        Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.info("asyncPoll - Consumed a record ({}), executing void function...", record.value());
             usersVoidConsumptionFunction.accept(record);
-            return List.of();
-        });
+            List<Object> userFunctionReturnsNothing = List.of();
+            return userFunctionReturnsNothing;
+        };
+        Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
+        asyncPollInternal(wrappedUserFunc, voidCallBack);
     }
 
     /**
+     * todo
+     *
+     * @param userFunction
+     * @param callback     applied after message ack'd by kafka
      * @return a stream of results for monitoring, as messages are produced into the output topic
      */
     @SneakyThrows
-    public <R> Stream<Tuple<ConsumerRecord<K, V>, Tuple<ProducerRecord<K, V>, RecordMetadata>>> asyncPollAndProduce(
-            Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
-
-        var tupleStream = this.<Tuple<ProducerRecord<K, V>, RecordMetadata>>asyncPollAndStream((record) -> {
-            List<ProducerRecord<K, V>> apply = userFunction.apply(record);
-            if (apply.isEmpty()) {
+    public <R> void asyncPollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                        Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        // wrap user func to add produce function
+        Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
+            List<ProducerRecord<K, V>> recordListToProduce = userFunction.apply(consumedRecord);
+            if (recordListToProduce.isEmpty()) {
                 log.warn("No result returned from function to send.");
             }
-            log.info("asyncPoll and Stream - Consumed and a record ({}), and returning a derivative result record to be produced: {}", record, apply);
+            log.info("asyncPoll and Stream - Consumed and a record ({}), and returning a derivative result record to be produced: {}", consumedRecord, recordListToProduce);
 
-            var results = new ArrayList<Tuple<ProducerRecord<K, V>, RecordMetadata>>();
-            for (ProducerRecord<K, V> kvProducerRecord : apply) {
-                RecordMetadata produceResult = produceMessage(kvProducerRecord);
-                var tuple = new Tuple<>(kvProducerRecord, produceResult);
-                results.add(tuple);
+            List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
+            for (ProducerRecord<K, V> toProduce : recordListToProduce) {
+                RecordMetadata produceResultMeta = produceMessage(toProduce);
+                var result = new ConsumeProduceResult<>(consumedRecord, toProduce, produceResultMeta);
+                results.add(result);
             }
             return results;
-        });
+        };
 
-        return tupleStream;
+        asyncPollInternal(wrappedUserFunc, callback);
     }
 
     RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
@@ -115,35 +132,6 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * @param <R> result type
-     * @return a stream of results of applying the function to the polled records
-     */
-    public <R> Stream<Tuple<ConsumerRecord<K, V>, R>> asyncPollAndStream(Function<ConsumerRecord<K, V>, List<R>> userFunction) {
-        // TODO this doesn't need to be concurrent any more?
-        ConcurrentLinkedDeque<Tuple<ConsumerRecord<K, V>, R>> userProcessResultsStream = new ConcurrentLinkedDeque<>();
-
-        start(userFunction, userProcessResultsStream);
-
-        Spliterator<Tuple<ConsumerRecord<K, V>, R>> spliterator = Spliterators.spliterator(new Iterator<>() {
-            @Override
-            public boolean hasNext() {
-                boolean notEmpty = !userProcessResultsStream.isEmpty();
-                return notEmpty;
-            }
-
-            @Override
-            public Tuple<ConsumerRecord<K, V>, R> next() {
-                Tuple<ConsumerRecord<K, V>, R> poll = userProcessResultsStream.poll();
-                return poll;
-            }
-        }, userProcessResultsStream.size(), Spliterator.NONNULL);
-
-        Stream<Tuple<ConsumerRecord<K, V>, R>> stream = StreamSupport.stream(spliterator, false);
-
-        return stream;
     }
 
     @Override
@@ -177,7 +165,10 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         this.consumer.close(defaultTimeout);
         this.producer.close(defaultTimeout);
 
-        pollThread.get(); // throws exception if supervisor saw one
+        log.trace("Checking for control thread exception...");
+        pollThread.get(timeout.toSeconds(), SECONDS); // throws exception if supervisor saw one
+
+        log.debug("Close complete.");
     }
 
     public void waitForNoInFlight(Duration timeout) {
@@ -220,8 +211,11 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         return !offsetsToSend.isEmpty();
     }
 
-    private <R> void start(Function<ConsumerRecord<K, V>, List<R>> userFunction,
-                           ConcurrentLinkedDeque<Tuple<ConsumerRecord<K, V>, R>> resultsStream) {
+//    private <R> void asyncPollInternal(Function<ConsumerRecord<K, V>, List<R>> userFunction,
+//                                       Consumer<Tuple<ConsumerRecord<K, V>, R>> callback) {
+
+    protected <R> void asyncPollInternal(Function<ConsumerRecord<K, V>, List<R>> userFunction,
+                                       Consumer<R> callback) {
 
         producer.initTransactions();
         producer.beginTransaction();
@@ -230,16 +224,19 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         pollThread = internalPool.submit(() -> {
             while (shouldPoll) {
                 try {
-                    controlLoop(userFunction, resultsStream);
+                    controlLoop(userFunction, callback);
                 } catch (Exception e) {
                     log.error("Error from poll control thread ({}), throwing...", e.getMessage(), e);
                     throw new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
                 }
             }
+            log.trace("Poll loop ended.");
+            return true;
         });
     }
 
-    private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction, ConcurrentLinkedDeque<Tuple<ConsumerRecord<K, V>, R>> resultsStream) {
+    private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
+                                 Consumer<R> callback) {
         // TODO doesn't this forever expand if no future ever completes? eventually we'll run out of memory as we consume more and mor records without committing any
         ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
 
@@ -247,7 +244,7 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
 
         var records = wm.<R>getWork();
 
-        submitWorkToPool(userFunction, resultsStream, records);
+        submitWorkToPool(userFunction, callback, records);
 
         processMailBox();
 
@@ -270,14 +267,7 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
             log.debug("Mail received...");
             var work = mailBox.poll();
             handleFutureResult(work);
-//            removeFromInFlight(work);
         }
-    }
-
-    private void removeFromInFlight(WorkContainer<K, V> toRemove) {
-        TreeMap<Long, WorkContainer<K, V>> partitionInFlight = inFlightPerPartition.get(toRemove.getTopicPartition());
-        long offset = toRemove.getCr().offset();
-        partitionInFlight.remove(offset);
     }
 
     // todo keep alive with broker while processing messages when too many in flight
@@ -352,13 +342,15 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
     }
 
     /**
+     * todo
+     *
      * @param usersFunction
-     * @param usersResultsStream the stream of results to send to the sure code, added after the user's function has been executed
-     * @param workToProcess      the polled records to process
+     * @param callback
+     * @param workToProcess the polled records to process
      * @param <R>
      */
     private <R> void submitWorkToPool(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
-                                      ConcurrentLinkedDeque<Tuple<ConsumerRecord<K, V>, R>> usersResultsStream,
+                                      Consumer<R> callback,
                                       List<WorkContainer<K, V>> workToProcess) {
 
         for (var work : workToProcess) {
@@ -366,7 +358,7 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
             ConsumerRecord<K, V> cr = work.getCr();
 
             Future outputRecordFuture = workerPool.submit(() -> {
-                return userFunctionRunner(usersFunction, usersResultsStream, work);
+                return userFunctionRunner(usersFunction, callback, work);
             });
             work.setFuture(outputRecordFuture);
 
@@ -381,25 +373,25 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         }
     }
 
-    protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
-                                                                               ConcurrentLinkedDeque<Tuple<ConsumerRecord<K, V>, R>> usersResultsStream,
-                                                                               WorkContainer<K, V> wc) {
+    protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>>
+    userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
+                       Consumer<R> callback,
+                       WorkContainer<K, V> wc) {
+
         // call the user's function
-        List<R> resultsFromUserFunction = null;
+        List<R> resultsFromUserFunction;
         try {
-            resultsFromUserFunction = usersFunction.apply(wc.getCr());
+            ConsumerRecord<K, V> rec = wc.getCr();
+            resultsFromUserFunction = usersFunction.apply(rec);
             log.info("User function success");
 
             onUserFunctionSuccess(wc, resultsFromUserFunction);
 
             // capture each result, against the input record
             var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {// stream back to user
-                // TODO do we stream failed results?
-                Tuple<ConsumerRecord<K, V>, R> r = Tuple.of(wc.getCr(), result);
-                usersResultsStream.add(r);
-                // Result of this future
-                intermediateResults.add(r);
+            for (R result : resultsFromUserFunction) {
+                log.trace("Running call back...");
+                callback.accept(result);
             }
             log.info("User function future registered");
             // fail or succeed, either way we're done
@@ -484,9 +476,22 @@ public class AsyncConsumer<K, V> implements Closeable { // TODO generics for pro
         final private L left;
         final private R right;
 
-        public static <LL, RR> Tuple<LL, RR> of(LL l, RR r) {
+        public static <LL, RR> Tuple<LL, RR> pairOf(LL l, RR r) {
             return new Tuple<>(l, r);
         }
+    }
+
+    /**
+     * @param <K>  in key
+     * @param <V>  in value
+     * @param <KK> out key
+     * @param <VV> out value
+     */
+    @Data
+    public static class ConsumeProduceResult<K, V, KK, VV> {
+        final private ConsumerRecord<K, V> in;
+        final private ProducerRecord<KK, VV> out;
+        final private RecordMetadata meta;
     }
 
 }
