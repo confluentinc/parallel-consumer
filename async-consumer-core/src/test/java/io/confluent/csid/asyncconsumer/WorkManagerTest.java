@@ -75,7 +75,7 @@ public class WorkManagerTest {
 
     @Test
     public void testRemovedUnordered() {
-        setupWorkManager(AsyncConsumerOptions.builder().ordering(NONE).build());
+        setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
 
         int max = 1;
         var works = wm.getWork(max);
@@ -91,7 +91,7 @@ public class WorkManagerTest {
 
     @Test
     public void testUnorderedAndDelayed() {
-        setupWorkManager(AsyncConsumerOptions.builder().ordering(NONE).build());
+        setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
 
         int max = 2;
 
@@ -233,10 +233,10 @@ public class WorkManagerTest {
 
     @Test
     public void insertWrongOrderPreservesOffsetOrdering() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(NONE).build();
+        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(UNORDERED).build();
         setupWorkManager(build);
 
-        assertThat(wm.getOptions().getOrdering()).isEqualTo(NONE);
+        assertThat(wm.getOptions().getOrdering()).isEqualTo(UNORDERED);
         String key = "key";
         int partition = 0;
 

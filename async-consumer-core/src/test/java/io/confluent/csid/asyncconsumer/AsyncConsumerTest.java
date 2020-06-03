@@ -59,7 +59,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @SneakyThrows
     public void failingActionNothingCommitted() {
         var reentrantLock = new CountDownLatch(2);
-        asyncConsumer.asyncVoidPoll((ignore) -> {
+        asyncConsumer.asyncPoll((ignore) -> {
             reentrantLock.countDown();
             throw new RuntimeException("My user's function error");
         });
@@ -81,7 +81,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         var msg1Lock = new CountDownLatch(1);
 
         // finish processing only msg 1
-        asyncConsumer.asyncVoidPoll((ignore) -> {
+        asyncConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             switch (offset) {
                 case 0 -> {
@@ -159,7 +159,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         CountDownLatch startLatch = new CountDownLatch(1);
 
-        asyncConsumer.asyncVoidPoll((ignore) -> {
+        asyncConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -234,7 +234,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock);
 
-        asyncConsumer.asyncVoidPoll((ignore) -> {
+        asyncConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -289,7 +289,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     public void controlFlowException() {
         when(consumerSpy.groupMetadata()).thenThrow(new RuntimeException("My fake control loop error"));
         var reentrantLock = new CountDownLatch(2);
-        asyncConsumer.asyncVoidPoll((ignore) -> {
+        asyncConsumer.asyncPoll((ignore) -> {
             reentrantLock.countDown();
             return;
         });
@@ -307,7 +307,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     public void testVoid() {
         int expected = 2;
         var reentrantLock = new CountDownLatch(expected);
-        asyncConsumer.asyncVoidPoll((record) -> {
+        asyncConsumer.asyncPoll((record) -> {
             myRecordProcessingAction.apply(record);
             reentrantLock.countDown();
         });
@@ -319,73 +319,6 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         verify(myRecordProcessingAction, times(expected)).apply(any());
         verify(producerSpy).commitTransaction();
         verify(producerSpy).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
-    }
-
-    @Test
-    public void testStream() {
-        var streamedResults = asyncConsumer.asyncPollAndStream((record) -> {
-            Object result = Math.random();
-            log.info("Consumed and a record ({}), and returning a derivative result to produce to output topic: {}", record, result);
-            myRecordProcessingAction.apply(record);
-            return Lists.list(result);
-        });
-
-        asyncConsumer.close(); // wait for everything to finish oustanding work
-
-        verify(myRecordProcessingAction, times(2)).apply(any());
-
-        var peekedStream = streamedResults.peek(x ->
-        {
-            log.info("streaming test {}", x.getLeft().value());
-        });
-
-        assertThat(peekedStream).hasSize(2);
-    }
-
-    @Test
-    public void testConsumeAndProduce() {
-        var stream = asyncConsumer.asyncPollAndProduce((record) -> {
-            String apply = myRecordProcessingAction.apply(record);
-            ProducerRecord<MyKey, MyInput> result = new ProducerRecord<>(OUTPUT_TOPIC, new MyKey("akey"), new MyInput(apply));
-            log.info("Consumed and a record ({}), and returning a derivative result record to be produced: {}", record, result);
-            List<ProducerRecord<MyKey, MyInput>> result1 = Lists.list(result);
-            return result1;
-        });
-
-        asyncConsumer.close();
-
-        verify(myRecordProcessingAction, times(2)).apply(any());
-
-        var myResultStream = stream.peek(x -> {
-            if (x != null) {
-                ConsumerRecord<MyKey, MyInput> left = x.getLeft();
-//                ProducerRecord<MyKey, MyInput> middle = x.getMiddle();
-                AsyncConsumer.Tuple<ProducerRecord<MyKey, MyInput>, RecordMetadata> right = x.getRight();
-                log.info("{}:{}:{}", left.key(), left.value(), right);
-            } else {
-                log.info("null");
-            }
-        });
-
-        var collect = myResultStream.collect(Collectors.toList());
-
-        assertThat(collect).hasSize(2);
-    }
-
-    @Test
-    public void testFlatMapProduce() {
-        var myResultStream = asyncConsumer.asyncPollAndStream((record) -> {
-            String apply1 = myRecordProcessingAction.apply(record);
-            String apply2 = myRecordProcessingAction.apply(record);
-            List<String> list = Lists.list(apply1, apply2);
-            return list;
-        });
-
-        asyncConsumer.close();
-
-        verify(myRecordProcessingAction, times(4)).apply(any());
-
-        assertThat(myResultStream).hasSize(4);
     }
 
     @Test
@@ -457,7 +390,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock, msg4Lock, msg5Lock);
 
-        asyncConsumer.asyncVoidPoll((ignore) -> {
+        asyncConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {

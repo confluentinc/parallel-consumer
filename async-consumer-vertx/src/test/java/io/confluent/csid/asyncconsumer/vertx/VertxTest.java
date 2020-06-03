@@ -1,10 +1,12 @@
 package io.confluent.csid.asyncconsumer.vertx;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.csid.asyncconsumer.AsyncConsumer.Tuple;
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;
+import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer.Result;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -14,6 +16,7 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
@@ -45,7 +48,7 @@ import static org.mockito.internal.verification.VerificationModeFactory.times;
 @ExtendWith(VertxExtension.class)
 public class VertxTest extends AsyncConsumerTestBase {
 
-    VertxAsyncConsumer<MyKey, MyInput> vertxAsync;
+    StreamingAsyncVertxConsumer<MyKey, MyInput> vertxAsync;
 
     private static WireMockServer stubServer;
 
@@ -65,7 +68,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
         AsyncConsumerOptions build = AsyncConsumerOptions.builder().build();
-        vertxAsync = new VertxAsyncConsumer<>(consumerSpy, producerSpy, vertx, wc, build);
+        vertxAsync = new StreamingAsyncVertxConsumer<>(consumerSpy, producerSpy, vertx, wc, build);
         vertxAsync.setLongPollTimeout(ofMillis(100));
         vertxAsync.setTimeBetweenCommits(ofMillis(100));
     }
@@ -75,10 +78,11 @@ public class VertxTest extends AsyncConsumerTestBase {
         WireMockConfiguration options = wireMockConfig().dynamicPort();
         stubServer = new WireMockServer(options);
         stubServer.start();
+        MappingBuilder mappingBuilder = get(urlPathEqualTo("/"))
+                .willReturn(aResponse()
+                        .withBody(stubResponse));
         stubServer.stubFor(
-                get(urlPathEqualTo("/"))
-                        .willReturn(aResponse()
-                                .withBody(stubResponse)));
+                mappingBuilder);
     }
 
     @SneakyThrows
@@ -98,9 +102,10 @@ public class VertxTest extends AsyncConsumerTestBase {
     public void failingHttpCall() {
         var reentrantLock = new CountDownLatch(2);
         var tupleStream =
-                vertxAsync.vertxHttp((ConsumerRecord<MyKey, MyInput> rec) -> {
+                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<MyKey, MyInput> rec) -> {
                     reentrantLock.countDown();
-                    return getBadHost();
+                    RequestInfo badHost = getBadHost();
+                    return badHost;
                 });
 
         reentrantLock.await(defaultTimeoutSeconds, SECONDS);
@@ -115,7 +120,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         // check results are failures
         var res = getResults(tupleStream);
         assertThat(res).doesNotContainNull();
-        assertThat(res).extracting(x -> x.failed()).containsOnly(true);
+        assertThat(res).extracting(AsyncResult::failed).containsOnly(true);
         assertThat(res).flatExtracting(x ->
                 asList(x.cause().getMessage().split(" ")))
                 .contains("Connection", "refused:");
@@ -124,7 +129,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @Test
     public void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
         var futureStream =
-                vertxAsync.vertxHttp((ConsumerRecord<MyKey, MyInput> rec) -> {
+                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<MyKey, MyInput> rec) -> {
                     log.debug("Inner user function");
                     return getBadHost();
                 });
@@ -133,7 +138,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         vertxAsync.close();
 
         // verify
-        var collect = futureStream.map(x -> x.getRight()).collect(Collectors.toList());
+        var collect = futureStream.map(x -> x.getAsr()).collect(Collectors.toList());
         assertThat(collect).hasSize(2);
         Future<HttpResponse<Buffer>> actual = collect.get(0).onComplete(x -> {
         });
@@ -151,7 +156,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @Test
     public void testHttpMinimal() {
         var futureStream =
-                vertxAsync.vertxHttp((ConsumerRecord<MyKey, MyInput> rec) -> {
+                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<MyKey, MyInput> rec) -> {
                     log.debug("Inner user function");
                     RequestInfo goodHost = getGoodHost();
                     var params = Map.of("randomParam", rec.value().getData());
@@ -172,32 +177,40 @@ public class VertxTest extends AsyncConsumerTestBase {
         assertThat(res).extracting(x -> x.result().bodyAsString()).contains(stubResponse);
     }
 
+    @SneakyThrows
     @Test
     public void testHttp() {
+       var latch = new CountDownLatch(2);
+
         var futureStream =
-                vertxAsync.vertxHttp((WebClient c, ConsumerRecord<MyKey, MyInput> rec) -> {
+                vertxAsync.vertxHttpRequestStream((WebClient c, ConsumerRecord<MyKey, MyInput> rec) -> {
                     log.debug("Inner user function");
                     var data = rec.value().getData();
                     RequestInfo reqInfo = getGoodHost();
-                    var req = c.get(reqInfo.getPort(), reqInfo.getHost(), reqInfo.getContextPath());
-                    req = req.addQueryParam("randomParam", data);
-                    return req;
+                    var httpRequest = c.get(reqInfo.getPort(), reqInfo.getHost(), reqInfo.getContextPath());
+                    httpRequest = httpRequest.addQueryParam("randomParam", data);
+
+                    latch.countDown();
+
+                    return httpRequest;
                 });
 
-        vertxAsync.close(ofSeconds(60));
+        latch.await(defaultTimeoutSeconds, SECONDS);
+
+        vertxAsync.close(ofSeconds(60)); // wait for no inflight instead of close in @AfterEach ?
 
         var res = getResults(futureStream);
 
         // test results are successes
         assertThat(res).hasSize(2).doesNotContainNull();
+        assertThat(res).extracting(AsyncResult::cause).containsOnlyNulls();
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
         assertThat(res).extracting(x -> x.result().bodyAsString()).contains(stubResponse);
     }
 
     private List<AsyncResult<HttpResponse<Buffer>>> getResults(
-            Stream<Tuple<ConsumerRecord<MyKey, MyInput>, Future<HttpResponse<Buffer>>>> futureStream) {
-        var collect = futureStream.map(Tuple::getRight)
-                .collect(Collectors.toList());
+            Stream<Result<MyKey, MyInput>> futureStream) {
+        var collect = futureStream.map(Result::getAsr).collect(Collectors.toList());
         return blockingGetResults(collect);
     }
 
