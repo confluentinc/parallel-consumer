@@ -1,4 +1,4 @@
-<configuration packagingData="true">
+<configuration packagingData="true" scan="true" scanPeriod="15 seconds">
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <!-- encoders are assigned the type
@@ -10,7 +10,7 @@
 <!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%class{0}.java:%line\)) %msg%n</pattern>-->
 <!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%file:%line\)) %msg%n</pattern>-->
 <!--            <pattern>%highlight(%-5level) %yellow([%thread]) %blue(\(%file:%line\)) %cyan(#%M) %msg%n</pattern>-->
-            <pattern>%highlight(%-5level) %yellow([%thread]) %cyan(\(%file:%line#%M\))  %msg%n</pattern>
+            <pattern>%d{mm:ss.SSS} %highlight(%-5level) %yellow([%thread]) %X{offset} %cyan(\(%file:%line#%M\))  %msg%n</pattern>
 <!--            <pattern>%highlight(%-5level) %yellow([%thread]) %cyan(\(%logger{36}:%line#%M\))  %msg%n</pattern>-->
         </encoder>
     </appender>
@@ -19,7 +19,11 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-    <logger name="io.confluent.csid" level="trace" />
+    <logger name="io.confluent.csid" level="debug" />
+<!--    <logger name="io.confluent.csid" level="trace" />-->
+
+    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />
+    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="debug" />
 
     <logger name="io.vertx" level="debug" />
     <logger name="io.netty" level="info" />

@@ -2,6 +2,7 @@ package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.utils.WallClock;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
@@ -16,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 
-@ToString
+@Slf4j
 @EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
@@ -26,6 +27,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
      */
     @Getter
     @Setter
+    // TODO remove in favour of class sub-typing
     private String workType;
 
     @Getter
@@ -55,12 +57,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public void fail(WallClock clock) {
+        log.trace("Failing {}", this);
         numberOfAttempts++;
         failedAt = Optional.of(clock.getNow());
         inFlight = false;
     }
 
     public void succeed() {
+        log.trace("Succeeded {}", this);
         inFlight = false;
     } // todo ??
 
@@ -98,6 +102,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public void takingAsWork() {
+        log.trace("Being taken as work: {}", this);
         inFlight = true;
     }
 
@@ -117,4 +122,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return this.getUserFunctionSucceeded().isPresent();
     }
 
+    @Override
+    public String toString() {
+        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ":" + cr.value() + ")";
+    }
 }

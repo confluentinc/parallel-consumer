@@ -1,8 +1,11 @@
 package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.utils.AdvancingWallClockProvider;
+import io.confluent.csid.utils.KafkaTestUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
 import org.assertj.core.api.ObjectAssert;
@@ -10,16 +13,17 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.*;
 import static io.confluent.csid.asyncconsumer.WorkContainer.getRetryDelay;
+import static io.confluent.csid.utils.Range.range;
 import static java.time.Duration.ofSeconds;
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,7 +57,9 @@ public class WorkManagerTest {
 
         wm = new WorkManager<>(1000, build);
         wm.setClock(clock);
+    }
 
+    private void registerSomeWork() {
         String key = "key-0";
         int partition = 0;
         var rec = makeRec("0", key, partition);
@@ -76,6 +82,7 @@ public class WorkManagerTest {
     @Test
     public void testRemovedUnordered() {
         setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
+        registerSomeWork();
 
         int max = 1;
         var works = wm.getWork(max);
@@ -92,6 +99,8 @@ public class WorkManagerTest {
     @Test
     public void testUnorderedAndDelayed() {
         setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
+        registerSomeWork();
+
 
         int max = 2;
 
@@ -139,6 +148,8 @@ public class WorkManagerTest {
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
 
+        registerSomeWork();
+
         int max = 2;
 
         var works = wm.getWork(max);
@@ -161,6 +172,7 @@ public class WorkManagerTest {
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
 
+        registerSomeWork();
 
         int max = 2;
 
@@ -237,6 +249,9 @@ public class WorkManagerTest {
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(UNORDERED);
+
+        registerSomeWork();
+
         String key = "key";
         int partition = 0;
 
@@ -317,6 +332,8 @@ public class WorkManagerTest {
         AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
 
+        registerSomeWork();
+
         var partition = 2;
         var rec = new ConsumerRecord<>(INPUT_TOPIC, partition, 10, "66", "value");
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "66", "value");
@@ -357,6 +374,8 @@ public class WorkManagerTest {
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(KEY);
 
+        registerSomeWork();
+
         var partition = 2;
         var rec = new ConsumerRecord<>(INPUT_TOPIC, partition, 10, "key-a", "value");
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "key-a", "value");
@@ -396,5 +415,56 @@ public class WorkManagerTest {
     @Test
     @Disabled
     public void unorderedPartitionsGreedy() {
+    }
+
+//        @Test
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
+    public void highVolumeKeyOrder(int quantity) {
+//    public void highVolumeKeyOrder() {
+//        int quantity = 20000;
+        int uniqueKeys = 100;
+
+        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(KEY).build();
+        setupWorkManager(build);
+
+        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer(OffsetResetStrategy.EARLIEST));
+
+        List<Integer> keys = range(uniqueKeys).list();
+
+        var records = ktu.generateRecords(keys, quantity);
+        var flattened = ktu.flatten(records.values());
+
+        Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
+        m.put(new TopicPartition(INPUT_TOPIC, 0), flattened);
+        var recs = new ConsumerRecords<>(m);
+
+        //
+        wm.registerWork(recs);
+
+        //
+        List<WorkContainer<String, String>> work = wm.getWork();
+
+        //
+        assertThat(work).hasSameSizeAs(records.keySet());
+    }
+
+    @Test
+    public void treeMapOrderingCorrect() {
+        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer(OffsetResetStrategy.EARLIEST));
+
+        int i = 10;
+        var records = ktu.generateRecords(i);
+
+        var treeMap = new TreeMap<Long, WorkContainer<String, String>>();
+        for (ConsumerRecord<String, String> record : records) {
+            treeMap.put(record.offset(), new WorkContainer<>(record));
+        }
+
+        // read back, assert correct order
+        NavigableSet<Long> ascendingOrder = treeMap.navigableKeySet();
+        Object[] objects = ascendingOrder.toArray();
+
+        assertThat(objects).containsExactly(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
     }
 }

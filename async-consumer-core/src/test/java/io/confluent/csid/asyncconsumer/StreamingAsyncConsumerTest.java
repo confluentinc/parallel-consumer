@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -23,55 +24,71 @@ import static org.mockito.internal.verification.VerificationModeFactory.times;
 @Slf4j
 public class StreamingAsyncConsumerTest extends AsyncConsumerTestBase {
 
-    StreamingAsyncConsumer<MyKey, MyInput> streaming;
+    StreamingAsyncConsumer<String, String> streaming;
 
     @BeforeEach
-    public void setupAsyncConsumerTest() {
+    public void setupData() {
+        super.primeFirstRecord();
+    }
+
+    @Override
+    protected AsyncConsumer initAsyncConsumer(AsyncConsumerOptions asyncConsumerOptions) {
         AsyncConsumerOptions options = AsyncConsumerOptions.builder().build();
         streaming = new StreamingAsyncConsumer<>(consumerSpy, producerSpy, options);
-        streaming.setLongPollTimeout(ofMillis(100));
-        streaming.setTimeBetweenCommits(ofMillis(100));
+
+        return streaming;
     }
 
     @Test
     public void testStream() {
-        Stream<ConsumeProduceResult<MyKey, MyInput, MyKey, MyInput>> streamedResults = streaming.asyncPollProduceAndStream((record) -> {
-//            Object result = Math.random();
+        var latch = new CountDownLatch(1);
+        Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.asyncPollProduceAndStream((record) -> {
             ProducerRecord mock = mock(ProducerRecord.class);
-            log.info("Consumed and a record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
+            log.info("Consumed and produced record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
             myRecordProcessingAction.apply(record);
+            latch.countDown();
             return Lists.list(mock);
         });
 
-        streaming.close(); // wait for everything to finish outstanding work
+        awaitLatch(latch);
 
-        verify(myRecordProcessingAction, times(2)).apply(any());
+        waitForSomeLoopCycles(2);
 
-        Stream<ConsumeProduceResult<MyKey, MyInput, MyKey, MyInput>> peekedStream = streamedResults.peek(x ->
+        verify(myRecordProcessingAction, times(1)).apply(any());
+
+        Stream<ConsumeProduceResult<String, String, String, String>> peekedStream = streamedResults.peek(x ->
         {
             log.info("streaming test {}", x.getIn().value());
         });
 
-        assertThat(peekedStream).hasSize(2);
+        assertThat(peekedStream).hasSize(1);
     }
 
     @Test
     public void testConsumeAndProduce() {
+        var latch = new CountDownLatch(1);
         var stream = streaming.asyncPollProduceAndStream((record) -> {
             String apply = myRecordProcessingAction.apply(record);
-            ProducerRecord<MyKey, MyInput> result = new ProducerRecord<>(OUTPUT_TOPIC, new MyKey("akey"), new MyInput(apply));
+            ProducerRecord<String, String> result = new ProducerRecord<>(OUTPUT_TOPIC, "akey", apply);
             log.info("Consumed and a record ({}), and returning a derivative result record to be produced: {}", record, result);
-            List<ProducerRecord<MyKey, MyInput>> result1 = Lists.list(result);
+            List<ProducerRecord<String, String>> result1 = Lists.list(result);
+            latch.countDown();
             return result1;
         });
 
-        streaming.close();
+        pauseControlLoop();
 
-        verify(myRecordProcessingAction, times(2)).apply(any());
+        awaitLatch(latch);
+
+        resumeControlLoop();
+
+        waitForSomeLoopCycles(1);
+
+        verify(myRecordProcessingAction, times(1)).apply(any());
 
         var myResultStream = stream.peek(x -> {
             if (x != null) {
-                ConsumerRecord<MyKey, MyInput> left = x.getIn();
+                ConsumerRecord<String, String> left = x.getIn();
                 log.info("{}:{}:{}:{}", left.key(), left.value(), x.getOut(), x.getMeta());
             } else {
                 log.info("null");
@@ -80,27 +97,32 @@ public class StreamingAsyncConsumerTest extends AsyncConsumerTestBase {
 
         var collect = myResultStream.collect(Collectors.toList());
 
-        assertThat(collect).hasSize(2);
+        assertThat(collect).hasSize(1);
     }
 
 
     @Test
     public void testFlatMapProduce() {
+        var latch = new CountDownLatch(1);
         var myResultStream = streaming.asyncPollProduceAndStream((record) -> {
             String apply1 = myRecordProcessingAction.apply(record);
             String apply2 = myRecordProcessingAction.apply(record);
 
             var list = Lists.list(
-                    new ProducerRecord<>(OUTPUT_TOPIC, new MyKey("key"), new MyInput(apply1)),
-                    new ProducerRecord<>(OUTPUT_TOPIC, new MyKey("key"), new MyInput(apply2)));
+                    new ProducerRecord<>(OUTPUT_TOPIC,"key", apply1),
+                    new ProducerRecord<>(OUTPUT_TOPIC,"key", apply2));
+
+            latch.countDown();
             return list;
         });
 
-        streaming.close();
+        awaitLatch(latch);
 
-        verify(myRecordProcessingAction, times(4)).apply(any());
+        waitForSomeLoopCycles(1);
 
-        assertThat(myResultStream).hasSize(4);
+        verify(myRecordProcessingAction, times(2)).apply(any());
+
+        assertThat(myResultStream).hasSize(2);
     }
 
 }
