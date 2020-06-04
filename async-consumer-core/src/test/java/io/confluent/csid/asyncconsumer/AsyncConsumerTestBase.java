@@ -1,55 +1,73 @@
 package io.confluent.csid.asyncconsumer;
 
+import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.Data;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
-import org.assertj.core.util.Lists;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
-import static io.confluent.csid.utils.KafkaUtils.toTP;
+import static io.confluent.csid.utils.Range.range;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
-import static org.assertj.core.api.Assertions.assertThat;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
 
+@Slf4j
 public class AsyncConsumerTestBase {
 
     public static final String INPUT_TOPIC = "input";
     public static final String OUTPUT_TOPIC = "output";
     public static final String CONSUMER_GROUP_ID = "my-group";
 
-    MockConsumer<MyKey, MyInput> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
-    MockProducer<MyKey, MyInput> producer = new MockProducer<>(true, null, null); // TODO do async testing
+    protected MockConsumer<String, String> consumerSpy;
+    protected MockProducer<String, String> producerSpy;
 
-    protected MockConsumer<MyKey, MyInput> consumerSpy;
-    protected MockProducer<MyKey, MyInput> producerSpy;
+    protected AsyncConsumer<String, String> asyncConsumer;
 
-    protected AsyncConsumer<MyKey, MyInput> asyncConsumer;
+    static protected int defaultTimeoutSeconds = 5;
 
-    protected int defaultTimeoutSeconds = 10;
-
-    protected Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
-    protected Duration infiniteTimeout = Duration.ofMinutes(20);
+    static protected Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
+    static protected long defaultTimeoutMs = defaultTimeout.toMillis();
+    static protected Duration infiniteTimeout = Duration.ofMinutes(20);
 
     AsyncConsumerTest.MyAction myRecordProcessingAction;
 
-    ConsumerRecord<MyKey, MyInput> firstRecord;
+    ConsumerRecord<String, String> firstRecord;
+    ConsumerRecord<String, String> secondRecord;
 
-    int offset = 0;
+    KafkaTestUtils ktu;
 
+    protected AtomicReference<Integer> loopCountRef;
+
+    volatile CountDownLatch loopLatchV = new CountDownLatch(0);
+    volatile CountDownLatch controlLoopPauseLatch = new CountDownLatch(0);
+    protected AtomicReference<Integer> loopCount;
+
+    // todo ??
+    long waitMs;
+
+    // todo remove?
     @Data
-    public class MyKey {
+    public static class MyKey {
         private final String data;
+
     }
 
+    // todo remove?
     @Data
     public static class MyInput {
         private final String data;
@@ -57,59 +75,179 @@ public class AsyncConsumerTestBase {
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
-        producerSpy = spy(producer);
-        consumerSpy = spy(consumer);
-        when(consumerSpy.groupMetadata()).thenReturn(new ConsumerGroupMetadata(CONSUMER_GROUP_ID)); // todo fix AK mock consumer
+        setupAsyncConsumerInstance(AsyncConsumerOptions.builder().build());
+    }
 
+    protected void primeFirstRecord() {
+        firstRecord = ktu.makeRecord("key-0", "v0");
+        consumerSpy.addRecord(firstRecord);
+    }
+
+    protected MockConsumer<String, String> setupClients() {
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        MockProducer<String, String> producer = new MockProducer<>(true, null, null); // TODO do async testing
+
+        this.producerSpy = spy(producer);
+        this.consumerSpy = spy(consumer);
         myRecordProcessingAction = mock(AsyncConsumerTest.MyAction.class);
-        TopicPartition tp1 = new TopicPartition(INPUT_TOPIC, 1);
-        TopicPartition tp0 = new TopicPartition(INPUT_TOPIC, 0);
-        consumer.assign(Lists.list(tp0, tp1));
 
-        HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
-        beginningOffsets.put(tp0, 0L);
-        beginningOffsets.put(tp1, 0L);
-        consumer.updateBeginningOffsets(beginningOffsets);
+        ktu = new KafkaTestUtils(consumerSpy);
 
-        firstRecord = makeRecord("key-0", "v0");
-        consumer.addRecord(firstRecord);
-        consumer.addRecord(makeRecord("key-0", "v1"));
+        KafkaTestUtils.setupConsumer(this.consumerSpy);
+
+        return consumer;
     }
 
-    // TODO
-//    @AfterEach
-//    public void closeConsumer(){
-//
-//    }
-
-    protected ConsumerRecord<MyKey, MyInput> makeRecord(String key, String value) {
-        return makeRecord(0, key, value);
+    protected void setupAsyncConsumerInstance(AsyncConsumerOptions.ProcessingOrder order) {
+        setupAsyncConsumerInstance(AsyncConsumerOptions.builder().ordering(order).build());
     }
 
-    protected ConsumerRecord<MyKey, MyInput> makeRecord(int part, String key, String value) {
-        ConsumerRecord<MyKey, MyInput> stringStringConsumerRecord = new ConsumerRecord<>(INPUT_TOPIC, part, offset, new MyKey(key), new MyInput(value));
-        offset++;
-        return stringStringConsumerRecord;
+    protected void setupAsyncConsumerInstance(AsyncConsumerOptions asyncConsumerOptions) {
+        setupClients();
+
+        asyncConsumer = initAsyncConsumer(asyncConsumerOptions);
+
+        asyncConsumer.setLongPollTimeout(ofMillis(10));
+        asyncConsumer.setTimeBetweenCommits(ofMillis(0));
+
+        waitMs = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
+
+        loopCountRef = attachLoopCounter(asyncConsumer);
     }
 
-    protected void assertCommits(List<Integer> integers) {
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = producerSpy.consumerGroupOffsetsHistory();
-//        assertThat(maps).hasSameSizeAs(integers);
-        assertThat(maps).describedAs("Which offsets are committed and in the expected order")
-                .flatExtracting(x ->
-                {
-                    // get all partitino offsets and flatten
-                    var results = new ArrayList<Integer>();
-                    var y = x.get(CONSUMER_GROUP_ID);
-                    for (var z : y.entrySet()) {
-                        results.add((int) z.getValue().offset());
-                    }
-//                    return (int) y
-//                            .get(toTP(firstRecord))
-//                            .offset();
-                    return results;
-                })
-                .isEqualTo(integers);
+    protected AsyncConsumer<String, String> initAsyncConsumer(AsyncConsumerOptions asyncConsumerOptions) {
+        asyncConsumer = new AsyncConsumer<>(consumerSpy, producerSpy, asyncConsumerOptions);
+
+        return asyncConsumer;
+    }
+
+    protected void sendSecondRecord(MockConsumer<String, String> consumer) {
+        secondRecord = ktu.makeRecord("key-0", "v1");
+        consumer.addRecord(secondRecord);
+    }
+
+    protected AtomicReference<Integer> attachLoopCounter(AsyncConsumer asyncConsumer) {
+        final AtomicReference<Integer> currentLoop = new AtomicReference<>(0);
+        asyncConsumer.addLoopEndCallBack(() -> {
+            Integer currentNumber = currentLoop.get();
+            int newLoopNumber = currentNumber + 1;
+            currentLoop.compareAndSet(currentNumber, newLoopNumber);
+            log.trace("Counting down latch from {}", loopLatchV.getCount());
+            loopLatchV.countDown();
+            log.trace("Loop latch remaining: {}", loopLatchV.getCount());
+            if (controlLoopPauseLatch.getCount() > 0) {
+                log.debug("Waiting on pause latch ({})...", controlLoopPauseLatch.getCount());
+                try {
+                    controlLoopPauseLatch.await();
+                } catch (InterruptedException e) {
+                    log.error(e.getMessage(), e);
+                }
+                log.trace("Completed waiting on pause latch");
+            }
+            log.trace("Loop count {}", currentLoop.get());
+        });
+        return currentLoop;
+    }
+
+    protected void pauseControlLoop() {
+        log.trace("Pause loop");
+        controlLoopPauseLatch = new CountDownLatch(1);
+    }
+
+    protected void resumeControlLoop() {
+        log.trace("Resume loop");
+        controlLoopPauseLatch.countDown();
+    }
+
+    protected void waitForOneLoopCycle() {
+        waitForSomeLoopCycles(1);
+    }
+
+    protected void waitForSomeLoopCycles(int thisManyMore) {
+        log.trace("Waiting for {} more iterations of the control loop.", thisManyMore);
+        blockingLoopLatchTrigger(thisManyMore);
+//        waitForLoopCount(this.loopCountRef.get() + thisManyMore);
+        log.trace("Completed waiting on {} loop(s)", thisManyMore);
+    }
+
+    protected void waitUntilTrue(Callable<Boolean> booleanCallable) {
+        waitAtMost(defaultTimeout).until(booleanCallable);
+    }
+
+    @SneakyThrows
+    private void blockingLoopLatchTrigger(int waitForCount) {
+        log.debug("Waiting on {} cycles on loop latch...", waitForCount);
+        loopLatchV = new CountDownLatch(waitForCount);
+        loopLatchV.await(defaultTimeoutSeconds, TimeUnit.SECONDS);
+    }
+
+    @SneakyThrows
+    private void waitForLoopCount(int waitForCount) {
+        log.debug("Waiting on {} cycles on loop latch...", waitForCount);
+        waitAtMost(defaultTimeout.multipliedBy(100)).until(() -> loopCount.get() > waitForCount);
+    }
+
+    protected void waitForCommitExact(int partition, int offset) {
+        log.debug("Waiting for commit offset {} on partition {}", offset, partition);
+        var expectedOffset = new OffsetAndMetadata(offset, "");
+        TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
+        var expectedOffsetMap = Map.of(partitionNumber, expectedOffset);
+        verify(producerSpy, timeout(defaultTimeoutMs).times(1)).sendOffsetsToTransaction(argThat(
+                (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
+                any(ConsumerGroupMetadata.class));
+    }
+
+    public void assertCommits(List<Integer> integers, String description) {
+        KafkaTestUtils.assertCommits(producerSpy, integers, Optional.of(description));
+    }
+
+    public void assertCommits(List<Integer> integers) {
+        KafkaTestUtils.assertCommits(producerSpy, integers, Optional.empty());
+    }
+
+    @SneakyThrows
+    protected void awaitLatch(CountDownLatch latch) {
+        log.trace("Waiting on latch");
+        boolean latchReachedZero = latch.await(defaultTimeoutSeconds, SECONDS);
+        if (latchReachedZero) {
+            log.trace("Latch released");
+        } else {
+            throw new AssertionError("Latch await timeout - " + latch.getCount() + " remaining");
+        }
+    }
+
+    protected void releaseAndWait(List<CountDownLatch> locks, List<Integer> ints) {
+        for (Integer i : ints) {
+            log.debug("Releasing {}...", i);
+            locks.get(i).countDown();
+        }
+        waitForSomeLoopCycles(1);
+    }
+
+    protected void release(List<CountDownLatch> locks, int i) {
+        log.debug("Releasing {}...", i);
+        locks.get(i).countDown();
+    }
+
+    protected void releaseAndWait(List<CountDownLatch> locks, int i) {
+        log.debug("Releasing {}...", i);
+        locks.get(i).countDown();
+        waitForSomeLoopCycles(1);
+    }
+
+    protected List<CountDownLatch> constructLatches(int i) {
+        var result = new ArrayList<CountDownLatch>(i);
+        for (Integer integer : range(i)) {
+            result.add(new CountDownLatch(1));
+        }
+        return result;
+    }
+
+    protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
+        pauseControlLoop();
+        awaitLatch(latch);
+        resumeControlLoop();
+        waitForOneLoopCycle();
     }
 
 }

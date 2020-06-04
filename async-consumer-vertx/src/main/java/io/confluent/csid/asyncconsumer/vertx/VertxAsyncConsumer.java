@@ -32,6 +32,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
     private Vertx vertx;
 
     private WebClient webClient;
+    private Runnable onVertxCompleteHook;
 
     public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer consumer, Producer producer) {
         this(consumer, producer, Vertx.vertx(), null, null);
@@ -148,16 +149,27 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
                 addToMailbox(wc);
             });
 
+            // add plugin callback hook
+            send.onComplete(ar -> {
+                log.trace("Running plugin hook");
+                this.onVertxCompleteHook.run();
+            });
+
             return List.of(send);
         };
 
-        Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {}; // don't need it, we attach to vertx futures for callback
+        Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
+        }; // don't need it, we attach to vertx futures for callback
 
         super.asyncPollInternal(userFuncWrapper, noOp);
     }
 
     protected void callInner(Consumer<ConsumerRecord<K, V>> userFuncWrapper) {
         super.asyncPoll(userFuncWrapper);
+    }
+
+    public void addVertxOncompleteHook(Runnable hookFunc) {
+        this.onVertxCompleteHook = hookFunc;
     }
 
     /**
