@@ -45,9 +45,7 @@ public class AsyncConsumer<K, V> implements Closeable {
     // TODO configurable number of threads
     final private ExecutorService workerPool = Executors.newFixedThreadPool(numberOfThreads);
 
-    final private ExecutorService internalPool = Executors.newSingleThreadExecutor();
-
-    private Future<?> pollThread;
+    private Future<?> controlThreadFuture;
 
     protected WorkManager<K, V> wm;
 
@@ -155,16 +153,13 @@ public class AsyncConsumer<K, V> implements Closeable {
             boolean shutdown = workerPool.isShutdown();
             boolean terminated = workerPool.isTerminated();
         }
-        internalPool.shutdown();
-        log.debug("Awaiting controller termination...");
-        boolean internalShutdown = internalPool.awaitTermination(10L, SECONDS);
 
         log.debug("Closing producer and consumer...");
         this.consumer.close(defaultTimeout);
         this.producer.close(defaultTimeout);
 
         log.trace("Checking for control thread exception...");
-        pollThread.get(timeout.toSeconds(), SECONDS); // throws exception if supervisor saw one
+        controlThreadFuture.get(timeout.toSeconds(), SECONDS); // throws exception if supervisor saw one
 
         log.debug("Close complete.");
     }
@@ -186,11 +181,11 @@ public class AsyncConsumer<K, V> implements Closeable {
 
 
     private boolean areMyThreadsDone() {
-        if (pollThread == null) {
+        if (controlThreadFuture == null) {
             // not constructed yet, will become alive, unless #poll is never called // TODO fix
             return false;
         }
-        return pollThread.isDone();
+        return controlThreadFuture.isDone();
     }
 
     protected <R> void asyncPollInternal(Function<ConsumerRecord<K, V>, List<R>> userFunction,
@@ -198,7 +193,8 @@ public class AsyncConsumer<K, V> implements Closeable {
         producer.beginTransaction();
 
         // run main pool loop in thread
-        pollThread = internalPool.submit(() -> {
+        Callable controlTask = () -> {
+            Thread.currentThread().setName("control");
             while (shouldPoll) {
                 try {
                     controlLoop(userFunction, callback);
@@ -209,7 +205,8 @@ public class AsyncConsumer<K, V> implements Closeable {
             }
             log.trace("Poll loop ended.");
             return true;
-        });
+        };
+        this.controlThreadFuture = Executors.newSingleThreadExecutor().submit(controlTask);
     }
 
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
