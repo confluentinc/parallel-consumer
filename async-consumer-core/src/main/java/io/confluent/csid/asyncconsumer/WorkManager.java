@@ -1,6 +1,7 @@
 package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder;
+import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,6 +15,7 @@ import org.apache.kafka.common.TopicPartition;
 import java.util.*;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
+import static java.lang.Math.min;
 import static lombok.AccessLevel.PACKAGE;
 
 /**
@@ -28,26 +30,31 @@ public class WorkManager<K, V> {
     @Getter
     private final AsyncConsumerOptions options;
 
-    // disable if using partition order
-    final private Map<Object, TreeMap<Long, WorkContainer<K, V>>> processingShards = new HashMap<>();
+    // todo disable/remove if using partition order
+    final private LinkedHashMap<Object, TreeMap<Long, WorkContainer<K, V>>> processingShards = new LinkedHashMap<>();
 
     /**
-     * need to record globalally consumed records, to ensure correct offset order committal. Cannot rely on
+     * need to record globally consumed records, to ensure correct offset order committal. Cannot rely on
      * incrementally advancing offsets, as this isn't a guarantee of kafka's.
      */
     final private Map<TopicPartition, TreeMap<Long, WorkContainer<K, V>>> partitionRecords = new HashMap<>();
 
-    private int maxInFlight;
+    private final int maxConcurrency;
+
+    /**
+     * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every shard.
+     */
+    private Optional<Object> iterationResumePoint = Optional.empty();
 
     // todo for testing - replace with listener or event bus
     @Getter(PACKAGE)
-    private List<WorkContainer<K, V>> successfulWork = new ArrayList<>();
+    private final List<WorkContainer<K, V>> successfulWork = new ArrayList<>();
 
     @Setter(PACKAGE)
     private WallClock clock = new WallClock();
 
-    public WorkManager(int max, AsyncConsumerOptions options) {
-        this.maxInFlight = max;
+    public WorkManager(int maxConcurrency, AsyncConsumerOptions options) {
+        this.maxConcurrency = maxConcurrency;
         this.options = options;
     }
 
@@ -67,28 +74,37 @@ public class WorkManager<K, V> {
     }
 
     private Object computeShardKey(ConsumerRecord<K, V> rec) {
-        var key = switch (options.getOrdering()) {
+        return switch (options.getOrdering()) {
             case KEY -> rec.key();
             case PARTITION, UNORDERED -> new TopicPartition(rec.topic(), rec.partition());
         };
-        return key;
     }
 
     public <R> List<WorkContainer<K, V>> getWork() {
-        return getWork(maxInFlight);
+        return getWork(maxConcurrency);
     }
 
-    // todo make fair, esp when in no order
-    public <R> List<WorkContainer<K, V>> getWork(int max) {
+    /**
+     * Depth first work retrieval.
+     *
+     * @param maxWorkToRetrieve ignored unless less than {@link #maxConcurrency}
+     */
+    public List<WorkContainer<K, V>> getWork(int maxWorkToRetrieve) {
+        int max = min(maxWorkToRetrieve, maxConcurrency);
         List<WorkContainer<K, V>> work = new ArrayList<>();
 
-        for (var e : processingShards.entrySet()) {
-            log.trace("Looking for work on shard: {}", e.getKey());
-            if (work.size() >= max)
+        var it = new LoopingResumingIterator<>(iterationResumePoint, processingShards);
+
+        for (var shard : it) {
+            log.trace("Looking for work on shard: {}", shard.getKey());
+            if (work.size() >= max) {
+                this.iterationResumePoint = Optional.of(shard.getKey());
+                log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
                 break;
+            }
 
             ArrayList<WorkContainer<K, V>> shardWork = new ArrayList<>();
-            SortedMap<Long, WorkContainer<K, V>> partitionQueue = e.getValue();
+            SortedMap<Long, WorkContainer<K, V>> partitionQueue = shard.getValue();
 
             // then iterate over partitionQueue queue
             // todo don't iterate entire stream if max limit passed in
@@ -96,7 +112,7 @@ public class WorkManager<K, V> {
             for (var entry : entries) {
                 int taken = work.size() + shardWork.size();
                 if (taken >= max) {
-                    log.trace("Work taken ({}) execedds max ({})", taken, max);
+                    log.trace("Work taken ({}) execeds max ({})", taken, max);
                     break;
                 }
 
@@ -115,7 +131,7 @@ public class WorkManager<K, V> {
                 } else {
                     // can't take any more from this partition until this work is finished
                     // processing blocked on this partition, continue to next partition
-                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shard.", this.options.getOrdering(), e.getKey());
+                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shard.", this.options.getOrdering(), shard.getKey());
                     break;
                 }
             }
@@ -131,7 +147,6 @@ public class WorkManager<K, V> {
         wc.succeed();
         Object key = computeShardKey(cr);
         processingShards.get(key).remove(cr.offset());
-//        addToCommitQueue(wc);
         successfulWork.add(wc);
     }
 
