@@ -1,5 +1,6 @@
 package io.confluent.csid.asyncconsumer;
 
+import io.confluent.csid.utils.WallClock;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
@@ -12,10 +13,11 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
-import org.mockito.verification.VerificationMode;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,15 +26,18 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.KEY;
+import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
+import static java.time.Duration.ofMillis;
 import static java.util.List.of;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 
+@Timeout(value = 10, unit = SECONDS)
 @Slf4j
 public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
@@ -96,17 +101,17 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         // finish processing 1
         msg1Lock.countDown();
 
-        // make sure no offsets are committed
-        verify(producerSpy, after(waitMs).never()).commitTransaction(); // todo smelly, change to event based - this is racey
+        waitForOneLoopCycle();
 
-        // for other tests,
-        // finish 0
+        // make sure no offsets are committed
+        verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction(); // todo smelly, change to event based - this is racey
+
+        // So it's data setup can be used in other tests, finish 0
         // todo prefer to shutdown and verify, but no mechanism presently as messages are still in "flight"
-//        asyncConsumer.close();
-//        verify(producerSpy, never()).commitTransaction(); // todo smelly, change to event based - this is racey
-//        msg0Lock.await();
         log.debug("Unlocking 0");
         msg0Lock.countDown();
+
+        log.debug("Clossing...");
         asyncConsumer.close();
     }
 
@@ -118,7 +123,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         // make sure offset 1, not 0 is committed
         // check only 1 is now committed, not committing 0 as well is a performance thing
         verify(producerSpy,
-                after(waitMs)
+                after(verificationWaitDelay)
                         .times(1)
                         .description("Only one of the two offsets committed for efficiency"))
                 .commitTransaction();
@@ -161,7 +166,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         waitForSomeLoopCycles(1);
 
         // make sure no offsets are committed
-        verify(producerSpy, after(waitMs).never()).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction();
 
         // finish 2
         releaseAndWait(locks, 2);
@@ -170,14 +175,14 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         waitForSomeLoopCycles(1);
 
         // make sure no offsets are committed
-        verify(producerSpy, after(waitMs).never()).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction();
 
         // finish 0
         releaseAndWait(locks, 0);
         waitForOneLoopCycle();
 
         // make sure offset 2, not 0 or 1 is committed
-        verify(producerSpy, after(waitMs).times(1)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).times(1)).commitTransaction();
         var maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSize(1);
         OffsetAndMetadata offsets = maps.get(0).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
@@ -187,7 +192,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         releaseAndWait(locks, 3);
 
         // 3 committed
-        verify(producerSpy, after(waitMs).times(2)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).times(2)).commitTransaction();
         maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSize(2);
         offsets = maps.get(1).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
@@ -197,7 +202,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         releaseAndWait(locks, of(4, 5));
 
         // 5 committed
-        verify(producerSpy, after(waitMs).times(3)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).times(3)).commitTransaction();
         maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSize(3);
         offsets = maps.get(2).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
@@ -245,7 +250,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         waitForOneLoopCycle();
 
         // make sure only 2 on it's partition of committed
-        verify(producerSpy, after(waitMs).times(1)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).times(1)).commitTransaction();
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = producerSpy.consumerGroupOffsetsHistory();
         assertCommits(of(2));
 
@@ -253,14 +258,14 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         releaseAndWait(locks, 0);
 
         // make sure offset 0 and 1 is committed
-        verify(producerSpy, after(waitMs).times(2)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).times(2)).commitTransaction();
         assertCommits(of(2, 1));
 
         // finish 3
         releaseAndWait(locks, 3);
 
         //
-        verify(producerSpy, after(waitMs).times(3)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).times(3)).commitTransaction();
         assertCommits(of(2, 1, 3));
     }
 
@@ -279,29 +284,19 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @SneakyThrows
     public void controlFlowException() {
         //
-        when(consumerSpy.groupMetadata()).thenThrow(new RuntimeException("My fake control loop error"));
+        WallClock mock = mock(WallClock.class);
+        when(mock.getNow()).thenThrow(new RuntimeException("My fake control loop error"));
+        asyncConsumer.setClock(mock);
 
         //
-        var latch = new CountDownLatch(1);
         asyncConsumer.asyncPoll((ignore) -> {
-            latch.countDown();
             return;
         });
 
-        //
-        awaitLatch(latch);
-
-        //
-        asyncConsumer.waitForNoInFlight(defaultTimeout);
-
         // close and retrieve exception in control loop
-        Throwable throwable = catchThrowable(() -> {
-            asyncConsumer.close();
-        });
-
-        //
-        log.trace("Caught error: ", throwable);
-        assertThat(throwable).hasMessageContainingAll("Error", "poll", "thread", "fake control");
+        assertThatThrownBy(() -> {
+            asyncConsumer.close(false);
+        }).hasMessageContainingAll("Error", "poll", "thread", "fake control");
     }
 
     @Test
@@ -415,7 +410,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock, msg4Lock, msg5Lock, msg6Lock, msg7Lock, msg8Lock);
 
         final List polled = new ArrayList();
-        doAnswer(x -> {
+        Mockito.doAnswer(x -> {
             ConsumerRecords o = (ConsumerRecords) x.callRealMethod();
             for (Object o1 : o) {
                 polled.add(o1);
@@ -461,23 +456,23 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         // finish 2 process clear, but commit blocked by 0
         log.debug("Unlocking 2...");
         msg2Lock.countDown();
-        waitForSomeLoopCycles(1);
+        waitForSomeLoopCycles(2);
         assertThat(processedState.get(2)).isTrue();
 
 
-        // still nothing - 0 blocks 1 and 2 (part 0)
-        verify(producerSpy, after(waitMs).never()).commitTransaction(); // todo remove all wait nevers in favour of triggers as it slows down test
+        // still nothing - 0 blocks 1 and 2 (partition 0)
+        verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction(); // todo remove all wait nevers in favour of triggers as it slows down test
+        waitForOneLoopCycle();
         assertCommits(of());
 
         // finish 0 - releases pending (1,2)
         log.debug("Unlocking 0...");
         msg0Lock.countDown();
 
-        //
+        // 0 gets comitted by itself
         waitForCommitExact(0, 0);
-        assertCommits(of(0));
 
-        // make sure offset 0 is committed. 1 is now free to be processed (same key as 0), which as 2 was processed previously, frees up offet 2 to commit
+        // make sure offset 0 is committed. 1 is now free to be processed (same key as 0), which as 2 was processed previously, frees up offset 2 to commit
         waitForCommitExact(0, 2);
         assertCommits(of(0, 2));
 
@@ -570,6 +565,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         //
         awaitLatch(step1);
+        waitForOneLoopCycle();
 
         //
         assertCommits(of(0), "Only 0 should be committed, as event though 2 is also finished, 1 should be blocking the partition");
@@ -583,4 +579,33 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         //
         assertCommits(of(0, 2), "Remaining two records should be committed as a single offset");
     }
+
+    @Test
+    public void closeAfterSingleMessageShouldBeEventBasedFast() {
+        Duration time = time(() -> {
+            asyncConsumer.asyncPoll((ignore) -> {
+                log.info("noop");
+            });
+//            waitForOneLoopCycle();
+            asyncConsumer.close();
+        });
+        assertCommits(of(0));
+        assertThat(time).as("Should not be blocked for any reason, except some broker long polls").isLessThan(ofMillis(500));
+    }
+
+    @Test
+    public void closeWithoutRunningShouldBeEventBasedFast() {
+        asyncConsumer.close(false);
+    }
+
+    @Test
+    public void ensureLibraryCantBeUsedTwice() {
+        asyncConsumer.asyncPoll(ignore -> {
+        });
+        assertThatIllegalStateException().isThrownBy(() -> {
+            asyncConsumer.asyncPoll(ignore -> {
+            });
+        });
+    }
+
 }

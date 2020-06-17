@@ -70,13 +70,11 @@ public class StreamingAsyncConsumerTest extends AsyncConsumerTestBase {
         var stream = streaming.asyncPollProduceAndStream((record) -> {
             String apply = myRecordProcessingAction.apply(record);
             ProducerRecord<String, String> result = new ProducerRecord<>(OUTPUT_TOPIC, "akey", apply);
-            log.info("Consumed and a record ({}), and returning a derivative result record to be produced: {}", record, result);
+            log.info("Consumed a record ({}), and returning a derivative result record to be produced: {}", record, result);
             List<ProducerRecord<String, String>> result1 = Lists.list(result);
             latch.countDown();
             return result1;
         });
-
-        pauseControlLoop();
 
         awaitLatch(latch);
 

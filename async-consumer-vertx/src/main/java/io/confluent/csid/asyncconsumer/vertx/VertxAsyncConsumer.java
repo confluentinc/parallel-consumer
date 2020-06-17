@@ -52,17 +52,11 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         throw new RuntimeException();
     }
 
-
     @Override
-    public void close() {
-        close(defaultTimeout);
-    }
-
-    @Override
-    public void close(Duration timeout) {
+    public void close(Duration timeout, boolean waitForInFlight) {
         log.info("vertx async consumer closing...");
         waitForNoInFlight(timeout);
-        super.close(timeout);
+        super.close(timeout, waitForInFlight);
         webClient.close();
         Future<Void> close = vertx.close();
         await().until(close::isComplete);
@@ -161,7 +155,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
         }; // don't need it, we attach to vertx futures for callback
 
-        super.asyncPollInternal(userFuncWrapper, noOp);
+        super.mainLoop(userFuncWrapper, noOp);
     }
 
     protected void callInner(Consumer<ConsumerRecord<K, V>> userFuncWrapper) {

@@ -1,4 +1,4 @@
-<configuration packagingData="true" scan="true" scanPeriod="15 seconds">
+<configuration packagingData="true" scan="true" scanPeriod="5 seconds">
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <!-- encoders are assigned the type
@@ -19,12 +19,23 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-    <logger name="io.confluent.csid" level="debug" />
+    <logger name="io.confluent.csid" level="info" />
+<!--    <logger name="io.confluent.csid" level="debug" />-->
 <!--    <logger name="io.confluent.csid" level="trace" />-->
 
-    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />
-    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="debug" />
+<!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />-->
+<!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="info" />-->
 
+    <!-- containers -->
+    <logger name="io.confluent.csid.asyncconsumer.integrationTests.DbTest" level="debug" />
+    <logger name="io.confluent.csid.asyncconsumer.integrationTests.KafkaTest" level="debug" />
+
+    <!-- related -->
+    <logger name="org.apache.kafka.clients" level="warn" />
+    <logger name="io.ebean" level="info" />
+    <logger name="org.postgresql" level="info" />
+
+    <!-- external -->
     <logger name="io.vertx" level="debug" />
     <logger name="io.netty" level="info" />
 

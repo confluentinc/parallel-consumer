@@ -24,7 +24,7 @@ public class ReplaceCamelCase extends DisplayNameGenerator.Standard {
     }
 
     public String generateDisplayNameForMethod(Class<?> testClass, Method testMethod) {
-        return this.replaceCapitals(testMethod.getName());
+        return super.generateDisplayNameForClass(testClass) + ": " + this.replaceCapitals(testMethod.getName());
     }
 
     private String replaceCapitals(String name) {

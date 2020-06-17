@@ -2,10 +2,7 @@ package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.MockConsumer;
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
 import org.assertj.core.api.ObjectAssert;
@@ -19,7 +16,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.*;
 import static io.confluent.csid.asyncconsumer.WorkContainer.getRetryDelay;
@@ -55,7 +51,7 @@ public class WorkManagerTest {
     private void setupWorkManager(AsyncConsumerOptions build) {
         offset = 0;
 
-        wm = new WorkManager<>(1000, build);
+        wm = new WorkManager<>(build);
         wm.setClock(clock);
     }
 
@@ -78,22 +74,21 @@ public class WorkManagerTest {
         return stringStringConsumerRecord;
     }
 
-
     @Test
     public void testRemovedUnordered() {
         setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
         registerSomeWork();
 
         int max = 1;
-        var works = wm.getWork(max);
+        var works = wm.maybeGetWork(max);
         assertThat(works).hasSize(1);
-        assertThat(works)
-                .extracting(x -> (int) x.getCr().offset())
-                .isEqualTo(of(0));
+        assertOffsets(works, of(0));
 
-        works = wm.getWork(max);
+        wm.success(works.get(0));
+
+        works = wm.maybeGetWork(max);
         assertThat(works).hasSize(1);
-        assertWork(works, of(1));
+        assertOffsets(works, of(1));
     }
 
     @Test
@@ -104,30 +99,30 @@ public class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.getWork(max);
+        var works = wm.maybeGetWork(max);
         assertThat(works).hasSize(2);
-        assertWork(works, of(0, 1));
+        assertOffsets(works, of(0, 1));
 
         wm.success(works.get(0));
         wm.failed(works.get(1));
 
-        works = wm.getWork(max);
-        assertWork(works, of(2));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(2));
 
         wm.success(works.get(0));
 
-        works = wm.getWork(max);
-        assertWork(works, of());
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of());
 
         advanceClockBySlightlyLessThanDelay();
 
-        works = wm.getWork(max);
-        assertWork(works, of());
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of());
 
         advanceClockByDelay();
 
-        works = wm.getWork(max);
-        assertWork(works, of(1));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(1));
         wm.success(works.get(0));
 
         assertThat(wm.getSuccessfulWork())
@@ -135,7 +130,7 @@ public class WorkManagerTest {
                 .isEqualTo(of(0, 2, 1));
     }
 
-    private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>> assertWork(List<WorkContainer<String, String>> works, List<Integer> expected) {
+    private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>> assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
         return assertThat(works)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(expected);
@@ -152,17 +147,17 @@ public class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.getWork(max);
-        assertWork(works, of(0));
+        var works = wm.maybeGetWork(max);
+        assertOffsets(works, of(0));
         var w = works.get(0);
 
-        works = wm.getWork(max);
-        assertWork(works, of()); // should be blocked by in flight
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of()); // should be blocked by in flight
 
         wm.success(w);
 
-        works = wm.getWork(max);
-        assertWork(works, of(1));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(1));
     }
 
     @Test
@@ -176,45 +171,45 @@ public class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.getWork(max);
-        assertWork(works, of(0));
+        var works = wm.maybeGetWork(max);
+        assertOffsets(works, of(0));
         var wc = works.get(0);
         wm.failed(wc);
 
-        works = wm.getWork(max);
-        assertWork(works, of());
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of());
 
         advanceClockByDelay();
 
-        works = wm.getWork(max);
-        assertWork(works, of(0));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(0));
 
         wc = works.get(0);
         wm.failed(wc);
 
         advanceClock(getRetryDelay().minus(ofSeconds(1)));
 
-        works = wm.getWork(max);
-        assertWork(works, of());
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of());
 
         advanceClock(getRetryDelay());
 
-        works = wm.getWork(max);
-        assertWork(works, of(0));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(0));
         wm.success(works.get(0));
 
-        assertWork(wm.getSuccessfulWork(), of(0));
+        assertOffsets(wm.getSuccessfulWork(), of(0));
 
-        works = wm.getWork(max);
-        assertWork(works, of(1));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(1));
         wm.success(works.get(0));
 
-        works = wm.getWork(max);
-        assertWork(works, of(2));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(2));
         wm.success(works.get(0));
 
         // check all published in the end
-        assertWork(wm.getSuccessfulWork(), of(0, 1, 2));
+        assertOffsets(wm.getSuccessfulWork(), of(0, 1, 2));
     }
 
     @Test
@@ -272,23 +267,23 @@ public class WorkManagerTest {
 //        var works = wm.getWork(max);
 //        assertWork(works, of(0));
 
-        var works = wm.getWork(4);
-        assertWork(works, of(0, 1, 2, 6));
+        var works = wm.maybeGetWork(4);
+        assertOffsets(works, of(0, 1, 2, 6));
 
         // fail some
         wm.failed(works.get(1));
         wm.failed(works.get(3));
 
         //
-        works = wm.getWork(max);
-        assertWork(works, of(8, 10));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(8, 10));
 
         //
         advanceClockByDelay();
 
         //
-        works = wm.getWork(max);
-        assertWork(works, of(1, 6));
+        works = wm.maybeGetWork(max);
+        assertOffsets(works, of(1, 6));
     }
 
     @Test
@@ -302,30 +297,150 @@ public class WorkManagerTest {
     }
 
     @Test
-    @Disabled
-    public void maxOverall() {
+    public void maxInFlight() {
+        //
+        AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
+        opts.maxUncommittedMessagesToHandle(1);
+        setupWorkManager(opts.build());
+
+        //
+        registerSomeWork();
+
+        //
+        assertThat(wm.maybeGetWork()).hasSize(1);
+        assertThat(wm.maybeGetWork()).isEmpty();
     }
 
-//    @Test
-//    @Disabled
-//    public void multipleFailures() {
-//    }
+    @Test
+    public void maxConcurrency() {
+        //
+        AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
+        opts.maxConcurrency(1);
+        setupWorkManager(opts.build());
+
+        //
+        registerSomeWork();
+
+        //
+        assertThat(wm.maybeGetWork()).hasSize(1);
+        assertThat(wm.maybeGetWork()).isEmpty();
+    }
+
+    static class FluentQueue<T> implements Iterable<T> {
+        ArrayDeque<T> work = new ArrayDeque<>();
+
+        Collection<T> add(Collection<T> c) {
+            work.addAll(c);
+            return c;
+        }
+
+        public T poll() {
+            return work.poll();
+        }
+
+        @Override
+        public Iterator<T> iterator() {
+            return work.iterator();
+        }
+
+        public int size() {
+            return work.size();
+        }
+    }
+
+    @Test
+    public void maxConcurrencyVsInFlightAndNoLeaks() {
+        //
+        AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
+        opts.ordering(UNORDERED);
+
+        opts.maxUncommittedMessagesToHandle(3);
+        opts.maxConcurrency(2);
+
+        setupWorkManager(opts.build());
+
+        //
+        registerSomeWork();
+        registerSomeWork();
+        registerSomeWork();
+
+        //
+        assertThat(wm.getShardWorkRemainingCount()).isEqualTo(9);
+
+        //
+        var work = new FluentQueue<WorkContainer<String, String>>();
+        assertThat(work.add(wm.maybeGetWork())).hasSize(2);
+
+        //
+        assertThat(wm.maybeGetWork()).isEmpty();
+
+        // succeed
+        wm.success(work.poll());
+
+        //
+        assertThat(work.add(wm.maybeGetWork())).hasSize(1);
+
+        //
+        wm.failed(work.poll());
+        // bump the clock - we're not testing delayed failure
+        advanceClockByDelay();
+
+        //
+        assertThat(work.add(wm.maybeGetWork())).hasSize(1);
+
+        //
+        wm.success(work.poll());
+        wm.success(work.poll());
+
+        //
+        assertThat(work.add(wm.maybeGetWork(100))).hasSize(2);
+
+        //
+        for (var ignore : work) {
+            wm.success(work.poll());
+        }
+
+        //
+        assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
+
+        //
+        assertThat(wm.getInFlightCount()).isEqualTo(2);
+        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
+        assertThat(wm.getShardWorkRemainingCount()).isEqualTo(4);
+        assertThat(wm.getSuccessfulWork()).hasSize(5);
+
+        //
+        wm.success(work.poll());
+        wm.success(work.poll());
+
+        //
+        assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
+        wm.success(work.poll());
+        wm.success(work.poll());
+
+        //
+        assertThat(work.size()).isEqualTo(0);
+        assertThat(wm.getSuccessfulWork()).hasSize(9);
+        assertThat(wm.getInFlightCount()).isEqualTo(0);
+        assertThat(wm.getShardWorkRemainingCount()).isEqualTo(0);
+        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
+    }
 
     @Test
     @Disabled
-    public void terminalFailureGoesToDlq() {
-        assertThat(wm.getTerminallyFailedWork()).isNotNull();
+    public void multipleFailures() {
     }
-//
-//    @Test
-//    @Disabled
-//    public void delayedOrdered() {
-//    }
-//
-//    @Test
-//    @Disabled
-//    public void delayedUnordered() {
-//    }
+
+
+    @Test
+    @Disabled
+    public void delayedOrdered() {
+    }
+
+    @Test
+    @Disabled
+    public void delayedUnordered() {
+    }
 
     @Test
     public void orderedByPartitionsParallel() {
@@ -346,18 +461,18 @@ public class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        var works = wm.getWork();
-        assertWork(works, of(0, 6));
+        var works = wm.maybeGetWork();
+        assertOffsets(works, of(0, 6));
         successAll(works);
 
         //
-        works = wm.getWork();
-        assertWork(works, of(1, 8));
+        works = wm.maybeGetWork();
+        assertOffsets(works, of(1, 8));
         successAll(works);
 
         //
-        works = wm.getWork();
-        assertWork(works, of(2, 10));
+        works = wm.maybeGetWork();
+        assertOffsets(works, of(2, 10));
         successAll(works);
     }
 
@@ -391,25 +506,25 @@ public class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        var works = wm.getWork();
+        var works = wm.maybeGetWork();
         works.sort(Comparator.naturalOrder()); // we actually don't care about the order
-        assertWork(works, of(0, 6, 8, 12));
+        assertOffsets(works, of(0, 6, 8, 12));
         successAll(works);
 
         //
-        works = wm.getWork();
+        works = wm.maybeGetWork();
         works.sort(Comparator.naturalOrder());
-        assertWork(works, of(1, 10, 20));
+        assertOffsets(works, of(1, 10, 20));
         successAll(works);
 
         //
-        works = wm.getWork();
+        works = wm.maybeGetWork();
         works.sort(Comparator.naturalOrder());
-        assertWork(works, of(2, 15));
+        assertOffsets(works, of(2, 15));
         successAll(works);
 
-        works = wm.getWork();
-        assertWork(works, of());
+        works = wm.maybeGetWork();
+        assertOffsets(works, of());
     }
 
     @Test
@@ -417,7 +532,7 @@ public class WorkManagerTest {
     public void unorderedPartitionsGreedy() {
     }
 
-//        @Test
+    //        @Test
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
     public void highVolumeKeyOrder(int quantity) {
@@ -443,7 +558,7 @@ public class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        List<WorkContainer<String, String>> work = wm.getWork();
+        List<WorkContainer<String, String>> work = wm.maybeGetWork();
 
         //
         assertThat(work).hasSameSizeAs(records.keySet());
@@ -466,5 +581,38 @@ public class WorkManagerTest {
         Object[] objects = ascendingOrder.toArray();
 
         assertThat(objects).containsExactly(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+    }
+
+    /**
+     * Checks work management is correct in this respect.
+     */
+    @Test
+    public void workQueuesEmptyWhenAllWorkComplete() {
+        AsyncConsumerOptions build = AsyncConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .maxConcurrency(10)
+                .maxUncommittedMessagesToHandle(10)
+                .build();
+        setupWorkManager(build);
+        registerSomeWork();
+
+        //
+        var work = wm.maybeGetWork();
+        assertThat(work).hasSize(3);
+
+        //
+        for (var w : work) {
+            w.onUserFunctionSuccess();
+            wm.success(w);
+        }
+
+        //
+        assertThat(wm.getShardWorkRemainingCount()).isZero();
+        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(3);
+
+        // drain commit queue
+        var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
+        assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
+        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(0);
     }
 }

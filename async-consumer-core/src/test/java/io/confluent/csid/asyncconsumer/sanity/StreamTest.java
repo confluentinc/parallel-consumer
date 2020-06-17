@@ -1,6 +1,5 @@
 package io.confluent.csid.asyncconsumer.sanity;
 
-import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase.MyInput;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -12,7 +11,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
- * Sanity test usage
+ * Sanity test usage of Java {@link Stream}
  */
 @Slf4j
 public class StreamTest {
@@ -29,7 +28,7 @@ public class StreamTest {
     public void testStreamSpliterators() {
         int max = 10;
 
-        Iterator<MyInput> i = new Iterator<>() {
+        Iterator<String> i = new Iterator<>() {
 
             int count = 0;
 
@@ -39,27 +38,26 @@ public class StreamTest {
             }
 
             @Override
-            public MyInput next() {
+            public String next() {
                 count++;
-                return new MyInput(count + " " + Math.random());
+                return new String(count + " " + Math.random());
 
             }
         };
 
-        Spliterator<MyInput> spliterator = Spliterators.spliterator(i, 0, Spliterator.NONNULL);
+        Spliterator<String> spliterator = Spliterators.spliterator(i, 0, Spliterator.NONNULL);
 
-        Stream<MyInput> stream = StreamSupport.stream(spliterator, false);
-
-//        Stream<MyInput> streamParallel = StreamSupport.stream(spliterator, true);
+        Stream<String> stream = StreamSupport.stream(spliterator, false);
 
         List<String> collect = stream
                 .map(x -> {
                             log.info(x.toString());
-                            return x.getData().toUpperCase();
+                            return x.toUpperCase();
                         }
                 )
                 .collect(Collectors.toList());
 
         Assertions.assertThat(collect).hasSize(max);
     }
+    
 }

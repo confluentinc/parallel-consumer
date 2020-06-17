@@ -1,7 +1,5 @@
 package io.confluent.csid.utils;
 
-import org.assertj.core.util.Lists;
-
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -50,7 +48,8 @@ public class Range implements Iterable<Integer> {
     }
 
     public List<Integer> list() {
-        ArrayList<Integer> integers = Lists.newArrayList(this);
+        ArrayList<Integer> integers = new ArrayList<Integer>();
+        forEach(integers::add);
         return integers;
     }
 

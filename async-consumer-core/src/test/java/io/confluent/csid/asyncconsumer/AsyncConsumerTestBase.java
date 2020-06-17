@@ -1,6 +1,7 @@
 package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.csid.utils.LongPollingMockConsumer;
 import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -57,21 +58,10 @@ public class AsyncConsumerTestBase {
     volatile CountDownLatch controlLoopPauseLatch = new CountDownLatch(0);
     protected AtomicReference<Integer> loopCount;
 
-    // todo ??
-    long waitMs;
-
-    // todo remove?
-    @Data
-    public static class MyKey {
-        private final String data;
-
-    }
-
-    // todo remove?
-    @Data
-    public static class MyInput {
-        private final String data;
-    }
+    /**
+     * Time to wait to verify some assertion types
+     */
+    long verificationWaitDelay;
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
@@ -84,7 +74,7 @@ public class AsyncConsumerTestBase {
     }
 
     protected MockConsumer<String, String> setupClients() {
-        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        MockConsumer<String, String> consumer = new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST);
         MockProducer<String, String> producer = new MockProducer<>(true, null, null); // TODO do async testing
 
         this.producerSpy = spy(producer);
@@ -95,7 +85,7 @@ public class AsyncConsumerTestBase {
 
         KafkaTestUtils.setupConsumer(this.consumerSpy);
 
-        return consumer;
+        return consumerSpy;
     }
 
     protected void setupAsyncConsumerInstance(AsyncConsumerOptions.ProcessingOrder order) {
@@ -107,10 +97,10 @@ public class AsyncConsumerTestBase {
 
         asyncConsumer = initAsyncConsumer(asyncConsumerOptions);
 
-        asyncConsumer.setLongPollTimeout(ofMillis(10));
-        asyncConsumer.setTimeBetweenCommits(ofMillis(0));
+        asyncConsumer.setLongPollTimeout(ofMillis(100));
+        asyncConsumer.setTimeBetweenCommits(ofMillis(100));
 
-        waitMs = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
+        verificationWaitDelay = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
 
         loopCountRef = attachLoopCounter(asyncConsumer);
     }
@@ -149,11 +139,17 @@ public class AsyncConsumerTestBase {
         return currentLoop;
     }
 
+    /**
+     * Pauses the control loop by awaiting this injected countdown lunch
+     */
     protected void pauseControlLoop() {
         log.trace("Pause loop");
         controlLoopPauseLatch = new CountDownLatch(1);
     }
 
+    /**
+     * Resume is the controller by decrementing the injected countdown latch
+     */
     protected void resumeControlLoop() {
         log.trace("Resume loop");
         controlLoopPauseLatch.countDown();
@@ -164,10 +160,10 @@ public class AsyncConsumerTestBase {
     }
 
     protected void waitForSomeLoopCycles(int thisManyMore) {
-        log.trace("Waiting for {} more iterations of the control loop.", thisManyMore);
+        log.debug("Waiting for {} more iterations of the control loop.", thisManyMore);
         blockingLoopLatchTrigger(thisManyMore);
 //        waitForLoopCount(this.loopCountRef.get() + thisManyMore);
-        log.trace("Completed waiting on {} loop(s)", thisManyMore);
+        log.debug("Completed waiting on {} loop(s)", thisManyMore);
     }
 
     protected void waitUntilTrue(Callable<Boolean> booleanCallable) {
