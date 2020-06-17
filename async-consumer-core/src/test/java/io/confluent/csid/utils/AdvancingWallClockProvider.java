@@ -5,7 +5,7 @@ import java.time.Instant;
 
 public class AdvancingWallClockProvider extends WallClock {
 
-    Instant advanceAndGet(Duration time) {
+    public Instant advanceAndGet(Duration time) {
         return getNow().plus(time);
     }
 

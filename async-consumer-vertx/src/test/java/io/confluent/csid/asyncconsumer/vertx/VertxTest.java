@@ -113,9 +113,10 @@ public class VertxTest extends AsyncConsumerTestBase {
                     return badHost;
                 });
 
-        pauseControlToAwaitForLatch(latch);
+        //
+        awaitLatch(latch);
 
-
+        //
         verify(producerSpy, times(0).description("Nothing should be committed"))
                 .commitTransaction();
 
@@ -141,7 +142,7 @@ public class VertxTest extends AsyncConsumerTestBase {
                 });
 
         // wait
-        pauseControlToAwaitForLatch(latch);
+        awaitLatch(latch);
 
         // verify
         var collect = futureStream.map(Result::getAsr).collect(Collectors.toList());
@@ -175,8 +176,9 @@ public class VertxTest extends AsyncConsumerTestBase {
                 });
 
         // wait
-        pauseControlToAwaitForLatch(latch);
+        awaitLatch(latch);
 
+        //
         waitForOneLoopCycle();
 
         // verify
@@ -206,7 +208,7 @@ public class VertxTest extends AsyncConsumerTestBase {
                     return httpRequest;
                 });
 
-        pauseControlToAwaitForLatch(latch);
+        awaitLatch(latch);
 
         var res = getResults(futureStream);
 

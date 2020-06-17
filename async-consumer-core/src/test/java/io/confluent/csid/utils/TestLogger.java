@@ -9,9 +9,9 @@ import org.junit.platform.launcher.TestIdentifier;
 
 /**
  * Print out test names in Maven output, not just class names. Useful for added context for failures in CI runs.
- *
+ * <p>
  * Happy times... =D
- *
+ * <p>
  * https://stackoverflow.com/questions/49937451/junit-5-is-it-possible-to-set-a-testexecutionlistener-in-maven-surefire-plugin
  * https://junit.org/junit5/docs/current/user-guide/#launcher-api-listeners-custom
  * https://github.com/google/auto/tree/master/service
@@ -20,6 +20,7 @@ import org.junit.platform.launcher.TestIdentifier;
 @AutoService(TestExecutionListener.class)
 @Slf4j
 public class TestLogger implements TestExecutionListener {
+
     @Override
     public void executionStarted(TestIdentifier testIdentifier) {
 //        log.info("-------------------------------------------------------");
@@ -29,4 +30,5 @@ public class TestLogger implements TestExecutionListener {
         System.out.println(testIdentifier.getDisplayName());
         System.out.println("-------------------------------------------------------");
     }
+
 }

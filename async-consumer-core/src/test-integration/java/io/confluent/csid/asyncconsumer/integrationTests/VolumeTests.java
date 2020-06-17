@@ -1,6 +1,7 @@
-package io.confluent.csid.asyncconsumer;
+package io.confluent.csid.asyncconsumer.integrationTests;
 
 import ch.qos.logback.classic.Level;
+import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;
 import io.confluent.csid.utils.GeneralTestUtils;
 import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
@@ -36,8 +37,6 @@ public class VolumeTests extends AsyncConsumerTestBase {
     @SneakyThrows
     @Test
     public void load() {
-        GeneralTestUtils.changeLogLevelTo(Level.OFF);
-
         setupClients();
         setupAsyncConsumerInstance(UNORDERED);
 
@@ -82,10 +81,10 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         assertThat(mostRecentCommit(producerSpy)).isEqualTo(quantityOfMessagesToProduce - 1);
 
-//        assertThat(false).isTrue();
+//        TODO assertThat(false).isTrue();
 //        Assert process ordering
 
-        // Run the test of Run the test of the three different modes IKEA by topic by partition
+        // Run the test of the three different modes by topic by partition
     }
 
 
@@ -117,26 +116,21 @@ public class VolumeTests extends AsyncConsumerTestBase {
     }
 
     @Test
-//    @Disabled
     public void timingOfDifferentOrderingTypes() {
         var quantityOfMessagesToProduce = 100;
         var defaultNumKeys = 20;
 
-//        setupClients();
         setupAsyncConsumerInstance(UNORDERED);
         log.debug("No order");
         Duration unordered = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
 
-//        setupClients();
         setupAsyncConsumerInstance(KEY);
         for (var keySize : List.of(1, 2, 5, 10, 20, 50, 100, 1000)) {
-//            setupClients();
             setupAsyncConsumerInstance(KEY);
             log.debug("By key, {} keys", keySize);
             Duration key = time(() -> testTiming(keySize, quantityOfMessagesToProduce));
         }
 
-//        setupClients();
         setupAsyncConsumerInstance(PARTITION);
         log.debug("By partition");
         Duration partition = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
@@ -159,12 +153,14 @@ public class VolumeTests extends AsyncConsumerTestBase {
 //            log.debug(x.toString());
         });
 
+        waitForSomeLoopCycles(2);
         asyncConsumer.waitForNoInFlight(defaultTimeout.multipliedBy(10));
 
-        List<ProducerRecord<String, String>> history = producerSpy.history();
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = producerSpy.consumerGroupOffsetsHistory();
+        List<ProducerRecord<String, String>> produceHistory = producerSpy.history();
+        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> groupOffsetsHistory = producerSpy.consumerGroupOffsetsHistory();
 
-        assertThat(history).hasSize(quantityOfMessagesToProduce);
+        assertThat(produceHistory).hasSize(quantityOfMessagesToProduce);
+        assertThat(groupOffsetsHistory).hasSizeGreaterThan(0);
     }
 
     @SneakyThrows

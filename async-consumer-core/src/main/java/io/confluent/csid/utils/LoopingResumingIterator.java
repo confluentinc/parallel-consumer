@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 import lombok.Getter;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.function.Consumer;
 
 /**
@@ -18,7 +19,7 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
     @Getter
     private final Optional<KEY> iterationStartingPoint;
 
-    private final LinkedHashMap<KEY, VALUE> map;
+    private final Map<KEY, VALUE> map;
 
     private boolean looped = false;
 
@@ -28,13 +29,13 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
 
     private final boolean stillIterateCollectionIfStartingPointDoesntExist = true;
 
-    public LoopingResumingIterator(KEY startingKey, LinkedHashMap<KEY, VALUE> map) {
+    public LoopingResumingIterator(KEY startingKey, Map<KEY, VALUE> map) {
         this.iterationStartingPoint = Optional.ofNullable(startingKey);
         this.map = map;
         this.iterator = map.entrySet().iterator();
     }
 
-    public LoopingResumingIterator(LinkedHashMap<KEY, VALUE> map) {
+    public LoopingResumingIterator(Map<KEY, VALUE> map) {
         this(null, map);
     }
 

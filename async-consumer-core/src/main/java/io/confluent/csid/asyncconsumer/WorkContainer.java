@@ -66,7 +66,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     public void succeed() {
         log.trace("Succeeded {}", this);
         inFlight = false;
-    } // todo ??
+    }
 
     public boolean hasDelayPassed(WallClock clock) {
         long delay = getDelay(TimeUnit.SECONDS, clock);
@@ -124,6 +124,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     @Override
     public String toString() {
-        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ":" + cr.value() + ")";
+//        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ":" + cr.value() + ")";
+        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() +")";
     }
 }

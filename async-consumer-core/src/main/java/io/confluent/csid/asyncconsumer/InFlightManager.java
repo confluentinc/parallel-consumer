@@ -15,6 +15,7 @@ import java.util.TreeMap;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 
+// todo delete
 @Slf4j
 public class InFlightManager<K, V> {
 
@@ -34,61 +35,62 @@ public class InFlightManager<K, V> {
         // store the future reference, against it's offset as key
         offsetToFuture.put(offset, work);
     }
+//
+//    // TODO delete
+//    @SneakyThrows
+//    <R> void findCompletedFutureOffsets() {
+//        int count = 0;
+//        int removed = 0;
+//        log.trace("Scanning for in order in-flight work that has completed...");
+//        for (final var inFlightInPartition : inFlightPerPartition.entrySet()) {
+//            count += inFlightInPartition.getValue().size();
+//            var offsetsToRemoveFromInFlight = new LinkedList<Long>();
+//            TreeMap<Long, WorkContainer<K, V>> inFlightFutures = inFlightInPartition.getValue();
+//            for (final var offsetAndItsWorkContainer : inFlightFutures.entrySet()) {
+//                // ordered iteration via offset keys thanks to the tree-map
+//                WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
+//                boolean complete = container.isComplete();
+//                if (complete) {
+//                    long offset = container.getCr().offset();
+//                    offsetsToRemoveFromInFlight.add(offset);
+//                    if (container.getUserFunctionSucceeded().get()) {
+//                        log.trace("Work completed successfully, so marking to commit");
+//                        foundOffsetToSend(container);
+//                    } else {
+//                        log.debug("Offset {} is complete, but failed and is holding up the queue. Ending partition scan.", container.getCr().offset());
+//                        // can't scan any further
+//                        break;
+//                    }
+//                } else {
+//                    // can't commit this offset or beyond, as this is the latest offset that is incomplete
+//                    // i.e. only commit offsets that come before the current one, and stop looking for more
+//                    log.debug("Offset {} (key:{}) is incomplete, holding up the queue ({}). Ending partition scan.",
+//                            container.getCr().offset(),
+//                            container.getCr().key(),
+//                            inFlightInPartition.getKey());
+//                    break;
+//                }
+//            }
+//
+//            removed += offsetsToRemoveFromInFlight.size();
+//            for (Long offset : offsetsToRemoveFromInFlight) {
+//                inFlightFutures.remove(offset);
+//            }
+//        }
+//        log.debug("Scan finished, {} were in flight, {} completed offsets removed, {} coalesced offset(s) ({}) to be committed",
+//                count, removed, this.offsetsToSend.size(), offsetsToSend);
+//    }
 
-    @SneakyThrows
-    <R> void findCompletedFutureOffsets() {
-        int count = 0;
-        int removed = 0;
-        log.trace("Scanning for in order in-flight work that has completed...");
-        for (final var inFlightInPartition : inFlightPerPartition.entrySet()) {
-            count += inFlightInPartition.getValue().size();
-            var offsetsToRemoveFromInFlight = new LinkedList<Long>();
-            TreeMap<Long, WorkContainer<K, V>> inFlightFutures = inFlightInPartition.getValue();
-            for (final var offsetAndItsWorkContainer : inFlightFutures.entrySet()) {
-                // ordered iteration via offset keys thanks to the tree-map
-                WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
-                boolean complete = container.isComplete();
-                if (complete) {
-                    long offset = container.getCr().offset();
-                    offsetsToRemoveFromInFlight.add(offset);
-                    if (container.getUserFunctionSucceeded().get()) {
-                        log.trace("Work completed successfully, so marking to commit");
-                        foundOffsetToSend(container);
-                    } else {
-                        log.debug("Offset {} is complete, but failed and is holding up the queue. Ending partition scan.", container.getCr().offset());
-                        // can't scan any further
-                        break;
-                    }
-                } else {
-                    // can't commit this offset or beyond, as this is the latest offset that is incomplete
-                    // i.e. only commit offsets that come before the current one, and stop looking for more
-                    log.debug("Offset {} (key:{}) is incomplete, holding up the queue ({}). Ending partition scan.",
-                            container.getCr().offset(),
-                            container.getCr().key(),
-                            inFlightInPartition.getKey());
-                    break;
-                }
-            }
-
-            removed += offsetsToRemoveFromInFlight.size();
-            for (Long offset : offsetsToRemoveFromInFlight) {
-                inFlightFutures.remove(offset);
-            }
-        }
-        log.debug("Scan finished, {} were in flight, {} completed offsets removed, {} coalesced offset(s) ({}) to be committed",
-                count, removed, this.offsetsToSend.size(), offsetsToSend);
-    }
-
-    // todo tight loop optimise?
-    private void foundOffsetToSend(WorkContainer<K, V> wc) {
-        log.trace("Found offset candidate (offset:{}) to add to offset commit map", wc.getCr().offset());
-        ConsumerRecord<?, ?> cr = wc.getCr();
-        long offset = cr.offset();
-        OffsetAndMetadata offsetData = new OffsetAndMetadata(offset, ""); // TODO blank string? move object construction out?
-        TopicPartition topicPartitionKey = toTP(cr);
-        // as in flights are processed in order, this will keep getting overwritten with the highest offset available
-        offsetsToSend.put(topicPartitionKey, offsetData);
-    }
+//    // todo tight loop optimise?
+//    private void foundOffsetToSend(WorkContainer<K, V> wc) {
+//        log.trace("Found offset candidate (offset:{}) to add to offset commit map", wc.getCr().offset());
+//        ConsumerRecord<?, ?> cr = wc.getCr();
+//        long offset = cr.offset();
+//        OffsetAndMetadata offsetData = new OffsetAndMetadata(offset, ""); // TODO blank string? move object construction out?
+//        TopicPartition topicPartitionKey = toTP(cr);
+//        // as in flights are processed in order, this will keep getting overwritten with the highest offset available
+//        offsetsToSend.put(topicPartitionKey, offsetData);
+//    }
 
     boolean hasInFlightRemaining() {
         for (var entry : inFlightPerPartition.entrySet()) {

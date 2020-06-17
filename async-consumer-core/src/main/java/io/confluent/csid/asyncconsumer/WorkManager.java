@@ -13,6 +13,8 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static java.lang.Math.min;
@@ -31,20 +33,26 @@ public class WorkManager<K, V> {
     private final AsyncConsumerOptions options;
 
     // todo disable/remove if using partition order
-    final private LinkedHashMap<Object, TreeMap<Long, WorkContainer<K, V>>> processingShards = new LinkedHashMap<>();
+    final private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     /**
-     * need to record globally consumed records, to ensure correct offset order committal. Cannot rely on
+     * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on
      * incrementally advancing offsets, as this isn't a guarantee of kafka's.
      */
-    final private Map<TopicPartition, TreeMap<Long, WorkContainer<K, V>>> partitionRecords = new HashMap<>();
-
-    private final int maxConcurrency;
+    final private Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every shard.
      */
     private Optional<Object> iterationResumePoint = Optional.empty();
+
+    private int inFlightCount = 0;
+
+    /**
+     * The multiple of {@link AsyncConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting processing.
+     * Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
+     */
+    private int loadingFactor = 2;
 
     // todo for testing - replace with listener or event bus
     @Getter(PACKAGE)
@@ -53,9 +61,14 @@ public class WorkManager<K, V> {
     @Setter(PACKAGE)
     private WallClock clock = new WallClock();
 
-    public WorkManager(int maxConcurrency, AsyncConsumerOptions options) {
-        this.maxConcurrency = maxConcurrency;
+    public WorkManager(AsyncConsumerOptions options) {
         this.options = options;
+    }
+
+    public <R> void registerWork(List<ConsumerRecords<K, V>> records) {
+        for (var record : records) {
+            registerWork(record);
+        }
     }
 
     public <R> void registerWork(ConsumerRecords<K, V> records) {
@@ -65,10 +78,10 @@ public class WorkManager<K, V> {
             long offset = rec.offset();
             var wc = new WorkContainer<K, V>(rec);
 
-            processingShards.computeIfAbsent(shardKey, (ignore) -> new TreeMap<>())
+            processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>())
                     .put(offset, wc);
 
-            partitionRecords.computeIfAbsent(toTP(rec), (ignore) -> new TreeMap<>())
+            partitionCommitQueues.computeIfAbsent(toTP(rec), (ignore) -> new ConcurrentSkipListMap<>())
                     .put(offset, wc);
         }
     }
@@ -80,43 +93,53 @@ public class WorkManager<K, V> {
         };
     }
 
-    public <R> List<WorkContainer<K, V>> getWork() {
-        return getWork(maxConcurrency);
+    public <R> List<WorkContainer<K, V>> maybeGetWork() {
+        return maybeGetWork(options.getMaxConcurrency());
     }
 
     /**
      * Depth first work retrieval.
      *
-     * @param maxWorkToRetrieve ignored unless less than {@link #maxConcurrency}
+     * @param requestedMaxWorkToRetrieve ignored unless less than {@link AsyncConsumerOptions#getMaxConcurrency()}
      */
-    public List<WorkContainer<K, V>> getWork(int maxWorkToRetrieve) {
-        int max = min(maxWorkToRetrieve, maxConcurrency);
+    public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
+        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxConcurrency()), options.getMaxUncommittedMessagesToHandle());
+        int workToGetDelta = minWorkToGetSetting - getInFlightCount();
+
+        // optimise early
+        if (workToGetDelta < 1) {
+            return List.of();
+        }
+
+        //
         List<WorkContainer<K, V>> work = new ArrayList<>();
 
+        //
         var it = new LoopingResumingIterator<>(iterationResumePoint, processingShards);
 
+        //
         for (var shard : it) {
             log.trace("Looking for work on shard: {}", shard.getKey());
-            if (work.size() >= max) {
+            if (work.size() >= workToGetDelta) {
                 this.iterationResumePoint = Optional.of(shard.getKey());
                 log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
                 break;
             }
 
             ArrayList<WorkContainer<K, V>> shardWork = new ArrayList<>();
-            SortedMap<Long, WorkContainer<K, V>> partitionQueue = shard.getValue();
+            SortedMap<Long, WorkContainer<K, V>> shardQueue = shard.getValue();
 
-            // then iterate over partitionQueue queue
+            // then iterate over shardQueue queue
             // todo don't iterate entire stream if max limit passed in
-            Set<Map.Entry<Long, WorkContainer<K, V>>> entries = partitionQueue.entrySet();
-            for (var entry : entries) {
+            Set<Map.Entry<Long, WorkContainer<K, V>>> shardQueueEntries = shardQueue.entrySet();
+            for (var queueEntry : shardQueueEntries) {
                 int taken = work.size() + shardWork.size();
-                if (taken >= max) {
-                    log.trace("Work taken ({}) execeds max ({})", taken, max);
+                if (taken >= workToGetDelta) {
+                    log.trace("Work taken ({}) exceeds max ({})", taken, workToGetDelta);
                     break;
                 }
 
-                var wc = entry.getValue();
+                var wc = queueEntry.getValue();
                 if (wc.hasDelayPassed(clock) && wc.isNotInFlight()) {
                     log.trace("Taking {} as work", wc);
                     wc.takingAsWork();
@@ -137,7 +160,9 @@ public class WorkManager<K, V> {
             }
             work.addAll(shardWork);
         }
+
         log.debug("Returning {} records of work", work.size());
+        inFlightCount += work.size();
         return work;
     }
 
@@ -148,10 +173,7 @@ public class WorkManager<K, V> {
         Object key = computeShardKey(cr);
         processingShards.get(key).remove(cr.offset());
         successfulWork.add(wc);
-    }
-
-    public <R> List<WorkContainer<K, V>> getTerminallyFailedWork() {
-        throw new RuntimeException();
+        inFlightCount--;
     }
 
     public void failed(WorkContainer<K, V> wc) {
@@ -166,9 +188,18 @@ public class WorkManager<K, V> {
         var queue = processingShards.get(key);
         long offset = wc.getCr().offset();
         queue.put(offset, wc);
+        inFlightCount--;
     }
 
-    int workRemainingCount() {
+    public int getPartitionWorkRemainingCount() {
+        int count = 0;
+        for (var e : this.partitionCommitQueues.entrySet()) {
+            count += e.getValue().size();
+        }
+        return count;
+    }
+
+    public int getShardWorkRemainingCount() {
         int count = 0;
         for (var e : this.processingShards.entrySet()) {
             count += e.getValue().size();
@@ -177,40 +208,37 @@ public class WorkManager<K, V> {
     }
 
     boolean isWorkReamining() {
-        return workRemainingCount() > 0;
+        return getPartitionWorkRemainingCount() > 0;
     }
 
     public WorkContainer<K, V> getWorkContainerForRecord(ConsumerRecord<K, V> rec) {
         Object key = computeShardKey(rec);
-        TreeMap<Long, WorkContainer<K, V>> longWorkContainerTreeMap = this.processingShards.get(key);
+        var longWorkContainerTreeMap = this.processingShards.get(key);
         long offset = rec.offset();
         WorkContainer<K, V> wc = longWorkContainerTreeMap.get(offset);
         return wc;
     }
 
-    void addWorkToInFlight(WorkContainer<K, V> work, ConsumerRecord<K, V> cr) {
-        final TopicPartition inputTopicPartition = work.getTopicPartition();
-        long offset = cr.offset();
+    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
+        return findCompletedEligibleOffsetsAndRemove(true);
+    }
 
-        // ensure we have a TreeMap (ordered map by key) for the topic partition we're reading from
-        var offsetToFuture = partitionRecords
-                .computeIfAbsent(inputTopicPartition, (ignore) -> new TreeMap<>());
-
-        // store the future reference, against it's offset as key
-        offsetToFuture.put(offset, work);
+    boolean hasComittableOffsets() {
+        return findCompletedEligibleOffsetsAndRemove(false).size() != 0;
     }
 
     @SneakyThrows
-    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedFutureOffsets() {
+    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
         Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
         int count = 0;
         int removed = 0;
         log.trace("Scanning for in order in-flight work that has completed...");
-        for (final var inFlightInPartition : partitionRecords.entrySet()) {
-            count += inFlightInPartition.getValue().size();
-            var offsetsToRemoveFromInFlight = new LinkedList<Long>();
-            TreeMap<Long, WorkContainer<K, V>> inFlightFutures = inFlightInPartition.getValue();
-            for (final var offsetAndItsWorkContainer : inFlightFutures.entrySet()) {
+        for (final var partitionQueueEntry : partitionCommitQueues.entrySet()) {
+            var partitionQueue = partitionQueueEntry.getValue();
+            count += partitionQueue.size();
+//            var offsetsToRemoveFromPartitionQueue = new LinkedList<Long>();
+            var workToRemove = new LinkedList<WorkContainer<K, V>>();
+            for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
                 WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
                 boolean complete = container.isComplete();
@@ -219,10 +247,11 @@ public class WorkManager<K, V> {
                     if (container.getUserFunctionSucceeded().get()) {
 //                        log.trace("Work completed successfully, so marking to commit");
                         log.trace("Found offset candidate ({}) to add to offset commit map", container);
-                        offsetsToRemoveFromInFlight.add(offset);
-                        OffsetAndMetadata offsetData = new OffsetAndMetadata(offset, ""); // TODO blank string? move object construction out?
+//                        offsetsToRemoveFromPartitionQueue.add(offset);
+                        workToRemove.add(container);
                         TopicPartition topicPartitionKey = toTP(container.getCr());
                         // as in flights are processed in order, this will keep getting overwritten with the highest offset available
+                        OffsetAndMetadata offsetData = new OffsetAndMetadata(offset, ""); // TODO blank string? move object construction out?
                         offsetsToSend.put(topicPartitionKey, offsetData);
                     } else {
                         log.debug("Offset {} is complete, but failed and is holding up the queue. Ending partition scan.", container.getCr().offset());
@@ -233,13 +262,16 @@ public class WorkManager<K, V> {
                     // can't commit this offset or beyond, as this is the latest offset that is incomplete
                     // i.e. only commit offsets that come before the current one, and stop looking for more
                     log.debug("Offset ({}) is incomplete, holding up the queue ({}). Ending partition scan.",
-                            container, inFlightInPartition.getKey());
+                            container, partitionQueueEntry.getKey());
                     break;
                 }
             }
-            removed += offsetsToRemoveFromInFlight.size();
-            for (Long offset : offsetsToRemoveFromInFlight) {
-                inFlightFutures.remove(offset);
+            if (remove) {
+                removed += workToRemove.size();
+                for (var w : workToRemove) {
+                    var offset = w.getCr().offset();
+                    partitionQueue.remove(offset);
+                }
             }
         }
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
@@ -247,4 +279,35 @@ public class WorkManager<K, V> {
         return offsetsToSend;
     }
 
+    public boolean shouldThrottle() {
+        return isOverMax();
+    }
+
+    private boolean isOverMax() {
+        int remaining = getPartitionWorkRemainingCount();
+        boolean loadedEnough = remaining > options.getMaxConcurrency() * loadingFactor;
+        boolean overMaxInFlight = remaining > options.getMaxUncommittedMessagesToHandle();
+        boolean isOverMax = loadedEnough || overMaxInFlight;
+        if (isOverMax) {
+            log.debug("loadedEnough {} || overMaxInFlight {}", loadedEnough, overMaxInFlight);
+        }
+        return isOverMax;
+    }
+
+    public int getInFlightCount() {
+        return inFlightCount;
+    }
+
+    public boolean workIsWaitingToBeCompletedSuccessfully() {
+        Collection<NavigableMap<Long, WorkContainer<K, V>>> values = processingShards.values();
+        for (NavigableMap<Long, WorkContainer<K, V>> value : values) {
+            if (!value.isEmpty())
+                return true;
+        }
+        return false;
+    }
+
+    public boolean hasWorkInFlight() {
+        return getInFlightCount() != 0;
+    }
 }
