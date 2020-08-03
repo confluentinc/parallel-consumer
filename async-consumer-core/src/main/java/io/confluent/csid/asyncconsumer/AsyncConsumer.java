@@ -72,8 +72,6 @@ public class AsyncConsumer<K, V> implements Closeable {
 
     private final BlockingQueue<WorkContainer<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
-    private final InFlightManager<K, V> inFlightManager = new InFlightManager<>();
-
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
     /**
@@ -469,7 +467,6 @@ public class AsyncConsumer<K, V> implements Closeable {
                     retryCount++;
                 }
             }
-            inFlightManager.clearOffsetsToSend();
 
             // only open the next tx if we are running
             if (state == running) {
@@ -515,8 +512,6 @@ public class AsyncConsumer<K, V> implements Closeable {
                 return userFunctionRunner(usersFunction, callback, work);
             });
             work.setFuture(outputRecordFuture);
-
-            inFlightManager.addWorkToInFlight(work, cr);
         }
     }
 
