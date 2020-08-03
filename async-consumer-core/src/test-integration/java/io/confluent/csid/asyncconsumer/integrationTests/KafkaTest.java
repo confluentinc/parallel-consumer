@@ -22,6 +22,7 @@ import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.util.List;
 import java.util.Properties;
@@ -38,12 +39,12 @@ public abstract class KafkaTest<K, V> {
   String topic;
 
   @Container
-  static public KafkaContainer kafkaContainer = new KafkaContainer("latest")
+  static public KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:latest"))
           .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
           .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
           .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1"); //transaction.state.log.num.partitions
 
-  KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
+  protected KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
   @BeforeAll
   static void followKafkaLogs(){
@@ -72,7 +73,7 @@ public abstract class KafkaTest<K, V> {
   }
 
   @SneakyThrows
-  private void ensureTopic(String topic, int numPartitions) {
+  protected void ensureTopic(String topic, int numPartitions) {
     NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
     CreateTopicsResult topics = kcu.admin.createTopics(List.of(e1));
     Void all = topics.all().get();

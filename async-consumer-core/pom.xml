@@ -14,7 +14,6 @@
     <name>Async Consumer Core</name>
 
     <properties>
-        <kafka.version>2.5.0</kafka.version>
     </properties>
 
     <dependencies>

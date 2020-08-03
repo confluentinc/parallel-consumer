@@ -11,20 +11,150 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 
-image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"]
+image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"] image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
 
-An asynchronous messaging processing library for the Apache Kafka consumer
+A concurrent / asynchronous messaging processing library for the Apache Kafka consumer.
+
+.Consume _concurrently_ with a *single* consumer instance:
+[source,java]
+asyncConsumer.asyncPoll(record -> {
+    log.info("A record: {}", record);
+});
+
 
 toc::[]
 
-## Per Client Asynchronous AK Message Processing
+== Motivation
 
-This library will process messages consumed from Apache Kafka (AK) in parallel.
-It correctly enforces the order of committed offsets in the source partition, such that upon system failure, messages will be retried.
+The core Kafka consumer client gives you a batch of messages to process one at a time.Processing these in parallel on thread pools is difficult, particularly due to ensuring correctness of offset management, especially when trying to process concurrent by message key.
 
-CAUTION: Beware of third party systems which are not idempotent, or are key order sensitive.
+You also need to manage your consume loop, and commit transactions properly if using Exactly Once semantics.
 
-### Order enforced commit sync per partition
+This wrapper library for the core Kafka client handles all this for you, you just supply your processing function.
+
+A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typicaly CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
+
+== Feature List
+* Have massively parallel consumption processing without running hundreds or thousands of
+** Kafka consumer clients
+** topic partitions
++
+without operational burden or harming the clusters performance
+* Per `key` concurrent processing, per partition and unordered message processing
+* Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
+* Vert.x non-blocking library integration (HTTP currently)
+* Fair partition traversal
+* Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
+* Throttle control and broker liveliness management
+* Clean draining shutdown cycle
+
+image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
+image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"]
+
+And more <<roadmap,to come>>!
+
+=== Performance
+
+In the best case, you don't care about ordering at all.In which case, the degree of concurrency achievable is simply set by max thread and concurrency settings, or with the VertX extension, the Vertx Vertical being used - e.g. non-blocking HTTP calls.
+
+For example, instead of having to run 1,000 consumer to process 1,000 messages at the same time, we can process all 1,000 concurrently on a single consumer instance.
+
+More typically though you probably still want the per key ordering grantees that Kafka provides.
+For this there is the per key ordering setting.
+This will limit the library from processing any message at the same time or out of order, if they have the same key.
+
+Massively reduce message processing latency regardless of partition count for spikey workloads where there is good key distribution.
+Eg 100,000 “users” all trigger an action at once.
+As long as the processing layer can handle the load horizontally (e.g auto scaling web service), per message latency will be massively decreased, potentially down to the time for processing a single message, if the integration point can handle the concurrency.
+
+For example, if you have a key set of 10,000 unique keys, and you need to call an http end point to process each one, you can use the per key order setting, and in the best case the system will process 10,000 at the same time using the non-blocking Vertx HTTP client library.
+The user just has to provide a function to extract from the message the HTTP call parameters and construct the HTTP request object.
+
+== Usage
+
+=== Common Preparation
+
+.Setup the async client
+[source,java]
+----
+AsyncConsumer<String, String> setupAsync() {
+    var options = AsyncConsumerOptions.builder()
+            .ordering(KEY) <1>
+            .maxConcurrency(1000) <2>
+            .maxUncommittedMessagesToHandle(10000) <3>
+            .build();
+
+    Consumer<String, String> kafkaConsumer = getKafkaConsumer(); <4>
+    kafkaConsumer.subscribe(List.of("input-topic")); <5>
+
+    return new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+}
+----
+<1> Choose your ordering type, `KEY` in this case. This ensures maximum concurrency, while ensuring messages are
+processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition are completed also.
+<2> The maximum number of concurrent processing operations to be performing at any given time
+<3> Regardless of the level of concurrency, don't have more than this many messages uncomitted at any given time
+<4> Setup your consumer client as per normal
+<5> Setup your topic subscriptions
+
+=== Core
+
+This is the only thing you need to do, in order to get massively concurrent processing in your code.
+
+.Usage - print message content out to the console in parallel
+[source,java]
+async.asyncPoll(record -> {
+    log.info("A record: {}", record);
+});
+
+See the link:./async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[core example] project, and it's test.
+
+=== HTTP with the VertX Module
+
+.Call an HTTP end point for each message usage
+[source,java]
+----
+async.vertxHttpReqInfoStream(record -> {
+    Map params = Map.of("recordKey", record.key(), "payload", record.value());
+    return new RequestInfo("myhost.com", "/api", params); <1>
+});
+----
+<1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
+
+See the link:./async-consumer-examples/async-consumer-example-vertx/src/main/java/io/confluent/csid/asyncconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
+
+=== Kafka Streams Concurrent Processing
+
+.Preprocess in Kafka Streams, then process concurrently
+[source,java]
+----
+void run() {
+    preprocess(); <1>
+    concurrentProcess(); <2>
+}
+
+void preprocess() {
+    StreamsBuilder builder = new StreamsBuilder();
+    builder.<String, String>stream("my-input-topic")
+            .mapValues(value -> String.valueOf(value.length()))
+            .to(outputTopicName);
+
+    KafkaStreams streams = new KafkaStreams(builder.build(), getStreamsProperties());
+    streams.start();
+}
+
+void concurrentProcess() {
+    async.asyncPoll(record -> {
+        log.info("A record: {}", record);
+    });
+}
+----
+<1> Setup your Kafka Streams stage as per normal, performing any type of preprocessing in Kafka Streams
+<2> For the slow consumer part of your Topology, drop down into the async consumer, and use massive concurrency
+
+See the link:./async-consumer-examples/async-consumer-example-streams/src/main/java/io/confluent/csid/asyncconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
+
+=== Order enforced commit sync per partition
 
 The user has the option to either choose ordered, or unordered message processing.
 
@@ -37,21 +167,23 @@ TIP: `Unordered` processing is highly concurrent processing per partition, `orde
 
 CAUTION: `Unordered` processing could cause problems for third party integration where ordering by key is required.
 
-#### Unordered
+CAUTION: Beware of third party systems which are not idempotent, or are key order sensitive.
+
+==== Unordered
 
 Unordered processing is where there is no such restriction on there being multiple messages being processed per partition.
 However, regardless of how far along the partition the processing progresses, the earliest outstanding message will block committing of offsets.
 
 WARNING: If the system fails with many messages processed ahead of a single old message, ALL these messages will be rpocessed again.
 
-#### Ordered by Partition
+==== Ordered by Partition
 
 At most only one message from any given input partition will be in flight at any given time.
 This means that concurrent processing is restricted to the number of input partitions.
 
 The advantage of ordered processing mode, is that for an input of 1000 partitions, you do not need to run 1000 application instances or threads, to process the partitions in parallel.
 
-#### Ordered by Key (coming next)
+==== Ordered by Key
 
 Most similar to ordered by partition, this mode ensures process ordering by key.
 
@@ -60,23 +192,30 @@ Each of these key/message sets can actually possibly be processed concurrently, 
 
 And as usual, the order of offset commit's will be correct such that under failure, the system will resume from the most recently committed message in the input partitions.
 
-CAUTION: Beware of retries, idempotency and roll backs
+CAUTION: Beware of retries, idempotency and rollbacks
 
-## Retries and Ordering
+== Retries and Ordering
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
 During `ordered` processing, retries will cause a partitions messages to be held up either until the message is given up on and sent to the DLQ.
 
-### Result Consumption Models
+== Result Models
 
 * Void
 
+Processing is complete simply when your provided function finishes, and the offsets are committed.
+
 * Streaming User Results
+
+When your function is actually run, a result object will be streamed back to your client code, with information about the operation completion.
 
 * Streaming Message Publishing Results
 
-## AK EoS Transaction Model
+After your operation completes, you can also choose to publish a result message back to Kafka.
+The message publishing metadata can be streamed back to your client code.
+
+== Apache Kafka EoS Transaction Model
 
 Optionally, the user can enable AK EoE mode.
 This causes all messages produced as a result of processing a message to be committed within a transaction.
@@ -84,55 +223,46 @@ This means that even under failure, at least for the Kafka output topic, the res
 
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is Idempotent.
 
-## Your Function
-
-Consider using libraries to manage concurrent resource management, like https://github.com/resilience4j/resilience4j[resilience4j]'s.
-
-## Using with Kafka Streams
+== Using with Kafka Streams
 
 Kafka Streams (KS) doesn't yet (https://cwiki.apache.org/confluence/display/KAFKA/KIP-311%3A+Async+processing+with+dynamic+scheduling+in+Kafka+Streams[KIP-311],
 https://cwiki.apache.org/confluence/display/KAFKA/KIP-408%3A+Add+Asynchronous+Processing+To+Kafka+Streams[KIP-408]) have async processing of messages.
 However, any given preprocessing can be done in KS, preparing the messages.
 One can then use this library to consume from an input topic, produced by KS to process the messages in parallel.
 
-## Roadmap
+[[roadmap]]
+== Roadmap
 
-### Short Term - What we're working on now. ⏰
+=== Short Term - What we're working on nowish ⏰
 
----
-
-* Per `key` concurrent processing instead of per partition
-* Close consumer producer 
-* Can’t call async consumer methods more than once, must shutdown, create new
-* Make a “KafkaConsumer” which delegates, but create async. So only have to change package name to import.
-* Remove comparable 
-* Test retries
-* Producer is optional 
-* Integration tests
-** TX tests
-** Volume & ordering tests
-** Avro test
-* Exponential back off optional with an optional max
+* Producer is optional
 * Transactions optional
+* Depth~ first or breadth first partition traversal
+* JavaRX and other streaming modules
 
-### Medium Term - What's up next. ⏲
+=== Medium Term - What's up next ⏲
 
----
-
-* DLQ
-* Max in flight global, per partition, pre topic
+* Automatic fanout (automatic selection of concurrency level based on downstream back pressure)
+* Support for general Vert.x Verticles (non-blocking libraries)
+* Dead Letter Queue (DLQ) handling
 * Non-blocking I/O work management
-** Change to process HTTP result and indicate success or failure
+** More customisable handling of HTTP interactions
 ** Chance to batch multiple consumer records into a single or multiple http request objects
 * Support https://jitpack.io/ version
+* Distributed tracing integration
+* Metrics
 
-### Long Term - The future ☁️
+=== Long Term - The future ☁️
+
+* Apache Kafka KIP?
+* Call backs only offset has been committed
+* resilience4j example / integration
 
 ---
 
-* Apache Kafka KIP
-* Call backs only after offset has been committed
-* resilience4j example
-* Kafka Streams integration example
+== Development
 
----
+=== Requirements
+
+* Uses https://projectlombok.org/setup/intellij[Lombok], if you're using IntelliJ Idea, get the https://plugins.jetbrains.com/plugin/6317-lombok[plugin].
+* Integration tests require a https://docs.docker.com/docker-for-mac/[running locally accessible Docker host].

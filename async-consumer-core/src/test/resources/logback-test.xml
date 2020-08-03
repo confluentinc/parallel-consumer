@@ -32,7 +32,6 @@
 
     <!-- related -->
     <logger name="org.apache.kafka.clients" level="warn" />
-    <logger name="io.ebean" level="info" />
     <logger name="org.postgresql" level="info" />
 
     <!-- external -->
