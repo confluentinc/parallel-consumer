@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class KafkaSanityTests extends KafkaTest<String, String> {
 
     /**
-     * @see io.confluent.csid.asyncconsumer.BrokerPollSystem#pollBrokerForRecords
+     * @link io.confluent.csid.asyncconsumer.BrokerPollSystem#pollBrokerForRecords
      */
     @Timeout(value = 20) // includes docker broker startup time, can be slow on CI machines
     @Test

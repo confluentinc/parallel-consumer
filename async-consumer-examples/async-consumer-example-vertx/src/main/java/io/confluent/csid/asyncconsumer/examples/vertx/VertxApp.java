@@ -1,0 +1,70 @@
+package io.confluent.csid.asyncconsumer.examples.vertx;
+
+import io.confluent.csid.asyncconsumer.AsyncConsumer;
+import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
+import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer;
+import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer;
+import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.stream.Stream;
+
+@Slf4j
+public class VertxApp {
+
+    static String inputTopic = "input-topic";
+
+    Consumer<String, String> getKafkaConsumer() {
+        return new KafkaConsumer<>(new Properties());
+    }
+
+    Producer<String, String> getKafkaProducer() {
+        return new KafkaProducer<>(new Properties());
+    }
+
+    StreamingAsyncVertxConsumer<String, String> async;
+
+
+    void run() {
+        var options = AsyncConsumerOptions.builder()
+                .ordering(AsyncConsumerOptions.ProcessingOrder.KEY)
+                .maxConcurrency(1000)
+                .maxUncommittedMessagesToHandle(10000)
+                .build();
+
+        Consumer<String, String> kafkaConsumer = getKafkaConsumer();
+        setupSubscription(kafkaConsumer);
+
+        async = new StreamingAsyncVertxConsumer<>(kafkaConsumer,
+                getKafkaProducer(), options);
+
+        Stream<StreamingAsyncVertxConsumer.Result<String, String>> resultStream = async.vertxHttpReqInfoStream(record -> {
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
+            Map params = Map.of("recordKey", record.key(), "payload", record.value());
+            return new RequestInfo("localhost", "/api", params);
+        });
+
+        resultStream.forEach(x->{
+            log.info("From result stream: {}", x);
+        });
+
+    }
+
+    void setupSubscription(Consumer<String, String> kafkaConsumer) {
+        kafkaConsumer.subscribe(List.of(inputTopic));
+    }
+
+    void close() {
+        async.close(Duration.ofSeconds(2), true);
+    }
+
+}

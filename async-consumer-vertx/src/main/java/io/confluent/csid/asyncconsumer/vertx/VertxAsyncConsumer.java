@@ -18,6 +18,7 @@ import org.apache.kafka.clients.producer.Producer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -29,16 +30,16 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
 
     private static final String VERTX_TYPE = "vert.x type";
 
-    private Vertx vertx;
+    final private Vertx vertx;
 
-    private WebClient webClient;
-    private Runnable onVertxCompleteHook;
+    final private WebClient webClient;
+    private Optional<Runnable> onVertxCompleteHook = Optional.empty();
 
-    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer consumer, Producer producer) {
-        this(consumer, producer, Vertx.vertx(), null, null);
+    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer, AsyncConsumerOptions options) {
+        this(consumer, producer, Vertx.vertx(), null, options);
     }
 
-    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer consumer, Producer producer, Vertx vertx, WebClient webClient, AsyncConsumerOptions options) {
+    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer, Vertx vertx, WebClient webClient, AsyncConsumerOptions options) {
         super(consumer, producer, options);
         if (vertx == null)
             vertx = Vertx.vertx();
@@ -48,13 +49,16 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         this.webClient = webClient;
     }
 
-    public void vertx() {
-        throw new RuntimeException();
+    /**
+     * Run any Vertx vertical for message processing
+     */
+    public void vertical() {
+        throw new RuntimeException("Not implemented yet");
     }
 
     @Override
     public void close(Duration timeout, boolean waitForInFlight) {
-        log.info("vertx async consumer closing...");
+        log.info("Vert.x async consumer closing...");
         waitForNoInFlight(timeout);
         super.close(timeout, waitForInFlight);
         webClient.close();
@@ -138,7 +142,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
                 addToMailbox(wc);
             });
             send.onFailure(h -> {
-                log.debug("Vert.x Vertical fail: {}", h.getMessage());
+                log.error("Vert.x Vertical fail: {}", h.getMessage());
                 wc.onUserFunctionFailure();
                 addToMailbox(wc);
             });
@@ -146,7 +150,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
             // add plugin callback hook
             send.onComplete(ar -> {
                 log.trace("Running plugin hook");
-                this.onVertxCompleteHook.run();
+                this.onVertxCompleteHook.ifPresent(Runnable::run);
             });
 
             return List.of(send);
@@ -162,8 +166,8 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         super.asyncPoll(userFuncWrapper);
     }
 
-    public void addVertxOncompleteHook(Runnable hookFunc) {
-        this.onVertxCompleteHook = hookFunc;
+    public void addVertxOnCompleteHook(Runnable hookFunc) {
+        this.onVertxCompleteHook = Optional.of(hookFunc);
     }
 
     /**
@@ -194,7 +198,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
         // logging
         if (isVertxWork(resultsFromUserFunction)) {
-            log.info("Vertx creation function success, user's function success");
+            log.debug("Vertx creation function success, user's function success");
         } else {
             super.onUserFunctionSuccess(wc, resultsFromUserFunction);
         }

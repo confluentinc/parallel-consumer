@@ -34,7 +34,6 @@ import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
-import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.Arrays.asList;
 import static java.util.List.of;
@@ -105,7 +104,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @SneakyThrows
     public void failingHttpCall() {
         var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOncompleteHook(latch::countDown);
+        vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var tupleStream =
                 vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> {
@@ -133,7 +132,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @Test
     public void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
         var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOncompleteHook(latch::countDown);
+        vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
@@ -163,7 +162,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @Test
     public void testHttpMinimal() {
         var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOncompleteHook(latch::countDown);
+        vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
@@ -195,7 +194,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @Test
     public void testHttp() {
         var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOncompleteHook(latch::countDown);
+        vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
                 vertxAsync.vertxHttpRequestStream((webClient, rec) -> {
@@ -250,7 +249,7 @@ public class VertxTest extends AsyncConsumerTestBase {
     @Test
     @Disabled
     public void testGeneralVertical() {
-        vertxAsync.vertx();
+        vertxAsync.vertical();
         String result = null;
         assertThat(result).isNotNull();
     }

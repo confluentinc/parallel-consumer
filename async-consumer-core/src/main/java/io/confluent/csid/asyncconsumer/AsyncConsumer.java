@@ -89,9 +89,19 @@ public class AsyncConsumer<K, V> implements Closeable {
 
     private State state = State.unused;
 
+    /**
+     * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
+     * way as per normal.
+     *
+     * @param consumer
+     * @param producer
+     * @param asyncConsumerOptions
+     */
     public AsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
                          org.apache.kafka.clients.producer.Producer<K, V> producer,
                          AsyncConsumerOptions asyncConsumerOptions) {
+        log.info("Confluent async consumer initialise");
+
         //
         this.producer = producer;
         this.consumer = consumer;
@@ -237,7 +247,7 @@ public class AsyncConsumer<K, V> implements Closeable {
 
     public void waitForNoInFlight(Duration timeout) {
         log.debug("Waiting for no in flight...");
-        waitAtMost(timeout).until(this::noInFlight);
+        waitAtMost(timeout).alias("Waiting for no more records in-flight").until(this::noInFlight);
         log.debug("No longer anything in flight.");
     }
 
@@ -566,7 +576,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         workMailBox.add(wc);
     }
 
-    public void notifyNewWorkRegistered() {
+    void notifyNewWorkRegistered() {
         if (pollingWorkMailBox.getAcquire()) {
             log.trace("Knock knock, wake up! You've got mail (tm)!");
             this.blockableControlThread.interrupt();

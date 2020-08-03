@@ -42,8 +42,8 @@ public class StreamingAsyncVertxConsumer<K, V> extends VertxAsyncConsumer<K, V> 
         stream = Java8StreamUtils.setupStreamFromDeque(userProcessResultsStream);
     }
 
-    public StreamingAsyncVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer) {
-        this(consumer, producer, null, null, null);
+    public StreamingAsyncVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer, AsyncConsumerOptions options) {
+        this(consumer, producer, null, null, options);
     }
 
     @Override

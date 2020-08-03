@@ -3,6 +3,9 @@ package io.confluent.csid.asyncconsumer;
 import lombok.Builder;
 import lombok.Getter;
 
+/**
+ * The options for the {@link AsyncConsumer} system.
+ */
 @Getter
 @Builder
 public class AsyncConsumerOptions {
