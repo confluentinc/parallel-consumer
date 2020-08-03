@@ -34,4 +34,4 @@ addons:
 script:
   # the following command line builds the project, runs the tests with coverage and then execute the SonarCloud analysis
   # - mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install sonar:sonar versions:display-dependency-updates
-  - mvn clean verify versions:display-dependency-updates
+  - mvn clean verify versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates --fail-at-end
