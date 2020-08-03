@@ -125,7 +125,7 @@
                         <exclude>**/integrationTest*/**/*.java</exclude>
                         <exclude>**/*IT.java</exclude>
                     </excludes>
-                    <argLine>--enable-preview</argLine>
+                    <argLine>@{argLine} --enable-preview</argLine>
                 </configuration>
             </plugin>
             <plugin>
@@ -145,7 +145,7 @@
                         <!-- Integration tests need to be in a package named `integrationTest` -->
                         <include>**/integrationTest*/**/*.java</include>
                     </includes>
-                    <argLine>--enable-preview</argLine>
+                    <argLine>@{argLine} --enable-preview</argLine>
                 </configuration>
             </plugin>
             <plugin>
