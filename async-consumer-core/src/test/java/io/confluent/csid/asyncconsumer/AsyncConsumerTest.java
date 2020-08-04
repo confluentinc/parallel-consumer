@@ -586,7 +586,8 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
             asyncConsumer.asyncPoll((ignore) -> {
                 log.info("noop");
             });
-//            waitForOneLoopCycle();
+            // allow for offset to be committed
+            waitForOneLoopCycle();
             asyncConsumer.close();
         });
         assertCommits(of(0));
