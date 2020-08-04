@@ -13,7 +13,7 @@ endif::[]
 
 image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"] image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
 
-A concurrent / asynchronous messaging processing library for the Apache Kafka consumer.
+A concurrent / asynchronous messaging processing library for the Apache Kafka consumer/producer with non blocking IO extensions.
 
 .Consume _concurrently_ with a *single* consumer instance:
 [source,java]
@@ -266,3 +266,48 @@ One can then use this library to consume from an input topic, produced by KS to 
 
 * Uses https://projectlombok.org/setup/intellij[Lombok], if you're using IntelliJ Idea, get the https://plugins.jetbrains.com/plugin/6317-lombok[plugin].
 * Integration tests require a https://docs.docker.com/docker-for-mac/[running locally accessible Docker host].
+
+==== Integration Testing with TestContainers
+//https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
+
+We use the excellent [Testcontainers](https://testcontainers.org) library for integration testing with JUnit.
+
+To speed up test execution, you can enable container reused across test runs by setting the
+following in your [`~/.testcontainers.properties` file](https://www.testcontainers.org/features/configuration/):
+```
+testcontainers.reuse.enable=true
+```
+
+This will leave the container running after the JUnit test is complete for reuse by subsequent runs.
+
+> NOTE: The container will only be left running if it is not explicitly stopped by the JUnit rule.
+> For this reason, we use a variant of the [singleton container pattern](https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers)
+> instead of the JUnit rule.
+
+Testcontainers detects if a container is reusable by hashing the container creation parameters
+from the JUnit test.  If an existing container is _not_ reusable, a new container will be created
+**but the old container will not be removed**.
+
+Target | Description
+--- | ---
+`testcontainers-list` | List all containers labeled as testcontainers
+`testcontainers-clean` | Remove all containers labeled as testcontainers
+
+.Stop and remove all containers labeled with `org.testcontainers=true`
+[source,bash]
+----
+docker container ls --filter 'label=org.testcontainers=true' --format '{{.ID}}' \
+| $(XARGS) docker container rm --force
+----
+
+.List all containers labeled with `org.testcontainers=true`
+[source,bash]
+----
+docker container ls --filter 'label=org.testcontainers=true'
+----
+
+> NOTE: `testcontainers-clean` removes **all** docker containers on your system with the `io.testcontainers=true` label
+> (including the most recent container which may be reusable).
+
+See [this testcontainers PR](https://github.com/testcontainers/testcontainers-java/pull/1781) for
+details on the reusable containers feature.

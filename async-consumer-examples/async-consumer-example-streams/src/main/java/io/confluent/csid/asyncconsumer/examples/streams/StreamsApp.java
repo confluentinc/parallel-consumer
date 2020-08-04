@@ -3,6 +3,7 @@ package io.confluent.csid.asyncconsumer.examples.streams;
 import io.confluent.csid.asyncconsumer.AsyncConsumer;
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -15,14 +16,15 @@ import org.apache.kafka.streams.Topology;
 
 import java.util.List;
 import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class StreamsApp {
 
-    static String inputTopic = "input-topic";
+    static String inputTopic = "input-topic-" + RandomUtils.nextInt();
 
-    static String outputTopicName = "my-output-topic";
+    static String outputTopicName = "my-output-topic-" + RandomUtils.nextInt();
 
     Consumer<String, String> getKafkaConsumer() {
         return new KafkaConsumer<>(new Properties());

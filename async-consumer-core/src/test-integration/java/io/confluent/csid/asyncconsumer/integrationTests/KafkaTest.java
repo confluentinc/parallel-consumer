@@ -3,10 +3,7 @@ package io.confluent.csid.asyncconsumer.integrationTests;
 import io.confluent.csid.asyncconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.CreateTopicsResult;
-import org.apache.kafka.clients.admin.KafkaAdminClient;
-import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
@@ -38,11 +35,19 @@ public abstract class KafkaTest<K, V> {
 
   String topic;
 
-  @Container
+  /**
+   * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
+   * https://github.com/testcontainers/testcontainers-java/pull/1781
+   */
   static public KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:latest"))
           .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
           .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
-          .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1"); //transaction.state.log.num.partitions
+          .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
+          .withReuse(true);
+
+  static {
+    kafkaContainer.start();
+  }
 
   protected KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
