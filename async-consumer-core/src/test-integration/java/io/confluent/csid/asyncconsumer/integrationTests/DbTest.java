@@ -22,8 +22,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public class DbTest extends KafkaTest<String, String> {
 
-    @Container
-    final protected PostgreSQLContainer dbc = new PostgreSQLContainer<>();
+    final static protected PostgreSQLContainer dbc;
+
+    /**
+     * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
+     * https://github.com/testcontainers/testcontainers-java/pull/1781
+     */
+    static {
+        dbc = new PostgreSQLContainer<>()
+                .withReuse(true);
+        dbc.start();
+    }
 
     Connection connection;
 
@@ -47,7 +56,7 @@ public class DbTest extends KafkaTest<String, String> {
 //        connection = DriverManager.getConnection(dbc.getJdbcUrl(), dbc.getUsername(), dbc.getPassword());
 
         PreparedStatement create_table = connection.prepareStatement("""
-                CREATE TABLE DATA(
+                CREATE TABLE IF NOT EXISTS DATA(
                    ID SERIAL PRIMARY KEY     NOT NULL,
                    KEY           TEXT    NOT NULL,
                    VALUE         TEXT     NOT NULL

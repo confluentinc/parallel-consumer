@@ -3,6 +3,7 @@ package io.confluent.csid.asyncconsumer.examples.core;
 import io.confluent.csid.asyncconsumer.AsyncConsumer;
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -19,7 +20,7 @@ import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrd
 @Slf4j
 public class CoreApp {
 
-    static String inputTopic = "input-topic";
+    static String inputTopic = "input-topic-" + RandomUtils.nextInt();
 
     Consumer<String, String> getKafkaConsumer() {
         return new KafkaConsumer<>(new Properties());

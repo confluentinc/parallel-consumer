@@ -6,6 +6,7 @@ import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -21,7 +22,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class VertxApp {
 
-    static String inputTopic = "input-topic";
+    static String inputTopic = "input-topic-" + RandomUtils.nextInt();
 
     Consumer<String, String> getKafkaConsumer() {
         return new KafkaConsumer<>(new Properties());
