@@ -31,7 +31,7 @@ public class KafkaTestUtils {
     static public final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
 
     public static void setupConsumer(MockConsumer mc) {
-        when(mc.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
+        when(mc.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
 
         TopicPartition tp1 = new TopicPartition(INPUT_TOPIC, 1);
         TopicPartition tp0 = new TopicPartition(INPUT_TOPIC, 0);
@@ -121,7 +121,6 @@ public class KafkaTestUtils {
         return all;
     }
 
-    // todo smelly remove
     @Setter
     @Getter
     private List<Integer> defaultKeys = range(100).list();

@@ -45,4 +45,9 @@ public class AsyncConsumerOptions {
      */
     @Builder.Default
     private int maxConcurrency = 100;
+
+    @Builder.Default
+    private final int numberOfThreads = 16;
+
+
 }

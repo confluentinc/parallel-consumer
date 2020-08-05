@@ -2,7 +2,6 @@ package io.confluent.csid.asyncconsumer.vertx;
 
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.utils.Java8StreamUtils;
-import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -10,7 +9,6 @@ import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import lombok.Builder;
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -23,13 +21,27 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+/**
+ * Result streaming version of {@link VertxAsyncConsumer}.
+ */
 @Slf4j
 public class StreamingAsyncVertxConsumer<K, V> extends VertxAsyncConsumer<K, V> {
 
-    final private Stream<Result<K, V>> stream;
+    /**
+     * The stream of results, constructed from the Queue {@link #userProcessResultsStream}
+     */
+    final private Stream<VertxCPResult<K, V>> stream;
 
-    final private ConcurrentLinkedDeque<Result<K, V>> userProcessResultsStream;
+    /**
+     * The Queue of results
+     */
+    final private ConcurrentLinkedDeque<VertxCPResult<K, V>> userProcessResultsStream;
 
+    /**
+     * Provide your own instances of the Vertx engine and it's webclient.
+     * <p>
+     * Use this to share a Vertx runtime with different systems for efficiency.
+     */
     public StreamingAsyncVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
                                        Producer<K, V> producer,
                                        Vertx vertx,
@@ -42,48 +54,52 @@ public class StreamingAsyncVertxConsumer<K, V> extends VertxAsyncConsumer<K, V> 
         stream = Java8StreamUtils.setupStreamFromDeque(userProcessResultsStream);
     }
 
-    public StreamingAsyncVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer, AsyncConsumerOptions options) {
+    /**
+     * Simple constructor. Internal Vertx objects will be created.
+     */
+    public StreamingAsyncVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                       Producer<K, V> producer,
+                                       AsyncConsumerOptions options) {
         this(consumer, producer, null, null, options);
     }
-
-    @Override
-    protected void callInner(Consumer<ConsumerRecord<K, V>> userFuncWrapper) {
-        super.asyncPoll(userFuncWrapper);
-    }
-
+    
     /**
-     * todo see other
+     * Streaming version
+     * 
+     * @see VertxAsyncConsumer#vertxHttpReqInfo 
      */
-    public Stream<Result<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
+    public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
 
-        Result.ResultBuilder<K, V> result = Result.builder();
+        VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
         Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunctionWrapped = x -> {
             result.in(x);
             RequestInfo apply = requestInfoFunction.apply(x);
-            result.req(Optional.of(apply));
+            result.requestInfo(Optional.of(apply));
             return apply;
         };
-
 
         Consumer<Future<HttpResponse<Buffer>>> onSendCallBack = future -> {
             // stream
             result.asr(future);
-            Result<K, V> build = result.build();
+            VertxCPResult<K, V> build = result.build();
             userProcessResultsStream.add(build);
         };
 
-        super.vertxHttpReqInfo(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {});
+        super.vertxHttpReqInfo(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {
+        });
 
         return stream;
     }
 
     /**
-     * todo see other
+     * Streaming version
+     *
+     * @see VertxAsyncConsumer#vertxHttpRequest 
      */
-    public Stream<Result<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
+    public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
 
-        Result.ResultBuilder<K, V> result = Result.builder();
+        VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
         BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> requestInfoFunctionWrapped = (wc, x) -> {
             result.in(x);
@@ -95,21 +111,24 @@ public class StreamingAsyncVertxConsumer<K, V> extends VertxAsyncConsumer<K, V> 
         Consumer<Future<HttpResponse<Buffer>>> onSendCallBack = future -> {
             // stream
             result.asr(future);
-            Result<K, V> build = result.build();
+            VertxCPResult<K, V> build = result.build();
             userProcessResultsStream.add(build);
         };
 
-        super.vertxHttpRequest(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {});
+        super.vertxHttpRequest(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {
+        });
         return stream;
     }
 
     /**
-     * todo see other
+     * Streaming version
+     *
+     * @see VertxAsyncConsumer#vertxHttpWebClient 
      */
-    public Stream<Result<K, V>> vertxHttpWebClientStream(
+    public Stream<VertxCPResult<K, V>> vertxHttpWebClientStream(
             BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
 
-        Result.ResultBuilder<K, V> result = Result.builder();
+        VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
         BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> wrappedFunc = (x, y) -> {
             // capture
@@ -122,7 +141,7 @@ public class StreamingAsyncVertxConsumer<K, V> extends VertxAsyncConsumer<K, V> 
         Consumer<Future<HttpResponse<Buffer>>> onSendCallBack = future -> {
             // stream
             result.asr(future);
-            Result<K, V> build = result.build();
+            VertxCPResult<K, V> build = result.build();
             userProcessResultsStream.add(build);
         };
 
@@ -131,16 +150,23 @@ public class StreamingAsyncVertxConsumer<K, V> extends VertxAsyncConsumer<K, V> 
         return stream;
     }
 
+    /**
+     * @param <K>
+     * @param <V>
+     * @see io.confluent.csid.asyncconsumer.AsyncConsumer.ConsumeProduceResult
+     */
     @Getter
     @Builder
-    public static class Result<K, V> {
+    public static class VertxCPResult<K, V> {
         final private ConsumerRecord<K, V> in;
-        @Builder.Default
-        final private Optional<RequestInfo> req = Optional.empty(); // todo change to type variables? 2 fields become 2, tlc. Not worth the hassle atm.
-        @Builder.Default
-        final private Optional<HttpRequest> httpReq = Optional.empty();
-//        final private AsyncResult<HttpResponse<Buffer>> asr;
         final private Future<HttpResponse<Buffer>> asr;
+
+        // todo change to class generic type variables? 2 fields become 1. Not worth the hassle atm.
+        // Currently our vertx usage has two types of results. This is a quick way to model that. Should consider improving.
+        @Builder.Default
+        final private Optional<RequestInfo> requestInfo = Optional.empty();
+        @Builder.Default
+        final private Optional<HttpRequest<Buffer>> httpReq = Optional.empty();
     }
 
 }

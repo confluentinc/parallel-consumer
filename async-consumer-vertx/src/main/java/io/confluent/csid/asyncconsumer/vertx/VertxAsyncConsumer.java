@@ -10,7 +10,9 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.Producer;
@@ -25,21 +27,56 @@ import java.util.function.Function;
 
 import static org.awaitility.Awaitility.await;
 
+/**
+ * An extension to {@link AsyncConsumer} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
+ * blocking clients to process messages.
+ *
+ * @param <K>
+ * @param <V>
+ * @see AsyncConsumer
+ * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
+ */
 @Slf4j
 public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
 
-    private static final String VERTX_TYPE = "vert.x type";
+    /**
+     * @see WorkContainer#getWorkType()
+     */
+    private static final String VERTX_TYPE = "vert.x-type";
 
+    /**
+     * The Vertx engine to use
+     */
     final private Vertx vertx;
 
+    /**
+     * The Vertx webclient for making HTTP requests
+     */
     final private WebClient webClient;
+
+    /**
+     * Extension point for running after Vertx {@link io.vertx.core.Verticle}s finish.
+     */
     private Optional<Runnable> onVertxCompleteHook = Optional.empty();
 
-    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer, AsyncConsumerOptions options) {
+    /**
+     * Simple constructor. Internal Vertx objects will be created.
+     */
+    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                              Producer<K, V> producer,
+                              AsyncConsumerOptions options) {
         this(consumer, producer, Vertx.vertx(), null, options);
     }
 
-    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer, Vertx vertx, WebClient webClient, AsyncConsumerOptions options) {
+    /**
+     * Provide your own instances of the Vertx engine and it's webclient.
+     * <p>
+     * Use this to share a Vertx runtime with different systems for efficiency.
+     */
+    public VertxAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer,
+                              Vertx vertx,
+                              WebClient webClient,
+                              AsyncConsumerOptions options) {
         super(consumer, producer, options);
         if (vertx == null)
             vertx = Vertx.vertx();
@@ -50,28 +87,11 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
     }
 
     /**
-     * Run any Vertx vertical for message processing
-     */
-    public void vertical() {
-        throw new RuntimeException("Not implemented yet");
-    }
-
-    @Override
-    public void close(Duration timeout, boolean waitForInFlight) {
-        log.info("Vert.x async consumer closing...");
-        waitForNoInFlight(timeout);
-        super.close(timeout, waitForInFlight);
-        webClient.close();
-        Future<Void> close = vertx.close();
-        await().until(close::isComplete);
-    }
-
-    /**
-     * Just give us the {@link RequestInfo}, we'll do the rest.
+     * Consume from the broker concurrently, just give us the {@link RequestInfo}, we'll do the rest.
      * <p>
      * Useful for when the web request is very straight forward.
      *
-     * @param requestInfoFunction
+     * @param requestInfoFunction  a function taking a {@link ConsumerRecord} and returns a {@link RequestInfo} object
      * @param onWebRequestComplete
      */
     public void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
@@ -89,10 +109,10 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
     }
 
     /**
-     * Give us the {@link HttpRequest}, we'll do the rest.
+     * Consume from the broker concurrently, give us the {@link HttpRequest}, we'll do the rest.
      *
-     * @param webClientRequestFunction
-     * @param onWebRequestComplete
+     * @param webClientRequestFunction Given the {@link WebClient} and a {@link ConsumerRecord}, return us the {@link
+     *                                 HttpRequest}
      */
     public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
@@ -113,13 +133,15 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
     }
 
     /**
-     * Initiate your own {@link HttpRequest#send()} call, give us the {@link Future}.
+     * Consume from the broker concurrently, initiating your own {@link HttpRequest#send()} call, give us the {@link
+     * Future}.
      * <p>
      * Useful for when the request if complicated and needs to be handled in a special way.
      * <p>
      * Note that an alternative is to pass into the constructor a configured {@link WebClient} instead.
      *
-     * @param webClientRequestFunction
+     * @see #vertxHttpReqInfo
+     * @see #vertxHttpRequest
      */
     public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                                    Consumer<Future<HttpResponse<Buffer>>> onSend) {
@@ -131,13 +153,12 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
             onSend.accept(send);
 
             // attach internal handler
-            WorkContainer<K, V> wc = wm.getWorkContainerForRecord(record); // todo thread safe?
+            WorkContainer<K, V> wc = wm.getWorkContainerForRecord(record);
             wc.setWorkType(VERTX_TYPE);
 
             send.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
                 log.trace("Response body: {}", h.bodyAsString());
-                // todo stream http result
                 wc.onUserFunctionSuccess();
                 addToMailbox(wc);
             });
@@ -159,13 +180,12 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
         }; // don't need it, we attach to vertx futures for callback
 
-        super.mainLoop(userFuncWrapper, noOp);
+        super.supervisorLoop(userFuncWrapper, noOp);
     }
 
-    protected void callInner(Consumer<ConsumerRecord<K, V>> userFuncWrapper) {
-        super.asyncPoll(userFuncWrapper);
-    }
-
+    /**
+     * @see #onVertxCompleteHook
+     */
     public void addVertxOnCompleteHook(Runnable hookFunc) {
         this.onVertxCompleteHook = Optional.of(hookFunc);
     }
@@ -215,11 +235,30 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         }
     }
 
+    /**
+     * Determines if any of the elements in the supplied list is a Vertx Future type
+     */
     private boolean isVertxWork(List<?> resultsFromUserFunction) {
         for (Object object : resultsFromUserFunction) {
             return (object instanceof Future);
         }
         return false;
+    }
+
+    /**
+     * Close the concurrent Vertx consumer system
+     *
+     * @param timeout         how long to wait before giving up
+     * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
+     */
+    @Override
+    public void close(Duration timeout, boolean waitForInFlight) {
+        log.info("Vert.x async consumer closing...");
+        waitForNoInFlight(timeout);
+        super.close(timeout, waitForInFlight);
+        webClient.close();
+        Future<Void> close = vertx.close();
+        await().until(close::isComplete);
     }
 
 }

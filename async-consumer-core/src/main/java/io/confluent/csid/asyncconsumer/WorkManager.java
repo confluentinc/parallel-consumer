@@ -21,7 +21,7 @@ import static java.lang.Math.min;
 import static lombok.AccessLevel.PACKAGE;
 
 /**
- * Sharded, prioritised, delayed work queue.
+ * Sharded, prioritised, offset managed, order controlled, delayed work queue.
  *
  * @param <K>
  * @param <V>
@@ -32,7 +32,7 @@ public class WorkManager<K, V> {
     @Getter
     private final AsyncConsumerOptions options;
 
-    // todo disable/remove if using partition order
+    // todo performance: disable/remove if using partition order
     final private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     /**
@@ -54,7 +54,6 @@ public class WorkManager<K, V> {
      */
     private int loadingFactor = 2;
 
-    // todo for testing - replace with listener or event bus
     @Getter(PACKAGE)
     private final List<WorkContainer<K, V>> successfulWork = new ArrayList<>();
 
@@ -130,7 +129,6 @@ public class WorkManager<K, V> {
             SortedMap<Long, WorkContainer<K, V>> shardQueue = shard.getValue();
 
             // then iterate over shardQueue queue
-            // todo don't iterate entire stream if max limit passed in
             Set<Map.Entry<Long, WorkContainer<K, V>>> shardQueueEntries = shardQueue.entrySet();
             for (var queueEntry : shardQueueEntries) {
                 int taken = work.size() + shardWork.size();
@@ -236,7 +234,6 @@ public class WorkManager<K, V> {
         for (final var partitionQueueEntry : partitionCommitQueues.entrySet()) {
             var partitionQueue = partitionQueueEntry.getValue();
             count += partitionQueue.size();
-//            var offsetsToRemoveFromPartitionQueue = new LinkedList<Long>();
             var workToRemove = new LinkedList<WorkContainer<K, V>>();
             for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
@@ -245,13 +242,11 @@ public class WorkManager<K, V> {
                 if (complete) {
                     long offset = container.getCr().offset();
                     if (container.getUserFunctionSucceeded().get()) {
-//                        log.trace("Work completed successfully, so marking to commit");
                         log.trace("Found offset candidate ({}) to add to offset commit map", container);
-//                        offsetsToRemoveFromPartitionQueue.add(offset);
                         workToRemove.add(container);
                         TopicPartition topicPartitionKey = toTP(container.getCr());
                         // as in flights are processed in order, this will keep getting overwritten with the highest offset available
-                        OffsetAndMetadata offsetData = new OffsetAndMetadata(offset, ""); // TODO blank string? move object construction out?
+                        OffsetAndMetadata offsetData = new OffsetAndMetadata(offset);
                         offsetsToSend.put(topicPartitionKey, offsetData);
                     } else {
                         log.debug("Offset {} is complete, but failed and is holding up the queue. Ending partition scan.", container.getCr().offset());

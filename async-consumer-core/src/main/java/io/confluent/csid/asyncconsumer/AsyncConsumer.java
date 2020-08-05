@@ -26,31 +26,32 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
+import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.closed;
+import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.running;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static java.lang.String.format;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.waitAtMost;
-import static org.slf4j.helpers.MessageFormatter.format;
 
 /**
- * @param <K> key
- * @param <V> value
+ * Asynchronous / concurrent message consumer for Kafka.
+ *
+ * @param <K> key consume / produce key type
+ * @param <V> value consume / produce value type
+ * @see #asyncPoll(Consumer)
+ * @see #asyncPollAndProduce(Function, Consumer)
  */
-// TODO generics for produce vs consume, different produce topics may need different generics
 @Slf4j
 public class AsyncConsumer<K, V> implements Closeable {
 
-    private final int numberOfThreads = 16; // todo dynamic/config
+    protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
-    protected static final Duration defaultTimeout = Duration.ofSeconds(10); // increase if debugging
-
-    final private Duration waitForWorkAtMost = ofMillis(500);
-
+    /**
+     * Injectable clock for testing
+     */
     @Setter
     private WallClock clock = new WallClock();
 
@@ -63,13 +64,18 @@ public class AsyncConsumer<K, V> implements Closeable {
     private final org.apache.kafka.clients.producer.Producer<K, V> producer;
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
-    // TODO configurable number of threads
-    final private ExecutorService workerPool = Executors.newFixedThreadPool(numberOfThreads);
+    /**
+     * The pool which is used for running the users's supplied function
+     */
+    final private ExecutorService workerPool;
 
     private Optional<Future<?>> controlThreadFuture = Optional.empty();
 
     protected WorkManager<K, V> wm;
 
+    /**
+     * Collection of work waiting to be
+     */
     private final BlockingQueue<WorkContainer<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
@@ -79,35 +85,59 @@ public class AsyncConsumer<K, V> implements Closeable {
      */
     final private List<Runnable> controlLoopHooks = new ArrayList<>();
 
+    /**
+     * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
+     * collection sooner.
+     *
+     * @see #processWorkMailBox
+     */
     private Thread blockableControlThread;
 
+    /**
+     * @see #notifyNewWorkRegistered
+     * @see #processWorkMailBox
+     */
     private final AtomicBoolean pollingWorkMailBox = new AtomicBoolean();
 
-    public enum State {
+    /**
+     * The run state of the controller.
+     *
+     * @see #state
+     */
+    enum State {
         unused, running, draining, closing, closed;
     }
 
+    /**
+     * The run state of the controller.
+     *
+     * @see State
+     */
     private State state = State.unused;
 
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
      *
-     * @param consumer
-     * @param producer
-     * @param asyncConsumerOptions
+     * @see AsyncConsumerOptions
      */
     public AsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
                          org.apache.kafka.clients.producer.Producer<K, V> producer,
-                         AsyncConsumerOptions asyncConsumerOptions) {
+                         AsyncConsumerOptions options) {
         log.info("Confluent async consumer initialise");
+
+        Objects.requireNonNull(consumer);
+        Objects.requireNonNull(producer);
+        Objects.requireNonNull(options);
 
         //
         this.producer = producer;
         this.consumer = consumer;
 
+        workerPool = Executors.newFixedThreadPool(options.getNumberOfThreads());
+
         //
-        this.wm = new WorkManager<>(asyncConsumerOptions);
+        this.wm = new WorkManager<>(options);
 
         //
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumer, wm, this);
@@ -123,31 +153,29 @@ public class AsyncConsumer<K, V> implements Closeable {
     }
 
     /**
-     * todo
+     * Register a function to be applied in parallel to each received message
      *
-     * @param usersVoidConsumptionFunction
+     * @param usersVoidConsumptionFunction the function
      */
     public void asyncPoll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
         Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
             usersVoidConsumptionFunction.accept(record);
-            List<Object> userFunctionReturnsNothing = List.of();
-            return userFunctionReturnsNothing;
+            return List.of(); // user function returns no produce records, so we satisfy our api
         };
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
-        mainLoop(wrappedUserFunc, voidCallBack);
+        supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
     /**
-     * todo
+     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
+     * ProducerRecord} to be sent back to the broker.
      *
-     * @param userFunction
-     * @param callback     applied after message ack'd by kafka
-     * @return a stream of results for monitoring, as messages are produced into the output topic
+     * @param callback applied after the produced message is acknowledged by kafka
      */
     @SneakyThrows
-    public <R> void asyncPollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                        Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+    public void asyncPollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // wrap user func to add produce function
         Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
             List<ProducerRecord<K, V>> recordListToProduce = userFunction.apply(consumedRecord);
@@ -165,19 +193,33 @@ public class AsyncConsumer<K, V> implements Closeable {
             return results;
         };
 
-        mainLoop(wrappedUserFunc, callback);
+        supervisorLoop(wrappedUserFunc, callback);
     }
 
+    /**
+     * Produce a message back to the broker.
+     * <p>
+     * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the common use
+     * case ({@link #asyncPoll(Consumer)}).
+     *
+     * @see #asyncPollAndProduce(Function, Consumer)
+     */
     RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
         Future<RecordMetadata> send = producer.send(outMsg);
         try {
-            var recordMetadata = send.get(); // TODO don't block
-            return recordMetadata;
+            return send.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
+    /**
+     * Close the consumer.
+     * <p>
+     * Uses a default timeout.
+     *
+     * @see #close(Duration, boolean)
+     */
     @Override
     public void close() {
         // use a longer timeout, to cover fpr evey other step using the default
@@ -185,6 +227,16 @@ public class AsyncConsumer<K, V> implements Closeable {
         close(timeout, true);
     }
 
+    public void close(boolean waitForInflight) {
+        this.close(defaultTimeout, waitForInflight);
+    }
+
+    /**
+     * Close the consumer.
+     *
+     * @param timeout         how long to wait before giving up
+     * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
+     */
     @SneakyThrows
     public void close(Duration timeout, boolean waitForInFlight) {
         if (state == closed) {
@@ -233,7 +285,7 @@ public class AsyncConsumer<K, V> implements Closeable {
             log.warn("Threads not done: {}", unfinished);
         }
         log.trace("Awaiting worker pool termination...");
-        boolean terminationFinished = workerPool.awaitTermination(defaultTimeout.toSeconds(), SECONDS); // todo make smarter
+        boolean terminationFinished = workerPool.awaitTermination(defaultTimeout.toSeconds(), SECONDS);
         if (!terminationFinished) {
             log.warn("workerPool termination interrupted!");
             boolean shutdown = workerPool.isShutdown();
@@ -245,6 +297,9 @@ public class AsyncConsumer<K, V> implements Closeable {
         this.state = closed;
     }
 
+    /**
+     * Block the calling thread until no more messages are being processed.
+     */
     public void waitForNoInFlight(Duration timeout) {
         log.debug("Waiting for no in flight...");
         waitAtMost(timeout).alias("Waiting for no more records in-flight").until(this::noInFlight);
@@ -262,15 +317,20 @@ public class AsyncConsumer<K, V> implements Closeable {
 
     private boolean areMyThreadsDone() {
         if (controlThreadFuture.isEmpty()) {
-            // not constructed yet, will become alive, unless #poll is never called // TODO fix
+            // not constructed yet, will become alive, unless #poll is never called
             return false;
         } else {
             return controlThreadFuture.get().isDone();
         }
     }
 
-    protected <R> void mainLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
-                                Consumer<R> callback) {
+    /**
+     * Supervisor loop for the main loop.
+     *
+     * @see #supervisorLoop(Function, Consumer)
+     */
+    protected <R> void supervisorLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
+                                      Consumer<R> callback) {
         if (state != State.unused) {
             throw new IllegalStateException(msg("Invalid state - must be {}", State.unused));
         } else {
@@ -306,6 +366,9 @@ public class AsyncConsumer<K, V> implements Closeable {
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
     }
 
+    /**
+     * Main control loop
+     */
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                  Consumer<R> callback) {
         log.trace("Loop: Get work");
@@ -355,10 +418,17 @@ public class AsyncConsumer<K, V> implements Closeable {
         }
     }
 
+    /**
+     * Check the work queue for work to be done, potentially blocking.
+     * <p>
+     * Can be interrupted if something else needs doing.
+     */
     private void processWorkMailBox() {
         log.trace("Processing mailbox (might block waiting or results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
+
+        // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
             log.debug("Blocking until next scheduled offset commit attempt for {}", timeout);
@@ -375,8 +445,8 @@ public class AsyncConsumer<K, V> implements Closeable {
             results.add(firstBlockingPoll);
         }
 
-        // check for more work to batch, just in case more has arrived
-        // TODO not convinced this second poll is necessary or even useful..?
+        // check for more work to batch up, there may be more work queued up behind the head that we can also take
+        // see how big the queue is now, and poll that many times
         int size = workMailBox.size();
         log.trace("Draining {} more, got {} already...", size, results.size());
         for (var ignore : range(size)) {
@@ -400,6 +470,9 @@ public class AsyncConsumer<K, V> implements Closeable {
         }
     }
 
+    /**
+     * Conditionally commit offsets to broker
+     */
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
         boolean commitFrequencyOK = elapsedSinceLast.toSeconds() >= timeBetweenCommits.toSeconds();
@@ -418,6 +491,11 @@ public class AsyncConsumer<K, V> implements Closeable {
         }
     }
 
+    /**
+     * Under some conditions, waiting longer before committing can be faster
+     *
+     * @return
+     */
     private boolean lingeringOnCommitWouldBeBeneficial() {
         // no work is waiting to be done
         boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeCompletedSuccessfully();
@@ -443,6 +521,9 @@ public class AsyncConsumer<K, V> implements Closeable {
         return Duration.between(lastCommit, now);
     }
 
+    /**
+     * Get offsets from {@link WorkManager} that are ready to commit
+     */
     private void commitOffsetsThatAreReady() {
         log.trace("Loop: Find completed work to commit offsets");
         // todo shouldn't be removed until commit succeeds (there's no harm in committing the same offset twice)
@@ -450,7 +531,6 @@ public class AsyncConsumer<K, V> implements Closeable {
         if (offsetsToSend.isEmpty()) {
             log.trace("No offsets ready");
         } else {
-            // todo retry loop? or should be made idempotent. Failure?
             log.trace("Committing offsets for {} partition(s): {}", offsetsToSend.size(), offsetsToSend);
             ConsumerGroupMetadata groupMetadata = consumer.groupMetadata();
             producer.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
@@ -505,7 +585,7 @@ public class AsyncConsumer<K, V> implements Closeable {
     }
 
     /**
-     * todo
+     * Submit a piece of work to the processing pool.
      *
      * @param workToProcess the polled records to process
      */
@@ -515,8 +595,6 @@ public class AsyncConsumer<K, V> implements Closeable {
 
         for (var work : workToProcess) {
             // for each record, construct dispatch to the executor and capture a Future
-            ConsumerRecord<K, V> cr = work.getCr();
-
             log.trace("Sending work ({}) to pool", work);
             Future outputRecordFuture = workerPool.submit(() -> {
                 return userFunctionRunner(usersFunction, callback, work);
@@ -525,11 +603,12 @@ public class AsyncConsumer<K, V> implements Closeable {
         }
     }
 
-
+    /**
+     * Run the supplied function.
+     */
     protected <R> List<Tuple<ConsumerRecord<K, V>, R>> userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
-                       Consumer<R> callback,
-                       WorkContainer<K, V> wc) {
-
+                                                                          Consumer<R> callback,
+                                                                          WorkContainer<K, V> wc) {
         // call the user's function
         List<R> resultsFromUserFunction;
         try {
@@ -561,14 +640,13 @@ public class AsyncConsumer<K, V> implements Closeable {
     }
 
 
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?>
-            resultsFromUserFunction) {
+    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         addToMailbox(wc);
     }
 
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
-        wc.onUserFunctionSuccess(); // todo incorrectly succeeds vertx functions
+        wc.onUserFunctionSuccess();
     }
 
     protected void addToMailbox(WorkContainer<K, V> wc) {
@@ -576,6 +654,14 @@ public class AsyncConsumer<K, V> implements Closeable {
         workMailBox.add(wc);
     }
 
+    /**
+     * Early notify of work arrived.
+     * <p>
+     * Only wake up the thread if it's sleeping while polling the mail box.
+     *
+     * @see #processWorkMailBox
+     * @see #blockableControlThread
+     */
     void notifyNewWorkRegistered() {
         if (pollingWorkMailBox.getAcquire()) {
             log.trace("Knock knock, wake up! You've got mail (tm)!");
@@ -585,10 +671,20 @@ public class AsyncConsumer<K, V> implements Closeable {
         }
     }
 
+    /**
+     * Of the records consumed from the broker, how many do we have remaining in our local queues
+     *
+     * @return the number of consumed but outstanding records to process
+     */
     public int workRemaining() {
         return wm.getPartitionWorkRemainingCount();
     }
 
+    /**
+     * Plugin a function to run at the end of each main loop.
+     * <p>
+     * Useful for testing and controlling loop progression.
+     */
     void addLoopEndCallBack(Runnable r) {
         this.controlLoopHooks.add(r);
     }
@@ -597,10 +693,12 @@ public class AsyncConsumer<K, V> implements Closeable {
         BrokerPollSystem.setLongPollTimeout(ofMillis);
     }
 
-    public void close(boolean waitForInflight) {
-        this.close(defaultTimeout, waitForInflight);
-    }
-
+    /**
+     * A simple tuple structure.
+     *
+     * @param <L>
+     * @param <R>
+     */
     @Data
     public static class Tuple<L, R> {
         final private L left;
@@ -612,6 +710,14 @@ public class AsyncConsumer<K, V> implements Closeable {
     }
 
     /**
+     * A simple triple structure to capture the set of coinciding data.
+     *
+     * <ul>
+     *     <li>the record consumer</li>
+     *     <li>any producer record produced as a result of it's procssing</li>
+     *     <li>the metadata for publishing that record</li>
+     * </ul>
+     *
      * @param <K>  in key
      * @param <V>  in value
      * @param <KK> out key

@@ -1,9 +1,7 @@
 package io.confluent.csid.asyncconsumer.examples.vertx;
 
-import io.confluent.csid.asyncconsumer.AsyncConsumer;
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer;
-import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -13,7 +11,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -48,7 +45,7 @@ public class VertxApp {
         async = new StreamingAsyncVertxConsumer<>(kafkaConsumer,
                 getKafkaProducer(), options);
 
-        Stream<StreamingAsyncVertxConsumer.Result<String, String>> resultStream = async.vertxHttpReqInfoStream(record -> {
+        Stream<StreamingAsyncVertxConsumer.VertxCPResult<String, String>> resultStream = async.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map params = Map.of("recordKey", record.key(), "payload", record.value());
             return new RequestInfo("localhost", "/api", params);

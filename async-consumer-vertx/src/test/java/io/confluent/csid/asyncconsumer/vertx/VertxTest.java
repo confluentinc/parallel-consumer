@@ -6,7 +6,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.csid.asyncconsumer.AsyncConsumer;
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;
-import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer.Result;
+import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer.VertxCPResult;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.vertx.core.AsyncResult;
@@ -144,7 +144,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         awaitLatch(latch);
 
         // verify
-        var collect = futureStream.map(Result::getAsr).collect(Collectors.toList());
+        var collect = futureStream.map(VertxCPResult::getAsr).collect(Collectors.toList());
         assertThat(collect).hasSize(1);
         Future<HttpResponse<Buffer>> actual = collect.get(0).onComplete(x -> {
         });
@@ -219,8 +219,8 @@ public class VertxTest extends AsyncConsumerTestBase {
     }
 
     private List<AsyncResult<HttpResponse<Buffer>>> getResults(
-            Stream<Result<String, String>> futureStream) {
-        var collect = futureStream.map(Result::getAsr).collect(Collectors.toList());
+            Stream<VertxCPResult<String, String>> futureStream) {
+        var collect = futureStream.map(VertxCPResult::getAsr).collect(Collectors.toList());
         return blockingGetResults(collect);
     }
 
@@ -246,11 +246,4 @@ public class VertxTest extends AsyncConsumerTestBase {
         return list;
     }
 
-    @Test
-    @Disabled
-    public void testGeneralVertical() {
-        vertxAsync.vertical();
-        String result = null;
-        assertThat(result).isNotNull();
-    }
 }
