@@ -20,6 +20,12 @@ import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.defaultTimeout;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+/**
+ * Subsystem for polling the broker for messages.
+ *
+ * @param <K>
+ * @param <V>
+ */
 @Slf4j
 public class BrokerPollSystem<K, V> {
 
@@ -89,7 +95,6 @@ public class BrokerPollSystem<K, V> {
         state = closed;
     }
 
-    // todo keep alive with broker while processing messages when too many in flight
     private ConsumerRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
 

@@ -22,12 +22,12 @@ import static io.confluent.csid.utils.KafkaUtils.toTP;
 public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private final String DEFAULT_TYPE = "DEFAULT";
+
     /**
      * Simple way to differentiate treatment based on type
      */
     @Getter
     @Setter
-    // TODO remove in favour of class sub-typing
     private String workType;
 
     @Getter

@@ -99,15 +99,37 @@ processed and committed in `KEY` order, making sure no offset is committed unles
 
 === Core
 
+==== Simple Message Process
+
 This is the only thing you need to do, in order to get massively concurrent processing in your code.
 
 .Usage - print message content out to the console in parallel
 [source,java]
 async.asyncPoll(record -> {
-    log.info("A record: {}", record);
-});
+        log.info("A record: {}", record);
+    });
 
 See the link:./async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[core example] project, and it's test.
+
+==== Process and Produce a Response Message
+
+This interface allows you to process your message, then publish back to the broker zero, one or more result messages.
+You can also optionally provide a callback function to be run after the message(s) is(are) successfully published to the broker.
+
+.Usage - print message content out to the console in parallel
+[source,java]
+async.asyncPollAndProduce((record) -> {
+        var result = processBrokerRecord(record);
+        ProducerRecord<String, String> produceRecord =
+                    new ProducerRecord<>(OUTPUT_TOPIC, "a-key", result.payload);
+        return List.of(produceRecord);
+    }, (consumeProduceResult) -> {
+        log.info("Message {} saved to broker at offset {}",
+            consumeProduceResult.out.key,
+            consumeProduceResult.meta.offset());
+    });
+
+==== Callbacks vs Streams
 
 === HTTP with the VertX Module
 
@@ -115,13 +137,15 @@ See the link:./async-consumer-examples/async-consumer-example-core/src/main/java
 [source,java]
 ----
 async.vertxHttpReqInfoStream(record -> {
-    Map params = Map.of("recordKey", record.key(), "payload", record.value());
-    return new RequestInfo("myhost.com", "/api", params); <1>
-});
+        Map params = Map.of("recordKey", record.key(), "payload", record.value());
+        return new RequestInfo("myhost.com", "/api", params); <1>
+    });
 ----
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
 See the link:./async-consumer-examples/async-consumer-example-vertx/src/main/java/io/confluent/csid/asyncconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
+
+==== Vert.x Callbacks vs Streams
 
 === Kafka Streams Concurrent Processing
 
@@ -154,7 +178,7 @@ void concurrentProcess() {
 
 See the link:./async-consumer-examples/async-consumer-example-streams/src/main/java/io/confluent/csid/asyncconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
 
-=== Order enforced commit sync per partition
+== Order enforced commit sync per partition
 
 The user has the option to either choose ordered, or unordered message processing.
 
@@ -169,21 +193,21 @@ CAUTION: `Unordered` processing could cause problems for third party integration
 
 CAUTION: Beware of third party systems which are not idempotent, or are key order sensitive.
 
-==== Unordered
+=== Unordered
 
-Unordered processing is where there is no such restriction on there being multiple messages being processed per partition.
+Unordered processing is where there is no such restriction on there being multiple messages processed per partition.
 However, regardless of how far along the partition the processing progresses, the earliest outstanding message will block committing of offsets.
 
-WARNING: If the system fails with many messages processed ahead of a single old message, ALL these messages will be rpocessed again.
+WARNING: If the system fails with many messages processed ahead of a single old message, ALL these messages will be processed again.
 
-==== Ordered by Partition
+=== Ordered by Partition
 
 At most only one message from any given input partition will be in flight at any given time.
 This means that concurrent processing is restricted to the number of input partitions.
 
 The advantage of ordered processing mode, is that for an input of 1000 partitions, you do not need to run 1000 application instances or threads, to process the partitions in parallel.
 
-==== Ordered by Key
+=== Ordered by Key
 
 Most similar to ordered by partition, this mode ensures process ordering by key.
 
@@ -194,7 +218,7 @@ And as usual, the order of offset commit's will be correct such that under failu
 
 CAUTION: Beware of retries, idempotency and rollbacks
 
-== Retries and Ordering
+=== Retries and Ordering
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
@@ -258,7 +282,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 * Call backs only offset has been committed
 * resilience4j example / integration
 
----
+'''
 
 == Development
 
@@ -274,9 +298,11 @@ We use the excellent [Testcontainers](https://testcontainers.org) library for in
 
 To speed up test execution, you can enable container reused across test runs by setting the
 following in your [`~/.testcontainers.properties` file](https://www.testcontainers.org/features/configuration/):
-```
+
+[source]
+----
 testcontainers.reuse.enable=true
-```
+----
 
 This will leave the container running after the JUnit test is complete for reuse by subsequent runs.
 
