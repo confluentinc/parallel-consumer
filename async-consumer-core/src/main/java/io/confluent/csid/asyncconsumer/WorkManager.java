@@ -55,7 +55,7 @@ public class WorkManager<K, V> {
     private int loadingFactor = 2;
 
     @Getter(PACKAGE)
-    private final List<WorkContainer<K, V>> successfulWork = new ArrayList<>();
+    public final List<WorkContainer<K, V>> successfulWork = new ArrayList<>();
 
     @Setter(PACKAGE)
     private WallClock clock = new WallClock();
@@ -64,13 +64,13 @@ public class WorkManager<K, V> {
         this.options = options;
     }
 
-    public <R> void registerWork(List<ConsumerRecords<K, V>> records) {
+    public void registerWork(List<ConsumerRecords<K, V>> records) {
         for (var record : records) {
             registerWork(record);
         }
     }
 
-    public <R> void registerWork(ConsumerRecords<K, V> records) {
+    public void registerWork(ConsumerRecords<K, V> records) {
         log.debug("Registering {} records of work", records.count());
         for (ConsumerRecord<K, V> rec : records) {
             Object shardKey = computeShardKey(rec);
@@ -205,7 +205,7 @@ public class WorkManager<K, V> {
         return count;
     }
 
-    boolean isWorkReamining() {
+    boolean isWorkRemaining() {
         return getPartitionWorkRemainingCount() > 0;
     }
 
@@ -217,7 +217,7 @@ public class WorkManager<K, V> {
         return wc;
     }
 
-    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
+    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
 

@@ -1,7 +1,5 @@
 package io.confluent.csid.utils;
 
-import io.confluent.csid.asyncconsumer.StreamingAsyncConsumer;
-
 import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.Spliterators;

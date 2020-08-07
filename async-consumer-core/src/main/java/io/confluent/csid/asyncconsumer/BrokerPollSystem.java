@@ -118,7 +118,7 @@ public class BrokerPollSystem<K, V> {
     public void drain() {
         // idempotent
         if (state != AsyncConsumer.State.draining) {
-            log.info("Signaling to drain...");
+            log.debug("Signaling to drain...");
             state = draining;
             consumer.wakeup();
         }
@@ -130,7 +130,7 @@ public class BrokerPollSystem<K, V> {
             log.trace("Already paused");
         } else {
             paused = true;
-            log.info("Pausing subs");
+            log.debug("Pausing subs");
             Set<TopicPartition> assignment = consumer.assignment();
             consumer.pause(assignment);
         }
