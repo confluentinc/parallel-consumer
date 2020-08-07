@@ -43,7 +43,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
     @Override
     public synchronized void wakeup() {
-        log.info("Interrupting mock long poll...");
+        log.debug("Interrupting mock long poll...");
         synchronized (this) {
             this.notifyAll();
         }

@@ -133,8 +133,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     }
 
     @Test
-//    @SneakyThrows
-    public void offsetsAreNeverCommittedForMessagesStillInFlightLong() throws InterruptedException {
+    public void offsetsAreNeverCommittedForMessagesStillInFlightLong() {
         sendSecondRecord(consumerSpy);
 
         // send three messages - 0, 1, 2
@@ -204,7 +203,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         // 5 committed
         verify(producerSpy, after(verificationWaitDelay).times(3)).commitTransaction();
         maps = producerSpy.consumerGroupOffsetsHistory();
-        assertThat(maps).hasSize(3);
+        assertThat(maps).hasSizeGreaterThanOrEqualTo(3);
         offsets = maps.get(2).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
         assertThat(offsets.offset()).isEqualTo(5);
 

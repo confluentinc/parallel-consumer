@@ -14,6 +14,7 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
@@ -74,6 +75,7 @@ public class AsyncConsumer<K, V> implements Closeable {
 
     private Optional<Future<?>> controlThreadFuture = Optional.empty();
 
+    @Getter
     protected WorkManager<K, V> wm;
 
     /**
@@ -236,7 +238,14 @@ public class AsyncConsumer<K, V> implements Closeable {
      * @see #asyncPollAndProduce(Function, Consumer)
      */
     RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
-        Future<RecordMetadata> send = producer.send(outMsg);
+        // only needed if not using tx
+        Callback callback = (RecordMetadata metadata, Exception exception) -> {
+            if (exception != null) {
+                log.error("Error producing result message", exception);
+                throw new RuntimeException("Error producing result message", exception);
+            }
+        };
+        Future<RecordMetadata> send = producer.send(outMsg, callback);
         try {
             return send.get();
         } catch (Exception e) {
@@ -273,7 +282,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         if (state == closed) {
             log.info("Already closed, checking end state..");
         } else {
-            log.info("Signaling to close...");
+            log.debug("Signaling to close...");
 
             if (waitForInFlight) {
                 transitionToDraining();
@@ -338,7 +347,7 @@ public class AsyncConsumer<K, V> implements Closeable {
     }
 
     private boolean noInFlight() {
-        return !wm.isWorkReamining() || areMyThreadsDone();
+        return !wm.isWorkRemaining() || areMyThreadsDone();
     }
 
     private void transitionToDraining() {
@@ -577,7 +586,16 @@ public class AsyncConsumer<K, V> implements Closeable {
                     throw new RuntimeException(msg, lastErrorSavedForRethrow);
                 }
                 try {
-                    producer.commitTransaction();
+                    if (producer instanceof MockProducer) {
+                        // see bug https://issues.apache.org/jira/browse/KAFKA-10382
+                        // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
+                        synchronized (producer) {
+                            producer.commitTransaction();
+                        }
+                    } else {
+                        producer.commitTransaction();
+                    }
+
                     notCommitted = false;
                     if (retryCount > 0) {
                         log.warn("Commit success, but took {} tries.", retryCount);

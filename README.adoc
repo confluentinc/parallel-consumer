@@ -70,6 +70,83 @@ As long as the processing layer can handle the load horizontally (e.g auto scali
 For example, if you have a key set of 10,000 unique keys, and you need to call an http end point to process each one, you can use the per key order setting, and in the best case the system will process 10,000 at the same time using the non-blocking Vertx HTTP client library.
 The user just has to provide a function to extract from the message the HTTP call parameters and construct the HTTP request object.
 
+==== Illustrative Performance Example
+.(see link:./async-consumer-core/src/test-integration/java/io/confluent/csid/asyncconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
+
+As an illustrative example of relative performance, given:
+
+* A random processing time between 0 and 5ms
+* 10,000 messages to process
+* A single partition (simplifies comparison - a topic with 5 partitions is the same as 1 partition with a keyspace of 5)
+* Default `AsyncConsumerOptions`
+** maxUncommittedMessagesToHandle = 1000
+** maxConcurrency = 100
+** numberOfThreads = 16
+
+.Comparative performance of order modes and key spaces
+[cols="1,1,1,3", options="header"]
+|===
+|Ordering
+|Number of keys
+|Duration
+|Note
+
+|Partition
+|20 (not relevant)
+|22.221s
+|This is the same as a single partition with a single normal serial consumer, as we can see: 2.5ms avg processing time * 10,000 msg / 1000ms = ~25s.
+
+|Key
+|1
+|26.743s
+|Same as above
+
+|Key
+|2
+|13.576s
+|
+
+|Key
+|5
+|5.916s
+|
+
+|Key
+|10
+|3.310s
+|
+
+|Key
+|20
+|2.242s
+|
+
+|Key
+|50
+|2.204s
+|
+
+|Key
+|100
+|2.178s
+|
+
+|Key
+|1,000
+|2.056s
+|
+
+|Key
+|10,000
+|2.128s
+|As key space is t he same as the number of messages, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
+
+|Unordered
+|20 (not relevant)
+|2.829s
+|As there is no order restriction, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
+|===
+
 == Usage
 
 === Common Preparation
@@ -90,8 +167,8 @@ AsyncConsumer<String, String> setupAsync() {
     return new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
 }
 ----
-<1> Choose your ordering type, `KEY` in this case. This ensures maximum concurrency, while ensuring messages are
-processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition are completed also.
+<1> Choose your ordering type, `KEY` in this case.
+This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
 <2> The maximum number of concurrent processing operations to be performing at any given time
 <3> Regardless of the level of concurrency, don't have more than this many messages uncomitted at any given time.
 Also, because the library coordinates offsets, `enable.auto.commit` must be disabled in your consumer.
@@ -99,6 +176,14 @@ Also, because the library coordinates offsets, `enable.auto.commit` must be disa
 <5> Setup your topic subscriptions
 
 NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disabled.
+
+After this setup, one then has the choice of async interfaces:
+
+* `AsyncConsumer`
+* `VertxAsyncConsumer`
+* `StreamingAsyncConsumer`
+* `StreamingAsyncVertxConsumer`
+
 
 === Core
 
@@ -134,6 +219,13 @@ async.asyncPollAndProduce((record) -> {
 
 ==== Callbacks vs Streams
 
+You have the option to either use callbacks to be notified of events, or use the `Streaming` versions of the API, which use the `java.util.stream.Stream` system:
+
+* `StreamingAsyncConsumer`
+* `StreamingAsyncVertxConsumer`
+
+In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
+
 === HTTP with the VertX Module
 
 .Call an HTTP end point for each message usage
@@ -147,8 +239,6 @@ async.vertxHttpReqInfoStream(record -> {
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
 See the link:./async-consumer-examples/async-consumer-example-vertx/src/main/java/io/confluent/csid/asyncconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
-
-==== Vert.x Callbacks vs Streams
 
 === Kafka Streams Concurrent Processing
 

@@ -107,8 +107,6 @@ public class LoadTest extends DbTest {
         log.info("Starting to read back");
         final List<ConsumerRecord<String, String>> allRecords = Lists.newArrayList();
         time(() -> {
-            DecimalFormat speedFormat = new DecimalFormat();
-            speedFormat.setMaximumFractionDigits(0);
             ProgressBar pb = new ProgressBarBuilder()
                     .setInitialMax(total).showSpeed().setTaskName("Read").setUnit("msg", 1)
                     .build();
