@@ -93,9 +93,12 @@ AsyncConsumer<String, String> setupAsync() {
 <1> Choose your ordering type, `KEY` in this case. This ensures maximum concurrency, while ensuring messages are
 processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition are completed also.
 <2> The maximum number of concurrent processing operations to be performing at any given time
-<3> Regardless of the level of concurrency, don't have more than this many messages uncomitted at any given time
+<3> Regardless of the level of concurrency, don't have more than this many messages uncomitted at any given time.
+Also, because the library coordinates offsets, `enable.auto.commit` must be disabled in your consumer.
 <4> Setup your consumer client as per normal
 <5> Setup your topic subscriptions
+
+NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disabled.
 
 === Core
 
