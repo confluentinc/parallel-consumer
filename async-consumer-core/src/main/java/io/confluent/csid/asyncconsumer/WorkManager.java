@@ -15,6 +15,7 @@ import org.apache.kafka.common.TopicPartition;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static java.lang.Math.min;
@@ -36,13 +37,14 @@ public class WorkManager<K, V> {
     final private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     /**
-     * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on
-     * incrementally advancing offsets, as this isn't a guarantee of kafka's.
+     * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
+     * advancing offsets, as this isn't a guarantee of kafka's.
      */
     final private Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
 
     /**
-     * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every shard.
+     * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
+     * shard.
      */
     private Optional<Object> iterationResumePoint = Optional.empty();
 
@@ -54,8 +56,11 @@ public class WorkManager<K, V> {
      */
     private int loadingFactor = 2;
 
+    /**
+     * Useful for testing
+     */
     @Getter(PACKAGE)
-    public final List<WorkContainer<K, V>> successfulWork = new ArrayList<>();
+    private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
     @Setter(PACKAGE)
     private WallClock clock = new WallClock();
@@ -170,7 +175,7 @@ public class WorkManager<K, V> {
         wc.succeed();
         Object key = computeShardKey(cr);
         processingShards.get(key).remove(cr.offset());
-        successfulWork.add(wc);
+        successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
         inFlightCount--;
     }
 

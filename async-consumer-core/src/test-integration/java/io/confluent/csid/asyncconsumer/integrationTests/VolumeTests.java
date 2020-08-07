@@ -182,8 +182,8 @@ public class VolumeTests extends AsyncConsumerTestBase {
             int rangeOfTimeSimulatedProcessingTakesMs = 5;
             long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);
             sleep(sleepTime);
-            //ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "Processing took: " + sleepTime + ". SourceV:" + rec.value());
-            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), rec.value());
+            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "Processing took: " + sleepTime + ". SourceV:" + rec.value());
+//            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), rec.value());
             bar.stepTo(producerSpy.history().size());
             return List.of(stub);
         }, (x) -> {
@@ -192,7 +192,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
         });
 
         Awaitility.waitAtMost(defaultTimeout.multipliedBy(10)).untilAsserted(() -> {
-            assertThat(asyncConsumer.getWm().successfulWork.size()).as("All messages expected messages were processed and successful").isEqualTo(quantityOfMessagesToProduce);
+            assertThat(super.successfulWork.size()).as("All messages expected messages were processed and successful").isEqualTo(quantityOfMessagesToProduce);
             assertThat(producerSpy.history().size()).as("All messages expected messages were processed and results produced").isEqualTo(quantityOfMessagesToProduce);
         });
         bar.close();
@@ -246,6 +246,9 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         assertThat(producerSpy.history().size()).as("Finally, all messages expected messages were produced").isEqualTo(quantityOfMessagesToProduce);
         assertThat(groupOffsetsHistory).as("No offsets committed").hasSizeGreaterThan(0);
+
+        // clear messages
+        super.successfulWork.clear();
     }
 
     @SneakyThrows
