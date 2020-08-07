@@ -2,6 +2,7 @@ package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
@@ -25,6 +26,10 @@ import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * @see WorkManager
+ */
+@Slf4j
 public class WorkManagerTest {
 
     public static final String INPUT_TOPIC = "input";
@@ -48,11 +53,17 @@ public class WorkManagerTest {
         setupWorkManager(AsyncConsumerOptions.builder().build());
     }
 
+    protected List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
+
     private void setupWorkManager(AsyncConsumerOptions build) {
         offset = 0;
 
         wm = new WorkManager<>(build);
         wm.setClock(clock);
+        wm.getSuccessfulWorkListeners().add((work) -> {
+            log.debug("Heard some successful work: {}", work);
+            successfulWork.add(work);
+        });
     }
 
     private void registerSomeWork() {
@@ -125,7 +136,7 @@ public class WorkManagerTest {
         assertOffsets(works, of(1));
         wm.success(works.get(0));
 
-        assertThat(wm.getSuccessfulWork())
+        assertThat(successfulWork)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(of(0, 2, 1));
     }
@@ -198,7 +209,7 @@ public class WorkManagerTest {
         assertOffsets(works, of(0));
         wm.success(works.get(0));
 
-        assertOffsets(wm.getSuccessfulWork(), of(0));
+        assertOffsets(successfulWork, of(0));
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(1));
@@ -209,7 +220,7 @@ public class WorkManagerTest {
         wm.success(works.get(0));
 
         // check all published in the end
-        assertOffsets(wm.getSuccessfulWork(), of(0, 1, 2));
+        assertOffsets(successfulWork, of(0, 1, 2));
     }
 
     @Test
@@ -407,7 +418,7 @@ public class WorkManagerTest {
         assertThat(wm.getInFlightCount()).isEqualTo(2);
         assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
         assertThat(wm.getShardWorkRemainingCount()).isEqualTo(4);
-        assertThat(wm.getSuccessfulWork()).hasSize(5);
+        assertThat(successfulWork).hasSize(5);
 
         //
         wm.success(work.poll());
@@ -420,7 +431,7 @@ public class WorkManagerTest {
 
         //
         assertThat(work.size()).isEqualTo(0);
-        assertThat(wm.getSuccessfulWork()).hasSize(9);
+        assertThat(successfulWork).hasSize(9);
         assertThat(wm.getInFlightCount()).isEqualTo(0);
         assertThat(wm.getShardWorkRemainingCount()).isEqualTo(0);
         assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);

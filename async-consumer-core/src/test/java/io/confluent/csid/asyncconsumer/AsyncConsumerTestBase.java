@@ -11,10 +11,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -68,6 +65,15 @@ public class AsyncConsumerTestBase {
         setupAsyncConsumerInstance(AsyncConsumerOptions.builder().build());
     }
 
+    protected List<WorkContainer<String, String>> successfulWork = Collections.synchronizedList(new ArrayList<>());
+
+    private void setupWorkManager(WorkManager<String, String> wm) {
+        wm.getSuccessfulWorkListeners().add((work)->{
+            log.debug("Heard some successful work: {}", work);
+            successfulWork.add(work);
+        });
+    }
+
     protected void primeFirstRecord() {
         firstRecord = ktu.makeRecord("key-0", "v0");
         consumerSpy.addRecord(firstRecord);
@@ -103,6 +109,8 @@ public class AsyncConsumerTestBase {
         verificationWaitDelay = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
 
         loopCountRef = attachLoopCounter(asyncConsumer);
+
+        setupWorkManager(asyncConsumer.getWm());
     }
 
     protected AsyncConsumer<String, String> initAsyncConsumer(AsyncConsumerOptions asyncConsumerOptions) {
