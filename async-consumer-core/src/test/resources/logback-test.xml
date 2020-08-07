@@ -38,4 +38,7 @@
     <logger name="io.vertx" level="debug" />
     <logger name="io.netty" level="info" />
 
+    <!-- kafka internal -->
+    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug" />
+
 </configuration>

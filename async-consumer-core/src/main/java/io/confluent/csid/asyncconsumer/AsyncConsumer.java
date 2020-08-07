@@ -8,7 +8,9 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -18,6 +20,7 @@ import org.apache.kafka.common.errors.InterruptException;
 import org.slf4j.MDC;
 
 import java.io.Closeable;
+import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -130,6 +133,8 @@ public class AsyncConsumer<K, V> implements Closeable {
         Objects.requireNonNull(producer);
         Objects.requireNonNull(options);
 
+        checkAutoCommitIsDisabled(consumer);
+
         //
         this.producer = producer;
         this.consumer = consumer;
@@ -149,6 +154,32 @@ public class AsyncConsumer<K, V> implements Closeable {
         } catch (KafkaException e) {
             log.error("Make sure your producer is setup for transactions - specifically make sure it's {} is set.", ProducerConfig.TRANSACTIONAL_ID_CONFIG, e);
             throw e;
+        }
+    }
+
+    /**
+     * Nasty reflection to check if auto commit is disabled.
+     * <p>
+     * Other way would be to politely request the user also include their consumer properties when construction, but
+     * this is more reliable in a correctness sense, but britle in terms of coupling to internal implementation. Consider
+     * requesting ability to inspect configuration at runtime.
+     */
+    @SneakyThrows
+    private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        if (consumer instanceof KafkaConsumer) {
+            // Commons lang FieldUtils#readField - avoid needing commons lang
+            Field coordinatorField = consumer.getClass().getDeclaredField("coordinator"); //NoSuchFieldException
+            coordinatorField.setAccessible(true);
+            ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
+
+            Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
+            autoCommitEnabledField.setAccessible(true);
+            Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
+
+            if (isAutoCommitEnabled)
+                throw new IllegalStateException("Consumer auto commit must be disabled, as commits are handled by the library.");
+        } else {
+            // noop - probably MockConsumer being used in testing - which doesn't do auto commits
         }
     }
 
