@@ -1,6 +1,7 @@
 package io.confluent.csid.asyncconsumer.integrationTests;
 
 import io.confluent.csid.asyncconsumer.integrationTests.utils.KafkaClientUtils;
+import io.confluent.csid.testcontainers.FilteredSlf4jLogConsumer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.*;
@@ -54,7 +55,7 @@ public abstract class KafkaTest<K, V> {
   @BeforeAll
   static void followKafkaLogs(){
     if(log.isDebugEnabled()) {
-      Slf4jLogConsumer logConsumer = new Slf4jLogConsumer(log);
+      FilteredSlf4jLogConsumer logConsumer = new FilteredSlf4jLogConsumer(log);
       kafkaContainer.followOutput(logConsumer);
     }
   }
