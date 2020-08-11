@@ -162,7 +162,6 @@ public class AsyncConsumerTestBase {
     protected void waitForSomeLoopCycles(int thisManyMore) {
         log.debug("Waiting for {} more iterations of the control loop.", thisManyMore);
         blockingLoopLatchTrigger(thisManyMore);
-//        waitForLoopCount(this.loopCountRef.get() + thisManyMore);
         log.debug("Completed waiting on {} loop(s)", thisManyMore);
     }
 
@@ -201,9 +200,14 @@ public class AsyncConsumerTestBase {
         KafkaTestUtils.assertCommits(producerSpy, integers, Optional.empty());
     }
 
+    protected void awaitLatch(List<CountDownLatch> latches, int latchIndex) {
+        log.trace("Waiting on latch {}", latchIndex);
+        awaitLatch(latches.get(latchIndex));
+    }
+
     @SneakyThrows
     protected void awaitLatch(CountDownLatch latch) {
-        log.trace("Waiting on latch");
+        log.trace("Waiting on latch with timeout {}", defaultTimeout);
         boolean latchReachedZero = latch.await(defaultTimeoutSeconds, SECONDS);
         if (latchReachedZero) {
             log.trace("Latch released");
@@ -212,28 +216,28 @@ public class AsyncConsumerTestBase {
         }
     }
 
-    protected void releaseAndWait(List<CountDownLatch> locks, List<Integer> ints) {
-        for (Integer i : ints) {
+    protected void releaseAndWait(List<CountDownLatch> locks, List<Integer> lockIndexes) {
+        for (Integer i : lockIndexes) {
             log.debug("Releasing {}...", i);
             locks.get(i).countDown();
         }
         waitForSomeLoopCycles(1);
     }
 
-    protected void release(List<CountDownLatch> locks, int i) {
-        log.debug("Releasing {}...", i);
-        locks.get(i).countDown();
+    protected void release(List<CountDownLatch> locks, int lockIndex) {
+        log.debug("Releasing {}...", lockIndex);
+        locks.get(lockIndex).countDown();
     }
 
-    protected void releaseAndWait(List<CountDownLatch> locks, int i) {
-        log.debug("Releasing {}...", i);
-        locks.get(i).countDown();
+    protected void releaseAndWait(List<CountDownLatch> locks, int lockIndex) {
+        log.debug("Releasing {}...", lockIndex);
+        locks.get(lockIndex).countDown();
         waitForSomeLoopCycles(1);
     }
 
-    protected List<CountDownLatch> constructLatches(int i) {
-        var result = new ArrayList<CountDownLatch>(i);
-        for (Integer integer : range(i)) {
+    protected List<CountDownLatch> constructLatches(int numberOfLatches) {
+        var result = new ArrayList<CountDownLatch>(numberOfLatches);
+        for (var ignore : range(numberOfLatches)) {
             result.add(new CountDownLatch(1));
         }
         return result;

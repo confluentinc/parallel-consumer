@@ -72,64 +72,57 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @Test
     @SneakyThrows
     public void offsetsAreNeverCommittedForMessagesStillInFlightSimplest() {
-        var msg0Lock = new CountDownLatch(1);
-        var msg1Lock = new CountDownLatch(1);
+        sendSecondRecord(consumerSpy);
+
+        var locks = constructLatches(2);
+
+        var processedStates = new HashMap<Integer, Boolean>();
+
+        var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
         asyncConsumer.asyncPoll((ignore) -> {
+            startBarrierLatch.countDown();
             int offset = (int) ignore.offset();
-            switch (offset) {
-                case 0 -> {
-                    // wait for processing
-                    try {
-                        msg0Lock.await();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-                case 1 -> {
-                    // wait for processing
-                    try {
-                        msg1Lock.await();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
+            awaitLatch(locks, offset);
+            processedStates.put(offset, true);
         });
 
-        // finish processing 1
-        msg1Lock.countDown();
+        awaitLatch(startBarrierLatch);
 
-        waitForOneLoopCycle();
+        assertThat(asyncConsumer.getWm().getInFlightCount()).isEqualTo(2);
+
+        // finish processing 1
+        releaseAndWait(locks, 1);
 
         // make sure no offsets are committed
         verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction(); // todo smelly, change to event based - this is racey
+        assertCommits(of(), "Partition is blocked");
 
         // So it's data setup can be used in other tests, finish 0
-        // todo prefer to shutdown and verify, but no mechanism presently as messages are still in "flight"
-        log.debug("Unlocking 0");
-        msg0Lock.countDown();
+        releaseAndWait(locks, 0);
 
-        log.debug("Clossing...");
+        log.debug("Closing...");
         asyncConsumer.close();
+
+        assertThat(processedStates.values()).as("sanity - all expected messages are processed").containsExactly(true, true);
     }
 
     @Test
-//    @SneakyThrows
-    public void offsetsAreNeverCommittedForMessagesStillInFlightShort() throws InterruptedException {
+    public void offsetsAreNeverCommittedForMessagesStillInFlightShort() {
         offsetsAreNeverCommittedForMessagesStillInFlightSimplest();
+
+        log.info("Test start");
 
         // make sure offset 1, not 0 is committed
         // check only 1 is now committed, not committing 0 as well is a performance thing
         verify(producerSpy,
                 after(verificationWaitDelay)
-                        .times(1)
-                        .description("Only one of the two offsets committed for efficiency"))
+                        .atLeast(1)
+                        .description("wait for at least one commit call"))
                 .commitTransaction();
 
-
-        assertCommits(of(0));
+        assertCommits(of(1), "Only one of the two offsets committed, as they were coalesced for efficiency");
     }
 
     @Test

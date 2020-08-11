@@ -26,6 +26,7 @@
 
     <!-- notable specifics -->
     <logger name="io.confluent.csid.asyncconsumer.integrationTests.VolumeTests" level="debug"/>
+    <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumerTestBase" level="trace"/>-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="info" />-->
 
@@ -42,6 +43,6 @@
     <logger name="io.netty" level="info"/>
 
     <!-- kafka internal -->
-    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug" />
+    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug"/>
 
 </configuration>
