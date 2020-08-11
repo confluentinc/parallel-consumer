@@ -18,6 +18,8 @@ import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
+import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.common.utils.Timer;
 import org.slf4j.MDC;
 
 import java.io.Closeable;
@@ -37,7 +39,6 @@ import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.awaitility.Awaitility.waitAtMost;
 
 /**
  * Asynchronous / concurrent message consumer for Kafka.
@@ -304,7 +305,15 @@ public class AsyncConsumer<K, V> implements Closeable {
     @SneakyThrows
     private void waitForClose(Duration timeout) {
         log.info("Waiting on closed state...");
-        waitAtMost(timeout).pollInterval(ofMillis(10)).until(() -> closed.equals(state));
+        Timer timer = Time.SYSTEM.timer(timeout);
+        while (!state.equals(closed)) {
+            log.trace("Still waiting for system to close...");
+            Thread.sleep(100);
+            timer.update();
+            if (timer.isExpired()) {
+                throw new TimeoutException("Timeout waiting for system to close");
+            }
+        }
     }
 
     @SneakyThrows
@@ -340,9 +349,18 @@ public class AsyncConsumer<K, V> implements Closeable {
     /**
      * Block the calling thread until no more messages are being processed.
      */
+    @SneakyThrows
     public void waitForNoInFlight(Duration timeout) {
         log.debug("Waiting for no in flight...");
-        waitAtMost(timeout).alias("Waiting for no more records in-flight").until(this::noInFlight);
+        var timer = Time.SYSTEM.timer(timeout);
+        while (!noInFlight()) {
+            log.trace("Waiting for no in flight...");
+            Thread.sleep(100);
+            timer.update();
+            if (timer.isExpired()) {
+                throw new TimeoutException("Waiting for no more records in-flight");
+            }
+        }
         log.debug("No longer anything in flight.");
     }
 
@@ -608,7 +626,7 @@ public class AsyncConsumer<K, V> implements Closeable {
             }
 
             // only open the next tx if we are running
-            if (state == running || state == draining){
+            if (state == running || state == draining) {
                 producer.beginTransaction();
             }
         }

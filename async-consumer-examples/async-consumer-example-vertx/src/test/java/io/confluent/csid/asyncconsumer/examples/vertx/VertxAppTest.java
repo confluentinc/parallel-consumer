@@ -13,21 +13,22 @@ import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.Mockito;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 import static io.confluent.csid.utils.KafkaTestUtils.DEFAULT_GROUP_METADATA;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.mockito.Mockito.when;
 
 @Slf4j
 public class VertxAppTest {
 
     TopicPartition tp = new TopicPartition(VertxApp.inputTopic, 0);
 
+    @Timeout(20)
     @SneakyThrows
     @Test
     public void test() {
@@ -44,10 +45,10 @@ public class VertxAppTest {
             Assertions.assertThat(coreApp.mockConsumer.position(tp)).isEqualTo(3);
         });
 
-        assertThatExceptionOfType(ConditionTimeoutException.class)
+        Assertions.assertThatExceptionOfType(TimeoutException.class)
                 .as("no server to receive request, should timeout trying to close. Could also setup wire mock...")
                 .isThrownBy(coreApp::close)
-                .withMessageContainingAll("Condition", "lambda", "fulfilled", "Waiting", "records", "flight");
+                .withMessageContainingAll("Waiting", "records", "flight");
     }
 
     class VertxAppAppUnderTest extends VertxApp {
@@ -59,7 +60,7 @@ public class VertxAppTest {
             HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
             beginningOffsets.put(tp, 0L);
             mockConsumer.updateBeginningOffsets(beginningOffsets);
-            when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
+            Mockito.when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
             return mockConsumer;
         }
 
