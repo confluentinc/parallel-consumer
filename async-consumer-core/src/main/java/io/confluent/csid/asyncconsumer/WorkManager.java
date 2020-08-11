@@ -256,8 +256,8 @@ public class WorkManager<K, V> {
                 } else {
                     // can't commit this offset or beyond, as this is the latest offset that is incomplete
                     // i.e. only commit offsets that come before the current one, and stop looking for more
-                    log.debug("Offset ({}) is incomplete, holding up the queue ({}). Ending partition scan.",
-                            container, partitionQueueEntry.getKey());
+                    log.debug("Offset ({}) is incomplete, holding up the queue ({}) of size {}. Ending partition scan.",
+                            container, partitionQueueEntry.getKey(), partitionQueueEntry.getValue().size());
                     break;
                 }
             }
