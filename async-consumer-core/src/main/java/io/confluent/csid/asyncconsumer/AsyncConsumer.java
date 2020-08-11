@@ -30,8 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.closed;
-import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.running;
+import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.time.Duration.ofMillis;
@@ -94,15 +93,15 @@ public class AsyncConsumer<K, V> implements Closeable {
      * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
      * collection sooner.
      *
-     * @see #processWorkMailBox
+     * @see #processWorkCompleteMailBox
      */
     private Thread blockableControlThread;
 
     /**
      * @see #notifyNewWorkRegistered
-     * @see #processWorkMailBox
+     * @see #processWorkCompleteMailBox
      */
-    private final AtomicBoolean pollingWorkMailBox = new AtomicBoolean();
+    private final AtomicBoolean workCompleteMailBox = new AtomicBoolean();
 
     /**
      * The run state of the controller.
@@ -313,6 +312,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         log.debug("Doing closing state: {}...", state);
 
         log.debug("Closing producer, assuming no more in flight...");
+        producer.commitTransaction();
         producer.close(timeout);
 
         // only close consumer once producer has committed it's offsets (tx'l)
@@ -418,7 +418,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         submitWorkToPool(userFunction, callback, records);
 
         log.trace("Loop: Process mailbox");
-        processWorkMailBox();
+        processWorkCompleteMailBox();
 
         log.trace("Loop: Maybe commit");
         commitOffsetsMaybe();
@@ -463,7 +463,7 @@ public class AsyncConsumer<K, V> implements Closeable {
      * <p>
      * Can be interrupted if something else needs doing.
      */
-    private void processWorkMailBox() {
+    private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting or results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
@@ -472,10 +472,10 @@ public class AsyncConsumer<K, V> implements Closeable {
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
             log.debug("Blocking until next scheduled offset commit attempt for {}", timeout);
-            pollingWorkMailBox.getAndSet(true);
+            workCompleteMailBox.getAndSet(true);
             // wait for work, with a timeout for sanity
             firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
-            pollingWorkMailBox.getAndSet(false);
+            workCompleteMailBox.getAndSet(false);
         } catch (InterruptedException e) {
             log.trace("Interrupted waiting on work results");
         }
@@ -578,7 +578,7 @@ public class AsyncConsumer<K, V> implements Closeable {
             boolean notCommitted = true;
             int retryCount = 0;
             int arbitrarilyChosenLimitForArbitraryErrorSituation = 200;
-            InterruptException lastErrorSavedForRethrow = null;
+            Exception lastErrorSavedForRethrow = null;
             while (notCommitted) {
                 if (retryCount > arbitrarilyChosenLimitForArbitraryErrorSituation) {
                     String msg = msg("Retired too many times ({} > limit of {}), giving up. See error above.", retryCount, arbitrarilyChosenLimitForArbitraryErrorSituation);
@@ -600,15 +600,15 @@ public class AsyncConsumer<K, V> implements Closeable {
                     if (retryCount > 0) {
                         log.warn("Commit success, but took {} tries.", retryCount);
                     }
-                } catch (InterruptException e) {
-                    log.warn("Commit interrupted, will retry, have tried {} times (see KafkaProducer#commit)", retryCount, e);
+                } catch (Exception e) {
+                    log.warn("Commit exception, will retry, have tried {} times (see KafkaProducer#commit)", retryCount, e);
                     lastErrorSavedForRethrow = e;
                     retryCount++;
                 }
             }
 
             // only open the next tx if we are running
-            if (state == running) {
+            if (state == running || state == draining){
                 producer.beginTransaction();
             }
         }
@@ -708,11 +708,11 @@ public class AsyncConsumer<K, V> implements Closeable {
      * <p>
      * Only wake up the thread if it's sleeping while polling the mail box.
      *
-     * @see #processWorkMailBox
+     * @see #processWorkCompleteMailBox
      * @see #blockableControlThread
      */
     void notifyNewWorkRegistered() {
-        if (pollingWorkMailBox.getAcquire()) {
+        if (workCompleteMailBox.getAcquire()) {
             log.trace("Knock knock, wake up! You've got mail (tm)!");
             this.blockableControlThread.interrupt();
         } else {
