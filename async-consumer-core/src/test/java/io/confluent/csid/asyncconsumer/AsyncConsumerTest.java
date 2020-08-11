@@ -201,12 +201,11 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         releaseAndWait(locks, of(4, 5));
 
         // 5 committed
-        verify(producerSpy, after(verificationWaitDelay).times(3)).commitTransaction();
+        verify(producerSpy, after(verificationWaitDelay).atLeast(3)).commitTransaction();
         maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSizeGreaterThanOrEqualTo(3);
         offsets = maps.get(2).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
         assertThat(offsets.offset()).isEqualTo(5);
-
         assertCommits(of(2, 3, 5));
 
         // close
