@@ -24,6 +24,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>io.confluent.csig.asyncconsumer</groupId>
             <artifactId>async-consumer-core</artifactId>
             <version>${project.version}</version>

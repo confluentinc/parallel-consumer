@@ -13,19 +13,20 @@ import io.vertx.ext.web.client.WebClient;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.common.utils.Time;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import static org.awaitility.Awaitility.await;
 
 /**
  * An extension to {@link AsyncConsumer} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
@@ -251,6 +252,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
      * @param timeout         how long to wait before giving up
      * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
      */
+    @SneakyThrows
     @Override
     public void close(Duration timeout, boolean waitForInFlight) {
         log.info("Vert.x async consumer closing...");
@@ -258,7 +260,15 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         super.close(timeout, waitForInFlight);
         webClient.close();
         Future<Void> close = vertx.close();
-        await().until(close::isComplete);
+        var timer = Time.SYSTEM.timer(timeout);
+        while (!close.isComplete()) {
+            log.trace("Waiting on close to complete");
+            Thread.sleep(100);
+            timer.update();
+            if (timer.isExpired()) {
+                throw new TimeoutException("Waiting for system to close");
+            }
+        }
     }
 
 }
