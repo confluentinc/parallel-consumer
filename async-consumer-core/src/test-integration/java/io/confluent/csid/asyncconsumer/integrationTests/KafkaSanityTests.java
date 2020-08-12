@@ -5,9 +5,9 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Set;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
@@ -28,7 +28,7 @@ public class KafkaSanityTests extends KafkaTest<String, String> {
         setupTopic();
         KafkaConsumer<String, String> c = kcu.consumer;
         log.info("Subscribe to topic");
-        c.subscribe(List.of(topic));
+        c.subscribe(UniLists.of(topic));
         Set<TopicPartition> assignment = c.assignment();
         log.info("Pause subscription");
         c.pause(assignment);

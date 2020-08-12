@@ -13,10 +13,9 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
+import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.List;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -70,7 +69,7 @@ public class StreamsApp {
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
-        kafkaConsumer.subscribe(List.of(outputTopicName));
+        kafkaConsumer.subscribe(UniLists.of(outputTopicName));
 
         async = new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
 

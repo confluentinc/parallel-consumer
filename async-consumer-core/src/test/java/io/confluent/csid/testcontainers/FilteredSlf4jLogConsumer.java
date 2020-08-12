@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.event.Level;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.List;
 
@@ -19,7 +20,7 @@ public class FilteredSlf4jLogConsumer extends Slf4jLogConsumer {
 
     @Getter
     @Setter
-    private List<Level> filteredLevels = List.of(TRACE, DEBUG);
+    private List<Level> filteredLevels = UniLists.of(TRACE, DEBUG);
 
     public FilteredSlf4jLogConsumer(Logger logger) {
         super(logger);

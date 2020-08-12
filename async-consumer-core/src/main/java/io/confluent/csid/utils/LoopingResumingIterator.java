@@ -6,6 +6,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.function.Consumer;
 
+import static io.confluent.csid.utils.BackportUtils.isEmpty;
+
 /**
  * Loop implementations that will resume from a given key. Can be constructed and used as an iterable, or a function
  * passed into the static version {@link #iterateStartingFromKeyLooping}.
@@ -41,7 +43,7 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
 
     @Override
     public boolean hasNext() {
-        if (iterationStartingPoint.isEmpty()) return iterator.hasNext();
+        if (isEmpty(iterationStartingPoint)) return iterator.hasNext();
         if (looped) {
             if (foundIndex.orElse(-1) == indexOfNextElementToRetrieve) {
                 // we've looped around
@@ -71,7 +73,7 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
     @Override
     public Map.Entry<KEY, VALUE> next() {
         Map.Entry<KEY, VALUE> toReturn = null;
-        if (iterationStartingPoint.isEmpty()) {
+        if (isEmpty(iterationStartingPoint)) {
             toReturn = getNext();
         } else {
             Object lookingFor = iterationStartingPoint.get();
@@ -104,7 +106,7 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
                         break;
                     }
                 }
-                if (foundIndex.isEmpty() && stillIterateCollectionIfStartingPointDoesntExist) {
+                if (isEmpty(foundIndex) && stillIterateCollectionIfStartingPointDoesntExist) {
                     foundIndex = Optional.of(0); // act as if it was found at 0 and proceed normally
                     resetIterator();
                     toReturn = getNext();

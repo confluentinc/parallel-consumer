@@ -10,7 +10,6 @@
         <version>0.1-SNAPSHOT</version>
     </parent>
 
-    <groupId>io.confluent.csig.asyncconsumer</groupId>
     <artifactId>async-consumer-example-core</artifactId>
 
     <dependencies>

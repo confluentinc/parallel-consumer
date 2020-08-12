@@ -18,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.utils.Time;
+import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.List;
@@ -175,7 +177,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
                 this.onVertxCompleteHook.ifPresent(Runnable::run);
             });
 
-            return List.of(send);
+            return UniLists.of(send);
         };
 
         Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
@@ -209,7 +211,7 @@ public class VertxAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
         }
 
         public RequestInfo(String host, String contextPath) {
-            this(host, DEFAULT_PORT, contextPath, Map.of());
+            this(host, DEFAULT_PORT, contextPath, UniMaps.of());
         }
 
     }

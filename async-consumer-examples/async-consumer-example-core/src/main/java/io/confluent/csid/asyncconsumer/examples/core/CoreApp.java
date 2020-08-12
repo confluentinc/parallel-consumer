@@ -8,8 +8,8 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
+import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.List;
 import java.util.Properties;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.KEY;
@@ -54,7 +54,7 @@ public class CoreApp {
     }
 
     void setupSubscription(Consumer<String, String> kafkaConsumer) {
-        kafkaConsumer.subscribe(List.of(inputTopic));
+        kafkaConsumer.subscribe(UniLists.of(inputTopic));
     }
 
     void close() {

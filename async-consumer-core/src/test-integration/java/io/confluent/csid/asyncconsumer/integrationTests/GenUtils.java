@@ -1,11 +1,12 @@
 package io.confluent.csid.asyncconsumer.integrationTests;
 
+import pl.tlinkowski.unij.api.UniCollectors;
+
 import java.time.Instant;
 import java.util.Calendar;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.function.IntFunction;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class GenUtils {
@@ -16,7 +17,7 @@ public class GenUtils {
   public <T> List<T> createSomeStuff(Integer quantity, IntFunction<T> constructor) {
     return IntStream.range(0, quantity)
             .mapToObj(constructor)
-            .collect(Collectors.toUnmodifiableList());
+            .collect(UniCollectors.toUnmodifiableList());
   }
 
 }

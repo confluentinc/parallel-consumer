@@ -22,10 +22,16 @@ import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -34,9 +40,6 @@ import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
-import static java.time.Duration.ofSeconds;
-import static java.util.Arrays.asList;
-import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -54,11 +57,11 @@ public class VertxTest extends AsyncConsumerTestBase {
     static final protected String stubResponse = "Good times.";
 
     RequestInfo getGoodHost() {
-        return new RequestInfo("localhost", stubServer.port(), "/", Map.of());
+        return new RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
     }
 
     RequestInfo getBadHost() {
-        return new RequestInfo("localhost", 1, "", Map.of());
+        return new RequestInfo("localhost", 1, "", UniMaps.of());
     }
 
     @BeforeAll
@@ -124,7 +127,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         assertThat(res).doesNotContainNull();
         assertThat(res).extracting(AsyncResult::failed).containsOnly(true);
         assertThat(res).flatExtracting(x ->
-                asList(x.cause().getMessage().split(" ")))
+                Arrays.asList(x.cause().getMessage().split(" ")))
                 .contains("Connection", "refused:");
     }
 
@@ -168,7 +171,7 @@ public class VertxTest extends AsyncConsumerTestBase {
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
                     log.debug("Inner user function");
                     RequestInfo goodHost = getGoodHost();
-                    var params = Map.of("randomParam", rec.value());
+                    var params = UniMaps.of("randomParam", rec.value());
                     goodHost.setParams(params);
 
                     return goodHost;
@@ -183,7 +186,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         // verify
         var res = getResults(futureStream);
 
-        KafkaTestUtils.assertCommits(producerSpy, of(0));
+        KafkaTestUtils.assertCommits(producerSpy, UniLists.of(0));
 
         // test results are successes
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);

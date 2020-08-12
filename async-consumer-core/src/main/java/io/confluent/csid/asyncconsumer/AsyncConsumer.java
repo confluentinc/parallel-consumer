@@ -11,16 +11,13 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
 import org.slf4j.MDC;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.io.Closeable;
 import java.lang.reflect.Field;
@@ -33,9 +30,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
+import static io.confluent.csid.utils.BackportUtils.isEmpty;
+import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -102,7 +100,7 @@ public class AsyncConsumer<K, V> implements Closeable {
      * @see #notifyNewWorkRegistered
      * @see #processWorkCompleteMailBox
      */
-    private final AtomicBoolean workCompleteMailBox = new AtomicBoolean();
+    private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
     /**
      * The run state of the controller.
@@ -194,7 +192,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
             usersVoidConsumptionFunction.accept(record);
-            return List.of(); // user function returns no produce records, so we satisfy our api
+            return UniLists.of(); // user function returns no produce records, so we satisfy our api
         };
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
         supervisorLoop(wrappedUserFunc, voidCallBack);
@@ -296,7 +294,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         if (controlThreadFuture.isPresent()) {
             log.trace("Checking for control thread exception...");
             Future<?> future = controlThreadFuture.get();
-            future.get(timeout.toSeconds(), SECONDS); // throws exception if supervisor saw one
+            future.get(toSeconds(timeout), SECONDS); // throws exception if supervisor saw one
         }
 
         log.info("Close complete.");
@@ -334,7 +332,7 @@ public class AsyncConsumer<K, V> implements Closeable {
             log.warn("Threads not done: {}", unfinished);
         }
         log.trace("Awaiting worker pool termination...");
-        boolean terminationFinished = workerPool.awaitTermination(defaultTimeout.toSeconds(), SECONDS);
+        boolean terminationFinished = workerPool.awaitTermination(toSeconds(defaultTimeout), SECONDS);
         if (!terminationFinished) {
             log.warn("workerPool termination interrupted!");
             boolean shutdown = workerPool.isShutdown();
@@ -374,7 +372,7 @@ public class AsyncConsumer<K, V> implements Closeable {
     }
 
     private boolean areMyThreadsDone() {
-        if (controlThreadFuture.isEmpty()) {
+        if (isEmpty(controlThreadFuture)) {
             // not constructed yet, will become alive, unless #poll is never called
             return false;
         } else {
@@ -490,10 +488,10 @@ public class AsyncConsumer<K, V> implements Closeable {
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
             log.debug("Blocking until next scheduled offset commit attempt for {}", timeout);
-            workCompleteMailBox.getAndSet(true);
+            currentlyPollingWorkCompleteMailBox.getAndSet(true);
             // wait for work, with a timeout for sanity
             firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
-            workCompleteMailBox.getAndSet(false);
+            currentlyPollingWorkCompleteMailBox.getAndSet(false);
         } catch (InterruptedException e) {
             log.trace("Interrupted waiting on work results");
         }
@@ -533,7 +531,7 @@ public class AsyncConsumer<K, V> implements Closeable {
      */
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
-        boolean commitFrequencyOK = elapsedSinceLast.toSeconds() >= timeBetweenCommits.toSeconds();
+        boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
         if (commitFrequencyOK || lingeringOnCommitWouldBeBeneficial()) {
             if (!commitFrequencyOK) {
                 log.trace("Commit too frequent, but no benefit in lingering");
@@ -730,7 +728,7 @@ public class AsyncConsumer<K, V> implements Closeable {
      * @see #blockableControlThread
      */
     void notifyNewWorkRegistered() {
-        if (workCompleteMailBox.getAcquire()) {
+        if (currentlyPollingWorkCompleteMailBox.get()) {
             log.trace("Knock knock, wake up! You've got mail (tm)!");
             this.blockableControlThread.interrupt();
         } else {

@@ -10,6 +10,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.util.Lists;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -83,7 +84,7 @@ public class KafkaTestUtils {
      */
     public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(List<Integer> keys, int quantity) {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
-        List<Integer> keyWork = List.copyOf(keys);
+        List<Integer> keyWork = UniLists.copyOf(keys);
 
         int count = 0;
         while (count < quantity) {

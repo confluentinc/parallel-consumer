@@ -3,7 +3,10 @@ package io.confluent.csid.asyncconsumer;
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
 import org.assertj.core.api.ObjectAssert;
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -22,9 +26,8 @@ import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrd
 import static io.confluent.csid.asyncconsumer.WorkContainer.getRetryDelay;
 import static io.confluent.csid.utils.Range.range;
 import static java.time.Duration.ofSeconds;
-import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * @see WorkManager

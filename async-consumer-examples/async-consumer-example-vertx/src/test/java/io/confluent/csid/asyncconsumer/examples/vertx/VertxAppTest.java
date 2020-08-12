@@ -11,10 +11,10 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
-import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -71,7 +71,7 @@ public class VertxAppTest {
 
         @Override
         void setupSubscription(Consumer<String, String> kafkaConsumer) {
-            mockConsumer.assign(List.of(tp));
+            mockConsumer.assign(UniLists.of(tp));
         }
     }
 }

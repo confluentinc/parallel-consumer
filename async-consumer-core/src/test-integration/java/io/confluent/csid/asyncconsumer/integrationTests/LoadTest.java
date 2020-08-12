@@ -16,6 +16,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.text.DecimalFormat;
 import java.util.*;
@@ -54,7 +55,7 @@ public class LoadTest extends DbTest {
     void timedNormalKafkaConsumerTest() {
         setupTestData();
         // subscribe in advance, it can be a few seconds
-        kcu.consumer.subscribe(List.of(topic));
+        kcu.consumer.subscribe(UniLists.of(topic));
 
         readRecordsPlainConsumer(total, topic);
     }
@@ -65,7 +66,7 @@ public class LoadTest extends DbTest {
         setupTestData();
 
         // subscribe in advance, it can be a few seconds
-        kcu.consumer.subscribe(List.of(topic));
+        kcu.consumer.subscribe(UniLists.of(topic));
 
         //
         AsyncConsumerOptions options = AsyncConsumerOptions.builder().ordering(AsyncConsumerOptions.ProcessingOrder.KEY).build();

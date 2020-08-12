@@ -340,6 +340,7 @@ This means that even under failure, at least for the Kafka output topic, the res
 
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is Idempotent.
 
+[[streams-usage]]
 == Using with Kafka Streams
 
 Kafka Streams (KS) doesn't yet (https://cwiki.apache.org/confluence/display/KAFKA/KIP-311%3A+Async+processing+with+dynamic+scheduling+in+Kafka+Streams[KIP-311],
@@ -377,12 +378,49 @@ One can then use this library to consume from an input topic, produced by KS to 
 
 '''
 
-== Development
+== Usage Requirements
+
+* Client side
+** JDK 9 (8 coming)
+** SLF4J
+** Apache Kafka (AK) Client libraries 2.5
+** Supports all features of the AK client (e.g. security setups, schema registry etc)
+** For use with Streams, see <<streams-usage>> section
+** For use with Connect:
+*** Source: simply consume from the topic that your Connect plugin is publishing to
+*** Sink: use the `asyncPollAndProduce` API and publish the records to the topic that the connector is sinking from
+* Server side
+** Should work with any cluster that the linked AK client library works with
+*** If using EoS/Transactions, needs a cluster setup that supports eos/transactions
+
+== Development Information
 
 === Requirements
 
 * Uses https://projectlombok.org/setup/intellij[Lombok], if you're using IntelliJ Idea, get the https://plugins.jetbrains.com/plugin/6317-lombok[plugin].
 * Integration tests require a https://docs.docker.com/docker-for-mac/[running locally accessible Docker host].
+* Has a Maven `profile` setup for IntelliJ Idea, but not Eclipse for example.
+
+=== Maven targets
+
+[qanda]
+Compile and run all tests::
+`mvn verify`
+
+Run tests excluding the integration tests::
+`mvn test`
+
+Run all tests::
+`mvn verify`
+
+Run any goal skipping tests (replace `<goalName>` e.g. `install`)::
+`mvn <goalName> -DskipTests`
+
+See what profiles are active::
+`mvn help:active-profiles`
+
+See what plugins or dependencies are avaible to be updated::
+`mvn versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates`
 
 ==== Integration Testing with TestContainers
 //https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
