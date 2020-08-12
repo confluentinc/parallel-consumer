@@ -2,6 +2,6 @@
  
 common {
   slackChannel = 'csid-build'
-  nodeLabel = 'docker-oraclejdk8'
+  nodeLabel = 'docker-oraclejdk13'
   runMergeCheck = false
 }
