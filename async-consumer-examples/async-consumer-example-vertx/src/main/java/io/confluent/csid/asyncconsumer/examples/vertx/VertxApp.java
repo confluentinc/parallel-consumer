@@ -9,9 +9,10 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
+import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Stream;
@@ -47,7 +48,7 @@ public class VertxApp {
 
         Stream<StreamingAsyncVertxConsumer.VertxCPResult<String, String>> resultStream = async.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
-            Map params = Map.of("recordKey", record.key(), "payload", record.value());
+            Map params = UniMaps.of("recordKey", record.key(), "payload", record.value());
             return new RequestInfo("localhost", "/api", params);
         });
 
@@ -58,7 +59,7 @@ public class VertxApp {
     }
 
     void setupSubscription(Consumer<String, String> kafkaConsumer) {
-        kafkaConsumer.subscribe(List.of(inputTopic));
+        kafkaConsumer.subscribe(UniLists.of(inputTopic));
     }
 
     void close() {

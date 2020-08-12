@@ -8,6 +8,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.Map;
@@ -18,6 +19,8 @@ import java.util.concurrent.Future;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.defaultTimeout;
+import static io.confluent.csid.utils.BackportUtils.toSeconds;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
@@ -77,7 +80,7 @@ public class BrokerPollSystem<K, V> {
                     state = closing;
                 }
                 case closing -> {
-                    if(polledRecords.isEmpty()) {
+                    if (polledRecords.isEmpty()) {
                         doClose();
                     } else {
                         log.info("Subscriptions are paused, but records are still being drained (count: {})", polledRecords.count());
@@ -100,14 +103,14 @@ public class BrokerPollSystem<K, V> {
 
         Duration thisLongPollTimeout = (state == running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
-        log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if no data available on broker.", thisLongPollTimeout.toSeconds());
+        log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if no data available on broker.", toSeconds(thisLongPollTimeout)); // java 8
         ConsumerRecords<K, V> records;
         try {
             records = this.consumer.poll(thisLongPollTimeout);
             log.debug("Poll completed normally and returned {}...", records.count());
         } catch (WakeupException w) {
             log.warn("Awoken from poll. State? {}", state);
-            records = new ConsumerRecords<>(Map.of());
+            records = new ConsumerRecords<>(UniMaps.of());
         }
         return records;
     }
@@ -143,7 +146,7 @@ public class BrokerPollSystem<K, V> {
         if (controlFuture.isPresent()) {
             log.debug("Wait for loop to finish ending...");
             Boolean success = controlFuture.get()
-                    .get(defaultTimeout.toSeconds(), SECONDS);
+                    .get(defaultTimeout.toMillis(), MILLISECONDS);
         }
         log.debug("Broker poll system finished closing");
     }

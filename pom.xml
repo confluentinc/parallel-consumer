@@ -18,9 +18,15 @@
     </modules>
 
     <properties>
+        <!-- when running mvn locally from cmd line, use default jvm for jvm8 -->
+        <jvm.location>${JAVA_HOME}</jvm.location>
+        <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
+        <jvm9.location>-insert jvm9 location via environment variable-</jvm9.location>
+
+        <!-- standard props -->
         <maven.version>3.6.3</maven.version>
-        <maven.compiler.source>13</maven.compiler.source>
-        <maven.compiler.target>13</maven.compiler.target>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -37,8 +43,58 @@
         <auto-service.version>1.0-rc7</auto-service.version>
     </properties>
 
+    <profiles>
+        <profile>
+            <!-- override source and target when working from IDE -->
+            <id>intellij-idea-only</id>
+            <activation>
+                <property>
+                    <name>idea.maven.embedder.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <!-- override source and target when working from IDE -->
+                            <source>13</source>
+                            <target>13</target>
+                            <release>13</release>
+                            <!-- disable jabel -->
+                            <annotationProcessors>
+                                <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
+                                <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                            </annotationProcessors>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <!-- For releasing, use jvm8 for testing -->
+            <!-- currently broken -->
+            <id>jvm8-release</id>
+            <properties>
+                <jvm.location>${jvm8.location}</jvm.location>
+            </properties>
+        </profile>
+        <profile>
+            <!-- For releasing, use jvm9 for testing -->
+            <id>jvm9-release</id>
+            <properties>
+                <jvm.location>${jvm9.location}</jvm.location>
+            </properties>
+        </profile>
+    </profiles>
 
     <dependencies>
+        <dependency>
+            <groupId>com.github.bsideup.jabel</groupId>
+            <artifactId>jabel-javac-plugin</artifactId>
+            <version>0.2.0</version>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -49,6 +105,17 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>pl.tlinkowski.unij</groupId>
+            <artifactId>pl.tlinkowski.unij.api</artifactId>
+            <version>0.1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>pl.tlinkowski.unij</groupId>
+            <artifactId>pl.tlinkowski.unij.bundle.jdk8</artifactId>
+            <version>0.1.1</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- test dependencies -->
@@ -155,12 +222,20 @@
                             <artifactId>lombok</artifactId>
                             <version>${lombok.version}</version>
                         </path>
+                        <!-- jabel setup-->
+                        <path>
+                            <groupId>com.github.bsideup.jabel</groupId>
+                            <artifactId>jabel-javac-plugin</artifactId>
+                            <version>0.2.0</version>
+                        </path>
                     </annotationProcessorPaths>
                     <!-- enable language preview features -->
-                    <compilerArgs>--enable-preview</compilerArgs>
-                    <source>13</source>
-                    <target>13</target>
-                    <compilerArgs>--enable-preview</compilerArgs>
+                    <target>8</target>
+                    <release>8</release>
+                    <annotationProcessors>
+                        <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
                 </configuration>
             </plugin>
             <plugin>
@@ -173,7 +248,7 @@
                         <exclude>**/integrationTest*/**/*.java</exclude>
                         <exclude>**/*IT.java</exclude>
                     </excludes>
-                    <argLine>@{argLine} --enable-preview</argLine>
+                    <jvm>${jvm.location}/bin/java</jvm>
                 </configuration>
             </plugin>
             <plugin>
@@ -193,7 +268,7 @@
                         <!-- Integration tests need to be in a package named `integrationTest` -->
                         <include>**/integrationTest*/**/*.java</include>
                     </includes>
-                    <argLine>@{argLine} --enable-preview</argLine>
+                    <jvm>${jvm.location}/bin/java</jvm>
                 </configuration>
             </plugin>
             <plugin>
@@ -228,7 +303,7 @@
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>13</version>
+                                    <version>[13,14]</version>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>3.6.3</version>
@@ -303,6 +378,10 @@
         <repository>
             <id>confluent</id>
             <url>https://packages.confluent.io/maven/</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
         </repository>
     </repositories>
 

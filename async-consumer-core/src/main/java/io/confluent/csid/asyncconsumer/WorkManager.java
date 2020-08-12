@@ -11,6 +11,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -112,7 +113,7 @@ public class WorkManager<K, V> {
 
         // optimise early
         if (workToGetDelta < 1) {
-            return List.of();
+            return UniLists.of();
         }
 
         //

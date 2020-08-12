@@ -1,14 +1,10 @@
 package io.confluent.csid.asyncconsumer.examples.core;
 
-import io.confluent.csid.asyncconsumer.integrationTests.KafkaTest;
-import io.confluent.csid.utils.KafkaTestUtils;
-import io.confluent.csid.utils.KafkaUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.Producer;
@@ -17,10 +13,10 @@ import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 
 import static io.confluent.csid.utils.KafkaTestUtils.DEFAULT_GROUP_METADATA;
 import static org.mockito.Mockito.when;
@@ -69,7 +65,7 @@ public class CoreAppTest {
 
         @Override
         void setupSubscription(Consumer<String, String> kafkaConsumer) {
-            mockConsumer.assign(List.of(tp));
+            mockConsumer.assign(UniLists.of(tp));
         }
     }
 }

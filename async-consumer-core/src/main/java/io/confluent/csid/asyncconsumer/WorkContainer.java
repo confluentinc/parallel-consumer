@@ -74,11 +74,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return delayHasPassed;
     }
 
-    //    @Override
     public long getDelay(TimeUnit unit, WallClock clock) {
         Instant now = clock.getNow();
         Duration between = Duration.between(now, tryAgainAt(clock));
-        long convert = unit.convert(between);
+        long convert = unit.convert(between.toMillis(), TimeUnit.MILLISECONDS); // java 8, @see Duration#convert
         return convert;
     }
 

@@ -15,6 +15,7 @@ import org.assertj.core.util.Lists;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.shaded.com.google.common.collect.Maps;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.*;
@@ -53,7 +54,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         asyncConsumer.asyncPollAndProduce((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
-            return List.of(mock);
+            return UniLists.of(mock);
         }, (x) -> {
 //            log.debug(x.toString());
             latch.countDown();
@@ -123,7 +124,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
      */
     @Test
     public void timingOfDifferentOrderingTypes() {
-        var quantityOfMessagesToProduce = 10_000;
+        var quantityOfMessagesToProduce = 10_00;
         var defaultNumKeys = 20;
 
         Duration unorderedDuration = null;
@@ -136,7 +137,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         var keyResults = Maps.<Integer, Duration>newTreeMap();
         setupAsyncConsumerInstance(KEY);
-        for (var keySize : List.of(1, 2, 5, 10, 20, 50, 100, 1_000, 10_000)) {
+        for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
             setupAsyncConsumerInstance(KEY);
             log.debug("By key, {} keys", keySize);
             Duration keyOrderDuration = time(() -> testTiming(keySize, quantityOfMessagesToProduce));
@@ -185,7 +186,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
             ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "Processing took: " + sleepTime + ". SourceV:" + rec.value());
 //            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), rec.value());
             bar.stepTo(producerSpy.history().size());
-            return List.of(stub);
+            return UniLists.of(stub);
         }, (x) -> {
             // noop
 //            log.debug(x.toString());

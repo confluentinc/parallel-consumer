@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -30,12 +31,13 @@ import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
 import static java.time.Duration.ofMillis;
-import static java.util.List.of;
+
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Timeout(value = 10, unit = SECONDS)
 @Slf4j

@@ -4,26 +4,15 @@ import io.confluent.csid.asyncconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.csid.testcontainers.FilteredSlf4jLogConsumer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.admin.*;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.assertj.core.api.Assertions;
-import org.junit.jupiter.api.AfterAll;
+import org.apache.kafka.clients.admin.CreateTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.containers.output.Slf4jLogConsumer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-
-import java.util.List;
-import java.util.Properties;
+import pl.tlinkowski.unij.api.UniLists;
 
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -81,7 +70,7 @@ public abstract class KafkaTest<K, V> {
   @SneakyThrows
   protected void ensureTopic(String topic, int numPartitions) {
     NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
-    CreateTopicsResult topics = kcu.admin.createTopics(List.of(e1));
+    CreateTopicsResult topics = kcu.admin.createTopics(UniLists.of(e1));
     Void all = topics.all().get();
   }
 

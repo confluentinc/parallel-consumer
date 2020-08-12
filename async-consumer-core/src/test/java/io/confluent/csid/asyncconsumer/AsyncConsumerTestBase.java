@@ -9,6 +9,7 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.*;
@@ -194,7 +195,7 @@ public class AsyncConsumerTestBase {
         log.debug("Waiting for commit offset {} on partition {}", offset, partition);
         var expectedOffset = new OffsetAndMetadata(offset, "");
         TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
-        var expectedOffsetMap = Map.of(partitionNumber, expectedOffset);
+        var expectedOffsetMap = UniMaps.of(partitionNumber, expectedOffset);
         verify(producerSpy, timeout(defaultTimeoutMs).times(1)).sendOffsetsToTransaction(argThat(
                 (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
                 any(ConsumerGroupMetadata.class));
