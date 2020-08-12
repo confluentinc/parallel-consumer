@@ -6,7 +6,7 @@
 
     <parent>
         <artifactId>async-consumer-parent</artifactId>
-        <groupId>io.confluent.csig.asyncconsumer</groupId>
+        <groupId>io.confluent.csid.asyncconsumer</groupId>
         <version>0.1-SNAPSHOT</version>
     </parent>
 
