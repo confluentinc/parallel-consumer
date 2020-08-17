@@ -65,8 +65,8 @@
         <kafka.version>2.5.0</kafka.version>
 
         <!-- tests -->
-        <junit.version>5.7.0-M1</junit.version>
-        <junit.platform.version>1.7.0-M1</junit.platform.version>
+        <junit.version>5.7.0-RC1</junit.version>
+        <junit.platform.version>1.7.0-RC1</junit.platform.version>
         <testcontainers.version>1.15.0-rc1</testcontainers.version>
     </properties>
 
@@ -192,7 +192,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>3.4.6</version>
+            <version>3.5.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
