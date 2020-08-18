@@ -11,6 +11,7 @@
     </parent>
 
     <artifactId>async-consumer-examples</artifactId>
+    <name>Async Examples</name>
     <packaging>pom</packaging>
 
     <modules>

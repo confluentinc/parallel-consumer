@@ -8,6 +8,16 @@
     <artifactId>async-consumer-parent</artifactId>
     <name>Async Consumer</name>
     <version>0.1-SNAPSHOT</version>
+    <description>A concurrent / asynchronous messaging processing library for the Apache Kafka consumer/producer with
+        non blocking IO extensions.
+    </description>
+    <url>http://confluent.io</url>
+    <inceptionYear>2020</inceptionYear>
+
+    <organization>
+        <name>Confluent, Inc.</name>
+        <url>http://confluent.io</url>
+    </organization>
 
     <packaging>pom</packaging>
 
@@ -17,11 +27,19 @@
         <module>async-consumer-examples</module>
     </modules>
 
+    <scm>
+        <connection>scm:git:git://github.com:confluentinc/async-consumer.git</connection>
+        <developerConnection>scm:git:git@github.com:confluentinc/async-consumer.git</developerConnection>
+        <url>https://github.com/confluentinc/async-consumer.git</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <properties>
         <!-- when running mvn locally from cmd line, use default jvm for jvm8 -->
         <jvm.location>${JAVA_HOME}</jvm.location>
         <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
         <jvm9.location>-insert jvm9 location via environment variable-</jvm9.location>
+        <license.mode>check</license.mode>
 
         <!-- standard props -->
         <maven.version>3.6.3</maven.version>
@@ -31,8 +49,12 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- version numbers -->
-        <!-- core -->
+        <!-- plugins -->
+        <mycila.version>4.0.rc2</mycila.version>
         <lombok.version>1.18.12</lombok.version>
+        <auto-service.version>1.0-rc7</auto-service.version>
+
+        <!-- core -->
         <slf4j.version>2.0.0-alpha1</slf4j.version>
         <kafka.version>2.5.0</kafka.version>
 
@@ -40,7 +62,6 @@
         <junit.version>5.7.0-M1</junit.version>
         <junit.platform.version>1.7.0-M1</junit.platform.version>
         <testcontainers.version>1.15.0-rc1</testcontainers.version>
-        <auto-service.version>1.0-rc7</auto-service.version>
     </properties>
 
     <profiles>
@@ -65,7 +86,8 @@
                             <!-- disable jabel -->
                             <annotationProcessors>
                                 <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
-                                <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                                <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
+                                </annotationProcessor>
                             </annotationProcessors>
                         </configuration>
                     </plugin>
@@ -85,6 +107,18 @@
             <id>jvm9-release</id>
             <properties>
                 <jvm.location>${jvm9.location}</jvm.location>
+            </properties>
+        </profile>
+        <profile>
+            <id>license-format</id>
+            <activation>
+                <os>
+                    <!-- improve to instead be !jenkins && !travis  / !CI -->
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <license.mode>format</license.mode>
             </properties>
         </profile>
     </profiles>
@@ -207,6 +241,44 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${mycila.version}</version>
+                <inherited>false</inherited>
+                <!-- To apply the license run: -->
+                <!-- ↪ mvn com.mycila:license-maven-plugin:format-->
+                <configuration>
+                    <aggregate>true</aggregate>
+                    <licenseSets>
+                        <licenseSet>
+                            <inlineHeader>Copyright (C) ${license.git.copyrightYears} ${project.organization.name}
+                            </inlineHeader>
+                            <excludes>
+                                <exclude>**/README*</exclude>
+                            </excludes>
+                        </licenseSet>
+                    </licenseSets>
+                    <mapping>
+                        <java>JAVAPKG_STYLE</java>
+                    </mapping>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.mycila</groupId>
+                        <artifactId>license-maven-plugin-git</artifactId>
+                        <version>${mycila.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>${license.mode}</goal>
+                        </goals>
+                        <phase>process-sources</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version>
@@ -234,7 +306,8 @@
                     <release>8</release>
                     <annotationProcessors>
                         <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
-                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
+                        </annotationProcessor>
                     </annotationProcessors>
                 </configuration>
             </plugin>
@@ -384,6 +457,5 @@
             <url>https://jitpack.io</url>
         </repository>
     </repositories>
-
 
 </project>
