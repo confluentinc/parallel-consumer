@@ -1,5 +1,9 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.Spliterators;

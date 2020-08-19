@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.Java8StreamUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

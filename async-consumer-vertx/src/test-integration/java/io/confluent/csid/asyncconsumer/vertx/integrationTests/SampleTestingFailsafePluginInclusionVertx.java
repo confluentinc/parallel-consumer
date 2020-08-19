@@ -1,3 +1,7 @@
+
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
 package io.confluent.csid.asyncconsumer.vertx.integrationTests;
 
 import lombok.extern.slf4j.Slf4j;

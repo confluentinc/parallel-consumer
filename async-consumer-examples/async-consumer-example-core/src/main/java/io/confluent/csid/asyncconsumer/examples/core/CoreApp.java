@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer.examples.core;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import io.confluent.csid.asyncconsumer.AsyncConsumer;
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import lombok.extern.slf4j.Slf4j;

@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.WallClock;
 import lombok.Data;
 import lombok.Getter;

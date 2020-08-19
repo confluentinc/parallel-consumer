@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer.examples.vertx;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
