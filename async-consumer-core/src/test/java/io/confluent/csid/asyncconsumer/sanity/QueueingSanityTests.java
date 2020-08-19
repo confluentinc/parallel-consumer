@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer.sanity;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 

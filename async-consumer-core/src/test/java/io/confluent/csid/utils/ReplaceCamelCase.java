@@ -1,5 +1,9 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.platform.commons.util.StringUtils;
 import org.mockito.internal.util.StringUtil;

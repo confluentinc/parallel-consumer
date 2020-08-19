@@ -1,5 +1,9 @@
 package io.confluent.csid.testcontainers;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import lombok.Getter;
 import lombok.Setter;
 import org.slf4j.Logger;

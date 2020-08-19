@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer.sanity;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;

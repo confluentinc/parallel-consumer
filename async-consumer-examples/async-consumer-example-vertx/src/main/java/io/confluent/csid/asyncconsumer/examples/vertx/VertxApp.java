@@ -1,5 +1,9 @@
 package io.confluent.csid.asyncconsumer.examples.vertx;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
 import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer;
 import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;

@@ -1,3 +1,7 @@
+
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
 package io.confluent.csid.asyncconsumer.integrationTests;
 
 import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;

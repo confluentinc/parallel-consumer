@@ -1,5 +1,9 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
 import io.confluent.csid.asyncconsumer.BrokerPollSystem;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;

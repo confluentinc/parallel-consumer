@@ -1,3 +1,8 @@
+<!--
+
+    Copyright (C) 2020 Confluent, Inc.
+
+-->
 <configuration packagingData="true" scan="true" scanPeriod="5 seconds">
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
