@@ -1,8 +1,5 @@
-#!/usr/bin/env groovy
- 
-common {
+ common {
   slackChannel = 'csid-build'
   nodeLabel = 'docker-openjdk13'
   runMergeCheck = false
- 
 }
