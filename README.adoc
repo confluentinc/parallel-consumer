@@ -419,8 +419,8 @@ Run any goal skipping tests (replace `<goalName>` e.g. `install`)::
 See what profiles are active::
 `mvn help:active-profiles`
 
-See what plugins or dependencies are avaible to be updated::
-`mvn versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates`
+See what plugins and dependencies are avaible to be updated::
+`mvn help:active-profiles versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates`
 
 ==== Integration Testing with TestContainers
 //https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
