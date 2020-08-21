@@ -1,4 +1,4 @@
-# async-consumer
+= async-consumer (alpha)
 :icons:
 :toc: macro
 :toclevels: 3
@@ -13,9 +13,15 @@ endif::[]
 
 image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"] image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
 
-A concurrent / asynchronous messaging processing library with client side queueing for the Apache Kafka consumer/producer with non  blocking IO extensions.
+Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
-.Consume _concurrently_ with a *single* consumer instance:
+[[intro]]
+Process your Kafka messages _orders of magnitudes **faster**_, with much lower latency, *without* adjusting your partitions or managing more client instances.
+
+As processing speed and response time isn't bound to the number of partitions in a topic anymore, go faster in situations where partition counts are fixed such as legacy, Y, Z or where brokers are overloaded with too many partitions already or where the partition count is out of your control, or where running large consumer groups, or many consumer clients isn't desirable.
+
+
+.Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java]
 asyncConsumer.asyncPoll(record -> {
     log.info("A record: {}", record);
@@ -26,13 +32,128 @@ toc::[]
 
 == Motivation
 
-The core Kafka consumer client gives you a batch of messages to process one at a time.Processing these in parallel on thread pools is difficult, particularly due to ensuring correctness of offset management, especially when trying to process concurrent by message key.
+Process your Kafka messages _orders of magnitudes **faster**_, with much lower latency, *without* adjusting your partitions or managing more client instances.
+
+more flexible use of resources
+
+lower minimum and average message response times
+
+=== Why would I need this?
+
+
+Dramatically increased performance, lower latency, and save developers months of work.
+
+Save money on shorter development time, save money by not needing to add resources or reduce resources deployed, achieve high-performance in under provisioned or miss-configured environments (partition counts).
+All without unnecessarily burdening your Kafka Broker side with extra partition load or large consumer groups.
+
+Save months of error prone development implementing this correctly yourself.
+
+When reading the below, keep in mind that the unit of concurrency and thus performance, is restricted by the number of partitions (degree of sharding / concurrency) anb currently you can't adjust the number of partitions in your kafka topics without jumping through a lot of hoops, or breaking your key ordering.
+
+[qanda]
+Why not just run more consumers?::
+The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic. This is affective in a lot of situations, but falls short in a lot too.
+* Primarily: You cannot use more consumers, than you have partitions available to read from.
++
+So, if you have a topic with 5 partitions, you cannot use more than 5 consumers to read from it.
+
+** You can use this library to process messages concurrently up to the number of keys available, without worrying about increasing partition counts.
+** You can increase partition counts by first copying all topic data to a new topic, but that doubles the data requirements for the topic, adds another processing step that has to be monitored and increases minimum latency in end to end processing.
+Then your level of concurrency (and thus latency and throughput) is then _still_ restricted to the number of partitions and consumer instances available.
+** Large numbers of partitions in a Kafka broker system is one of the primary causes of instability and performance problems with over burdened cluster systems.
+* Running more extra consumers has resource implications - each consumer takes up resources client side, and broker side. Each consumer add a lot of additional overheads in terms of memory and CPU and network bandwidth
+* Large consumer groups (especially many large groups) can cause a lot of strain on the consumer group coordination system, such as rebalance storms.
+* Even with several partitions, you cannot achieve the performance levels obtainble by *per-key* ordered or unordered concurrent processing
+
+Why not run more consumers __within__ your application instance?::
+* This is in some respects a slightly easier way of running more consumer instances, and in others a more complicated way. However, you are still restricted by all the per consumer restrictions as described above.
+
+Why not use the Vert.x library yourself in your processing loop?::
+* Vert.x us used in this library to provide a non-blocking IO system in the message processing step.
+Using Vert.x without using this library with *ordered* processing, you will have to deal with the quite complicated aspect of handling offset commits with Vert.x asynchronous processing system which is not straight forward.
++
+Unordered processing with Vert.x is somewhat easier, however offset management is still complicated. To ensure that offsets are not committed, which would cause other not yet processed offsets to be incorrectly comitted, is quite complicated.
+This library handles all that for you.
+
+=== Scenarios
+
+Described below are some real world use cases which illustrate concrete situations where the described advantages massively improve performance.
+
+* Slow consumer systems in transactional systems (online vs offline or reporting systems)
+** Notification system:
++
+*** Notification processing system which sends push notifications to the users phone to acknowledge a two factor authentication request on their mobile to authorise a login to a website, where end to end latency is very important for a good user experience.
+*** A specific message in this queue uncharacteristically takes a long time to process because the third party system is sometimes unpredictably slow to respond and so holds up the processing for *ALL* other notifications for other users that are in the same partition behind this message.
+*** Using key order concurrent processing will allow notifications to proceed while this message either slowly succeeds or times out and retires.
+** Slow GPS tracking system (slow http interfaces that can scale horizontally)
+*** GPS tracking messages from 100,000 different field devices pour through at a high rate into an input topic.
+*** For each message, the GPS location needs to be checked with a legacy HTTP services that checks if the coordinate is within allowed ranges, decided by some business rules behind the service.
+*** The service takes 50ms to process each message, however can be scaled out horizontally without restriction.
+*** The input topic only has 10 partitions and for various reasons (see above) cannot be changed.
+*** With the vanilla consumer, messages on each partition must be consumed one after the other in serial order.
+*** The maximum rate of message processing is then:
++
+`1 second / 50 ms * 10 partitions = 200 messages per second.`
+*** By using this library, the 10 partitions can all be processed in key order a potential.
++
+`1 second / 50ms × 100,000 keys = 2,000,000 messages per second`
++
+Now the HTTP system probably cannot handle 2,000,000 messages per second, but now your system is no longer the bottle neck.
+
+** Slow CPU bound model processing for fraud prediction
+*** Similar to the above, but instead of an external system being slow, we have to put our message data through a prediction model which takes cpu cycles.
+*** We can scale easily the number of CPUs on our virtual machine where the processing is being run, but we choose not to scale the partitions or consumers (see above).
+*** By deploying onto machines with far more CPUs available, we can run our fraud model massively parallel, increasing our through put and reducing our end to end response times.
+* Spikey load with latency sensitive non-functional requirements
+** An up stream system regularly floods our input topic every 6pm at closing time with data from our retail outlets with the days settlement totals.
+*** Situations like this are common where systems are designed to comfortably handle average day time load, but are not provisioned to handle sudden increases in traffic as they don't happen often enough to justify the increased spending on processing capacity that would otherwise remain idle.
+*** Without adjusting the available partitions or running consumers, we can reduce our maximum end to end latency and throughout to get our global days outlet reports to our division managers quickly well before the end of day so action can be taken before close of business.
+** Natural consumer behaviour
+*** Same as the above but instead of being caused by business operations or legacy batch systems, are generated by sudden user behaviour such as sales or television events.
+*** A game show on TV that only runs in the evening show a quiz on TV where users send in answers on their devices.
+The end to end latency of the responses to these answers needs to be as low as technically possible, even if the processing step is quick.
+*** As opposed to the vanilla client where each users' response waits in a virtual queue to have it's response processed, we use this tool to actually process every single response in parallel at the same time.
+* Legacy partition structure
+** Any existing setups where we need higher performance eihter in throughput or latency where there are not enough partitions for needed concurrency level, the tool can be applied.
+* Partition overloaded brokers
+** Clusters with under-provisioned hardware and with too many partitions already - where we cannot expand partitions even if were able to.
+** Similar to the above, but from the operations perspective, our system is already over partitioned, perhaps in order to support existing parallel workloads which aren't using the tool (and so need large numbers of partitions).
+** We encourage our development teams to migrate to the tool, and then being a process of actually __lowering__ the number of partitions in our partitions in order to reduce operational complexity, improve reliability and perhaps save on infrastructure costs.
+* Server side resources are controlled by a different team we can't influence
+** The cluster our team is working with is not in our control, we cannot change the partition setup, or perhaps even the consumer layout.
+** We can use the tool ourselves to improve our system performance without touching the cluster / topic setup.
+* Kafka Streams app that had a slow stage
+** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance. We can break out as described below into the tool for for processing that step, then return to the Kafka Streams context.
+
+
+=== Background
+
+The core Kafka consumer client gives you a batch of messages to process one at a time.
+Processing these in parallel on thread pools is difficult, particularly due to ensuring correctness of offset management, especially when trying to process concurrent by message key.
 
 You also need to manage your consume loop, and commit transactions properly if using Exactly Once semantics.
 
 This wrapper library for the core Kafka client handles all this for you, you just supply your processing function.
 
-A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typicaly CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
+A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typically CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
+
+== Support and Issues
+
+This library is experimental, and Confluent does not currently offer support for this library.
+If you encounter any issues, or have any suggestions or future requests, please create issues in the link:./issues[github issue tracker].
+
+We are very interested to hear about your experiences!
+You can also reach out to the maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
+
+== License
+
+This library is copyright Confluent Inc, and licensed under the XXX.
+
+== Testing
+
+The project has good automated test coverage, of all features.
+Including integration tests running against real Kafka broker and database.
+If you want to run the tests yourself, clone the repository and run the command: `mvn test`. The tests require an active docker server on `localhost`.
 
 == Feature List
 
@@ -57,7 +178,7 @@ image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Stat
 
 And more <<roadmap,to come>>!
 
-=== Performance
+== Performance
 
 In the best case, you don't care about ordering at all.In which case, the degree of concurrency achievable is simply set by max thread and concurrency settings, or with the VertX extension, the Vertx Vertical being used - e.g. non-blocking HTTP calls.
 
@@ -74,8 +195,20 @@ As long as the processing layer can handle the load horizontally (e.g auto scali
 For example, if you have a key set of 10,000 unique keys, and you need to call an http end point to process each one, you can use the per key order setting, and in the best case the system will process 10,000 at the same time using the non-blocking Vertx HTTP client library.
 The user just has to provide a function to extract from the message the HTTP call parameters and construct the HTTP request object.
 
-==== Illustrative Performance Example
+=== Illustrative Performance Example
 .(see link:./async-consumer-core/src/test-integration/java/io/confluent/csid/asyncconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
+
+This performance comparison results below, even though are based on real performance measurement results, are for illustrative purposes.
+To see how the performance of the tool is related to instance counts, partition counts, key distribution and how it would relate to the vanilla client.
+Actual results will vary wildly depending upon the setup being deployed into.
+
+For example, if you have hundreds of thousands of keys in your topic, randomly distributed, even with hundreds of partitions, with only a handful of this wrapper deployed, you will probably see many orders of magnitude performance improvements - massively out performing dozens of vanila Kafka consumer clients.
+
+image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1691474082&amp;format=image[]
+
+image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1161363385&format=image[]
+
+image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=938493158&format=image[]
 
 As an illustrative example of relative performance, given:
 
@@ -442,10 +575,10 @@ See what plugins or dependencies are avaible to be updated::
 ==== Integration Testing with TestContainers
 //https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
 
-We use the excellent [Testcontainers](https://testcontainers.org) library for integration testing with JUnit.
+We use the excellent https://testcontainers.org[Testcontainers] library for integration testing with JUnit.
 
 To speed up test execution, you can enable container reused across test runs by setting the
-following in your [`~/.testcontainers.properties` file](https://www.testcontainers.org/features/configuration/):
+following in your https://www.testcontainers.org/features/configuration/[`~/.testcontainers.properties` file]:
 
 [source]
 ----
@@ -455,7 +588,7 @@ testcontainers.reuse.enable=true
 This will leave the container running after the JUnit test is complete for reuse by subsequent runs.
 
 > NOTE: The container will only be left running if it is not explicitly stopped by the JUnit rule.
-> For this reason, we use a variant of the [singleton container pattern](https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers)
+> For this reason, we use a variant of the https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers[singleton container pattern]
 > instead of the JUnit rule.
 
 Testcontainers detects if a container is reusable by hashing the container creation parameters
@@ -483,7 +616,7 @@ docker container ls --filter 'label=org.testcontainers=true'
 > NOTE: `testcontainers-clean` removes **all** docker containers on your system with the `io.testcontainers=true` label
 > (including the most recent container which may be reusable).
 
-See [this testcontainers PR](https://github.com/testcontainers/testcontainers-java/pull/1781) for
+See https://github.com/testcontainers/testcontainers-java/pull/1781[this testcontainers PR] for
 details on the reusable containers feature.
 
 == Implementation Details
@@ -509,3 +642,7 @@ details on the reusable containers feature.
 ** Not being able to fit the map into the metadata, depends on how many partitions we're assigned (it's 4096 bytes total for all assigned partitions, not each unfortunately), and the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit hundreds of partitions))
 *** To improve this situation, we could introduce the option of a dynamic backpressure system, where the size of the serialised offset map is monitored, and if it is growing too large, we pause work until it can fit again
 ** @see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`
+
+== Attribution
+
+http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.
