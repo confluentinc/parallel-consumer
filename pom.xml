@@ -271,6 +271,7 @@
                             </inlineHeader>
                             <excludes>
                                 <exclude>**/README*</exclude>
+                                <exclude>.ci/**/*</exclude>
                             </excludes>
                         </licenseSet>
                     </licenseSets>
