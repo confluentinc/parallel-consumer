@@ -67,6 +67,7 @@
         <mycila.version>4.0.rc2</mycila.version>
         <lombok.version>1.18.12</lombok.version>
         <auto-service.version>1.0-rc7</auto-service.version>
+        <surefire.version>3.0.0-M4</surefire.version>
 
         <!-- core -->
         <slf4j.version>2.0.0-alpha1</slf4j.version>
@@ -368,7 +369,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0-M4</version>
+                <version>${surefire.version}</version>
                 <configuration>
                     <excludes>
                         <!-- <exclude>**/*integration*/**/*.java</exclude> too aggressive? -->
@@ -380,7 +381,7 @@
             </plugin>
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.0.0-M4</version>
+                <version>${surefire.version}</version>
                 <executions>
                     <execution>
                         <goals>
@@ -499,6 +500,42 @@
                 <version>3.1.0</version>
             </plugin>
         </plugins>
+
+        <!-- Management -->
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>3.9.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-project-info-reports-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>3.0.0-M1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>3.0.0-M1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
 
     <repositories>
