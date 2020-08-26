@@ -50,11 +50,13 @@ public class VertxApp {
         async = new StreamingAsyncVertxConsumer<>(kafkaConsumer,
                 getKafkaProducer(), options);
 
-        Stream<StreamingAsyncVertxConsumer.VertxCPResult<String, String>> resultStream = async.vertxHttpReqInfoStream(record -> {
+        // tag::example[]
+        var resultStream = async.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map params = UniMaps.of("recordKey", record.key(), "payload", record.value());
-            return new RequestInfo("localhost", "/api", params);
+            return new RequestInfo("localhost", "/api", params); // <1>
         });
+        // end::example[]
 
         resultStream.forEach(x->{
             log.info("From result stream: {}", x);
