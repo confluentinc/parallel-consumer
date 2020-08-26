@@ -12,6 +12,14 @@
 :toc: macro
 :toclevels: 3
 :numbered: 1
+
+// dynamic include base for editing in IDEA
+:project_root: ./
+
+// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
+//:project_root: ../../
+
+
 ifdef::env-github[]
 :tip-caption: :bulb:
 :note-caption: :information_source:
@@ -25,14 +33,14 @@ image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Stat
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
 [[intro]]
-Process your Kafka messages _orders of magnitudes **faster**_, with much lower latency, *without* adjusting your partitions or managing more client instances.
+Process your Kafka messages _orders of magnitudes *faster*_, with much lower latency, *without* adjusting your partitions or managing more client instances.
 
 As processing speed and response time isn't bound to the number of partitions in a topic anymore, go faster in situations where partition counts are fixed such as legacy, Y, Z or where brokers are overloaded with too many partitions already or where the partition count is out of your control, or where running large consumer groups, or many consumer clients isn't desirable.
 
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-include::async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
+include::{project_root}/async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
 ----
 
 
@@ -132,6 +140,7 @@ The end-to-end latency of the responses to these answers needs to be as low as t
 ** We can use the tool ourselves to improve our system performance without touching the cluster / topic setup.
 * Kafka Streams app that had a slow stage
 ** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance. We can break out as described below into the tool for for processing that step, then return to the Kafka Streams context.
+* Provisinoing extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
 
 === Background
@@ -169,7 +178,8 @@ If you want to run the tests yourself, clone the repository and run the command:
 ** topic partitions
 +
 without operational burden or harming the clusters performance
-* Client side queueing system on top of Kafka - individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
+* Client side queueing system on top of Apache Kafka consumer
+** Efficient individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
 * Vert.x non-blocking library integration (HTTP currently)
@@ -291,23 +301,29 @@ As an illustrative example of relative performance, given:
 
 == Usage
 
+=== Maven
+
+Where `${project.version}` is the version to be used.
+
+.Core Module Dependency
+[source,xml,indent=0]
+include::{project_root}async-consumer-examples/async-consumer-example-core/pom.xml[tag=exampleDep]
+
+.Vert.x Module Dependency
+[source,xml,indent=0]
+include::{project_root}async-consumer-examples/async-consumer-example-vertx/pom.xml[tag=exampleDep]
+
+
+.Repository
+[source,xml,indent=0]
+include::{project_root}async-consumer-examples/async-consumer-example-core/pom.xml[tag=exampleRepo]
+
 === Common Preparation
 
 .Setup the async client
-[source,java]
+[source,java,indent=0]
 ----
-AsyncConsumer<String, String> setupAsync() {
-    var options = AsyncConsumerOptions.builder()
-            .ordering(KEY) <1>
-            .maxConcurrency(1000) <2>
-            .maxUncommittedMessagesToHandle(10000) <3>
-            .build();
-
-    Consumer<String, String> kafkaConsumer = getKafkaConsumer(); <4>
-    kafkaConsumer.subscribe(List.of("input-topic")); <5>
-
-    return new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
-}
+include::{project_root}async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=exampleSetup]
 ----
 <1> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
@@ -334,10 +350,8 @@ After this setup, one then has the choice of async interfaces:
 This is the only thing you need to do, in order to get massively concurrent processing in your code.
 
 .Usage - print message content out to the console in parallel
-[source,java]
-async.asyncPoll(record -> {
-        log.info("A record: {}", record);
-    });
+[source,java,indent=0]
+include::{project_root}async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
 
 See the link:./async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 
@@ -347,17 +361,9 @@ This interface allows you to process your message, then publish back to the brok
 You can also optionally provide a callback function to be run after the message(s) is(are) successfully published to the broker.
 
 .Usage - print message content out to the console in parallel
-[source,java]
-async.asyncPollAndProduce((record) -> {
-        var result = processBrokerRecord(record);
-        ProducerRecord<String, String> produceRecord =
-                    new ProducerRecord<>(OUTPUT_TOPIC, "a-key", result.payload);
-        return List.of(produceRecord);
-    }, (consumeProduceResult) -> {
-        log.info("Message {} saved to broker at offset {}",
-            consumeProduceResult.out.key,
-            consumeProduceResult.meta.offset());
-    });
+[source,java,indent=0]
+include::{project_root}async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=exampleProduce]
+
 
 ==== Callbacks vs Streams
 
@@ -371,12 +377,9 @@ In future versions, we plan to look at supporting other streaming systems like h
 === HTTP with the VertX Module
 
 .Call an HTTP end point for each message usage
-[source,java]
+[source,java,indent=0]
 ----
-async.vertxHttpReqInfoStream(record -> {
-        Map params = Map.of("recordKey", record.key(), "payload", record.value());
-        return new RequestInfo("myhost.com", "/api", params); <1>
-    });
+include::{project_root}async-consumer-examples/async-consumer-example-vertx/src/main/java/io/confluent/csid/asyncconsumer/examples/vertx/VertxApp.java[tag=example]
 ----
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
@@ -385,28 +388,9 @@ See the link:./async-consumer-examples/async-consumer-example-vertx/src/main/jav
 === Kafka Streams Concurrent Processing
 
 .Preprocess in Kafka Streams, then process concurrently
-[source,java]
+[source,java,indent=0]
 ----
-void run() {
-    preprocess(); <1>
-    concurrentProcess(); <2>
-}
-
-void preprocess() {
-    StreamsBuilder builder = new StreamsBuilder();
-    builder.<String, String>stream("my-input-topic")
-            .mapValues(value -> String.valueOf(value.length()))
-            .to(outputTopicName);
-
-    KafkaStreams streams = new KafkaStreams(builder.build(), getStreamsProperties());
-    streams.start();
-}
-
-void concurrentProcess() {
-    async.asyncPoll(record -> {
-        log.info("A record: {}", record);
-    });
-}
+include::{project_root}async-consumer-examples/async-consumer-example-streams/src/main/java/io/confluent/csid/asyncconsumer/examples/streams/StreamsApp.java[tag=example]
 ----
 <1> Setup your Kafka Streams stage as per normal, performing any type of preprocessing in Kafka Streams
 <2> For the slow consumer part of your Topology, drop down into the async consumer, and use massive concurrency

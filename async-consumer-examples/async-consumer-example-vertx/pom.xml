@@ -19,11 +19,13 @@
     <name>Async Example - Vert.x</name>
 
     <dependencies>
+        <!-- tag::exampleDep[] -->
         <dependency>
             <groupId>io.confluent.csid.asyncconsumer</groupId>
             <artifactId>async-consumer-vertx</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- end::exampleDep[] -->
         <dependency>
             <groupId>io.confluent.csid.asyncconsumer</groupId>
             <artifactId>async-consumer-core</artifactId>

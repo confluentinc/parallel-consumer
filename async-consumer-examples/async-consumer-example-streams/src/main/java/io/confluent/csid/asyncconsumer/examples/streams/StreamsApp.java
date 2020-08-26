@@ -40,13 +40,14 @@ public class StreamsApp {
 
     KafkaStreams streams;
 
-    AsyncConsumer<String, String> async;
+    AsyncConsumer<String, String> asyncConsumer;
 
     AtomicInteger messageCount = new AtomicInteger();
 
+    // tag::example[]
     void run() {
-        preprocess();
-        concurrentProcess();
+        preprocess(); // <1>
+        concurrentProcess(); // <2>
     }
 
     void preprocess() {
@@ -67,6 +68,16 @@ public class StreamsApp {
     }
 
     void concurrentProcess() {
+        setupAsyncConsumer();
+
+        asyncConsumer.asyncPoll(record -> {
+            log.info("Concurrently processing a record: {}", record);
+            messageCount.getAndIncrement();
+        });
+    }
+    // end::example[]
+
+    private void setupAsyncConsumer() {
         var options = AsyncConsumerOptions.builder()
                 .ordering(AsyncConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
@@ -75,10 +86,10 @@ public class StreamsApp {
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
 
-        async = new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
-        async.subscribe(UniLists.of(outputTopicName));
+        asyncConsumer = new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+        asyncConsumer.subscribe(UniLists.of(outputTopicName));
 
-        async.asyncPoll(record -> {
+        asyncConsumer.asyncPoll(record -> {
             log.info("Concurrently processing a record: {}", record);
             messageCount.getAndIncrement();
         });
@@ -99,7 +110,7 @@ public class StreamsApp {
 
     void close() {
         streams.close();
-        async.close();
+        asyncConsumer.close();
     }
 
 }
