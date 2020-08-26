@@ -32,9 +32,7 @@ As processing speed and response time isn't bound to the number of partitions in
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        asyncConsumer.asyncPoll(record -> {
-            log.info("Concurrently processing a record: {}", record);
-        });
+include::async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
 ----
 
 

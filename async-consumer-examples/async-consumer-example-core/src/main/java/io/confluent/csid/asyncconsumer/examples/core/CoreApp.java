@@ -34,14 +34,15 @@ public class CoreApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    AsyncConsumer<String, String> async;
+    AsyncConsumer<String, String> asyncConsumer;
 
     void run() {
-        async = setupAsync();
-
-        async.asyncPoll(record -> {
+        asyncConsumer = setupAsync();
+        // tag::example[]
+        asyncConsumer.asyncPoll(record -> {
             log.info("Concurrently processing a record: {}", record);
         });
+        // end::example[]
     }
 
     AsyncConsumer<String, String> setupAsync() {
@@ -62,7 +63,7 @@ public class CoreApp {
     }
 
     void close() {
-        async.close();
+        asyncConsumer.close();
     }
 
 }
