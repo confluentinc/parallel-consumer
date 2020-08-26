@@ -127,6 +127,15 @@
                 <license.mode>format</license.mode>
             </properties>
         </profile>
+        <profile>
+            <id>github</id>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>github-asciidoc-template-maven-plugin</id>
+                    <url>https://maven.pkg.github.com/whelk-io/asciidoc-template-maven-plugin</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
     </profiles>
 
     <dependencies>
@@ -246,6 +255,26 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>io.whelk.asciidoc</groupId>
+                <artifactId>asciidoc-template-maven-plugin</artifactId>
+                <version>1.0.12-RELEASE</version>
+                <executions>
+                    <execution>
+                        <id>process</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>build</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <templateDirectory>./</templateDirectory>
+                    <templateFile>src/docs/README.adoc</templateFile>
+                    <outputDirectory>./</outputDirectory>
+                    <outputFile>README.adoc</outputFile>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
