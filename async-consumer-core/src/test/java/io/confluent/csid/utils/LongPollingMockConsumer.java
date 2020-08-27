@@ -4,7 +4,6 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.BrokerPollSystem;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.MockConsumer;
@@ -21,6 +20,7 @@ import java.time.Duration;
  */
 @Slf4j
 public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
+
     public LongPollingMockConsumer(OffsetResetStrategy offsetResetStrategy) {
         super(offsetResetStrategy);
     }

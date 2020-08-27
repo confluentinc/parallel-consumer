@@ -36,19 +36,20 @@ public class AsyncConsumerOptions {
      * The order type to use
      */
     @Builder.Default
-    private ProcessingOrder ordering = ProcessingOrder.UNORDERED;
+    private final ProcessingOrder ordering = ProcessingOrder.UNORDERED;
 
     /**
      * Don't have more than this many uncommitted messages in process
+     * TODO change this to per topic? global?
      */
     @Builder.Default
-    private int maxUncommittedMessagesToHandle = 1000;
+    private final int maxUncommittedMessagesToHandlePerPartition = 1000;
 
     /**
      * Don't process any more than this many messages concurrently
      */
     @Builder.Default
-    private int maxConcurrency = 100;
+    private final int maxConcurrency = 100;
 
     @Builder.Default
     private final int numberOfThreads = 16;

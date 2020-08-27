@@ -10,15 +10,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 
 @Slf4j
 public class StreamsAppTest extends KafkaTest<String, String> {
-
-    TopicPartition tp = new TopicPartition(StreamsApp.inputTopic, 0);
 
     @SneakyThrows
     @Test

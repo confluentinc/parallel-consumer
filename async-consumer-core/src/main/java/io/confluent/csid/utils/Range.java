@@ -13,19 +13,19 @@ import java.util.stream.IntStream;
  */
 public class Range implements Iterable<Integer> {
 
-    private int limit;
+    private long limit;
 
-    public Range(int limit) {
+    public Range(long limit) {
         this.limit = limit;
     }
 
-    public static Range range(int max) {
+    public static Range range(long max) {
         return new Range(max);
     }
 
     @Override
     public Iterator<Integer> iterator() {
-        final int max = limit;
+        final long max = limit;
         return new Iterator<Integer>() {
 
             private int current = 0;
@@ -58,7 +58,7 @@ public class Range implements Iterable<Integer> {
     }
 
     public IntStream toStream() {
-        return IntStream.range(0, limit);
+        return IntStream.range(0, (int)limit);
     }
 
     static IntStream rangeStream(int i) {

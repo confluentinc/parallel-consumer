@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -65,7 +64,7 @@ public class WorkManagerTest {
     private void setupWorkManager(AsyncConsumerOptions build) {
         offset = 0;
 
-        wm = new WorkManager<>(build);
+        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
         wm.setClock(clock);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
@@ -273,7 +272,7 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, key, "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, key, "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -318,7 +317,7 @@ public class WorkManagerTest {
     public void maxInFlight() {
         //
         AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
-        opts.maxUncommittedMessagesToHandle(1);
+        opts.maxUncommittedMessagesToHandlePerPartition(1);
         setupWorkManager(opts.build());
 
         //
@@ -372,7 +371,7 @@ public class WorkManagerTest {
         AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
         opts.ordering(UNORDERED);
 
-        opts.maxUncommittedMessagesToHandle(3);
+        opts.maxUncommittedMessagesToHandlePerPartition(3);
         opts.maxConcurrency(2);
 
         setupWorkManager(opts.build());
@@ -472,7 +471,7 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "66", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "66", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -517,7 +516,7 @@ public class WorkManagerTest {
         var rec5 = new ConsumerRecord<>(INPUT_TOPIC, partition, 15, "key-a", "value");
         var rec6 = new ConsumerRecord<>(INPUT_TOPIC, partition, 20, "key-c", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3, rec4, rec5, rec6));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec, rec4, rec5, rec6));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -567,6 +566,7 @@ public class WorkManagerTest {
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());
+        Collections.sort(flattened, (o1, o2) -> Long.compare(o1.offset(), o2.offset()));
 
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         m.put(new TopicPartition(INPUT_TOPIC, 0), flattened);
@@ -609,7 +609,7 @@ public class WorkManagerTest {
         AsyncConsumerOptions build = AsyncConsumerOptions.builder()
                 .ordering(UNORDERED)
                 .maxConcurrency(10)
-                .maxUncommittedMessagesToHandle(10)
+                .maxUncommittedMessagesToHandlePerPartition(10)
                 .build();
         setupWorkManager(build);
         registerSomeWork();
