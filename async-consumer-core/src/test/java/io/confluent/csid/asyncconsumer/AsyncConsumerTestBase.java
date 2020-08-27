@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,6 +36,23 @@ public class AsyncConsumerTestBase {
     public static final String INPUT_TOPIC = "input";
     public static final String OUTPUT_TOPIC = "output";
     public static final String CONSUMER_GROUP_ID = "my-group";
+
+    /**
+     * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
+     * lower value shouldn't affect test speed much unless many different batches of messages are "published".
+     * @see LongPollingMockConsumer#poll(Duration)
+     */
+    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
+
+    /**
+     * The commit interval for the main {@link AsyncConsumer} control thread. Actually the timeout that we poll the
+     * {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop cycles, making our
+     * test waiting go faster.
+     *
+     * @see AsyncConsumer#workMailBox
+     * @see AsyncConsumer#processWorkCompleteMailBox
+     */
+    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected MockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
@@ -74,7 +92,7 @@ public class AsyncConsumerTestBase {
 
     private void setupWorkManager(WorkManager<String, String> wm) {
         wm.getSuccessfulWorkListeners().add((work)->{
-            log.debug("Heard some successful work: {}", work);
+            log.debug("Test work listener heard some successful work: {}", work);
             successfulWork.add(work);
         });
     }
@@ -108,8 +126,8 @@ public class AsyncConsumerTestBase {
 
         asyncConsumer = initAsyncConsumer(asyncConsumerOptions);
 
-        asyncConsumer.setLongPollTimeout(ofMillis(100));
-        asyncConsumer.setTimeBetweenCommits(ofMillis(100));
+        asyncConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
+        asyncConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
 
         verificationWaitDelay = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
 
@@ -211,6 +229,10 @@ public class AsyncConsumerTestBase {
 
     public void assertCommits(List<Integer> integers) {
         KafkaTestUtils.assertCommits(producerSpy, integers, Optional.empty());
+    }
+
+    public void assertCommitLists(List<List<Integer>> integers) {
+        KafkaTestUtils.assertCommitLists(producerSpy, integers, Optional.empty());
     }
 
     protected void awaitLatch(List<CountDownLatch> latches, int latchIndex) {

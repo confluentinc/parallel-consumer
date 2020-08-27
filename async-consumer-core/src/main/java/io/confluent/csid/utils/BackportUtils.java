@@ -6,7 +6,12 @@ package io.confluent.csid.utils;
 
 import lombok.experimental.UtilityClass;
 
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Optional;
 
 public class BackportUtils {
@@ -21,7 +26,47 @@ public class BackportUtils {
     /**
      * @see Optional#isEmpty()  intro'd java 11
      */
-    static public boolean isEmpty(Optional<?> optional){
+    static public boolean isEmpty(Optional<?> optional) {
         return !optional.isPresent();
     }
+
+    public static byte[] readFully(InputStream is) throws IOException {
+        return BackportUtils.readFully(is, -1, true);
+    }
+
+    /**
+     * Used in Java 8 environments (Java 9 has read all bytes)
+     * <p>
+     * https://stackoverflow.com/a/25892791/105741
+     */
+    public static byte[] readFully(InputStream is, int length, boolean readAll) throws IOException {
+        byte[] output = {};
+        if (length == -1) length = Integer.MAX_VALUE;
+        int pos = 0;
+        while (pos < length) {
+            int bytesToRead;
+            if (pos >= output.length) { // Only expand when there's no room
+                bytesToRead = Math.min(length - pos, output.length + 1024);
+                if (output.length < pos + bytesToRead) {
+                    output = Arrays.copyOf(output, pos + bytesToRead);
+                }
+            } else {
+                bytesToRead = output.length - pos;
+            }
+            int cc = is.read(output, pos, bytesToRead);
+            if (cc < 0) {
+                if (readAll && length != Integer.MAX_VALUE) {
+                    throw new EOFException("Detect premature EOF");
+                } else {
+                    if (output.length != pos) {
+                        output = Arrays.copyOf(output, pos);
+                    }
+                    break;
+                }
+            }
+            pos += cc;
+        }
+        return output;
+    }
+
 }

@@ -48,7 +48,7 @@ public class CoreApp {
         var options = AsyncConsumerOptions.builder()
                 .ordering(KEY)
                 .maxConcurrency(1000)
-                .maxUncommittedMessagesToHandle(10000)
+                .maxUncommittedMessagesToHandlePerPartition(10000)
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();

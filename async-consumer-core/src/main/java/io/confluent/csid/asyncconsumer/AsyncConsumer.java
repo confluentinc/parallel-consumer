@@ -4,22 +4,19 @@ package io.confluent.csid.asyncconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.WallClock;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.common.utils.Timer;
 import org.slf4j.MDC;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -32,6 +29,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
@@ -51,7 +49,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @see #asyncPollAndProduce(Function, Consumer)
  */
 @Slf4j
-public class AsyncConsumer<K, V> implements Closeable {
+public class AsyncConsumer<K, V> implements ConsumerRebalanceListener, Closeable {
 
     protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
@@ -67,6 +65,8 @@ public class AsyncConsumer<K, V> implements Closeable {
 
     private Instant lastCommit = Instant.now();
 
+    private boolean inTransaction = false;
+
     private final org.apache.kafka.clients.producer.Producer<K, V> producer;
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
@@ -75,7 +75,7 @@ public class AsyncConsumer<K, V> implements Closeable {
      */
     final private ExecutorService workerPool;
 
-    private Optional<Future<?>> controlThreadFuture = Optional.empty();
+    private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
     @Getter
     protected WorkManager<K, V> wm;
@@ -123,6 +123,11 @@ public class AsyncConsumer<K, V> implements Closeable {
     private State state = State.unused;
 
     /**
+     * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
+     */
+    private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
+
+    /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
      *
@@ -131,12 +136,13 @@ public class AsyncConsumer<K, V> implements Closeable {
     public AsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
                          org.apache.kafka.clients.producer.Producer<K, V> producer,
                          AsyncConsumerOptions options) {
-        log.info("Confluent async consumer initialise");
+        log.debug("Confluent async consumer initialise");
 
         Objects.requireNonNull(consumer);
         Objects.requireNonNull(producer);
         Objects.requireNonNull(options);
 
+        checkNotSubscribed(consumer);
         checkAutoCommitIsDisabled(consumer);
 
         //
@@ -146,7 +152,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         workerPool = Executors.newFixedThreadPool(options.getNumberOfThreads());
 
         //
-        this.wm = new WorkManager<>(options);
+        this.wm = new WorkManager<>(options, consumer);
 
         //
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumer, wm, this);
@@ -161,12 +167,77 @@ public class AsyncConsumer<K, V> implements Closeable {
         }
     }
 
+    private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        if (consumer instanceof MockConsumer)
+            // disabled for unit tests which don't test rebalancing
+            return;
+        Set<String> subscription = consumer.subscription();
+        Set<TopicPartition> assignment = consumer.assignment();
+        if (subscription.size() != 0 || assignment.size() != 0) {
+            throw new IllegalStateException("Consumer subscription must be managed by this class. Use " + this.getClass().getName() + "#subcribe methods instead.");
+        }
+    }
+
+    public void subscribe(Collection<String> topics) {
+        log.debug("Subscribing to {}", topics);
+        consumer.subscribe(topics, this);
+    }
+
+    public void subscribe(Pattern pattern) {
+        log.debug("Subscribing to {}", pattern);
+        consumer.subscribe(pattern, this);
+    }
+
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
+        log.debug("Subscribing to {}", topics);
+        usersConsumerRebalanceListener = Optional.of(callback);
+        consumer.subscribe(topics, this);
+    }
+
+    public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
+        log.debug("Subscribing to {}", pattern);
+        usersConsumerRebalanceListener = Optional.of(callback);
+        consumer.subscribe(pattern, this);
+    }
+
+    /**
+     * Commit our offsets
+     */
+    @Override
+    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+        commitOffsetsThatAreReady();
+        wm.onPartitionsRevoked(partitions);
+        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
+    }
+
+    /**
+     * Delegate to {@link WorkManager}
+     *
+     * @see WorkManager#onPartitionsAssigned
+     */
+    @Override
+    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        wm.onPartitionsAssigned(partitions);
+        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
+    }
+
+    /**
+     * Delegate to {@link WorkManager}
+     *
+     * @see WorkManager#onPartitionsAssigned
+     */
+    @Override
+    public void onPartitionsLost(Collection<TopicPartition> partitions) {
+        wm.onPartitionsLost(partitions);
+        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
+    }
+
     /**
      * Nasty reflection to check if auto commit is disabled.
      * <p>
      * Other way would be to politely request the user also include their consumer properties when construction, but
-     * this is more reliable in a correctness sense, but britle in terms of coupling to internal implementation. Consider
-     * requesting ability to inspect configuration at runtime.
+     * this is more reliable in a correctness sense, but britle in terms of coupling to internal implementation.
+     * Consider requesting ability to inspect configuration at runtime.
      */
     @SneakyThrows
     private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
@@ -284,11 +355,13 @@ public class AsyncConsumer<K, V> implements Closeable {
         if (state == closed) {
             log.info("Already closed, checking end state..");
         } else {
-            log.debug("Signaling to close...");
+            log.info("Signaling to close...");
 
             if (waitForInFlight) {
+                log.info("Will wait for all in flight to complete before");
                 transitionToDraining();
             } else {
+                log.info("Not waiting for in flight to complete, will transition directly to closing");
                 transitionToClosing();
             }
 
@@ -304,47 +377,63 @@ public class AsyncConsumer<K, V> implements Closeable {
         log.info("Close complete.");
     }
 
-    @SneakyThrows
-    private void waitForClose(Duration timeout) {
+    private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
-        Timer timer = Time.SYSTEM.timer(timeout);
         while (!state.equals(closed)) {
             log.trace("Still waiting for system to close...");
-            Thread.sleep(100);
-            timer.update();
-            if (timer.isExpired()) {
-                throw new TimeoutException("Timeout waiting for system to close");
+            try {
+                boolean signaled = this.controlThreadFuture.get().get(toSeconds(timeout), SECONDS);
+                if (!signaled)
+                    throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
+            } catch (InterruptedException e) {
+                // ignore
+                log.trace("Interrupted", e);
+            } catch (ExecutionException | TimeoutException e) {
+                log.error("Execution or timeout exception", e);
+                throw e;
             }
         }
     }
 
-    @SneakyThrows
-    private void doClose(Duration timeout) {
+    private void doClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.debug("Doing closing state: {}...", state);
-
-        log.debug("Closing producer, assuming no more in flight...");
-        producer.commitTransaction();
-        producer.close(timeout);
 
         // only close consumer once producer has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
+
+        log.debug("Closing producer, assuming no more in flight...");
+        if (this.inTransaction) {
+            // close started after tx began, but before work was done, otherwise a tx wouldn't have been started
+            producer.abortTransaction();
+        }
+        producer.close(timeout);
 
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerPool.shutdownNow();
         if (!unfinished.isEmpty()) {
             log.warn("Threads not done: {}", unfinished);
         }
+
         log.trace("Awaiting worker pool termination...");
-        boolean terminationFinished = workerPool.awaitTermination(toSeconds(defaultTimeout), SECONDS);
-        if (!terminationFinished) {
-            log.warn("workerPool termination interrupted!");
-            boolean shutdown = workerPool.isShutdown();
-            boolean terminated = workerPool.isTerminated();
+        boolean interrupted = true;
+        while (interrupted) {
+            log.warn("Still interrupted");
+            try {
+                boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(defaultTimeout), SECONDS);
+                interrupted = false;
+                if (!terminationFinishedWithoutTimeout) {
+                    log.warn("workerPool await timeout!");
+                    boolean shutdown = workerPool.isShutdown();
+                    boolean terminated = workerPool.isTerminated();
+                }
+            } catch (InterruptedException e) {
+                log.error("InterruptedException", e);
+                interrupted = true;
+            }
         }
 
         log.debug("Close complete.");
-
         this.state = closed;
     }
 
@@ -373,6 +462,19 @@ public class AsyncConsumer<K, V> implements Closeable {
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
         this.state = State.draining;
+        interruptControlThread();
+    }
+
+    /**
+     * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to make tests
+     * run faster, or to move on to shutting down the {@link BrokerPollSystem} so that less messages are downloaded and
+     * queued.
+     */
+    private void interruptControlThread() {
+        if (blockableControlThread != null) {
+            log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
+            blockableControlThread.interrupt();
+        }
     }
 
     private boolean areMyThreadsDone() {
@@ -399,6 +501,7 @@ public class AsyncConsumer<K, V> implements Closeable {
 
         //
         producer.beginTransaction();
+        this.inTransaction = true;
 
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
@@ -430,12 +533,14 @@ public class AsyncConsumer<K, V> implements Closeable {
      * Main control loop
      */
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
-                                 Consumer<R> callback) {
-        log.trace("Loop: Get work");
-        var records = wm.<R>maybeGetWork();
+                                 Consumer<R> callback) throws TimeoutException, ExecutionException {
+        if (state == running) {
+            log.trace("Loop: Get work");
+            var records = wm.<R>maybeGetWork();
 
-        log.trace("Loop: Submit to pool");
-        submitWorkToPool(userFunction, callback, records);
+            log.trace("Loop: Submit to pool");
+            submitWorkToPool(userFunction, callback, records);
+        }
 
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
@@ -447,6 +552,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
         this.controlLoopHooks.forEach(Runnable::run);
 
+        log.debug("Current state: {}", state);
         switch (state) {
             case draining -> drain();
             case closing -> doClose(defaultTimeout);
@@ -454,11 +560,6 @@ public class AsyncConsumer<K, V> implements Closeable {
 
         // end of loop
         log.trace("End of control loop, {} remaining in work manager. In state: {}", wm.getPartitionWorkRemainingCount(), state);
-        try {
-            Thread.sleep(0);
-        } catch (InterruptedException e) {
-            log.warn("Awoken", e);
-        }
     }
 
     private void drain() {
@@ -476,6 +577,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         } else {
             state = State.closing;
         }
+        interruptControlThread();
     }
 
     /**
@@ -497,10 +599,10 @@ public class AsyncConsumer<K, V> implements Closeable {
             firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
             currentlyPollingWorkCompleteMailBox.getAndSet(false);
         } catch (InterruptedException e) {
-            log.trace("Interrupted waiting on work results");
+            log.debug("Interrupted waiting on work results");
         }
         if (firstBlockingPoll == null) {
-            log.debug("Mailbox results returned null, indicating timeout (after {}) during a blocking wait for returned work results", timeout);
+            log.debug("Mailbox results returned null, indicating timeout (which was set as {}) or interruption during a blocking wait for returned work results", timeout);
         } else {
             results.add(firstBlockingPoll);
         }
@@ -571,7 +673,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         if (state == running) {
             return getTimeBetweenCommits().minus(getTimeSinceLastCommit());
         } else {
-            log.debug("System not running as normal, don't wait to commit");
+            log.debug("System not {}, so don't wait to commit", running);
             return Duration.ZERO;
         }
     }
@@ -591,8 +693,9 @@ public class AsyncConsumer<K, V> implements Closeable {
         if (offsetsToSend.isEmpty()) {
             log.trace("No offsets ready");
         } else {
-            log.trace("Committing offsets for {} partition(s): {}", offsetsToSend.size(), offsetsToSend);
+            log.debug("Committing offsets for {} partition(s): {}", offsetsToSend.size(), offsetsToSend);
             ConsumerGroupMetadata groupMetadata = consumer.groupMetadata();
+
             producer.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
             // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
             boolean notCommitted = true;
@@ -616,6 +719,10 @@ public class AsyncConsumer<K, V> implements Closeable {
                         producer.commitTransaction();
                     }
 
+                    this.inTransaction = false;
+
+                    wm.onOffsetCommitSuccess(offsetsToSend);
+
                     notCommitted = false;
                     if (retryCount > 0) {
                         log.warn("Commit success, but took {} tries.", retryCount);
@@ -627,10 +734,9 @@ public class AsyncConsumer<K, V> implements Closeable {
                 }
             }
 
-            // only open the next tx if we are running
-            if (state == running || state == draining) {
-                producer.beginTransaction();
-            }
+            // begin tx for next cycle
+            producer.beginTransaction();
+            this.inTransaction = true;
         }
     }
 
@@ -733,7 +839,7 @@ public class AsyncConsumer<K, V> implements Closeable {
      */
     void notifyNewWorkRegistered() {
         if (currentlyPollingWorkCompleteMailBox.get()) {
-            log.trace("Knock knock, wake up! You've got mail (tm)!");
+            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
             this.blockableControlThread.interrupt();
         } else {
             log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next looop.");

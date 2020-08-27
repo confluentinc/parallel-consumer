@@ -31,13 +31,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -47,8 +45,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.Mockito.verify;
-import static org.mockito.internal.verification.VerificationModeFactory.times;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
@@ -123,8 +120,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         awaitLatch(latch);
 
         //
-        verify(producerSpy, times(0).description("Nothing should be committed"))
-                .commitTransaction();
+        assertCommits(of(0));
 
         // check results are failures
         var res = getResults(tupleStream);
@@ -190,7 +186,7 @@ public class VertxTest extends AsyncConsumerTestBase {
         // verify
         var res = getResults(futureStream);
 
-        KafkaTestUtils.assertCommits(producerSpy, UniLists.of(0));
+        KafkaTestUtils.assertCommits(producerSpy, of(0, 1));
 
         // test results are successes
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);

@@ -13,7 +13,7 @@ endif::[]
 
 image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"] image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
 
-A concurrent / asynchronous messaging processing library for the Apache Kafka consumer/producer with non blocking IO extensions.
+A concurrent / asynchronous messaging processing library with client side queueing for the Apache Kafka consumer/producer with non  blocking IO extensions.
 
 .Consume _concurrently_ with a *single* consumer instance:
 [source,java]
@@ -35,11 +35,15 @@ This wrapper library for the core Kafka client handles all this for you, you jus
 A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typicaly CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
 
 == Feature List
+
 * Have massively parallel consumption processing without running hundreds or thousands of
 ** Kafka consumer clients
 ** topic partitions
 +
 without operational burden or harming the clusters performance
+* Client side queueing system on top of Kafka - individual message acknowledgement system (without local or third system
+state)
+to massively reduce message replay upon failure
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
 * Vert.x non-blocking library integration (HTTP currently)
@@ -401,6 +405,19 @@ One can then use this library to consume from an input topic, produced by KS to 
 * Integration tests require a https://docs.docker.com/docker-for-mac/[running locally accessible Docker host].
 * Has a Maven `profile` setup for IntelliJ Idea, but not Eclipse for example.
 
+=== Notes
+
+The unit test code is set to run at a very high frequency, which can make it difficult to read debug logs (or
+impossible). If you want to debug the code or view the main logs, consider changing the below:
+
+// replace with code inclusion from readme branch
+.AsyncConsumerTestBase
+[source]
+----
+AsyncConsumerTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
+AsyncConsumerTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
+----
+
 === Maven targets
 
 [qanda]
@@ -468,3 +485,27 @@ docker container ls --filter 'label=org.testcontainers=true'
 
 See [this testcontainers PR](https://github.com/testcontainers/testcontainers-java/pull/1781) for
 details on the reusable containers feature.
+
+== Implementation Details
+
+=== Offset Map
+
+==== Storage
+
+* Runtime data model creates list of incomplete offsets
+* Then builds a full complete / not complete bit map from the base offset to be comitted
+* Dynamically switching storage
+** encodes into a `BitSet`, and a `ByteBuffer`, then compresses both using zstd, then uses the smallest and tags as such in the encoded String
+** Which is smallest can depend on the size and information density of the offset map
+*** Smaller maps fit better into uncompressed `BitSets` ~(30 entry map bitset: compressed: 13 Bytes, uncompressed: 4 Bytes, compressed ByteBuffer: )
+*** Larger maps are usually better in compressed `ByteBuffer` ~(13750 entry map bitset: compressed: 63 Bytes, uncompressed: 1719 Bytes, compressed ByteBuffer: 41 Bytes)
+*** Completely random offset maps, compressed and uncompressed `BitSet` is roughly the same (2000 entries, uncompressed bitset: 250, compressed: 259, compressed bytes array: 477)
+*** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again.
+*** A large map with a single oustanding message (2000 entries, 1 outstanding at a random position) compressed `BitSet` and `ByteArray` come out the same (23 vs 22 bytes, vs 250 for uncompressed `BitSet`)
+* Stores along with base offset for each partition, in the offset commitsync metadata string
+* The offset commit metadata has a hardcoded limit of 4096 bytes
+** Because of this, if our map doesn't fit into this, we have to drop it and not use it, loosing the shorter replay benefits
+** Upon recovery or restart or partition reassignment, the bitmap will be loaded as empty, and all messages from the offset committed will be replayed
+** Not being able to fit the map into the metadata, depends on how many partitions we're assigned (it's 4096 bytes total for all assigned partitions, not each unfortunately), and the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit hundreds of partitions))
+*** To improve this situation, we could introduce the option of a dynamic backpressure system, where the size of the serialised offset map is monitored, and if it is growing too large, we pause work until it can fit again
+** @see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`

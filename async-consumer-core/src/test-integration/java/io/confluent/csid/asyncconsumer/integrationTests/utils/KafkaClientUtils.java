@@ -5,6 +5,7 @@
 package io.confluent.csid.asyncconsumer.integrationTests.utils;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -25,8 +26,9 @@ import static java.time.Duration.ofSeconds;
 @Slf4j
 public class KafkaClientUtils {
 
+    public static final int MAX_POLL_RECORDS = 10_000;
     private final KafkaContainer kContainer;
-    protected Properties props = new Properties();
+    public Properties props = new Properties();
 
     public KafkaConsumer<String, String> consumer;
 
@@ -46,7 +48,7 @@ public class KafkaClientUtils {
         String servers = this.kContainer.getBootstrapServers();
 
         props.put("bootstrap.servers", servers);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
 
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
@@ -66,7 +68,7 @@ public class KafkaClientUtils {
 
         // make sure we can download lots of records if they're small. Default is 500
 //        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1_000_000);
-        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 2_000);
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
     }
 
     @BeforeEach
@@ -88,6 +90,13 @@ public class KafkaClientUtils {
     }
 
     public <K, V> KafkaConsumer<K, V> createNewConsumer() {
+        return createNewConsumer(false);
+    }
+
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup) {
+        if (newConsumerGroup) {
+            props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt()); // new group
+        }
         KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(props);
         log.debug("New consume {}", kvKafkaConsumer);
         return kvKafkaConsumer;

@@ -15,17 +15,17 @@ import org.apache.kafka.common.errors.WakeupException;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
 import static io.confluent.csid.asyncconsumer.AsyncConsumer.defaultTimeout;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * Subsystem for polling the broker for messages.
@@ -40,11 +40,11 @@ public class BrokerPollSystem<K, V> {
 
     public AsyncConsumer.State state = AsyncConsumer.State.running;
 
-    private Optional<Future<Boolean>> controlFuture;
+    private Optional<Future<Boolean>> pollControlThreadFuture;
 
     volatile private boolean paused = false;
 
-    private AsyncConsumer async;
+    private final AsyncConsumer<K, V> async;
 
     @Setter
     @Getter
@@ -52,16 +52,19 @@ public class BrokerPollSystem<K, V> {
 
     final private WorkManager<K, V> wm;
 
-    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, AsyncConsumer async) {
+    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, AsyncConsumer<K, V> async) {
         this.consumer = consumer;
         this.wm = wm;
         this.async = async;
     }
 
     public void start() {
-        this.controlFuture = Optional.of(Executors.newSingleThreadExecutor().submit(this::controlLoop));
+        this.pollControlThreadFuture = Optional.of(Executors.newSingleThreadExecutor().submit(this::controlLoop));
     }
 
+    /**
+     * @return true if closed cleanly
+     */
     private boolean controlLoop() {
         Thread.currentThread().setName("broker-poll");
         log.trace("Broker poll control loop start");
@@ -92,13 +95,14 @@ public class BrokerPollSystem<K, V> {
                 }
             }
         }
+        log.trace("Broker poll thread returning true");
         return true;
     }
 
     private void doClose() {
-        log.debug("Close consumer...");
+        log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
         this.consumer.close(defaultTimeout);
-        log.debug("Closed.");
+        log.debug("Consumer closed.");
         state = closed;
     }
 
@@ -125,7 +129,7 @@ public class BrokerPollSystem<K, V> {
     public void drain() {
         // idempotent
         if (state != AsyncConsumer.State.draining) {
-            log.debug("Signaling to drain...");
+            log.debug("Poll system signaling to drain...");
             state = draining;
             consumer.wakeup();
         }
@@ -143,14 +147,27 @@ public class BrokerPollSystem<K, V> {
         }
     }
 
-    @SneakyThrows
-    public void closeAndWait() {
+    public void closeAndWait() throws TimeoutException, ExecutionException {
         log.debug("Requesting broker polling system to close...");
         transitionToClosing();
-        if (controlFuture.isPresent()) {
+        if (pollControlThreadFuture.isPresent()) {
             log.debug("Wait for loop to finish ending...");
-            Boolean success = controlFuture.get()
-                    .get(defaultTimeout.toMillis(), MILLISECONDS);
+            Future<Boolean> pollControlResult = pollControlThreadFuture.get();
+            boolean interrupted = true;
+            while(interrupted) {
+                try {
+                    Boolean pollShutdownSuccess = pollControlResult.get(defaultTimeout.toMillis(), MILLISECONDS);
+                    interrupted = false;
+                    if (!pollShutdownSuccess) {
+                        log.warn("Broker poll control thread not closed cleanly.");
+                    }
+                } catch (InterruptedException e) {
+                    log.debug("Interrupted", e);
+                } catch (ExecutionException | TimeoutException e) {
+                    log.error("Execution or timeout exception", e);
+                    throw e;
+                }
+            }
         }
         log.debug("Broker poll system finished closing");
     }
