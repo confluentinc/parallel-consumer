@@ -6,7 +6,6 @@ package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder;
 import io.confluent.csid.utils.LoopingResumingIterator;
-import io.confluent.csid.utils.Range;
 import io.confluent.csid.utils.WallClock;
 import lombok.Getter;
 import lombok.Setter;
@@ -105,21 +104,36 @@ public class WorkManager<K, V> {
                 long offset = rec.offset();
                 var wc = new WorkContainer<K, V>(rec);
 
+                TopicPartition tp = toTP(rec);
+                raisePartitionHighWaterMark(offset, tp);
+
                 processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>())
                         .put(offset, wc);
 
-                partitionCommitQueues.computeIfAbsent(toTP(rec), (ignore) -> new ConcurrentSkipListMap<>())
+                partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
                         .put(offset, wc);
             }
         }
     }
 
-    Map<TopicPartition, TreeSet<Long>> incompleteOffsets = new HashMap<>();
+    private void raisePartitionHighWaterMark(long offset, TopicPartition tp) {
+        // rise the high water mark
+        Long oldMark = partitionOffsetHighWaterMarks.get(tp);
+        if (offset > oldMark) {
+            partitionOffsetHighWaterMarks.put(tp, offset);
+        } else {
+            throw new RuntimeException("What are the implications? Truncate?");
+        }
+
+    }
+
+    Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
     Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<>();
 
     private boolean recordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
         long offset = rec.offset();
         TopicPartition tp = new TopicPartition(rec.topic(), rec.partition());
+        TreeSet<Long> incompleteOffsets = this.partitionIncompleteOffsets.get(tp);
         if (incompleteOffsets.contains(offset)) {
             // record previously saved as having not been processed
             return false;
@@ -329,10 +343,10 @@ public class WorkManager<K, V> {
     }
 
     @SneakyThrows
-    Set<Long> deserialiseIncompleteOffsetMap(String incompleteOffsetMap) {
+    TreeSet<Long> deserialiseIncompleteOffsetMap(String incompleteOffsetMap) {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
         ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
-        Set<Long> incompleteOffsets = (Set<Long>) objectInputStream.readObject();
+        TreeSet<Long> incompleteOffsets = (TreeSet<Long>) objectInputStream.readObject();
 //        new InputStream(incompleteOffsetMap)
 //        try (ObjectInputStream in = new ObjectInputStream(inputStream)) {
 //            @SuppressWarnings("unchecked")
@@ -365,9 +379,9 @@ public class WorkManager<K, V> {
     void loadOffsetMetadataPayload(TopicPartition tp, String offsetMetadataPayload) {
         String[] split = offsetMetadataPayload.split(",");
         long offset = Long.parseLong(split[0]);
-        this.partitionOffsetHighWaterMarks.put(tp, offset);
-        Set<Long> longs = deserialiseIncompleteOffsetMap(split[1]);
-        this.incompleteOffsets = longs;
+        raisePartitionHighWaterMark(offset, tp);
+        TreeSet<Long> longs = deserialiseIncompleteOffsetMap(split[1]);
+        this.partitionIncompleteOffsets.put(tp, longs);
     }
 
     String makeOffsetMetadataPayload(Set<Long> incompleteOffsets) {
@@ -392,10 +406,10 @@ public class WorkManager<K, V> {
     public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         offsetsToSend.forEach((tp, meta) -> {
-            Set<Long> offsets = incompleteOffsets.get(tp);
+            Set<Long> offsets = partitionIncompleteOffsets.get(tp);
             long newLowWaterMark = meta.offset();
             for (Long offset : offsets) {
-                if(offset < newLowWaterMark){
+                if (offset < newLowWaterMark) {
                     offsets.remove(offset);
                 }
             }
