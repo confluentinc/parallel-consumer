@@ -129,7 +129,9 @@ public class WorkManager<K, V> {
 
     }
 
+    // visible for testing
     Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
+    // visible for testing
     Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<>();
 
     private boolean isRecordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
@@ -327,7 +329,7 @@ public class WorkManager<K, V> {
                     incompleteOffsets.add(offset);
                 }
                 // incomplete offset map
-                String offsetMapPayload = makeOffsetMetadataPayload(incompleteOffsets);
+                String offsetMapPayload = makeOffsetMetadataPayload(topicPartitionKey, incompleteOffsets);
                 OffsetAndMetadata offsetOnly = offsetsToSend.get(topicPartitionKey);
                 new OffsetAndMetadata(offsetOnly.offset(), offsetMapPayload);
             }
@@ -348,7 +350,8 @@ public class WorkManager<K, V> {
     TreeSet<Long> deserialiseIncompleteOffsetMap(String incompleteOffsetMap) {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
         ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
-        TreeSet<Long> incompleteOffsets = (TreeSet<Long>) objectInputStream.readObject();
+        Set raw = (Set)objectInputStream.readObject();
+        TreeSet<Long> incompleteOffsets = new TreeSet(raw);
         return incompleteOffsets;
     }
 
@@ -360,9 +363,10 @@ public class WorkManager<K, V> {
         this.partitionIncompleteOffsets.put(tp, longs);
     }
 
-    String makeOffsetMetadataPayload(Set<Long> incompleteOffsets) {
+    String makeOffsetMetadataPayload(TopicPartition tp, Set<Long> incompleteOffsets) {
         String offsetMap = serialiseIncompleteOffsetMap(incompleteOffsets);
-        return partitionOffsetHighWaterMarks + "," + offsetMap;
+        Long highWaterMark = partitionOffsetHighWaterMarks.get(tp);
+        return highWaterMark + "," + offsetMap;
     }
 
     @SneakyThrows
