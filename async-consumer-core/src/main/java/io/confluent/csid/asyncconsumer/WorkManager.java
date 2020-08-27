@@ -96,6 +96,11 @@ public class WorkManager<K, V> {
         }
     }
 
+    /**
+     * Work must be registered in offset order
+     * 
+     * @see #raisePartitionHighWaterMark
+     */
     public void registerWork(ConsumerRecords<K, V> records) {
         log.debug("Registering {} records of work", records.count());
         for (ConsumerRecord<K, V> rec : records) {
@@ -304,6 +309,7 @@ public class WorkManager<K, V> {
             count += partitionQueue.size();
             var workToRemove = new LinkedList<WorkContainer<K, V>>();
             Set<Long> incompleteOffsets = new HashSet<>();
+            boolean iteratedBeyondLowWaterMark = false;
             for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
                 WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
@@ -311,7 +317,7 @@ public class WorkManager<K, V> {
                 long offset = container.getCr().offset();
                 TopicPartition topicPartitionKey = toTP(container.getCr());
                 if (complete) {
-                    if (container.getUserFunctionSucceeded().get()) {
+                    if (container.getUserFunctionSucceeded().get() && !iteratedBeyondLowWaterMark) {
                         log.trace("Found offset candidate ({}) to add to offset commit map", container);
                         workToRemove.add(container);
                         // as in flights are processed in order, this will keep getting overwritten with the highest offset available
@@ -324,6 +330,7 @@ public class WorkManager<K, V> {
                 } else {
                     // can't commit this offset or beyond, as this is the latest offset that is incomplete
                     // i.e. only commit offsets that come before the current one, and stop looking for more
+                    iteratedBeyondLowWaterMark = true;
                     log.debug("Offset ({}) is incomplete, holding up the queue ({}) of size {}. Ending partition scan.",
                             container, partitionQueueEntry.getKey(), partitionQueueEntry.getValue().size());
                     incompleteOffsets.add(offset);
@@ -355,8 +362,8 @@ public class WorkManager<K, V> {
     TreeSet<Long> deserialiseIncompleteOffsetMap(String incompleteOffsetMap) {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
         ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
-        Set raw = (Set) objectInputStream.readObject();
-        TreeSet<Long> incompleteOffsets = new TreeSet(raw);
+        Set<Long> raw = (Set<Long>) objectInputStream.readObject();
+        TreeSet<Long> incompleteOffsets = new TreeSet<>(raw);
         return incompleteOffsets;
     }
 
