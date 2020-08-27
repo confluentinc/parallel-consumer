@@ -6,6 +6,7 @@ package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder;
 import io.confluent.csid.utils.LoopingResumingIterator;
+import io.confluent.csid.utils.Range;
 import io.confluent.csid.utils.WallClock;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,6 +18,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.io.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -245,31 +247,35 @@ public class WorkManager<K, V> {
             var partitionQueue = partitionQueueEntry.getValue();
             count += partitionQueue.size();
             var workToRemove = new LinkedList<WorkContainer<K, V>>();
+            List<Long> incompleteOffsets = new LinkedList<>();
             for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
                 WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
                 boolean complete = container.isComplete();
+                long offset = container.getCr().offset();
+                TopicPartition topicPartitionKey = toTP(container.getCr());
                 if (complete) {
-                    long offset = container.getCr().offset();
                     if (container.getUserFunctionSucceeded().get()) {
                         log.trace("Found offset candidate ({}) to add to offset commit map", container);
                         workToRemove.add(container);
-                        TopicPartition topicPartitionKey = toTP(container.getCr());
                         // as in flights are processed in order, this will keep getting overwritten with the highest offset available
                         OffsetAndMetadata offsetData = new OffsetAndMetadata(offset);
                         offsetsToSend.put(topicPartitionKey, offsetData);
                     } else {
                         log.debug("Offset {} is complete, but failed and is holding up the queue. Ending partition scan.", container.getCr().offset());
-                        // can't scan any further
-                        break;
+                        incompleteOffsets.add(offset);
                     }
                 } else {
                     // can't commit this offset or beyond, as this is the latest offset that is incomplete
                     // i.e. only commit offsets that come before the current one, and stop looking for more
                     log.debug("Offset ({}) is incomplete, holding up the queue ({}) of size {}. Ending partition scan.",
                             container, partitionQueueEntry.getKey(), partitionQueueEntry.getValue().size());
-                    break;
+                    incompleteOffsets.add(offset);
                 }
+                // incomplete offset map
+                String offsetMap = serialiseUncommittedOffsetMap(incompleteOffsets);
+                OffsetAndMetadata offsetOnly = offsetsToSend.get(topicPartitionKey);
+                new OffsetAndMetadata(offsetOnly.offset(), offsetMap);
             }
             if (remove) {
                 removed += workToRemove.size();
@@ -282,6 +288,49 @@ public class WorkManager<K, V> {
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
                 count, removed, offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;
+    }
+
+    @SneakyThrows
+    Set<Long> deserialiseUncommittedOffsetMap(String incompleteOffsetMap) {
+        byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
+        ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
+        Set<Long> incompleteOffsets = (Set<Long>)objectInputStream.readObject();
+//        new InputStream(incompleteOffsetMap)
+//        try (ObjectInputStream in = new ObjectInputStream(inputStream)) {
+//            @SuppressWarnings("unchecked")
+//            final T obj = (T) in.readObject();
+//            return obj;
+//        } catch (final ClassNotFoundException | IOException ex) {
+//            throw new SerializationException(ex);
+//        }
+//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//        ObjectOutputStream os = new ObjectOutputStream(baos);
+//        os.writeObject(incompleteOffsets);
+//        os.close();
+//        return baos.toString(StandardCharsets.UTF_8);
+        return incompleteOffsets;
+    }
+
+    Set<Long> makeCompletedOffsets(Set<Long> incompleteOffsets, int startOffset, int endOffset){
+        Set<Long> completeOffsets = new HashSet<Long>();
+        Range.range(startOffset, endOffset).foreach{ x ->
+            if(incompleteOffsets.contains(x)) {
+                // do nothing
+            } else {
+                completeOffsets.add(x);
+            }
+        }
+        return completeOffsets;
+    }
+
+    @SneakyThrows
+    String serialiseUncommittedOffsetMap(Set<Long> incompleteOffsets) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream os = new ObjectOutputStream(baos);
+        os.writeObject(incompleteOffsets);
+        os.close();
+        baos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray());
     }
 
     public boolean shouldThrottle() {
