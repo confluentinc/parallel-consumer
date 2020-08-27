@@ -98,7 +98,7 @@ public class LoadTest extends DbTest {
             });
 
             // keep checking how many message's we've processed
-            await().atMost(ofSeconds(120)).until(() -> {
+            await().atMost(ofSeconds(60)).until(() -> {
                 // log.debug("msg count: {}", msgCount.get());
                 pb.stepTo(msgCount.get());
                 return msgCount.get() >= total;
@@ -117,7 +117,7 @@ public class LoadTest extends DbTest {
                     .build();
 
             try (pb) {
-                await().atMost(ofSeconds(120)).untilAsserted(() -> {
+                await().atMost(ofSeconds(60)).untilAsserted(() -> {
                     ConsumerRecords<String, String> poll = kcu.consumer.poll(ofMillis(5000));
                     Iterable<ConsumerRecord<String, String>> records = poll.records(topic);
                     records.forEach(x -> {

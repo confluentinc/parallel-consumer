@@ -88,10 +88,10 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         assertCommitsAlwaysIncrease();
 
-        assertThat(mostRecentCommit(producerSpy)).isEqualTo(quantityOfMessagesToProduce - 1);
+        long mostRecentCommitOffset = findMostRecentCommitOffset(producerSpy);
+        assertThat(mostRecentCommitOffset).isEqualTo(quantityOfMessagesToProduce);
 
-//        TODO assertThat(false).isTrue();
-//        Assert process ordering
+        // TODO: Assert process ordering
     }
 
     private void assertCommitsAlwaysIncrease() {
@@ -112,7 +112,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
         }
     }
 
-    private long mostRecentCommit(MockProducer<?, ?> producerSpy) {
+    private long findMostRecentCommitOffset(MockProducer<?, ?> producerSpy) {
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistory = producerSpy.consumerGroupOffsetsHistory();
         Map<String, Map<TopicPartition, OffsetAndMetadata>> mostRecent = commitHistory.get(commitHistory.size() - 1);
         Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = mostRecent.get(CONSUMER_GROUP_ID);

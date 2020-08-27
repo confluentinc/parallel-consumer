@@ -26,28 +26,33 @@
     </root>
 
     <logger name="io.confluent.csid" level="info"/>
-    <!--    <logger name="io.confluent.csid" level="debug" />-->
-    <!--    <logger name="io.confluent.csid" level="trace" />-->
+<!--    <logger name="io.confluent.csid" level="debug"/>-->
+<!--            <logger name="io.confluent.csid" level="trace" />-->
 
     <!-- notable specifics -->
-    <logger name="io.confluent.csid.asyncconsumer.integrationTests.VolumeTests" level="debug"/>
+    <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.VolumeTests" level="debug"/>-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumerTestBase" level="trace"/>-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="trace" />-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="info" />-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.OffsetMapCodecManager" level="debug"/>-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
 
     <!-- containers -->
-    <logger name="io.confluent.csid.asyncconsumer.integrationTests.DbTest" level="debug"/>
-    <logger name="io.confluent.csid.asyncconsumer.integrationTests.KafkaTest" level="debug"/>
+    <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.DbTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.KafkaTest" level="debug"/>-->
 
     <!-- related -->
     <logger name="org.apache.kafka.clients" level="warn"/>
+<!--    <logger name="org.apache.kafka.clients" level="info"/>-->
+<!--    <logger name="org.apache.kafka.clients" level="debug"/>-->
+
     <logger name="org.postgresql" level="info"/>
 
     <!-- external -->
-    <logger name="io.vertx" level="debug"/>
+    <!--    <logger name="io.vertx" level="debug"/>-->
     <logger name="io.netty" level="info"/>
 
     <!-- kafka internal -->
-    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug"/>
+    <!--    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug"/>-->
 
 </configuration>

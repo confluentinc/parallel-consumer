@@ -121,8 +121,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         this.userFunctionSucceeded = Optional.of(false);
     }
 
-    public boolean isComplete() {
+    public boolean isUserFunctionComplete() {
         return this.getUserFunctionSucceeded().isPresent();
+    }
+
+    public boolean isUserFunctionSucceeded() {
+        Optional<Boolean> userFunctionSucceeded = this.getUserFunctionSucceeded();
+        return userFunctionSucceeded.orElse(false);
     }
 
     @Override

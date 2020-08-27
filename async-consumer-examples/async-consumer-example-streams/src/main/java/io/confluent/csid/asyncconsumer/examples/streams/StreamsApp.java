@@ -70,13 +70,13 @@ public class StreamsApp {
         var options = AsyncConsumerOptions.builder()
                 .ordering(AsyncConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
-                .maxUncommittedMessagesToHandle(10000)
+                .maxUncommittedMessagesToHandlePerPartition(10000)
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
-        kafkaConsumer.subscribe(UniLists.of(outputTopicName));
 
         async = new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+        async.subscribe(UniLists.of(outputTopicName));
 
         async.asyncPoll(record -> {
             log.info("Concurrently processing a record: {}", record);

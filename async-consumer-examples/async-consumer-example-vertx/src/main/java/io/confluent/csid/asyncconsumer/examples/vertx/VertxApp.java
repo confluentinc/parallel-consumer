@@ -41,7 +41,7 @@ public class VertxApp {
         var options = AsyncConsumerOptions.builder()
                 .ordering(AsyncConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
-                .maxUncommittedMessagesToHandle(10000)
+                .maxUncommittedMessagesToHandlePerPartition(10000)
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
