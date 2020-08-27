@@ -99,7 +99,7 @@ public class WorkManager<K, V> {
     public void registerWork(ConsumerRecords<K, V> records) {
         log.debug("Registering {} records of work", records.count());
         for (ConsumerRecord<K, V> rec : records) {
-            if (!recordPreviouslyProcessed(rec)) {
+            if (!isRecordPreviouslyProcessed(rec)) {
                 Object shardKey = computeShardKey(rec);
                 long offset = rec.offset();
                 var wc = new WorkContainer<K, V>(rec);
@@ -112,6 +112,8 @@ public class WorkManager<K, V> {
 
                 partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
                         .put(offset, wc);
+            } else {
+                log.trace("Record previously processed, skipping. {}", rec);
             }
         }
     }
@@ -130,7 +132,7 @@ public class WorkManager<K, V> {
     Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
     Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<>();
 
-    private boolean recordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
+    private boolean isRecordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
         long offset = rec.offset();
         TopicPartition tp = new TopicPartition(rec.topic(), rec.partition());
         TreeSet<Long> incompleteOffsets = this.partitionIncompleteOffsets.get(tp);
@@ -325,9 +327,9 @@ public class WorkManager<K, V> {
                     incompleteOffsets.add(offset);
                 }
                 // incomplete offset map
-                String offsetMap = serialiseIncompleteOffsetMap(incompleteOffsets);
+                String offsetMapPayload = makeOffsetMetadataPayload(incompleteOffsets);
                 OffsetAndMetadata offsetOnly = offsetsToSend.get(topicPartitionKey);
-                new OffsetAndMetadata(offsetOnly.offset(), offsetMap);
+                new OffsetAndMetadata(offsetOnly.offset(), offsetMapPayload);
             }
             if (remove) {
                 removed += workToRemove.size();
@@ -347,34 +349,8 @@ public class WorkManager<K, V> {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
         ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
         TreeSet<Long> incompleteOffsets = (TreeSet<Long>) objectInputStream.readObject();
-//        new InputStream(incompleteOffsetMap)
-//        try (ObjectInputStream in = new ObjectInputStream(inputStream)) {
-//            @SuppressWarnings("unchecked")
-//            final T obj = (T) in.readObject();
-//            return obj;
-//        } catch (final ClassNotFoundException | IOException ex) {
-//            throw new SerializationException(ex);
-//        }
-//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-//        ObjectOutputStream os = new ObjectOutputStream(baos);
-//        os.writeObject(incompleteOffsets);
-//        os.close();
-//        return baos.toString(StandardCharsets.UTF_8);
         return incompleteOffsets;
     }
-//
-//    Set<Long> makeCompletedOffsets(Set<Long> incompleteOffsets, int startOffset, int endOffset) {
-//        Set<Long> completeOffsets = new HashSet<Long>();
-//        Range.range(startOffset, endOffset).foreach {
-//            x ->
-//            if (incompleteOffsets.contains(x)) {
-//                // do nothing
-//            } else {
-//                completeOffsets.add(x);
-//            }
-//        }
-//        return completeOffsets;
-//    }
 
     void loadOffsetMetadataPayload(TopicPartition tp, String offsetMetadataPayload) {
         String[] split = offsetMetadataPayload.split(",");
@@ -414,9 +390,6 @@ public class WorkManager<K, V> {
                 }
             }
         });
-
-
-        throw new RuntimeException();
     }
 
     public boolean shouldThrottle() {
