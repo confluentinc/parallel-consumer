@@ -61,7 +61,7 @@ public class WorkManager<K, V> {
      * The multiple of {@link AsyncConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting processing.
      * Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
      */
-    private int loadingFactor = 2;
+    private final int loadingFactor = 2;
 
     /**
      * Useful for testing
@@ -72,8 +72,23 @@ public class WorkManager<K, V> {
     @Setter(PACKAGE)
     private WallClock clock = new WallClock();
 
-    public WorkManager(AsyncConsumerOptions options) {
+    public WorkManager(AsyncConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.options = options;
+
+        loadOffsetMap(consumer);
+    }
+
+    /**
+     * Load all the previously completed offsets that were not committed
+     */
+    private void loadOffsetMap(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        Set<TopicPartition> assignment = consumer.assignment();
+        Map<TopicPartition, OffsetAndMetadata> committed = consumer.committed(assignment);
+        committed.forEach((tp, offsetAndMeta) -> {
+            long offset = offsetAndMeta.offset();
+            String metadata = offsetAndMeta.metadata();
+            loadOffsetMetadataPayload(tp, metadata);
+        });
     }
 
     public void registerWork(List<ConsumerRecords<K, V>> records) {
@@ -85,15 +100,38 @@ public class WorkManager<K, V> {
     public void registerWork(ConsumerRecords<K, V> records) {
         log.debug("Registering {} records of work", records.count());
         for (ConsumerRecord<K, V> rec : records) {
-            Object shardKey = computeShardKey(rec);
-            long offset = rec.offset();
-            var wc = new WorkContainer<K, V>(rec);
+            if (!recordPreviouslyProcessed(rec)) {
+                Object shardKey = computeShardKey(rec);
+                long offset = rec.offset();
+                var wc = new WorkContainer<K, V>(rec);
 
-            processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>())
-                    .put(offset, wc);
+                processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>())
+                        .put(offset, wc);
 
-            partitionCommitQueues.computeIfAbsent(toTP(rec), (ignore) -> new ConcurrentSkipListMap<>())
-                    .put(offset, wc);
+                partitionCommitQueues.computeIfAbsent(toTP(rec), (ignore) -> new ConcurrentSkipListMap<>())
+                        .put(offset, wc);
+            }
+        }
+    }
+
+    Map<TopicPartition, TreeSet<Long>> incompleteOffsets = new HashMap<>();
+    Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<>();
+
+    private boolean recordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
+        long offset = rec.offset();
+        TopicPartition tp = new TopicPartition(rec.topic(), rec.partition());
+        if (incompleteOffsets.contains(offset)) {
+            // record previously saved as having not been processed
+            return false;
+        } else {
+            Long offsetHighWaterMarks = partitionOffsetHighWaterMarks.get(tp);
+            if (offset < offsetHighWaterMarks) {
+                // within the range of tracked offsets, so must have been previously completed
+                return true;
+            } else {
+                // we haven't recorded this far up, so must not have been processed yet
+                return false;
+            }
         }
     }
 
@@ -247,7 +285,7 @@ public class WorkManager<K, V> {
             var partitionQueue = partitionQueueEntry.getValue();
             count += partitionQueue.size();
             var workToRemove = new LinkedList<WorkContainer<K, V>>();
-            List<Long> incompleteOffsets = new LinkedList<>();
+            Set<Long> incompleteOffsets = new HashSet<>();
             for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
                 WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
@@ -273,7 +311,7 @@ public class WorkManager<K, V> {
                     incompleteOffsets.add(offset);
                 }
                 // incomplete offset map
-                String offsetMap = serialiseUncommittedOffsetMap(incompleteOffsets);
+                String offsetMap = serialiseIncompleteOffsetMap(incompleteOffsets);
                 OffsetAndMetadata offsetOnly = offsetsToSend.get(topicPartitionKey);
                 new OffsetAndMetadata(offsetOnly.offset(), offsetMap);
             }
@@ -291,10 +329,10 @@ public class WorkManager<K, V> {
     }
 
     @SneakyThrows
-    Set<Long> deserialiseUncommittedOffsetMap(String incompleteOffsetMap) {
+    Set<Long> deserialiseIncompleteOffsetMap(String incompleteOffsetMap) {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
         ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
-        Set<Long> incompleteOffsets = (Set<Long>)objectInputStream.readObject();
+        Set<Long> incompleteOffsets = (Set<Long>) objectInputStream.readObject();
 //        new InputStream(incompleteOffsetMap)
 //        try (ObjectInputStream in = new ObjectInputStream(inputStream)) {
 //            @SuppressWarnings("unchecked")
@@ -310,27 +348,61 @@ public class WorkManager<K, V> {
 //        return baos.toString(StandardCharsets.UTF_8);
         return incompleteOffsets;
     }
+//
+//    Set<Long> makeCompletedOffsets(Set<Long> incompleteOffsets, int startOffset, int endOffset) {
+//        Set<Long> completeOffsets = new HashSet<Long>();
+//        Range.range(startOffset, endOffset).foreach {
+//            x ->
+//            if (incompleteOffsets.contains(x)) {
+//                // do nothing
+//            } else {
+//                completeOffsets.add(x);
+//            }
+//        }
+//        return completeOffsets;
+//    }
 
-    Set<Long> makeCompletedOffsets(Set<Long> incompleteOffsets, int startOffset, int endOffset){
-        Set<Long> completeOffsets = new HashSet<Long>();
-        Range.range(startOffset, endOffset).foreach{ x ->
-            if(incompleteOffsets.contains(x)) {
-                // do nothing
-            } else {
-                completeOffsets.add(x);
-            }
-        }
-        return completeOffsets;
+    void loadOffsetMetadataPayload(TopicPartition tp, String offsetMetadataPayload) {
+        String[] split = offsetMetadataPayload.split(",");
+        long offset = Long.parseLong(split[0]);
+        this.partitionOffsetHighWaterMarks.put(tp, offset);
+        Set<Long> longs = deserialiseIncompleteOffsetMap(split[1]);
+        this.incompleteOffsets = longs;
+    }
+
+    String makeOffsetMetadataPayload(Set<Long> incompleteOffsets) {
+        String offsetMap = serialiseIncompleteOffsetMap(incompleteOffsets);
+        return partitionOffsetHighWaterMarks + "," + offsetMap;
     }
 
     @SneakyThrows
-    String serialiseUncommittedOffsetMap(Set<Long> incompleteOffsets) {
+    String serialiseIncompleteOffsetMap(Set<Long> incompleteOffsets) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ObjectOutputStream os = new ObjectOutputStream(baos);
         os.writeObject(incompleteOffsets);
         os.close();
         baos.close();
         return Base64.getEncoder().encodeToString(baos.toByteArray());
+    }
+
+    /**
+     * Truncate our tracked offsets as a commit was successful, so the low water mark rises, and we dont' need to track
+     * as much anymore.
+     */
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
+        // partitionOffsetHighWaterMarks this will get overwritten in due course
+        offsetsToSend.forEach((tp, meta) -> {
+            Set<Long> offsets = incompleteOffsets.get(tp);
+            long newLowWaterMark = meta.offset();
+            for (Long offset : offsets) {
+                if(offset < newLowWaterMark){
+                    offsets.remove(offset);
+                }
+            }
+        });
+
+
+        throw new RuntimeException();
     }
 
     public boolean shouldThrottle() {
@@ -364,4 +436,5 @@ public class WorkManager<K, V> {
     public boolean hasWorkInFlight() {
         return getInFlightCount() != 0;
     }
+
 }

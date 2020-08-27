@@ -146,7 +146,7 @@ public class AsyncConsumer<K, V> implements Closeable {
         workerPool = Executors.newFixedThreadPool(options.getNumberOfThreads());
 
         //
-        this.wm = new WorkManager<>(options);
+        this.wm = new WorkManager<>(options, consumer);
 
         //
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumer, wm, this);
@@ -615,6 +615,8 @@ public class AsyncConsumer<K, V> implements Closeable {
                     } else {
                         producer.commitTransaction();
                     }
+
+                    wm.onOffsetCommitSuccess(offsetsToSend);
 
                     notCommitted = false;
                     if (retryCount > 0) {
