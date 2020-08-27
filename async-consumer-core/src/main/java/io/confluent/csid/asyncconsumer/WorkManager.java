@@ -120,29 +120,29 @@ public class WorkManager<K, V> {
 
     private void raisePartitionHighWaterMark(long offset, TopicPartition tp) {
         // rise the high water mark
-        Long oldMark = partitionOffsetHighWaterMarks.get(tp);
-        if (offset > oldMark) {
+        Long oldMark = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
+        if (offset > oldMark || offset == MISSING_HIGH_WATER_MARK) {
             partitionOffsetHighWaterMarks.put(tp, offset);
         } else {
             throw new RuntimeException("What are the implications? Truncate?");
         }
-
     }
 
     // visible for testing
     Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
     // visible for testing
     Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<>();
+    long MISSING_HIGH_WATER_MARK = -1L;
 
     private boolean isRecordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
         long offset = rec.offset();
         TopicPartition tp = new TopicPartition(rec.topic(), rec.partition());
-        TreeSet<Long> incompleteOffsets = this.partitionIncompleteOffsets.get(tp);
+        TreeSet<Long> incompleteOffsets = this.partitionIncompleteOffsets.getOrDefault(tp, new TreeSet<>());
         if (incompleteOffsets.contains(offset)) {
             // record previously saved as having not been processed
             return false;
         } else {
-            Long offsetHighWaterMarks = partitionOffsetHighWaterMarks.get(tp);
+            Long offsetHighWaterMarks = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
             if (offset < offsetHighWaterMarks) {
                 // within the range of tracked offsets, so must have been previously completed
                 return true;
@@ -328,10 +328,15 @@ public class WorkManager<K, V> {
                             container, partitionQueueEntry.getKey(), partitionQueueEntry.getValue().size());
                     incompleteOffsets.add(offset);
                 }
-                // incomplete offset map
+                // Get final offset data, build the the offset map, and replace it in our map of offset data to send
                 String offsetMapPayload = makeOffsetMetadataPayload(topicPartitionKey, incompleteOffsets);
-                OffsetAndMetadata offsetOnly = offsetsToSend.get(topicPartitionKey);
-                new OffsetAndMetadata(offsetOnly.offset(), offsetMapPayload);
+                OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
+                boolean offsetsReadyForThisPartition = finalOffsetOnly != null;
+                if (offsetsReadyForThisPartition) {
+                    long finalOffsetForPartition = finalOffsetOnly.offset();
+                    OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(finalOffsetForPartition, offsetMapPayload);
+                    offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+                }
             }
             if (remove) {
                 removed += workToRemove.size();
@@ -350,7 +355,7 @@ public class WorkManager<K, V> {
     TreeSet<Long> deserialiseIncompleteOffsetMap(String incompleteOffsetMap) {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
         ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(decode));
-        Set raw = (Set)objectInputStream.readObject();
+        Set raw = (Set) objectInputStream.readObject();
         TreeSet<Long> incompleteOffsets = new TreeSet(raw);
         return incompleteOffsets;
     }
@@ -387,11 +392,10 @@ public class WorkManager<K, V> {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         offsetsToSend.forEach((tp, meta) -> {
             Set<Long> offsets = partitionIncompleteOffsets.get(tp);
-            long newLowWaterMark = meta.offset();
-            for (Long offset : offsets) {
-                if (offset < newLowWaterMark) {
-                    offsets.remove(offset);
-                }
+            boolean trackedOffsetsForThisPartitionExist = offsets != null;
+            if (trackedOffsetsForThisPartitionExist) {
+                long newLowWaterMark = meta.offset();
+                offsets.removeIf(offset -> offset < newLowWaterMark);
             }
         });
     }
