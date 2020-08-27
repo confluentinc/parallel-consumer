@@ -273,7 +273,7 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, key, "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, key, "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -472,7 +472,7 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "66", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "66", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -517,7 +517,7 @@ public class WorkManagerTest {
         var rec5 = new ConsumerRecord<>(INPUT_TOPIC, partition, 15, "key-a", "value");
         var rec6 = new ConsumerRecord<>(INPUT_TOPIC, partition, 20, "key-c", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3, rec4, rec5, rec6));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec, rec4, rec5, rec6));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -567,6 +567,7 @@ public class WorkManagerTest {
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());
+        Collections.sort(flattened, (o1, o2) -> Long.compare(o1.offset(), o2.offset()));
 
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         m.put(new TopicPartition(INPUT_TOPIC, 0), flattened);
