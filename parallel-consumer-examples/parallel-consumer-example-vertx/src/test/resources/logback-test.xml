@@ -23,8 +23,8 @@
     <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumer" level="info" />-->
 
     <!-- containers -->
-    <logger name="io.confluent.csid.asyncconsumer.integrationTests.DbTest" level="debug" />
-    <logger name="io.confluent.csid.asyncconsumer.integrationTests.KafkaTest" level="debug" />
+    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug" />
+    <logger name="io.confluent.parallelconsumer.integrationTests.KafkaTest" level="debug" />
 
     <!-- related -->
     <logger name="org.apache.kafka.clients" level="warn" />
