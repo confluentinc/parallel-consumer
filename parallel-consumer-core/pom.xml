@@ -8,15 +8,15 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <groupId>io.confluent.csid.asyncconsumer</groupId>
-        <artifactId>async-consumer-parent</artifactId>
+        <groupId>io.confluent.parallelconsumer</groupId>
+        <artifactId>parallel-consumer-parent</artifactId>
         <version>0.1-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>async-consumer-core</artifactId>
-    <name>Async Consumer Core</name>
+    <artifactId>parallel-consumer-core</artifactId>
+    <name>Confluent Parallel Consumer Core</name>
 
     <properties>
     </properties>

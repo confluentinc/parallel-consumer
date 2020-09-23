@@ -40,7 +40,7 @@ As processing speed and response time isn't bound to the number of partitions in
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-include::{project_root}/async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
+include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
 ----
 
 
@@ -211,7 +211,7 @@ For example, if you have a key set of 10,000 unique keys, and you need to call a
 The user just has to provide a function to extract from the message the HTTP call parameters and construct the HTTP request object.
 
 === Illustrative Performance Example
-.(see link:./async-consumer-core/src/test-integration/java/io/confluent/csid/asyncconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
+.(see link:./parallel-consumer-core/src/test-integration/java/io/confluent/csid/asyncconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
 
 This performance comparison results below, even though are based on real performance measurement results, are for illustrative purposes.
 To see how the performance of the tool is related to instance counts, partition counts, key distribution and how it would relate to the vanilla client.
@@ -353,7 +353,7 @@ This is the only thing you need to do, in order to get massively concurrent proc
 [source,java,indent=0]
 include::{project_root}async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[tag=example]
 
-See the link:./async-consumer-examples/async-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[core example] project, and it's test.
+See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/csid/asyncconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 
 ==== Process and Produce a Response Message
 
@@ -383,7 +383,7 @@ include::{project_root}async-consumer-examples/async-consumer-example-vertx/src/
 ----
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
-See the link:./async-consumer-examples/async-consumer-example-vertx/src/main/java/io/confluent/csid/asyncconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
+See the link:./parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/csid/asyncconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
 
 === Kafka Streams Concurrent Processing
 
@@ -395,7 +395,7 @@ include::{project_root}async-consumer-examples/async-consumer-example-streams/sr
 <1> Setup your Kafka Streams stage as per normal, performing any type of preprocessing in Kafka Streams
 <2> For the slow consumer part of your Topology, drop down into the async consumer, and use massive concurrency
 
-See the link:./async-consumer-examples/async-consumer-example-streams/src/main/java/io/confluent/csid/asyncconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
+See the link:./parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/csid/asyncconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
 
 == Order enforced commit sync per partition
 

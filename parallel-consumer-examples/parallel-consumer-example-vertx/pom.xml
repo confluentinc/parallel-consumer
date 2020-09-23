@@ -10,49 +10,38 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.confluent.csid.asyncconsumer</groupId>
-        <artifactId>async-consumer-examples</artifactId>
+        <groupId>io.confluent.parallelconsumer</groupId>
+        <artifactId>parallel-consumer-examples</artifactId>
         <version>0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>async-consumer-example-core</artifactId>
-    <name>Async Example - Core</name>
+    <artifactId>parallel-consumer-example-vertx</artifactId>
+    <name>Confluent Parallel Consumer Example - Vert.x</name>
 
     <dependencies>
         <!-- tag::exampleDep[] -->
         <dependency>
-            <groupId>io.confluent.csid.asyncconsumer</groupId>
-            <artifactId>async-consumer-core</artifactId>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-vertx</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!-- end::exampleDep[] -->
         <dependency>
-            <groupId>io.confluent.csid.asyncconsumer</groupId>
-            <artifactId>async-consumer-core</artifactId>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-core</artifactId>
             <version>${project.version}</version>
             <classifier>tests</classifier>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
         </dependency>
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>3.11</version>
-        </dependency>
     </dependencies>
-
-    <repositories>
-        <!-- tag::exampleRepo[] -->
-        <repository>
-            <name>Confluent</name>
-            <id>confluent</id>
-            <url>http://packages.confluent.io/maven/</url>
-        </repository>
-        <!-- end::exampleRepo[] -->
-    </repositories>
 
 </project>
