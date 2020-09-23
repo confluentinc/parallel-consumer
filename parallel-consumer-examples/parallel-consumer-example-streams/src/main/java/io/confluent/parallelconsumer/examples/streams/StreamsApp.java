@@ -70,7 +70,7 @@ public class StreamsApp {
     void concurrentProcess() {
         setupAsyncConsumer();
 
-        asyncConsumer.asyncPoll(record -> {
+        asyncConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
             messageCount.getAndIncrement();
         });
@@ -89,7 +89,7 @@ public class StreamsApp {
         asyncConsumer = new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
         asyncConsumer.subscribe(UniLists.of(outputTopicName));
 
-        asyncConsumer.asyncPoll(record -> {
+        asyncConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
             messageCount.getAndIncrement();
         });

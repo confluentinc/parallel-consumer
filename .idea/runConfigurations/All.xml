@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="All" type="JUnit" factoryName="JUnit">
     <useClassPathOnly />
-    <option name="PACKAGE_NAME" value="io.confluent.csid" />
+    <option name="PACKAGE_NAME" value="io.confluent" />
     <option name="MAIN_CLASS_NAME" value="" />
     <option name="METHOD_NAME" value="" />
     <option name="TEST_OBJECT" value="package" />
@@ -15,7 +15,6 @@
     </patterns>
     <method v="2">
       <option name="Make" enabled="true" />
-      <option name="BSP.BeforeRunTask" enabled="true" />
     </method>
   </configuration>
 </component>
