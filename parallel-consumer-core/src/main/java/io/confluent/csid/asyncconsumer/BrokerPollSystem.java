@@ -6,7 +6,6 @@ package io.confluent.csid.asyncconsumer;
 
 import lombok.Getter;
 import lombok.Setter;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -22,8 +21,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
-import static io.confluent.csid.asyncconsumer.AsyncConsumer.defaultTimeout;
+import static io.confluent.csid.asyncconsumer.ParallelConsumer.State.*;
+import static io.confluent.csid.asyncconsumer.ParallelConsumer.defaultTimeout;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -38,13 +37,13 @@ public class BrokerPollSystem<K, V> {
 
     final private org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
-    public AsyncConsumer.State state = AsyncConsumer.State.running;
+    public ParallelConsumer.State state = ParallelConsumer.State.running;
 
     private Optional<Future<Boolean>> pollControlThreadFuture;
 
     volatile private boolean paused = false;
 
-    private final AsyncConsumer<K, V> async;
+    private final ParallelConsumer<K, V> async;
 
     @Setter
     @Getter
@@ -52,7 +51,7 @@ public class BrokerPollSystem<K, V> {
 
     final private WorkManager<K, V> wm;
 
-    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, AsyncConsumer<K, V> async) {
+    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelConsumer<K, V> async) {
         this.consumer = consumer;
         this.wm = wm;
         this.async = async;
@@ -128,7 +127,7 @@ public class BrokerPollSystem<K, V> {
      */
     public void drain() {
         // idempotent
-        if (state != AsyncConsumer.State.draining) {
+        if (state != ParallelConsumer.State.draining) {
             log.debug("Poll system signaling to drain...");
             state = draining;
             consumer.wakeup();
@@ -173,7 +172,7 @@ public class BrokerPollSystem<K, V> {
     }
 
     private void transitionToClosing() {
-        state = AsyncConsumer.State.closing;
+        state = ParallelConsumer.State.closing;
         consumer.wakeup();
     }
 

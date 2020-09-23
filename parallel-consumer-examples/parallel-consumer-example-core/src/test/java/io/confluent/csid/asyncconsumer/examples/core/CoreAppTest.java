@@ -67,9 +67,9 @@ public class CoreAppTest {
             return new MockProducer<>();
         }
 
-        @Override
-        void setupSubscription(Consumer<String, String> kafkaConsumer) {
-            mockConsumer.assign(UniLists.of(tp));
-        }
+//        @Override
+//        void setupSubscription(Consumer<String, String> kafkaConsumer) {
+//            mockConsumer.assign(UniLists.of(tp));
+//        }
     }
 }

@@ -4,7 +4,7 @@ package io.confluent.csid.asyncconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder;
+import io.confluent.csid.asyncconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import lombok.Getter;
@@ -38,7 +38,7 @@ import static lombok.AccessLevel.PACKAGE;
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     @Getter
-    private final AsyncConsumerOptions options;
+    private final ParallelConsumerOptions options;
 
     // todo performance: disable/remove if using partition order
     /**
@@ -72,7 +72,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private int inFlightCount = 0;
 
     /**
-     * The multiple of {@link AsyncConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting processing.
+     * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting processing.
      * Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
      */
     private final int loadingFactor = 2;
@@ -103,7 +103,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // visible for testing
     long MISSING_HIGH_WATER_MARK = -1L;
 
-    public WorkManager(AsyncConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+    public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.options = options;
         this.consumer = consumer;
     }
@@ -127,9 +127,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Clear offset map for revoked partitions
      * <p>
-     * {@link AsyncConsumer#onPartitionsRevoked} handles committing off offsets upon revoke
+     * {@link ParallelConsumer#onPartitionsRevoked} handles committing off offsets upon revoke
      *
-     * @see AsyncConsumer#onPartitionsRevoked
+     * @see ParallelConsumer#onPartitionsRevoked
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
@@ -258,7 +258,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Depth first work retrieval.
      *
-     * @param requestedMaxWorkToRetrieve ignored unless less than {@link AsyncConsumerOptions#getMaxConcurrency()}
+     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#getMaxConcurrency()}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
         int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxConcurrency()), options.getMaxUncommittedMessagesToHandlePerPartition());

@@ -22,8 +22,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumerTestBase.CONSUMER_GROUP_ID;
-import static io.confluent.csid.asyncconsumer.AsyncConsumerTestBase.INPUT_TOPIC;
+import static io.confluent.csid.asyncconsumer.ParallelConsumerTestBase.CONSUMER_GROUP_ID;
+import static io.confluent.csid.asyncconsumer.ParallelConsumerTestBase.INPUT_TOPIC;
 import static io.confluent.csid.utils.Range.range;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;

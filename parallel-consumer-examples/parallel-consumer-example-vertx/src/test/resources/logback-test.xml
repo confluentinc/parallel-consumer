@@ -20,7 +20,7 @@
 <!--    <logger name="io.confluent.csid" level="trace" />-->
 
     <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="info" />-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumer" level="info" />-->
 
     <!-- containers -->
     <logger name="io.confluent.csid.asyncconsumer.integrationTests.DbTest" level="debug" />

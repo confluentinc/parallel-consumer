@@ -6,7 +6,6 @@ package io.confluent.csid.asyncconsumer;
 
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -31,7 +30,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
 
 @Slf4j
-public class AsyncConsumerTestBase {
+public class ParallelConsumerTestBase {
 
     public static final String INPUT_TOPIC = "input";
     public static final String OUTPUT_TOPIC = "output";
@@ -45,19 +44,19 @@ public class AsyncConsumerTestBase {
     public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
 
     /**
-     * The commit interval for the main {@link AsyncConsumer} control thread. Actually the timeout that we poll the
+     * The commit interval for the main {@link ParallelConsumer} control thread. Actually the timeout that we poll the
      * {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop cycles, making our
      * test waiting go faster.
      *
-     * @see AsyncConsumer#workMailBox
-     * @see AsyncConsumer#processWorkCompleteMailBox
+     * @see ParallelConsumer#workMailBox
+     * @see ParallelConsumer#processWorkCompleteMailBox
      */
     public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected MockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
 
-    protected AsyncConsumer<String, String> asyncConsumer;
+    protected ParallelConsumer<String, String> parallelConsumer;
 
     static protected int defaultTimeoutSeconds = 5;
 
@@ -65,7 +64,7 @@ public class AsyncConsumerTestBase {
     static protected long defaultTimeoutMs = defaultTimeout.toMillis();
     static protected Duration infiniteTimeout = Duration.ofMinutes(20);
 
-    AsyncConsumerTest.MyAction myRecordProcessingAction;
+    ParallelConsumerTest.MyAction myRecordProcessingAction;
 
     ConsumerRecord<String, String> firstRecord;
     ConsumerRecord<String, String> secondRecord;
@@ -85,7 +84,7 @@ public class AsyncConsumerTestBase {
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
-        setupAsyncConsumerInstance(AsyncConsumerOptions.builder().build());
+        setupAsyncConsumerInstance(ParallelConsumerOptions.builder().build());
     }
 
     protected List<WorkContainer<String, String>> successfulWork = Collections.synchronizedList(new ArrayList<>());
@@ -108,7 +107,7 @@ public class AsyncConsumerTestBase {
 
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
-        myRecordProcessingAction = mock(AsyncConsumerTest.MyAction.class);
+        myRecordProcessingAction = mock(ParallelConsumerTest.MyAction.class);
 
         ktu = new KafkaTestUtils(consumerSpy);
 
@@ -117,29 +116,29 @@ public class AsyncConsumerTestBase {
         return consumerSpy;
     }
 
-    protected void setupAsyncConsumerInstance(AsyncConsumerOptions.ProcessingOrder order) {
-        setupAsyncConsumerInstance(AsyncConsumerOptions.builder().ordering(order).build());
+    protected void setupAsyncConsumerInstance(ParallelConsumerOptions.ProcessingOrder order) {
+        setupAsyncConsumerInstance(ParallelConsumerOptions.builder().ordering(order).build());
     }
 
-    protected void setupAsyncConsumerInstance(AsyncConsumerOptions asyncConsumerOptions) {
+    protected void setupAsyncConsumerInstance(ParallelConsumerOptions parallelConsumerOptions) {
         setupClients();
 
-        asyncConsumer = initAsyncConsumer(asyncConsumerOptions);
+        parallelConsumer = initAsyncConsumer(parallelConsumerOptions);
 
-        asyncConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
-        asyncConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
+        parallelConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
+        parallelConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
 
-        verificationWaitDelay = asyncConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
+        verificationWaitDelay = parallelConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
 
-        loopCountRef = attachLoopCounter(asyncConsumer);
+        loopCountRef = attachLoopCounter(parallelConsumer);
 
-        setupWorkManager(asyncConsumer.getWm());
+        setupWorkManager(parallelConsumer.getWm());
     }
 
-    protected AsyncConsumer<String, String> initAsyncConsumer(AsyncConsumerOptions asyncConsumerOptions) {
-        asyncConsumer = new AsyncConsumer<>(consumerSpy, producerSpy, asyncConsumerOptions);
+    protected ParallelConsumer<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        parallelConsumer = new ParallelConsumer<>(consumerSpy, producerSpy, parallelConsumerOptions);
 
-        return asyncConsumer;
+        return parallelConsumer;
     }
 
     protected void sendSecondRecord(MockConsumer<String, String> consumer) {
@@ -147,9 +146,9 @@ public class AsyncConsumerTestBase {
         consumer.addRecord(secondRecord);
     }
 
-    protected AtomicReference<Integer> attachLoopCounter(AsyncConsumer asyncConsumer) {
+    protected AtomicReference<Integer> attachLoopCounter(ParallelConsumer parallelConsumer) {
         final AtomicReference<Integer> currentLoop = new AtomicReference<>(0);
-        asyncConsumer.addLoopEndCallBack(() -> {
+        parallelConsumer.addLoopEndCallBack(() -> {
             Integer currentNumber = currentLoop.get();
             int newLoopNumber = currentNumber + 1;
             currentLoop.compareAndSet(currentNumber, newLoopNumber);

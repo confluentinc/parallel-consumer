@@ -4,7 +4,6 @@ package io.confluent.csid.asyncconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.WallClock;
 import lombok.Data;
 import lombok.Getter;
@@ -31,7 +30,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumer.State.*;
+import static io.confluent.csid.asyncconsumer.ParallelConsumer.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
@@ -49,7 +48,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @see #asyncPollAndProduce(Function, Consumer)
  */
 @Slf4j
-public class AsyncConsumer<K, V> implements ConsumerRebalanceListener, Closeable {
+public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closeable {
 
     protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
@@ -131,11 +130,11 @@ public class AsyncConsumer<K, V> implements ConsumerRebalanceListener, Closeable
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
      *
-     * @see AsyncConsumerOptions
+     * @see ParallelConsumerOptions
      */
-    public AsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                         org.apache.kafka.clients.producer.Producer<K, V> producer,
-                         AsyncConsumerOptions options) {
+    public ParallelConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                            org.apache.kafka.clients.producer.Producer<K, V> producer,
+                            ParallelConsumerOptions options) {
         log.debug("Confluent async consumer initialise");
 
         Objects.requireNonNull(consumer);
@@ -494,7 +493,8 @@ public class AsyncConsumer<K, V> implements ConsumerRebalanceListener, Closeable
     protected <R> void supervisorLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                       Consumer<R> callback) {
         if (state != State.unused) {
-            throw new IllegalStateException(msg("Invalid state - must be {}", State.unused));
+            throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
+                    "state is {})", state));
         } else {
             state = running;
         }

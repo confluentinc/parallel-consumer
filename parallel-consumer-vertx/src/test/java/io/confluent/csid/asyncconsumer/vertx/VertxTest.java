@@ -7,11 +7,11 @@ package io.confluent.csid.asyncconsumer.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import io.confluent.csid.asyncconsumer.AsyncConsumer;
-import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
-import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;
-import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer.VertxCPResult;
-import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
+import io.confluent.csid.asyncconsumer.ParallelConsumer;
+import io.confluent.csid.asyncconsumer.ParallelConsumerOptions;
+import io.confluent.csid.asyncconsumer.ParallelConsumerTestBase;
+import io.confluent.csid.asyncconsumer.vertx.StreamingParallelVertxConsumer.VertxCPResult;
+import io.confluent.csid.asyncconsumer.vertx.VertxParallelConsumer.RequestInfo;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -49,9 +49,9 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
-public class VertxTest extends AsyncConsumerTestBase {
+public class VertxTest extends ParallelConsumerTestBase {
 
-    StreamingAsyncVertxConsumer<String, String> vertxAsync;
+    StreamingParallelVertxConsumer<String, String> vertxAsync;
 
     protected static WireMockServer stubServer;
 
@@ -78,12 +78,12 @@ public class VertxTest extends AsyncConsumerTestBase {
     }
 
     @Override
-    protected AsyncConsumer initAsyncConsumer(AsyncConsumerOptions asyncConsumerOptions) {
+    protected ParallelConsumer initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().build();
-        vertxAsync = new StreamingAsyncVertxConsumer<>(consumerSpy, producerSpy, vertx, wc, build);
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().build();
+        vertxAsync = new StreamingParallelVertxConsumer<>(consumerSpy, producerSpy, vertx, wc, build);
 
         return vertxAsync;
     }
