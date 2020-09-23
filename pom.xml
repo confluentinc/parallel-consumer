@@ -27,9 +27,9 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>async-consumer-core</module>
-        <module>async-consumer-vertx</module>
-        <module>async-consumer-examples</module>
+        <module>parallel-consumer-core</module>
+        <module>parallel-consumer-vertx</module>
+        <module>parallel-consumer-examples</module>
     </modules>
 
     <scm>
