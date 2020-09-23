@@ -10,18 +10,18 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.confluent.csid.asyncconsumer</groupId>
-        <artifactId>async-consumer-examples</artifactId>
+        <groupId>io.confluent.parallelconsumer</groupId>
+        <artifactId>parallel-consumer-examples</artifactId>
         <version>0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>async-consumer-example-streams</artifactId>
-    <name>Async Example - Streams</name>
+    <artifactId>parallel-consumer-example-streams</artifactId>
+    <name>Confluent Parallel Consumer Example - Streams</name>
 
     <dependencies>
         <dependency>
-            <groupId>io.confluent.csid.asyncconsumer</groupId>
-            <artifactId>async-consumer-core</artifactId>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -43,8 +43,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.confluent.csid.asyncconsumer</groupId>
-            <artifactId>async-consumer-core</artifactId>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-core</artifactId>
             <version>${project.version}</version>
             <classifier>tests</classifier>
             <scope>test</scope>

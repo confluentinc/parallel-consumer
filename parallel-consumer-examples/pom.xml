@@ -10,19 +10,19 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <artifactId>async-consumer-parent</artifactId>
-        <groupId>io.confluent.csid.asyncconsumer</groupId>
+        <artifactId>parallel-consumer-parent</artifactId>
+        <groupId>io.confluent.parallelconsumer</groupId>
         <version>0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>async-consumer-examples</artifactId>
-    <name>Async Examples</name>
+    <artifactId>parallel-consumer-examples</artifactId>
+    <name>Confluent Parallel Consumer Examples</name>
     <packaging>pom</packaging>
 
     <modules>
-        <module>async-consumer-example-core</module>
-        <module>async-consumer-example-streams</module>
-        <module>async-consumer-example-vertx</module>
+        <module>parallel-consumer-example-core</module>
+        <module>parallel-consumer-example-streams</module>
+        <module>parallel-consumer-example-vertx</module>
     </modules>
 
 </project>
