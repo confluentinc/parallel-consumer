@@ -44,8 +44,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  *
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
- * @see #asyncPoll(Consumer)
- * @see #asyncPollAndProduce(Function, Consumer)
+ * @see #poll(Consumer)
+ * @see #pollAndProduce(Function, Consumer)
  */
 @Slf4j
 public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closeable {
@@ -262,7 +262,7 @@ public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closea
      *
      * @param usersVoidConsumptionFunction the function
      */
-    public void asyncPoll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
+    public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
         Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
             usersVoidConsumptionFunction.accept(record);
@@ -279,8 +279,8 @@ public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closea
      * @param callback applied after the produced message is acknowledged by kafka
      */
     @SneakyThrows
-    public void asyncPollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+    public void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                               Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // wrap user func to add produce function
         Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
             List<ProducerRecord<K, V>> recordListToProduce = userFunction.apply(consumedRecord);
@@ -305,9 +305,9 @@ public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closea
      * Produce a message back to the broker.
      * <p>
      * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the common use
-     * case ({@link #asyncPoll(Consumer)}).
+     * case ({@link #poll(Consumer)}).
      *
-     * @see #asyncPollAndProduce(Function, Consumer)
+     * @see #pollAndProduce(Function, Consumer)
      */
     RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
         // only needed if not using tx

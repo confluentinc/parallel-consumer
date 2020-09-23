@@ -61,7 +61,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
     @Test
     @SneakyThrows
     public void failingActionNothingCommitted() {
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             throw new RuntimeException("My user's function error");
         });
 
@@ -100,7 +100,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             startBarrierLatch.countDown();
             int offset = (int) ignore.offset();
             awaitLatch(locks, offset);
@@ -158,7 +158,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
 
         CountDownLatch startLatch = new CountDownLatch(1);
 
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -239,7 +239,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock);
 
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -297,7 +297,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
         parallelConsumer.setClock(mock);
 
         //
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             // ignore
         });
 
@@ -312,7 +312,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
     public void testVoid() {
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
-        parallelConsumer.asyncPoll((record) -> {
+        parallelConsumer.poll((record) -> {
             waitForInitialBootstrapCommit();
             myRecordProcessingAction.apply(record);
             msgCompleteBarrier.countDown();
@@ -437,7 +437,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
             return o;
         }).when(consumerSpy).poll(any());
 
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -567,7 +567,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
             return records;
         }).when(consumerSpy).poll(any());
 
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch countDownLatch = locks.get(offset);
             if (countDownLatch != null) try {
@@ -616,7 +616,7 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
     public void closeAfterSingleMessageShouldBeEventBasedFast() {
         var msgCompleteBarrier = new CountDownLatch(1);
 
-        parallelConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.poll((ignore) -> {
             waitForInitialBootstrapCommit();
             log.info("Message processed: {} - noop", ignore.offset());
             msgCompleteBarrier.countDown();
@@ -646,10 +646,10 @@ public class ParallelConsumerTest extends ParallelConsumerTestBase {
 
     @Test
     public void ensureLibraryCantBeUsedTwice() {
-        parallelConsumer.asyncPoll(ignore -> {
+        parallelConsumer.poll(ignore -> {
         });
         assertThatIllegalStateException().isThrownBy(() -> {
-            parallelConsumer.asyncPoll(ignore -> {
+            parallelConsumer.poll(ignore -> {
             });
         });
     }

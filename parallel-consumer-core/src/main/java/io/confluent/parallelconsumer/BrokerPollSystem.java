@@ -41,7 +41,7 @@ public class BrokerPollSystem<K, V> {
 
     volatile private boolean paused = false;
 
-    private final ParallelConsumer<K, V> async;
+    private final ParallelConsumer<K, V> pc;
 
     @Setter
     @Getter
@@ -49,10 +49,10 @@ public class BrokerPollSystem<K, V> {
 
     final private WorkManager<K, V> wm;
 
-    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelConsumer<K, V> async) {
+    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelConsumer<K, V> pc) {
         this.consumer = consumer;
         this.wm = wm;
-        this.async = async;
+        this.pc = pc;
     }
 
     public void start() {
@@ -74,7 +74,7 @@ public class BrokerPollSystem<K, V> {
                 wm.registerWork(polledRecords);
 
                 // notify control work has been registered
-                async.notifyNewWorkRegistered();
+                pc.notifyNewWorkRegistered();
             }
 
             switch (state) {

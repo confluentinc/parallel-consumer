@@ -7,7 +7,7 @@
 //
 
 
-= async-consumer (alpha)
+= parallel-consumer (alpha)
 :icons:
 :toc: macro
 :toclevels: 3
@@ -40,7 +40,7 @@ As processing speed and response time isn't bound to the number of partitions in
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        parallelConsumer.asyncPoll(record -> {
+        parallelConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
         });
 ----

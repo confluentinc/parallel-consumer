@@ -56,7 +56,7 @@ public class VolumeTests extends ParallelConsumerTestBase {
 
         CountDownLatch latch = new CountDownLatch(quantityOfMessagesToProduce);
 
-        parallelConsumer.asyncPollAndProduce((rec) -> {
+        parallelConsumer.pollAndProduce((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
@@ -182,7 +182,7 @@ public class VolumeTests extends ParallelConsumerTestBase {
 
         Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
 
-        parallelConsumer.asyncPollAndProduce((rec) -> {
+        parallelConsumer.pollAndProduce((rec) -> {
             processingCheck.add(rec);
             int rangeOfTimeSimulatedProcessingTakesMs = 5;
             long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);
