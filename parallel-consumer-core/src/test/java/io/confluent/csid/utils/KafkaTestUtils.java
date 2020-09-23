@@ -4,7 +4,7 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -22,8 +22,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.asyncconsumer.ParallelConsumerTestBase.CONSUMER_GROUP_ID;
-import static io.confluent.csid.asyncconsumer.ParallelConsumerTestBase.INPUT_TOPIC;
+import static io.confluent.parallelconsumer.ParallelConsumerTestBase.CONSUMER_GROUP_ID;
+import static io.confluent.parallelconsumer.ParallelConsumerTestBase.INPUT_TOPIC;
 import static io.confluent.csid.utils.Range.range;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;
