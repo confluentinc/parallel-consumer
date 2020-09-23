@@ -80,7 +80,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         // read some messages
         var readByOne = new ArrayList<ConsumerRecord<String, String>>();
-        asyncOne.asyncPoll(x -> {
+        asyncOne.poll(x -> {
             log.info("Read by consumer ONE: {}", x);
             if (x.value().equals("4")) {
                 log.info("Throwing fake error for message 4");
@@ -117,7 +117,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
             // read what we're given
             var readByThree = new ArrayList<ConsumerRecord<String, String>>();
-            asyncThree.asyncPoll(x -> {
+            asyncThree.poll(x -> {
                 log.info("Read by consumer THREE: {}", x.value());
                 readByThree.add(x);
             });
@@ -167,7 +167,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
             asyncOne.subscribe(UniLists.of(topic));
 
             var readByOne = new ArrayList<ConsumerRecord<String, String>>();
-            asyncOne.asyncPoll(readByOne::add);
+            asyncOne.poll(readByOne::add);
 
             // the single message is processed
             await().untilAsserted(() -> assertThat(readByOne)
@@ -186,7 +186,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
             // read what we're given
             var readByThree = new ArrayList<ConsumerRecord<String, String>>();
-            asyncThree.asyncPoll(x -> {
+            asyncThree.poll(x -> {
                 log.info("Three read: {}", x.value());
                 readByThree.add(x);
             });
@@ -227,7 +227,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         Set<String> failingMessages = UniSets.of("123", "2345", "8765");
         var readByOne = new ConcurrentSkipListSet<String>();
-        asyncOne.asyncPoll(x -> {
+        asyncOne.poll(x -> {
             String value = x.value();
             if (failingMessages.contains(value)) {
                 log.info("Throwing fake error for message {}", value);
@@ -254,7 +254,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
             // read what we're given
             var readByThree = new ConcurrentSkipListSet<String>();
-            asyncThree.asyncPoll(x -> {
+            asyncThree.poll(x -> {
                 log.trace("Three read: {}", x.value());
                 readByThree.add(x.value());
             });

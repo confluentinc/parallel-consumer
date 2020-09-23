@@ -40,7 +40,6 @@
     </scm>
 
     <properties>
-        <short.artifact>async-consumer</short.artifact>
         <!-- when running mvn locally from cmd line, use default jvm for jvm8 -->
         <jvm.location>${JAVA_HOME}</jvm.location>
         <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>

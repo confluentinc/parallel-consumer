@@ -7,7 +7,7 @@
 //
 
 
-= async-consumer (alpha)
+= parallel-consumer (alpha)
 :icons:
 :toc: macro
 :toclevels: 3
