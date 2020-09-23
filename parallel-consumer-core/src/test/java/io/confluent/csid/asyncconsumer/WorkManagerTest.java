@@ -25,7 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.*;
+import static io.confluent.csid.asyncconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static io.confluent.csid.asyncconsumer.WorkContainer.getRetryDelay;
 import static io.confluent.csid.utils.Range.range;
 import static java.time.Duration.ofSeconds;
@@ -56,12 +56,12 @@ public class WorkManagerTest {
 
     @BeforeEach
     public void setup() {
-        setupWorkManager(AsyncConsumerOptions.builder().build());
+        setupWorkManager(ParallelConsumerOptions.builder().build());
     }
 
     protected List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
 
-    private void setupWorkManager(AsyncConsumerOptions build) {
+    private void setupWorkManager(ParallelConsumerOptions build) {
         offset = 0;
 
         wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
@@ -93,7 +93,7 @@ public class WorkManagerTest {
 
     @Test
     public void testRemovedUnordered() {
-        setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
+        setupWorkManager(ParallelConsumerOptions.builder().ordering(UNORDERED).build());
         registerSomeWork();
 
         int max = 1;
@@ -110,7 +110,7 @@ public class WorkManagerTest {
 
     @Test
     public void testUnorderedAndDelayed() {
-        setupWorkManager(AsyncConsumerOptions.builder().ordering(UNORDERED).build());
+        setupWorkManager(ParallelConsumerOptions.builder().ordering(UNORDERED).build());
         registerSomeWork();
 
 
@@ -155,7 +155,7 @@ public class WorkManagerTest {
 
     @Test
     public void testOrderedInFlightShouldBlockQueue() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(PARTITION).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
@@ -179,7 +179,7 @@ public class WorkManagerTest {
 
     @Test
     public void testOrderedAndDelayed() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(PARTITION).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
@@ -257,7 +257,7 @@ public class WorkManagerTest {
 
     @Test
     public void insertWrongOrderPreservesOffsetOrdering() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(UNORDERED).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(UNORDERED).build();
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(UNORDERED);
@@ -316,7 +316,7 @@ public class WorkManagerTest {
     @Test
     public void maxInFlight() {
         //
-        AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
+        var opts = ParallelConsumerOptions.builder();
         opts.maxUncommittedMessagesToHandlePerPartition(1);
         setupWorkManager(opts.build());
 
@@ -331,7 +331,7 @@ public class WorkManagerTest {
     @Test
     public void maxConcurrency() {
         //
-        AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
+        var opts = ParallelConsumerOptions.builder();
         opts.maxConcurrency(1);
         setupWorkManager(opts.build());
 
@@ -368,7 +368,7 @@ public class WorkManagerTest {
     @Test
     public void maxConcurrencyVsInFlightAndNoLeaks() {
         //
-        AsyncConsumerOptions.AsyncConsumerOptionsBuilder opts = AsyncConsumerOptions.builder();
+        var opts = ParallelConsumerOptions.builder();
         opts.ordering(UNORDERED);
 
         opts.maxUncommittedMessagesToHandlePerPartition(3);
@@ -461,7 +461,7 @@ public class WorkManagerTest {
 
     @Test
     public void orderedByPartitionsParallel() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(PARTITION).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
 
         registerSomeWork();
@@ -501,7 +501,7 @@ public class WorkManagerTest {
 
     @Test
     public void orderedByKeyParallel() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(KEY).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(KEY);
@@ -557,7 +557,7 @@ public class WorkManagerTest {
 //        int quantity = 20000;
         int uniqueKeys = 100;
 
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder().ordering(KEY).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
         KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer(OffsetResetStrategy.EARLIEST));
@@ -606,7 +606,7 @@ public class WorkManagerTest {
      */
     @Test
     public void workQueuesEmptyWhenAllWorkComplete() {
-        AsyncConsumerOptions build = AsyncConsumerOptions.builder()
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
                 .maxConcurrency(10)
                 .maxUncommittedMessagesToHandlePerPartition(10)

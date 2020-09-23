@@ -5,8 +5,8 @@ package io.confluent.csid.asyncconsumer.examples.streams;
  */
 
 
-import io.confluent.csid.asyncconsumer.AsyncConsumer;
-import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
+import io.confluent.csid.asyncconsumer.ParallelConsumer;
+import io.confluent.csid.asyncconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -40,7 +40,7 @@ public class StreamsApp {
 
     KafkaStreams streams;
 
-    AsyncConsumer<String, String> asyncConsumer;
+    ParallelConsumer<String, String> asyncConsumer;
 
     AtomicInteger messageCount = new AtomicInteger();
 
@@ -78,15 +78,15 @@ public class StreamsApp {
     // end::example[]
 
     private void setupAsyncConsumer() {
-        var options = AsyncConsumerOptions.builder()
-                .ordering(AsyncConsumerOptions.ProcessingOrder.KEY)
+        var options = ParallelConsumerOptions.builder()
+                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
                 .maxUncommittedMessagesToHandlePerPartition(10000)
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
 
-        asyncConsumer = new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+        asyncConsumer = new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
         asyncConsumer.subscribe(UniLists.of(outputTopicName));
 
         asyncConsumer.asyncPoll(record -> {

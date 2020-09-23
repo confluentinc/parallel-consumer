@@ -4,9 +4,9 @@ package io.confluent.csid.asyncconsumer.examples.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
-import io.confluent.csid.asyncconsumer.vertx.StreamingAsyncVertxConsumer;
-import io.confluent.csid.asyncconsumer.vertx.VertxAsyncConsumer.RequestInfo;
+import io.confluent.csid.asyncconsumer.ParallelConsumerOptions;
+import io.confluent.csid.asyncconsumer.vertx.StreamingParallelVertxConsumer;
+import io.confluent.csid.asyncconsumer.vertx.VertxParallelConsumer.RequestInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -34,12 +34,12 @@ public class VertxApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    StreamingAsyncVertxConsumer<String, String> async;
+    StreamingParallelVertxConsumer<String, String> async;
 
 
     void run() {
-        var options = AsyncConsumerOptions.builder()
-                .ordering(AsyncConsumerOptions.ProcessingOrder.KEY)
+        var options = ParallelConsumerOptions.builder()
+                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
                 .maxUncommittedMessagesToHandlePerPartition(10000)
                 .build();
@@ -47,7 +47,7 @@ public class VertxApp {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
         setupSubscription(kafkaConsumer);
 
-        async = new StreamingAsyncVertxConsumer<>(kafkaConsumer,
+        async = new StreamingParallelVertxConsumer<>(kafkaConsumer,
                 getKafkaProducer(), options);
 
         // tag::example[]

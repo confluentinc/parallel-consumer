@@ -40,7 +40,7 @@ As processing speed and response time isn't bound to the number of partitions in
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        asyncConsumer.asyncPoll(record -> {
+        parallelConsumer.asyncPoll(record -> {
             log.info("Concurrently processing a record: {}", record);
         });
 ----
@@ -232,7 +232,7 @@ As an illustrative example of relative performance, given:
 * A random processing time between 0 and 5ms
 * 10,000 messages to process
 * A single partition (simplifies comparison - a topic with 5 partitions is the same as 1 partition with a keyspace of 5)
-* Default `AsyncConsumerOptions`
+* Default `ParallelConsumerOptions`
 ** maxUncommittedMessagesToHandle = 1000
 ** maxConcurrency = 100
 ** numberOfThreads = 16
@@ -360,10 +360,10 @@ NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disa
 
 After this setup, one then has the choice of async interfaces:
 
-* `AsyncConsumer`
-* `VertxAsyncConsumer`
-* `StreamingAsyncConsumer`
-* `StreamingAsyncVertxConsumer`
+* `ParallelConsumer`
+* `VertxParallelConsumer`
+* `StreamingParallelConsumer`
+* `StreamingParallelVertxConsumer`
 
 
 === Core
@@ -403,8 +403,8 @@ You can also optionally provide a callback function to be run after the message(
 
 You have the option to either use callbacks to be notified of events, or use the `Streaming` versions of the API, which use the `java.util.stream.Stream` system:
 
-* `StreamingAsyncConsumer`
-* `StreamingAsyncVertxConsumer`
+* `StreamingParallelConsumer`
+* `StreamingParallelVertxConsumer`
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
 

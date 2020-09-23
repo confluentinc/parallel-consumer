@@ -4,7 +4,7 @@ package io.confluent.csid.asyncconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.AsyncConsumer.ConsumeProduceResult;
+import io.confluent.csid.asyncconsumer.ParallelConsumer.ConsumeProduceResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -17,7 +17,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.time.Duration.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -26,9 +25,9 @@ import static org.mockito.internal.verification.VerificationModeFactory.times;
 
 // TODO this class shouldn't have access to the non streaming async consumer - refactor out another super class layer
 @Slf4j
-public class StreamingAsyncConsumerTest extends AsyncConsumerTestBase {
+public class StreamingParallelConsumerTest extends ParallelConsumerTestBase {
 
-    StreamingAsyncConsumer<String, String> streaming;
+    StreamingParallelConsumer<String, String> streaming;
 
     @BeforeEach
     public void setupData() {
@@ -36,9 +35,9 @@ public class StreamingAsyncConsumerTest extends AsyncConsumerTestBase {
     }
 
     @Override
-    protected AsyncConsumer initAsyncConsumer(AsyncConsumerOptions asyncConsumerOptions) {
-        AsyncConsumerOptions options = AsyncConsumerOptions.builder().build();
-        streaming = new StreamingAsyncConsumer<>(consumerSpy, producerSpy, options);
+    protected ParallelConsumer initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder().build();
+        streaming = new StreamingParallelConsumer<>(consumerSpy, producerSpy, options);
 
         return streaming;
     }

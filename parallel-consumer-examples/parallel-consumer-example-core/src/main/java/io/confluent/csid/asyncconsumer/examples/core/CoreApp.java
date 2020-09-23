@@ -4,8 +4,8 @@ package io.confluent.csid.asyncconsumer.examples.core;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.AsyncConsumer;
-import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
+import io.confluent.csid.asyncconsumer.ParallelConsumer;
+import io.confluent.csid.asyncconsumer.ParallelConsumerOptions;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -20,7 +20,7 @@ import pl.tlinkowski.unij.api.UniLists;
 import java.util.List;
 import java.util.Properties;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.KEY;
+import static io.confluent.csid.asyncconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 
 /**
  * Basic core examples
@@ -39,12 +39,12 @@ public class CoreApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    AsyncConsumer<String, String> asyncConsumer;
+    ParallelConsumer<String, String> parallelConsumer;
 
     void run() {
-        asyncConsumer = setupAsync();
+        parallelConsumer = setupAsync();
         // tag::example[]
-        asyncConsumer.asyncPoll(record -> {
+        parallelConsumer.asyncPoll(record -> {
             log.info("Concurrently processing a record: {}", record);
         });
         // end::example[]
@@ -52,9 +52,9 @@ public class CoreApp {
         runPollAndProduce();
     }
 
-    AsyncConsumer<String, String> setupAsync() {
+    ParallelConsumer<String, String> setupAsync() {
         // tag::exampleSetup[]
-        var options = AsyncConsumerOptions.builder()
+        var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
                 .maxConcurrency(1000) // <2>
                 .maxUncommittedMessagesToHandlePerPartition(10000) // <3>
@@ -63,17 +63,17 @@ public class CoreApp {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
         kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
 
-        return new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+        return new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
         // end::exampleSetup[]
     }
 
     void close() {
-        asyncConsumer.close();
+        parallelConsumer.close();
     }
 
     void runPollAndProduce() {
         // tag::exampleProduce[]
-        asyncConsumer.asyncPollAndProduce((record) -> {
+        parallelConsumer.asyncPollAndProduce((record) -> {
             var result = processBrokerRecord(record);
             ProducerRecord<String, String> produceRecord =
                     new ProducerRecord<>(outputTopic, "a-key", result.payload);

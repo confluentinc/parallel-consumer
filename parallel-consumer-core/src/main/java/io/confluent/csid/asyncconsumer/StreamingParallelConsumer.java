@@ -10,26 +10,22 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
-import java.util.Iterator;
 import java.util.List;
-import java.util.Spliterator;
-import java.util.Spliterators;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.Function;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 @Slf4j
-public class StreamingAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
+public class StreamingParallelConsumer<K, V> extends ParallelConsumer<K, V> {
 
     final private Stream<ConsumeProduceResult<K, V, K, V>> stream;
 
     final private ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
 
-    public StreamingAsyncConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                  Producer<K, V> producer,
-                                  AsyncConsumerOptions asyncConsumerOptions) {
-        super(consumer, producer, asyncConsumerOptions);
+    public StreamingParallelConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                     Producer<K, V> producer,
+                                     ParallelConsumerOptions parallelConsumerOptions) {
+        super(consumer, producer, parallelConsumerOptions);
 
         userProcessResultsStream = new ConcurrentLinkedDeque<>();
 
@@ -37,7 +33,7 @@ public class StreamingAsyncConsumer<K, V> extends AsyncConsumer<K, V> {
     }
 
     /**
-     * Like {@link AsyncConsumer#asyncPollAndProduce} but instead of callbacks, streams the results instead, after the
+     * Like {@link ParallelConsumer#asyncPollAndProduce} but instead of callbacks, streams the results instead, after the
      * produce result is ack'd by Kafka.
      *
      * @return a stream of results of applying the function to the polled records
