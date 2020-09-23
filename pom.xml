@@ -9,12 +9,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.confluent.csid.asyncconsumer</groupId>
-    <artifactId>async-consumer-parent</artifactId>
-    <name>Async Consumer</name>
+    <groupId>io.confluent.parallelconsumer</groupId>
+    <artifactId>parallel-consumer-parent</artifactId>
+    <name>Confluent Parallel Consumer</name>
     <version>0.1-SNAPSHOT</version>
-    <description>A concurrent / asynchronous messaging processing library for the Apache Kafka consumer/producer with
-        non blocking IO extensions.
+    <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with
+        key concurrency and extendable non-blocking IO processing.
     </description>
     <url>http://confluent.io</url>
     <inceptionYear>2020</inceptionYear>
