@@ -26,7 +26,7 @@ import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.KEY;
+import static io.confluent.csid.asyncconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
@@ -42,7 +42,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Timeout(value = 10, unit = SECONDS)
 @Slf4j
-public class AsyncConsumerTest extends AsyncConsumerTestBase {
+public class ParallelConsumerTest extends ParallelConsumerTestBase {
 
     static class MyAction implements Function<ConsumerRecord<String, String>, String> {
 
@@ -61,7 +61,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @Test
     @SneakyThrows
     public void failingActionNothingCommitted() {
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             throw new RuntimeException("My user's function error");
         });
 
@@ -100,7 +100,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             startBarrierLatch.countDown();
             int offset = (int) ignore.offset();
             awaitLatch(locks, offset);
@@ -109,7 +109,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         awaitLatch(startBarrierLatch);
 
-        assertThat(asyncConsumer.getWm().getInFlightCount()).isEqualTo(2);
+        assertThat(parallelConsumer.getWm().getInFlightCount()).isEqualTo(2);
 
         // finish processing 1
         releaseAndWait(locks, 1);
@@ -121,7 +121,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         releaseAndWait(locks, 0);
 
         log.debug("Closing...");
-        asyncConsumer.close();
+        parallelConsumer.close();
 
         assertThat(processedStates.values()).as("sanity - all expected messages are processed").containsExactly(true, true);
     }
@@ -158,7 +158,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         CountDownLatch startLatch = new CountDownLatch(1);
 
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -221,7 +221,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         assertCommits(of(2, 3, 5));
 
         // close
-        asyncConsumer.close();
+        parallelConsumer.close();
     }
 
     @Test
@@ -239,7 +239,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock);
 
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -294,16 +294,16 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
         //
         WallClock mock = mock(WallClock.class);
         when(mock.getNow()).thenThrow(new RuntimeException("My fake control loop error"));
-        asyncConsumer.setClock(mock);
+        parallelConsumer.setClock(mock);
 
         //
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             // ignore
         });
 
         // close and retrieve exception in control loop
         assertThatThrownBy(() -> {
-            asyncConsumer.close(false);
+            parallelConsumer.close(false);
         }).hasMessageContainingAll("Error", "poll", "thread", "fake control");
     }
 
@@ -312,7 +312,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     public void testVoid() {
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
-        asyncConsumer.asyncPoll((record) -> {
+        parallelConsumer.asyncPoll((record) -> {
             waitForInitialBootstrapCommit();
             myRecordProcessingAction.apply(record);
             msgCompleteBarrier.countDown();
@@ -342,7 +342,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @Test
     public void testProducerStep() {
         ProducerRecord<String, String> outMsg = new ProducerRecord(OUTPUT_TOPIC, "");
-        RecordMetadata prodResult = asyncConsumer.produceMessage(outMsg);
+        RecordMetadata prodResult = parallelConsumer.produceMessage(outMsg);
         assertThat(prodResult).isNotNull();
 
         List<ProducerRecord<String, String>> history = producerSpy.history();
@@ -385,11 +385,11 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @Test
     @Disabled
     public void processInKeyOrder() {
-        AsyncConsumerOptions options = AsyncConsumerOptions.builder().ordering(KEY).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupAsyncConsumerInstance(options);
 
         // sanity check
-        assertThat(asyncConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
+        assertThat(parallelConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
 
         primeFirstRecord();
 
@@ -437,7 +437,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
             return o;
         }).when(consumerSpy).poll(any());
 
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -533,14 +533,14 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     @SneakyThrows
     @Test
     public void processInKeyOrderWorkNotReturnedDoesntBreakCommits() {
-        AsyncConsumerOptions options = AsyncConsumerOptions.builder().ordering(KEY).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupAsyncConsumerInstance(options);
         primeFirstRecord();
 
         sendSecondRecord(consumerSpy);
 
         // sanity check
-        assertThat(asyncConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
+        assertThat(parallelConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
 
         // 0,1 previously sent to partition 0
         // send one more, with same key of 1
@@ -552,7 +552,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         CountDownLatch twoLoopLatch = new CountDownLatch(2);
         CountDownLatch fourLoopLatch = new CountDownLatch(4);
-        asyncConsumer.addLoopEndCallBack(() -> {
+        parallelConsumer.addLoopEndCallBack(() -> {
             log.trace("Control loop cycle - {}, {}", twoLoopLatch.getCount(), fourLoopLatch.getCount());
             twoLoopLatch.countDown();
             fourLoopLatch.countDown();
@@ -567,7 +567,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
             return records;
         }).when(consumerSpy).poll(any());
 
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch countDownLatch = locks.get(offset);
             if (countDownLatch != null) try {
@@ -616,7 +616,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
     public void closeAfterSingleMessageShouldBeEventBasedFast() {
         var msgCompleteBarrier = new CountDownLatch(1);
 
-        asyncConsumer.asyncPoll((ignore) -> {
+        parallelConsumer.asyncPoll((ignore) -> {
             waitForInitialBootstrapCommit();
             log.info("Message processed: {} - noop", ignore.offset());
             msgCompleteBarrier.countDown();
@@ -631,7 +631,7 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
         // close
         Duration time = time(() -> {
-            asyncConsumer.close();
+            parallelConsumer.close();
         });
 
         //
@@ -641,15 +641,15 @@ public class AsyncConsumerTest extends AsyncConsumerTestBase {
 
     @Test
     public void closeWithoutRunningShouldBeEventBasedFast() {
-        asyncConsumer.close(false);
+        parallelConsumer.close(false);
     }
 
     @Test
     public void ensureLibraryCantBeUsedTwice() {
-        asyncConsumer.asyncPoll(ignore -> {
+        parallelConsumer.asyncPoll(ignore -> {
         });
         assertThatIllegalStateException().isThrownBy(() -> {
-            asyncConsumer.asyncPoll(ignore -> {
+            parallelConsumer.asyncPoll(ignore -> {
             });
         });
     }

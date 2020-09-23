@@ -4,7 +4,7 @@ package io.confluent.csid.asyncconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.asyncconsumer.AsyncConsumer.Tuple;
+import io.confluent.csid.asyncconsumer.ParallelConsumer.Tuple;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;

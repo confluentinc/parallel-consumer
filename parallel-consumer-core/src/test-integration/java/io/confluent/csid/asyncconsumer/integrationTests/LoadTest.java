@@ -4,8 +4,8 @@
  */
 package io.confluent.csid.asyncconsumer.integrationTests;
 
-import io.confluent.csid.asyncconsumer.AsyncConsumer;
-import io.confluent.csid.asyncconsumer.AsyncConsumerOptions;
+import io.confluent.csid.asyncconsumer.ParallelConsumer;
+import io.confluent.csid.asyncconsumer.ParallelConsumerOptions;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
@@ -22,7 +22,6 @@ import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniLists;
 
-import java.text.DecimalFormat;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,10 +72,10 @@ public class LoadTest extends DbTest {
         kcu.consumer.subscribe(UniLists.of(topic));
 
         //
-        AsyncConsumerOptions options = AsyncConsumerOptions.builder().ordering(AsyncConsumerOptions.ProcessingOrder.KEY).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.KEY).build();
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
         newConsumer.subscribe(Pattern.compile(topic));
-        var async = new AsyncConsumer<>(newConsumer, kcu.createNewProducer(true), options);
+        var async = new ParallelConsumer<>(newConsumer, kcu.createNewProducer(true), options);
         AtomicInteger msgCount = new AtomicInteger(0);
 
         ProgressBar pb = new ProgressBarBuilder()

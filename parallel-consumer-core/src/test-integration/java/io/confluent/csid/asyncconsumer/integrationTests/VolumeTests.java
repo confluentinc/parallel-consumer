@@ -4,7 +4,7 @@
  */
 package io.confluent.csid.asyncconsumer.integrationTests;
 
-import io.confluent.csid.asyncconsumer.AsyncConsumerTestBase;
+import io.confluent.csid.asyncconsumer.ParallelConsumerTestBase;
 import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +26,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 
-import static io.confluent.csid.asyncconsumer.AsyncConsumerOptions.ProcessingOrder.*;
+import static io.confluent.csid.asyncconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
 import static java.util.Comparator.comparing;
@@ -38,7 +38,7 @@ import static org.mockito.Mockito.mock;
  * Mocked out comparative volume tests
  */
 @Slf4j
-public class VolumeTests extends AsyncConsumerTestBase {
+public class VolumeTests extends ParallelConsumerTestBase {
 
     KafkaTestUtils ku = new KafkaTestUtils(consumerSpy);
 
@@ -56,7 +56,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         CountDownLatch latch = new CountDownLatch(quantityOfMessagesToProduce);
 
-        asyncConsumer.asyncPollAndProduce((rec) -> {
+        parallelConsumer.asyncPollAndProduce((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
@@ -68,8 +68,8 @@ public class VolumeTests extends AsyncConsumerTestBase {
         //
 //        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
         latch.await(defaultTimeoutSeconds, SECONDS);
-        asyncConsumer.waitForNoInFlight(defaultTimeout.multipliedBy(10));
-        asyncConsumer.close();
+        parallelConsumer.waitForNoInFlight(defaultTimeout.multipliedBy(10));
+        parallelConsumer.close();
 
 
         // assert quantity of produced messages
@@ -182,7 +182,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
 
         Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
 
-        asyncConsumer.asyncPollAndProduce((rec) -> {
+        parallelConsumer.asyncPollAndProduce((rec) -> {
             processingCheck.add(rec);
             int rangeOfTimeSimulatedProcessingTakesMs = 5;
             long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);
@@ -203,7 +203,7 @@ public class VolumeTests extends AsyncConsumerTestBase {
         bar.close();
 
         log.info("Closing async client");
-        asyncConsumer.close();
+        parallelConsumer.close();
 
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> groupOffsetsHistory = producerSpy.consumerGroupOffsetsHistory();
 

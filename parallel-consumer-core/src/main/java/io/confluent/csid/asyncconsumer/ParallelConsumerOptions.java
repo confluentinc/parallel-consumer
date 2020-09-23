@@ -8,11 +8,11 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * The options for the {@link AsyncConsumer} system.
+ * The options for the {@link ParallelConsumer} system.
  */
 @Getter
 @Builder
-public class AsyncConsumerOptions {
+public class ParallelConsumerOptions {
 
     public enum ProcessingOrder {
         /**

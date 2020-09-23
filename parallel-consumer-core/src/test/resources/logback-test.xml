@@ -31,9 +31,9 @@
 
     <!-- notable specifics -->
     <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.VolumeTests" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumerTestBase" level="trace"/>-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumerTestBase" level="trace"/>-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="trace" />-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.AsyncConsumer" level="info" />-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumer" level="info" />-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.OffsetMapCodecManager" level="debug"/>-->
     <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
 
