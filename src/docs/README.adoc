@@ -522,7 +522,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 == Usage Requirements
 
 * Client side
-** JDK 9 (8 coming)
+** JDK 8
 ** SLF4J
 ** Apache Kafka (AK) Client libraries 2.5
 ** Supports all features of the AK client (e.g. security setups, schema registry etc)
