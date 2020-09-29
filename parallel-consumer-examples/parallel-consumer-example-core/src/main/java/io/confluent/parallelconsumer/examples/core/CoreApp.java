@@ -17,7 +17,6 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.List;
 import java.util.Properties;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -43,13 +42,12 @@ public class CoreApp {
 
     void run() {
         parallelConsumer = setupAsync();
+
         // tag::example[]
         parallelConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
         });
         // end::example[]
-
-        runPollAndProduce();
     }
 
     ParallelConsumer<String, String> setupAsync() {
@@ -61,10 +59,15 @@ public class CoreApp {
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
-        kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
+//        kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
+        setupSubscription();
 
         return new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
         // end::exampleSetup[]
+    }
+
+    void setupSubscription() {
+        parallelConsumer.subscribe(UniLists.of(inputTopic)); // <5>
     }
 
     void close() {
@@ -72,12 +75,14 @@ public class CoreApp {
     }
 
     void runPollAndProduce() {
+        parallelConsumer = setupAsync();
+
         // tag::exampleProduce[]
         parallelConsumer.pollAndProduce((record) -> {
             var result = processBrokerRecord(record);
             ProducerRecord<String, String> produceRecord =
                     new ProducerRecord<>(outputTopic, "a-key", result.payload);
-            return List.of(produceRecord);
+            return UniLists.of(produceRecord);
         }, (consumeProduceResult) -> {
             log.info("Message {} saved to broker at offset {}",
                     consumeProduceResult.getOut(),

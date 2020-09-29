@@ -17,6 +17,7 @@ import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -48,6 +49,26 @@ public class CoreAppTest {
         coreApp.close();
     }
 
+
+    @SneakyThrows
+    @Test
+    public void testPollAndProduce() {
+        log.info("Test start");
+        CoreAppUnderTest coreApp = new CoreAppUnderTest();
+
+        coreApp.runPollAndProduce();
+
+        coreApp.mockConsumer.addRecord(new ConsumerRecord(CoreApp.inputTopic, 0, 0, "a key 1", "a value"));
+        coreApp.mockConsumer.addRecord(new ConsumerRecord(CoreApp.inputTopic, 0, 1, "a key 2", "a value"));
+        coreApp.mockConsumer.addRecord(new ConsumerRecord(CoreApp.inputTopic, 0, 2, "a key 3", "a value"));
+
+        Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(()->{
+            Assertions.assertThat(coreApp.mockConsumer.position(tp)).isEqualTo(3);
+        });
+
+        coreApp.close();
+    }
+
     class CoreAppUnderTest extends CoreApp {
 
         LongPollingMockConsumer<String, String> mockConsumer = Mockito.spy(new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
@@ -66,9 +87,10 @@ public class CoreAppTest {
             return new MockProducer<>();
         }
 
-//        @Override
-//        void setupSubscription(Consumer<String, String> kafkaConsumer) {
-//            mockConsumer.assign(UniLists.of(tp));
-//        }
+        @Override
+        void setupSubscription() {
+            mockConsumer.assign(UniLists.of(tp));
+        }
+
     }
 }
