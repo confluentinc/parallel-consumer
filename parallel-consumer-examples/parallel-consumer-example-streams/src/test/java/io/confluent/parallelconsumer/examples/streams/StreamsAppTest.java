@@ -28,16 +28,19 @@ public class StreamsAppTest extends KafkaTest<String, String> {
 
         coreApp.run();
 
-        Producer<String, String> kafkaProducer = kcu.createNewProducer(false);
-        kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic, "a key 1", "a value"));
-        kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic,"a key 2", "a value"));
-        kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic,"a key 3", "a value"));
+        try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
 
-        Awaitility.await().untilAsserted(()->{
-            Assertions.assertThat(coreApp.messageCount.get()).isEqualTo(3);
-        });
+            kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic, "a key 1", "a value"));
+            kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic, "a key 2", "a value"));
+            kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic, "a key 3", "a value"));
 
-        coreApp.close();
+            Awaitility.await().untilAsserted(() -> {
+                Assertions.assertThat(coreApp.messageCount.get()).isEqualTo(3);
+            });
+
+        } finally {
+            coreApp.close();
+        }
     }
 
     class StreamsAppUnderTest extends StreamsApp {

@@ -12,6 +12,7 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -41,7 +42,7 @@ public class CoreApp {
     ParallelConsumer<String, String> parallelConsumer;
 
     void run() {
-        parallelConsumer = setupAsync();
+        parallelConsumer = setupConsumer();
 
         // tag::example[]
         parallelConsumer.poll(record -> {
@@ -50,7 +51,7 @@ public class CoreApp {
         // end::example[]
     }
 
-    ParallelConsumer<String, String> setupAsync() {
+    ParallelConsumer<String, String> setupConsumer() {
         // tag::exampleSetup[]
         var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
@@ -59,15 +60,12 @@ public class CoreApp {
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
-//        kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
-        setupSubscription();
+        if (!(kafkaConsumer instanceof MockConsumer)) {
+            kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
+        }
 
         return new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
         // end::exampleSetup[]
-    }
-
-    void setupSubscription() {
-        parallelConsumer.subscribe(UniLists.of(inputTopic)); // <5>
     }
 
     void close() {
@@ -75,7 +73,7 @@ public class CoreApp {
     }
 
     void runPollAndProduce() {
-        parallelConsumer = setupAsync();
+        parallelConsumer = setupConsumer();
 
         // tag::exampleProduce[]
         parallelConsumer.pollAndProduce((record) -> {

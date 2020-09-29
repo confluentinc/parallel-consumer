@@ -79,17 +79,13 @@ public class CoreAppTest {
             beginningOffsets.put(tp, 0L);
             mockConsumer.updateBeginningOffsets(beginningOffsets);
             when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
+            mockConsumer.assign(UniLists.of(tp));
             return mockConsumer;
         }
 
         @Override
         Producer<String, String> getKafkaProducer() {
             return new MockProducer<>();
-        }
-
-        @Override
-        void setupSubscription() {
-            mockConsumer.assign(UniLists.of(tp));
         }
 
     }
