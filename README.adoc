@@ -3,7 +3,11 @@
 // STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
 //
 // Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
-// process-sources.
+// `process-sources`.
+//
+// Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
+//
+// To render the README directly, run `mvn asciidoc-template::build`
 //
 
 
@@ -13,10 +17,16 @@
 :toclevels: 3
 :numbered: 1
 
+:github_name: async-consumer
+:base_url: https://github.com/confluentinc/{github_name}
+:issues_link: {base_url}/issues
+
 // dynamic include base for editing in IDEA
 :project_root: ./
 
 // uncomment the following if not using IDEA or having issues, for editing the template to see the includes
+// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
+// leave it commented out when committing work)
 //:project_root: ../../
 
 
@@ -28,7 +38,7 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 
-image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"] image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
+image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"] image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
@@ -159,7 +169,7 @@ A very common example of a scenario where this helps tremulously, is in "slow co
 == Support and Issues
 
 This library is experimental, and Confluent does not currently offer support for this library.
-If you encounter any issues, or have any suggestions or future requests, please create issues in the link:./issues[github issue tracker].
+If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
 
 We are very interested to hear about your experiences!
 You can also reach out to the maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
@@ -190,8 +200,8 @@ without operational burden or harming the clusters performance
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
 
-image:https://codecov.io/gh/astubbs/async-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/async-consumer]
-image:https://travis-ci.com/astubbs/async-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/async-consumer"]
+image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
+image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
 
 And more <<roadmap,to come>>!
 
@@ -213,7 +223,7 @@ For example, if you have a key set of 10,000 unique keys, and you need to call a
 The user just has to provide a function to extract from the message the HTTP call parameters and construct the HTTP request object.
 
 === Illustrative Performance Example
-.(see link:./parallel-consumer-core/src/test-integration/java/io/confluent/parallalconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
+.(see link:./parallel-consumer-core/src/test-integration/java/io/confluent/parallelconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
 
 This performance comparison results below, even though are based on real performance measurement results, are for illustrative purposes.
 To see how the performance of the tool is related to instance counts, partition counts, key distribution and how it would relate to the vanilla client.
@@ -310,16 +320,16 @@ Where `${project.version}` is the version to be used.
 .Core Module Dependency
 [source,xml,indent=0]
         <dependency>
-            <groupId>io.confluent.csid.asyncconsumer</groupId>
-            <artifactId>async-consumer-core</artifactId>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-core</artifactId>
             <version>${project.version}</version>
         </dependency>
 
 .Vert.x Module Dependency
 [source,xml,indent=0]
         <dependency>
-            <groupId>io.confluent.csid.asyncconsumer</groupId>
-            <artifactId>async-consumer-vertx</artifactId>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-vertx</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -334,31 +344,33 @@ Where `${project.version}` is the version to be used.
 
 === Common Preparation
 
-.Setup the async client
+.Setup the client
 [source,java,indent=0]
 ----
-        var options = AsyncConsumerOptions.builder()
+        var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
                 .maxConcurrency(1000) // <2>
                 .maxUncommittedMessagesToHandlePerPartition(10000) // <3>
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
-        kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
+        if (!(kafkaConsumer instanceof MockConsumer)) {
+            kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
+        }
 
-        return new AsyncConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+        return new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
 ----
 <1> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
 <2> The maximum number of concurrent processing operations to be performing at any given time
-<3> Regardless of the level of concurrency, don't have more than this many messages uncomitted at any given time.
+<3> Regardless of the level of concurrency, don't have more than this many messages uncommitted at any given time.
 Also, because the library coordinates offsets, `enable.auto.commit` must be disabled in your consumer.
 <4> Setup your consumer client as per normal
-<5> Setup your topic subscriptions
+<5> Setup your topic subscriptions - (when using the `MockConsumer` you must use the `MockConsumer#assign` method)
 
 NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disabled.
 
-After this setup, one then has the choice of async interfaces:
+After this setup, one then has the choice of interfaces:
 
 * `ParallelConsumer`
 * `VertxParallelConsumer`
@@ -374,11 +386,11 @@ This is the only thing you need to do, in order to get massively concurrent proc
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        asyncConsumer.asyncPoll(record -> {
+        parallelConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
         });
 
-See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallalconsumer/examples/core/CoreApp.java[core example] project, and it's test.
+See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 
 ==== Process and Produce a Response Message
 
@@ -387,11 +399,11 @@ You can also optionally provide a callback function to be run after the message(
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        asyncConsumer.asyncPollAndProduce((record) -> {
+        parallelConsumer.pollAndProduce((record) -> {
             var result = processBrokerRecord(record);
             ProducerRecord<String, String> produceRecord =
                     new ProducerRecord<>(outputTopic, "a-key", result.payload);
-            return List.of(produceRecord);
+            return UniLists.of(produceRecord);
         }, (consumeProduceResult) -> {
             log.info("Message {} saved to broker at offset {}",
                     consumeProduceResult.getOut(),
@@ -413,7 +425,7 @@ In future versions, we plan to look at supporting other streaming systems like h
 .Call an HTTP end point for each message usage
 [source,java,indent=0]
 ----
-        var resultStream = async.vertxHttpReqInfoStream(record -> {
+        var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map params = UniMaps.of("recordKey", record.key(), "payload", record.value());
             return new RequestInfo("localhost", "/api", params); // <1>
@@ -421,7 +433,7 @@ In future versions, we plan to look at supporting other streaming systems like h
 ----
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
-See the link:./parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/parallalconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
+See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/parallelconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
 
 === Kafka Streams Concurrent Processing
 
@@ -451,18 +463,18 @@ See the link:./parallel-consumer-examples/parallel-consumer-example-vertx/src/ma
     }
 
     void concurrentProcess() {
-        setupAsyncConsumer();
+        setupConsumer();
 
-        asyncConsumer.asyncPoll(record -> {
+        parallelConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
             messageCount.getAndIncrement();
         });
     }
 ----
 <1> Setup your Kafka Streams stage as per normal, performing any type of preprocessing in Kafka Streams
-<2> For the slow consumer part of your Topology, drop down into the async consumer, and use massive concurrency
+<2> For the slow consumer part of your Topology, drop down into the parallel consumer, and use massive concurrency
 
-See the link:./parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/parallalconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
+See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/parallelconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
 
 == Order enforced commit sync per partition
 
@@ -537,7 +549,7 @@ CAUTION: This cannot be true for any externally integrated third party system, u
 == Using with Kafka Streams
 
 Kafka Streams (KS) doesn't yet (https://cwiki.apache.org/confluence/display/KAFKA/KIP-311%3A+Async+processing+with+dynamic+scheduling+in+Kafka+Streams[KIP-311],
-https://cwiki.apache.org/confluence/display/KAFKA/KIP-408%3A+Add+Asynchronous+Processing+To+Kafka+Streams[KIP-408]) have async processing of messages.
+https://cwiki.apache.org/confluence/display/KAFKA/KIP-408%3A+Add+Asynchronous+Processing+To+Kafka+Streams[KIP-408]) have parallel processing of messages.
 However, any given preprocessing can be done in KS, preparing the messages.
 One can then use this library to consume from an input topic, produced by KS to process the messages in parallel.
 
@@ -580,7 +592,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 ** For use with Streams, see <<streams-usage>> section
 ** For use with Connect:
 *** Source: simply consume from the topic that your Connect plugin is publishing to
-*** Sink: use the `asyncPollAndProduce` API and publish the records to the topic that the connector is sinking from
+*** Sink: use the poll and producer style API and publish the records to the topic that the connector is sinking from
 * Server side
 ** Should work with any cluster that the linked AK client library works with
 *** If using EoS/Transactions, needs a cluster setup that supports eos/transactions
@@ -610,7 +622,7 @@ AsyncConsumerTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:./src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
 
 === Maven targets
 

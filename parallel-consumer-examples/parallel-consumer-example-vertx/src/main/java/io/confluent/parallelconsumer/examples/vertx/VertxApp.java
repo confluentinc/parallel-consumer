@@ -33,7 +33,7 @@ public class VertxApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    StreamingParallelVertxConsumer<String, String> async;
+    StreamingParallelVertxConsumer<String, String> parallelConsumer;
 
 
     void run() {
@@ -46,11 +46,11 @@ public class VertxApp {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
         setupSubscription(kafkaConsumer);
 
-        async = new StreamingParallelVertxConsumer<>(kafkaConsumer,
+        parallelConsumer = new StreamingParallelVertxConsumer<>(kafkaConsumer,
                 getKafkaProducer(), options);
 
         // tag::example[]
-        var resultStream = async.vertxHttpReqInfoStream(record -> {
+        var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map params = UniMaps.of("recordKey", record.key(), "payload", record.value());
             return new RequestInfo("localhost", "/api", params); // <1>
@@ -68,7 +68,7 @@ public class VertxApp {
     }
 
     void close() {
-        async.close(Duration.ofSeconds(2), true);
+        parallelConsumer.close(Duration.ofSeconds(2), true);
     }
 
 }
