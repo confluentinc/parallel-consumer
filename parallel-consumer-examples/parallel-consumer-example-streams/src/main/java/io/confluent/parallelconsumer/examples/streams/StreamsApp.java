@@ -88,11 +88,6 @@ public class StreamsApp {
 
         asyncConsumer = new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
         asyncConsumer.subscribe(UniLists.of(outputTopicName));
-
-        asyncConsumer.poll(record -> {
-            log.info("Concurrently processing a record: {}", record);
-            messageCount.getAndIncrement();
-        });
     }
 
     Properties getStreamsProperties() {
