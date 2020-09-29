@@ -41,7 +41,7 @@ public class CoreApp {
     ParallelConsumer<String, String> parallelConsumer;
 
     void run() {
-        parallelConsumer = setupAsync();
+        parallelConsumer = setupConsumer();
 
         // tag::example[]
         parallelConsumer.poll(record -> {
@@ -50,7 +50,7 @@ public class CoreApp {
         // end::example[]
     }
 
-    ParallelConsumer<String, String> setupAsync() {
+    ParallelConsumer<String, String> setupConsumer() {
         // tag::exampleSetup[]
         var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
@@ -75,7 +75,7 @@ public class CoreApp {
     }
 
     void runPollAndProduce() {
-        parallelConsumer = setupAsync();
+        parallelConsumer = setupConsumer();
 
         // tag::exampleProduce[]
         parallelConsumer.pollAndProduce((record) -> {
