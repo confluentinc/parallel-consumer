@@ -43,9 +43,17 @@ image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build S
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
 [[intro]]
-Process your Kafka messages _orders of magnitudes *faster*_, with much lower latency, *without* adjusting your partitions or managing more client instances.
+If your use case fits - process your Kafka messages _orders of magnitudes *faster*_, with much lower latency, *without* adjusting your partitions or managing more client instances.
 
-As processing speed and response time isn't bound to the number of partitions in a topic anymore, go faster in situations where partition counts are fixed such as legacy, Y, Z or where brokers are overloaded with too many partitions already or where the partition count is out of your control, or where running large consumer groups, or many consumer clients isn't desirable.
+As processing speed and response time isn't bound to the number of partitions in a topic anymore, go faster in
+situations where;
+
+* partition counts are fixed such as legacy setups
+* production deployments where partitions can't otherwise be changed
+* where brokers are overloaded with too many partitions already
+* where the partition count is out of your control,
+* where running large consumer groups
+* many consumer clients isn't desirable
 
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
@@ -60,23 +68,14 @@ toc::[]
 
 == Motivation
 
-Process your Kafka messages _orders of magnitudes **faster**_, with much lower latency, *without* adjusting your partitions or managing more client instances.
-
-more flexible use of resources
-
-lower minimum and average message response times
-
 === Why would I need this?
 
+If your use case is a fit, dramatically increased performance, lower latency, and save developers months of error prone work trying to implement concurrent processing themselves.
 
-Dramatically increased performance, lower latency, and save developers months of work.
-
-Save money on shorter development time, save money by not needing to add resources or reduce resources deployed, achieve high-performance in under provisioned or miss-configured environments (partition counts), without unnecessarily burdening your Kafka Broker side with extra partition load or large consumer groups.
-
-Save months of error prone development implementing this correctly yourself.
+Save money by not needing to add resources or reduce resources deployed, achieve high-performance in under provisioned or miss-configured environments (partition counts), without unnecessarily burdening your Kafka Broker side with extra partition load or large consumer groups.
 
 When reading the below, keep in mind that the unit of concurrency and thus performance, is restricted by the number of partitions (degree of sharding / concurrency).
-Currently you can't adjust the number of partitions in your kafka topics without jumping through a lot of hoops, or breaking your key ordering.
+Currently, you can't adjust the number of partitions in your kafka topics without jumping through a lot of hoops, or breaking your key ordering.
 
 [qanda]
 Why not just run more consumers?::
@@ -539,9 +538,10 @@ The message publishing metadata can be streamed back to your client code.
 
 == Apache Kafka EoS Transaction Model
 
-Optionally, the user can enable AK EoE mode.
+The system uses Kafka's Exactly Once Semantics (EoS) system.
 This causes all messages produced as a result of processing a message to be committed within a transaction.
-This means that even under failure, at least for the Kafka output topic, the results will exist exactly once.
+This means that even under failure, the results will exist exactly once in the Kafka output topic. If as a part of
+your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
 
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is Idempotent.
 
@@ -595,7 +595,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 *** Sink: use the poll and producer style API and publish the records to the topic that the connector is sinking from
 * Server side
 ** Should work with any cluster that the linked AK client library works with
-*** If using EoS/Transactions, needs a cluster setup that supports eos/transactions
+*** If using EoS/Transactions, needs a cluster setup that supports EoS/transactions
 
 == Development Information
 
