@@ -74,15 +74,15 @@ public class OffsetMapCodecManager<K, V> {
         });
     }
 
-    static ParallelConsumerImpl.Tuple<Long, TreeSet<Long>> deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) {
+    static ParallelConsumer.Tuple<Long, TreeSet<Long>> deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) {
         byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
-        ParallelConsumerImpl.Tuple<Long, Set<Long>> incompleteOffsets = decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decode);
+        ParallelConsumer.Tuple<Long, Set<Long>> incompleteOffsets = decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decode);
         TreeSet<Long> longs = new TreeSet<>(incompleteOffsets.getRight());
-        return ParallelConsumerImpl.Tuple.pairOf(incompleteOffsets.getLeft(), longs);
+        return ParallelConsumer.Tuple.pairOf(incompleteOffsets.getLeft(), longs);
     }
 
     void loadOffsetMetadataPayload(long startOffset, TopicPartition tp, String offsetMetadataPayload) {
-        ParallelConsumerImpl.Tuple<Long, TreeSet<Long>> incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
+        ParallelConsumer.Tuple<Long, TreeSet<Long>> incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
         wm.raisePartitionHighWaterMark(incompletes.getLeft(), tp);
         wm.partitionIncompleteOffsets.put(tp, incompletes.getRight());
     }
@@ -122,20 +122,20 @@ public class OffsetMapCodecManager<K, V> {
      *
      * @return Set of offsets which are not complete.
      */
-    static ParallelConsumerImpl.Tuple<Long, Set<Long>> decodeCompressedOffsets(long finalOffsetForPartition, byte[] s) {
+    static ParallelConsumer.Tuple<Long, Set<Long>> decodeCompressedOffsets(long finalOffsetForPartition, byte[] s) {
         if (s.length == 0) {
             // no offset bitmap data
-            return ParallelConsumerImpl.Tuple.pairOf(finalOffsetForPartition, UniSets.of());
+            return ParallelConsumer.Tuple.pairOf(finalOffsetForPartition, UniSets.of());
         }
 
         EncodedOffsetPair result = EncodedOffsetPair.unwrap(s);
 
-        ParallelConsumerImpl.Tuple<Long, Set<Long>> incompletesTuple = result.getDecodedIncompletes(finalOffsetForPartition);
+        ParallelConsumer.Tuple<Long, Set<Long>> incompletesTuple = result.getDecodedIncompletes(finalOffsetForPartition);
 
         Set<Long> incompletes = incompletesTuple.getRight();
         long highWater = incompletesTuple.getLeft();
 
-        ParallelConsumerImpl.Tuple<Long, Set<Long>> tuple = ParallelConsumerImpl.Tuple.pairOf(highWater, incompletes);
+        ParallelConsumer.Tuple<Long, Set<Long>> tuple = ParallelConsumer.Tuple.pairOf(highWater, incompletes);
         return tuple;
     }
 
