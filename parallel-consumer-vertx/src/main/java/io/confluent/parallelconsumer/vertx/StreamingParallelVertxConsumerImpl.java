@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.vertx;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerImpl;
 import io.confluent.csid.utils.Java8StreamUtils;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -27,10 +27,10 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
- * Result streaming version of {@link VertxParallelConsumer}.
+ * Result streaming version of {@link VertxParallelConsumerImpl}.
  */
 @Slf4j
-public class StreamingParallelVertxConsumer<K, V> extends VertxParallelConsumer<K, V> {
+public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsumerImpl<K, V> {
 
     /**
      * The stream of results, constructed from the Queue {@link #userProcessResultsStream}
@@ -47,11 +47,11 @@ public class StreamingParallelVertxConsumer<K, V> extends VertxParallelConsumer<
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency.
      */
-    public StreamingParallelVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                          Producer<K, V> producer,
-                                          Vertx vertx,
-                                          WebClient webClient,
-                                          ParallelConsumerOptions options) {
+    public StreamingParallelVertxConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                              Producer<K, V> producer,
+                                              Vertx vertx,
+                                              WebClient webClient,
+                                              ParallelConsumerOptions options) {
         super(consumer, producer, vertx, webClient, options);
 
         userProcessResultsStream = new ConcurrentLinkedDeque<>();
@@ -62,16 +62,16 @@ public class StreamingParallelVertxConsumer<K, V> extends VertxParallelConsumer<
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public StreamingParallelVertxConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                          Producer<K, V> producer,
-                                          ParallelConsumerOptions options) {
+    public StreamingParallelVertxConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                              Producer<K, V> producer,
+                                              ParallelConsumerOptions options) {
         this(consumer, producer, null, null, options);
     }
     
     /**
      * Streaming version
      * 
-     * @see VertxParallelConsumer#vertxHttpReqInfo
+     * @see VertxParallelConsumerImpl#vertxHttpReqInfo
      */
     public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
 
@@ -100,7 +100,7 @@ public class StreamingParallelVertxConsumer<K, V> extends VertxParallelConsumer<
     /**
      * Streaming version
      *
-     * @see VertxParallelConsumer#vertxHttpRequest
+     * @see VertxParallelConsumerImpl#vertxHttpRequest
      */
     public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
 
@@ -128,7 +128,7 @@ public class StreamingParallelVertxConsumer<K, V> extends VertxParallelConsumer<
     /**
      * Streaming version
      *
-     * @see VertxParallelConsumer#vertxHttpWebClient
+     * @see VertxParallelConsumerImpl#vertxHttpWebClient
      */
     public Stream<VertxCPResult<K, V>> vertxHttpWebClientStream(
             BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
@@ -158,7 +158,7 @@ public class StreamingParallelVertxConsumer<K, V> extends VertxParallelConsumer<
     /**
      * @param <K>
      * @param <V>
-     * @see ParallelConsumer.ConsumeProduceResult
+     * @see ParallelConsumerImpl.ConsumeProduceResult
      */
     @Getter
     @Builder

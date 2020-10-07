@@ -8,7 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * The options for the {@link ParallelConsumer} system.
+ * The options for the {@link ParallelConsumerImpl} system.
  */
 @Getter
 @Builder

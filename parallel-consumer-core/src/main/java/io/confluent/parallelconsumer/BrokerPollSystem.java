@@ -35,13 +35,13 @@ public class BrokerPollSystem<K, V> {
 
     final private org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
-    public ParallelConsumer.State state = ParallelConsumer.State.running;
+    public ParallelConsumerImpl.State state = ParallelConsumerImpl.State.running;
 
     private Optional<Future<Boolean>> pollControlThreadFuture;
 
     volatile private boolean paused = false;
 
-    private final ParallelConsumer<K, V> pc;
+    private final ParallelConsumerImpl<K, V> pc;
 
     @Setter
     @Getter
@@ -49,7 +49,7 @@ public class BrokerPollSystem<K, V> {
 
     final private WorkManager<K, V> wm;
 
-    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelConsumer<K, V> pc) {
+    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelConsumerImpl<K, V> pc) {
         this.consumer = consumer;
         this.wm = wm;
         this.pc = pc;
@@ -65,7 +65,7 @@ public class BrokerPollSystem<K, V> {
     private boolean controlLoop() {
         Thread.currentThread().setName("broker-poll");
         log.trace("Broker poll control loop start");
-        while (state != ParallelConsumer.State.closed) {
+        while (state != ParallelConsumerImpl.State.closed) {
             log.trace("Loop: Poll broker");
             ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
 
@@ -81,7 +81,7 @@ public class BrokerPollSystem<K, V> {
                 case draining -> {
                     doPause();
                     // transition to closing
-                    state = ParallelConsumer.State.closing;
+                    state = ParallelConsumerImpl.State.closing;
                 }
                 case closing -> {
                     if (polledRecords.isEmpty()) {
@@ -98,15 +98,15 @@ public class BrokerPollSystem<K, V> {
 
     private void doClose() {
         log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
-        this.consumer.close(ParallelConsumer.defaultTimeout);
+        this.consumer.close(ParallelConsumerImpl.defaultTimeout);
         log.debug("Consumer closed.");
-        state = ParallelConsumer.State.closed;
+        state = ParallelConsumerImpl.State.closed;
     }
 
     private ConsumerRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
 
-        Duration thisLongPollTimeout = (state == ParallelConsumer.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
+        Duration thisLongPollTimeout = (state == ParallelConsumerImpl.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
         log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if no data available on broker.", toSeconds(thisLongPollTimeout)); // java 8
         ConsumerRecords<K, V> records;
@@ -125,9 +125,9 @@ public class BrokerPollSystem<K, V> {
      */
     public void drain() {
         // idempotent
-        if (state != ParallelConsumer.State.draining) {
+        if (state != ParallelConsumerImpl.State.draining) {
             log.debug("Poll system signaling to drain...");
-            state = ParallelConsumer.State.draining;
+            state = ParallelConsumerImpl.State.draining;
             consumer.wakeup();
         }
     }
@@ -153,7 +153,7 @@ public class BrokerPollSystem<K, V> {
             boolean interrupted = true;
             while(interrupted) {
                 try {
-                    Boolean pollShutdownSuccess = pollControlResult.get(ParallelConsumer.defaultTimeout.toMillis(), MILLISECONDS);
+                    Boolean pollShutdownSuccess = pollControlResult.get(ParallelConsumerImpl.defaultTimeout.toMillis(), MILLISECONDS);
                     interrupted = false;
                     if (!pollShutdownSuccess) {
                         log.warn("Broker poll control thread not closed cleanly.");
@@ -170,7 +170,7 @@ public class BrokerPollSystem<K, V> {
     }
 
     private void transitionToClosing() {
-        state = ParallelConsumer.State.closing;
+        state = ParallelConsumerImpl.State.closing;
         consumer.wakeup();
     }
 

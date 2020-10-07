@@ -126,9 +126,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Clear offset map for revoked partitions
      * <p>
-     * {@link ParallelConsumer#onPartitionsRevoked} handles committing off offsets upon revoke
+     * {@link ParallelConsumerImpl#onPartitionsRevoked} handles committing off offsets upon revoke
      *
-     * @see ParallelConsumer#onPartitionsRevoked
+     * @see ParallelConsumerImpl#onPartitionsRevoked
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
