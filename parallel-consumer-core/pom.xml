@@ -64,7 +64,7 @@
         <dependency>
             <groupId>me.tongfei</groupId>
             <artifactId>progressbar</artifactId>
-            <version>0.8.1</version>
+            <version>0.9.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -74,7 +74,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.2.14</version>
+            <version>42.2.16.jre7</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
