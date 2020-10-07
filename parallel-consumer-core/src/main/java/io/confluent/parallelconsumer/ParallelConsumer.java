@@ -19,7 +19,6 @@ import java.util.regex.Pattern;
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
  * @see #poll(Consumer)
- * @see #pollAndProduce(Function, Consumer)
  */
 public interface ParallelConsumer<K, V> {
 
@@ -51,16 +50,6 @@ public interface ParallelConsumer<K, V> {
     void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
-     * ProducerRecord} to be sent back to the broker.
-     *
-     * @param callback applied after the produced message is acknowledged by kafka
-     */
-    @SneakyThrows
-    void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                        Consumer<ConsumeProduceResult<K, V, K, V>> callback);
-
-    /**
      * A simple tuple structure.
      *
      * @param <L>
@@ -76,24 +65,4 @@ public interface ParallelConsumer<K, V> {
         }
     }
 
-    /**
-     * A simple triple structure to capture the set of coinciding data.
-     *
-     * <ul>
-     *     <li>the record consumer</li>
-     *     <li>any producer record produced as a result of it's procssing</li>
-     *     <li>the metadata for publishing that record</li>
-     * </ul>
-     *
-     * @param <K>  in key
-     * @param <V>  in value
-     * @param <KK> out key
-     * @param <VV> out value
-     */
-    @Data
-    public static class ConsumeProduceResult<K, V, KK, VV> {
-        final private ConsumerRecord<K, V> in;
-        final private ProducerRecord<KK, VV> out;
-        final private RecordMetadata meta;
-    }
 }
