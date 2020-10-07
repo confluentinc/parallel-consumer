@@ -40,7 +40,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @see ParallelConsumer
  */
 @Slf4j
-public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Closeable, ParallelConsumer<K, V> {
+public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K, V>, ConsumerRebalanceListener, Closeable {
 
     protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
