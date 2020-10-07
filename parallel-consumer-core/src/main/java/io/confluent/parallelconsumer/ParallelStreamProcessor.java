@@ -13,7 +13,14 @@ import java.util.function.Function;
 /**
  * @see #pollAndProduce(Function, Consumer)
  */
-public interface ParallelConsumeThenProduce<K,V> extends ParallelConsumer<K, V> {
+public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V> {
+
+    static <KK, VV> ParallelStreamProcessor<KK, VV> createEosProcessor(
+            org.apache.kafka.clients.consumer.Consumer<KK, VV> c,
+            org.apache.kafka.clients.producer.Producer<KK, VV> p,
+            ParallelConsumerOptions o) {
+        return new ParallelEoSStreamProcessorImpl<>(c, p, o);
+    }
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns a {@link
@@ -30,7 +37,7 @@ public interface ParallelConsumeThenProduce<K,V> extends ParallelConsumer<K, V> 
      *
      * <ul>
      *     <li>the record consumer</li>
-     *     <li>any producer record produced as a result of it's procssing</li>
+     *     <li>any producer record produced as a result of it's processing</li>
      *     <li>the metadata for publishing that record</li>
      * </ul>
      *
@@ -41,8 +48,8 @@ public interface ParallelConsumeThenProduce<K,V> extends ParallelConsumer<K, V> 
      */
     @Data
     class ConsumeProduceResult<K, V, KK, VV> {
-        final private ConsumerRecord<K, V> in;
-        final private ProducerRecord<KK, VV> out;
-        final private RecordMetadata meta;
+        private final ConsumerRecord<K, V> in;
+        private final ProducerRecord<KK, VV> out;
+        private final RecordMetadata meta;
     }
 }

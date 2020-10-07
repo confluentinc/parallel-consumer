@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumeThenProduce.ConsumeProduceResult;
+import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -26,9 +26,9 @@ import static org.mockito.internal.verification.VerificationModeFactory.times;
 
 // TODO this class shouldn't have access to the non streaming async consumer - refactor out another super class layer
 @Slf4j
-public class StreamingParallelConsumerImplTest extends ParallelConsumerImplTestBase {
+public class JStreamParallelEoSStreamProcessorImplTest extends ParallelEoSStreamProcessorImplTestBase {
 
-    StreamingParallelConsumerImpl<String, String> streaming;
+    JStreamParallelEoSStreamProcessorImpl<String, String> streaming;
 
     @BeforeEach
     public void setupData() {
@@ -36,9 +36,9 @@ public class StreamingParallelConsumerImplTest extends ParallelConsumerImplTestB
     }
 
     @Override
-    protected ParallelConsumerImpl initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParallelEoSStreamProcessorImpl initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().build();
-        streaming = new StreamingParallelConsumerImpl<>(consumerSpy, producerSpy, options);
+        streaming = new JStreamParallelEoSStreamProcessorImpl<>(consumerSpy, producerSpy, options);
 
         return streaming;
     }

@@ -16,24 +16,24 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 @Slf4j
-public class StreamingParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K, V> {
+public class JStreamParallelEoSStreamProcessorImpl<K, V> extends ParallelEoSStreamProcessorImpl<K, V> {
 
-    final private Stream<ConsumeProduceResult<K, V, K, V>> stream;
+    private final Stream<ConsumeProduceResult<K, V, K, V>> stream;
 
-    final private ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
+    private final ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
 
-    public StreamingParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                         Producer<K, V> producer,
-                                         ParallelConsumerOptions parallelConsumerOptions) {
+    public JStreamParallelEoSStreamProcessorImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                                 Producer<K, V> producer,
+                                                 ParallelConsumerOptions parallelConsumerOptions) {
         super(consumer, producer, parallelConsumerOptions);
 
-        userProcessResultsStream = new ConcurrentLinkedDeque<>();
+        this.userProcessResultsStream = new ConcurrentLinkedDeque<>();
 
-        stream = Java8StreamUtils.setupStreamFromDeque(userProcessResultsStream);
+        this.stream = Java8StreamUtils.setupStreamFromDeque(this.userProcessResultsStream);
     }
 
     /**
-     * Like {@link ParallelConsumerImpl#pollAndProduce} but instead of callbacks, streams the results instead, after the
+     * Like {@link ParallelEoSStreamProcessorImpl#pollAndProduce} but instead of callbacks, streams the results instead, after the
      * produce result is ack'd by Kafka.
      *
      * @return a stream of results of applying the function to the polled records
@@ -41,10 +41,10 @@ public class StreamingParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K,
     public Stream<ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
         super.pollAndProduce(userFunction, (result) -> {
             log.trace("Wrapper callback applied, sending result to stream. Input: {}", result);
-            userProcessResultsStream.add(result);
+            this.userProcessResultsStream.add(result);
         });
 
-        return stream;
+        return this.stream;
     }
 
 }

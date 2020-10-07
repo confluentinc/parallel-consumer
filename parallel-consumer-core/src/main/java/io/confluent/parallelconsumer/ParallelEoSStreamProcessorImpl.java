@@ -27,7 +27,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import static io.confluent.parallelconsumer.ParallelConsumerImpl.State.*;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
@@ -40,7 +40,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @see ParallelConsumer
  */
 @Slf4j
-public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K, V>, ConsumerRebalanceListener, Closeable {
+public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
 
     protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
@@ -64,7 +64,7 @@ public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K,
     /**
      * The pool which is used for running the users's supplied function
      */
-    final private ExecutorService workerPool;
+    private final ExecutorService workerPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -81,7 +81,7 @@ public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K,
     /**
      * Useful for testing async code
      */
-    final private List<Runnable> controlLoopHooks = new ArrayList<>();
+    private final List<Runnable> controlLoopHooks = new ArrayList<>();
 
     /**
      * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
@@ -124,9 +124,9 @@ public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K,
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                org.apache.kafka.clients.producer.Producer<K, V> producer,
-                                ParallelConsumerOptions options) {
+    public ParallelEoSStreamProcessorImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                          org.apache.kafka.clients.producer.Producer<K, V> producer,
+                                          ParallelConsumerOptions options) {
         log.debug("Confluent async consumer initialise");
 
         Objects.requireNonNull(consumer);
@@ -312,30 +312,19 @@ public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K,
         }
     }
 
-    /**
-     * Close the consumer.
-     * <p>
-     * Uses a default timeout.
-     *
-     * @see #close(Duration, boolean)
-     */
     @Override
     public void close() {
-        // use a longer timeout, to cover fpr evey other step using the default
+        // use a longer timeout, to cover for evey other step using the default
         Duration timeout = defaultTimeout.multipliedBy(2);
         close(timeout, true);
     }
 
+    @Override
     public void close(boolean waitForInflight) {
         this.close(defaultTimeout, waitForInflight);
     }
 
-    /**
-     * Close the consumer.
-     *
-     * @param timeout         how long to wait before giving up
-     * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
-     */
+    @Override
     @SneakyThrows
     public void close(Duration timeout, boolean waitForInFlight) {
         if (state == closed) {
@@ -833,11 +822,7 @@ public class ParallelConsumerImpl<K, V> implements ParallelConsumeThenProduce<K,
         }
     }
 
-    /**
-     * Of the records consumed from the broker, how many do we have remaining in our local queues
-     *
-     * @return the number of consumed but outstanding records to process
-     */
+    @Override
     public int workRemaining() {
         return wm.getPartitionWorkRemainingCount();
     }

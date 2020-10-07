@@ -30,7 +30,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
 
 @Slf4j
-public class ParallelConsumerImplTestBase {
+public class ParallelEoSStreamProcessorImplTestBase {
 
     public static final String INPUT_TOPIC = "input";
     public static final String OUTPUT_TOPIC = "output";
@@ -44,19 +44,19 @@ public class ParallelConsumerImplTestBase {
     public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
 
     /**
-     * The commit interval for the main {@link ParallelConsumerImpl} control thread. Actually the timeout that we poll the
+     * The commit interval for the main {@link ParallelEoSStreamProcessorImpl} control thread. Actually the timeout that we poll the
      * {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop cycles, making our
      * test waiting go faster.
      *
-     * @see ParallelConsumerImpl#workMailBox
-     * @see ParallelConsumerImpl#processWorkCompleteMailBox
+     * @see ParallelEoSStreamProcessorImpl#workMailBox
+     * @see ParallelEoSStreamProcessorImpl#processWorkCompleteMailBox
      */
     public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected MockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
 
-    protected ParallelConsumerImpl<String, String> parallelConsumer;
+    protected ParallelEoSStreamProcessorImpl<String, String> parallelConsumer;
 
     static protected int defaultTimeoutSeconds = 5;
 
@@ -64,7 +64,7 @@ public class ParallelConsumerImplTestBase {
     static protected long defaultTimeoutMs = defaultTimeout.toMillis();
     static protected Duration infiniteTimeout = Duration.ofMinutes(20);
 
-    ParallelConsumerImplTest.MyAction myRecordProcessingAction;
+    ParallelEoSStreamProcessorImplTest.MyAction myRecordProcessingAction;
 
     ConsumerRecord<String, String> firstRecord;
     ConsumerRecord<String, String> secondRecord;
@@ -107,7 +107,7 @@ public class ParallelConsumerImplTestBase {
 
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
-        myRecordProcessingAction = mock(ParallelConsumerImplTest.MyAction.class);
+        myRecordProcessingAction = mock(ParallelEoSStreamProcessorImplTest.MyAction.class);
 
         ktu = new KafkaTestUtils(consumerSpy);
 
@@ -135,8 +135,8 @@ public class ParallelConsumerImplTestBase {
         setupWorkManager(parallelConsumer.getWm());
     }
 
-    protected ParallelConsumerImpl<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        parallelConsumer = new ParallelConsumerImpl<>(consumerSpy, producerSpy, parallelConsumerOptions);
+    protected ParallelEoSStreamProcessorImpl<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        parallelConsumer = new ParallelEoSStreamProcessorImpl<>(consumerSpy, producerSpy, parallelConsumerOptions);
 
         return parallelConsumer;
     }
@@ -146,7 +146,7 @@ public class ParallelConsumerImplTestBase {
         consumer.addRecord(secondRecord);
     }
 
-    protected AtomicReference<Integer> attachLoopCounter(ParallelConsumerImpl parallelConsumer) {
+    protected AtomicReference<Integer> attachLoopCounter(ParallelEoSStreamProcessorImpl parallelConsumer) {
         final AtomicReference<Integer> currentLoop = new AtomicReference<>(0);
         parallelConsumer.addLoopEndCallBack(() -> {
             Integer currentNumber = currentLoop.get();
