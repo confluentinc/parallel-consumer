@@ -64,9 +64,9 @@
         <kafka.version>2.5.0</kafka.version>
 
         <!-- tests -->
-        <junit.version>5.7.0-M1</junit.version>
-        <junit.platform.version>1.7.0-M1</junit.platform.version>
-        <testcontainers.version>1.15.0-rc1</testcontainers.version>
+        <junit.version>5.7.0</junit.version>
+        <junit.platform.version>1.7.0</junit.platform.version>
+        <testcontainers.version>1.15.0-rc2</testcontainers.version>
     </properties>
 
     <profiles>
@@ -141,7 +141,7 @@
         <dependency>
             <groupId>com.github.bsideup.jabel</groupId>
             <artifactId>jabel-javac-plugin</artifactId>
-            <version>0.2.0</version>
+            <version>0.3.0</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -194,13 +194,13 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.16.1</version>
+            <version>3.17.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>3.4.6</version>
+            <version>3.5.13</version>
             <scope>test</scope>
         </dependency>
         <dependency>
