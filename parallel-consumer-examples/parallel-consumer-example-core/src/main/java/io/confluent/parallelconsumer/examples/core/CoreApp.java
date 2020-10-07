@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.examples.core;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -39,7 +39,7 @@ public class CoreApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    ParallelConsumer<String, String> parallelConsumer;
+    ParallelConsumerImpl<String, String> parallelConsumer;
 
     void run() {
         parallelConsumer = setupConsumer();
@@ -51,7 +51,7 @@ public class CoreApp {
         // end::example[]
     }
 
-    ParallelConsumer<String, String> setupConsumer() {
+    ParallelConsumerImpl<String, String> setupConsumer() {
         // tag::exampleSetup[]
         var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
@@ -64,7 +64,7 @@ public class CoreApp {
             kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
         }
 
-        return new ParallelConsumer<>(kafkaConsumer, getKafkaProducer(), options);
+        return new ParallelConsumerImpl<>(kafkaConsumer, getKafkaProducer(), options);
         // end::exampleSetup[]
     }
 

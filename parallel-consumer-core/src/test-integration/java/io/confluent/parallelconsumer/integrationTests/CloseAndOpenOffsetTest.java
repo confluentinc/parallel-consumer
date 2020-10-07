@@ -4,7 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -73,7 +73,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         //
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        var asyncOne = new ParallelConsumer<>(newConsumerOne, producerOne, options);
+        var asyncOne = new ParallelConsumerImpl<>(newConsumerOne, producerOne, options);
 
         //
         asyncOne.subscribe(UniLists.of(rebalanceTopic));
@@ -112,7 +112,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        try (var asyncThree = new ParallelConsumer<>(newConsumerThree, producerThree, options)) {
+        try (var asyncThree = new ParallelConsumerImpl<>(newConsumerThree, producerThree, options)) {
             asyncThree.subscribe(UniLists.of(rebalanceTopic));
 
             // read what we're given
@@ -162,7 +162,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
 
-        try (var asyncOne = new ParallelConsumer<>(consumer, producerOne, options)) {
+        try (var asyncOne = new ParallelConsumerImpl<>(consumer, producerOne, options)) {
 
             asyncOne.subscribe(UniLists.of(topic));
 
@@ -181,7 +181,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
 
-        try (var asyncThree = new ParallelConsumer<>(newConsumerThree, producerThree, options)) {
+        try (var asyncThree = new ParallelConsumerImpl<>(newConsumerThree, producerThree, options)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given
@@ -221,7 +221,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
-        var asyncOne = new ParallelConsumer<>(consumer, producerOne, options);
+        var asyncOne = new ParallelConsumerImpl<>(consumer, producerOne, options);
 
         asyncOne.subscribe(UniLists.of(topic));
 
@@ -249,7 +249,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        try (var asyncThree = new ParallelConsumer<>(newConsumerThree, producerThree, options)) {
+        try (var asyncThree = new ParallelConsumerImpl<>(newConsumerThree, producerThree, options)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given

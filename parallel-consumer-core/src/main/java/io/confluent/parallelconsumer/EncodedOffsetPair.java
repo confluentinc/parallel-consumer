@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
+import io.confluent.parallelconsumer.ParallelConsumerImpl.Tuple;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;

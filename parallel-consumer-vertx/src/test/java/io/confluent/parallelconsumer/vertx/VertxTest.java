@@ -7,9 +7,9 @@ package io.confluent.parallelconsumer.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumerTestBase;
+import io.confluent.parallelconsumer.ParallelConsumerImplTestBase;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -48,20 +48,20 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
-public class VertxTest extends ParallelConsumerTestBase {
+public class VertxTest extends ParallelConsumerImplTestBase {
 
-    StreamingParallelVertxConsumer<String, String> vertxAsync;
+    StreamingParallelVertxConsumerImpl<String, String> vertxAsync;
 
     protected static WireMockServer stubServer;
 
     static final protected String stubResponse = "Good times.";
 
-    VertxParallelConsumer.RequestInfo getGoodHost() {
-        return new VertxParallelConsumer.RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
+    VertxParallelConsumerImpl.RequestInfo getGoodHost() {
+        return new VertxParallelConsumerImpl.RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
     }
 
-    VertxParallelConsumer.RequestInfo getBadHost() {
-        return new VertxParallelConsumer.RequestInfo("localhost", 1, "", UniMaps.of());
+    VertxParallelConsumerImpl.RequestInfo getBadHost() {
+        return new VertxParallelConsumerImpl.RequestInfo("localhost", 1, "", UniMaps.of());
     }
 
     @BeforeAll
@@ -77,12 +77,12 @@ public class VertxTest extends ParallelConsumerTestBase {
     }
 
     @Override
-    protected ParallelConsumer initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParallelConsumerImpl initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
         ParallelConsumerOptions build = ParallelConsumerOptions.builder().build();
-        vertxAsync = new StreamingParallelVertxConsumer<>(consumerSpy, producerSpy, vertx, wc, build);
+        vertxAsync = new StreamingParallelVertxConsumerImpl<>(consumerSpy, producerSpy, vertx, wc, build);
 
         return vertxAsync;
     }
@@ -111,7 +111,7 @@ public class VertxTest extends ParallelConsumerTestBase {
 
         var tupleStream =
                 vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> {
-                    VertxParallelConsumer.RequestInfo badHost = getBadHost();
+                    VertxParallelConsumerImpl.RequestInfo badHost = getBadHost();
                     return badHost;
                 });
 
@@ -146,7 +146,7 @@ public class VertxTest extends ParallelConsumerTestBase {
         awaitLatch(latch);
 
         // verify
-        var collect = futureStream.map(StreamingParallelVertxConsumer.VertxCPResult::getAsr).collect(Collectors.toList());
+        var collect = futureStream.map(StreamingParallelVertxConsumerImpl.VertxCPResult::getAsr).collect(Collectors.toList());
         assertThat(collect).hasSize(1);
         Future<HttpResponse<Buffer>> actual = collect.get(0).onComplete(x -> {
         });
@@ -169,7 +169,7 @@ public class VertxTest extends ParallelConsumerTestBase {
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
                     log.debug("Inner user function");
-                    VertxParallelConsumer.RequestInfo goodHost = getGoodHost();
+                    VertxParallelConsumerImpl.RequestInfo goodHost = getGoodHost();
                     var params = UniMaps.of("randomParam", rec.value());
                     goodHost.setParams(params);
 
@@ -202,7 +202,7 @@ public class VertxTest extends ParallelConsumerTestBase {
                 vertxAsync.vertxHttpRequestStream((webClient, rec) -> {
                     log.debug("Inner user function");
                     var data = rec.value();
-                    VertxParallelConsumer.RequestInfo reqInfo = getGoodHost();
+                    VertxParallelConsumerImpl.RequestInfo reqInfo = getGoodHost();
                     var httpRequest = webClient.get(reqInfo.getPort(), reqInfo.getHost(), reqInfo.getContextPath());
                     httpRequest = httpRequest.addQueryParam("randomParam", data);
 
@@ -221,8 +221,8 @@ public class VertxTest extends ParallelConsumerTestBase {
     }
 
     private List<AsyncResult<HttpResponse<Buffer>>> getResults(
-            Stream<StreamingParallelVertxConsumer.VertxCPResult<String, String>> futureStream) {
-        var collect = futureStream.map(StreamingParallelVertxConsumer.VertxCPResult::getAsr).collect(Collectors.toList());
+            Stream<StreamingParallelVertxConsumerImpl.VertxCPResult<String, String>> futureStream) {
+        var collect = futureStream.map(StreamingParallelVertxConsumerImpl.VertxCPResult::getAsr).collect(Collectors.toList());
         return blockingGetResults(collect);
     }
 

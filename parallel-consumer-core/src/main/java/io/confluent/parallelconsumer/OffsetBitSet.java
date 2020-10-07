@@ -38,13 +38,13 @@ public class OffsetBitSet {
         return result.toString();
     }
 
-    static ParallelConsumer.Tuple<Long, Set<Long>> deserialiseBitSetWrapToIncompletes(long baseOffset, ByteBuffer wrap) {
+    static ParallelConsumerImpl.Tuple<Long, Set<Long>> deserialiseBitSetWrapToIncompletes(long baseOffset, ByteBuffer wrap) {
         wrap.rewind();
         short originalBitsetSize = wrap.getShort();
         ByteBuffer slice = wrap.slice();
         Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
         long highwaterMark = baseOffset + originalBitsetSize;
-        return ParallelConsumer.Tuple.pairOf(highwaterMark, incompletes);
+        return ParallelConsumerImpl.Tuple.pairOf(highwaterMark, incompletes);
     }
 
     static Set<Long> deserialiseBitSetToIncompletes(long baseOffset, int originalBitsetSize, ByteBuffer inputBuffer) {

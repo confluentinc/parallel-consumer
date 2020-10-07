@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import static io.confluent.parallelconsumer.ParallelConsumer.State.*;
+import static io.confluent.parallelconsumer.ParallelConsumerImpl.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
@@ -48,7 +48,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @see #pollAndProduce(Function, Consumer)
  */
 @Slf4j
-public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closeable {
+public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Closeable {
 
     protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
@@ -132,9 +132,9 @@ public class ParallelConsumer<K, V> implements ConsumerRebalanceListener, Closea
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                            org.apache.kafka.clients.producer.Producer<K, V> producer,
-                            ParallelConsumerOptions options) {
+    public ParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                org.apache.kafka.clients.producer.Producer<K, V> producer,
+                                ParallelConsumerOptions options) {
         log.debug("Confluent async consumer initialise");
 
         Objects.requireNonNull(consumer);

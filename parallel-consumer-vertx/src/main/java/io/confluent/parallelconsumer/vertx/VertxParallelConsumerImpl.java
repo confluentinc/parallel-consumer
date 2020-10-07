@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.WorkContainer;
 import io.vertx.core.AsyncResult;
@@ -35,16 +35,16 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * An extension to {@link ParallelConsumer} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
+ * An extension to {@link ParallelConsumerImpl} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
  * blocking clients to process messages.
  *
  * @param <K>
  * @param <V>
- * @see ParallelConsumer
+ * @see ParallelConsumerImpl
  * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
  */
 @Slf4j
-public class VertxParallelConsumer<K, V> extends ParallelConsumer<K, V> {
+public class VertxParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K, V> {
 
     /**
      * @see WorkContainer#getWorkType()
@@ -69,9 +69,9 @@ public class VertxParallelConsumer<K, V> extends ParallelConsumer<K, V> {
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public VertxParallelConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                 Producer<K, V> producer,
-                                 ParallelConsumerOptions options) {
+    public VertxParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                     Producer<K, V> producer,
+                                     ParallelConsumerOptions options) {
         this(consumer, producer, Vertx.vertx(), null, options);
     }
 
@@ -80,10 +80,10 @@ public class VertxParallelConsumer<K, V> extends ParallelConsumer<K, V> {
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency.
      */
-    public VertxParallelConsumer(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer,
-                                 Vertx vertx,
-                                 WebClient webClient,
-                                 ParallelConsumerOptions options) {
+    public VertxParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer,
+                                     Vertx vertx,
+                                     WebClient webClient,
+                                     ParallelConsumerOptions options) {
         super(consumer, producer, options);
         if (vertx == null)
             vertx = Vertx.vertx();
