@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerImpl;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.WorkContainer;
 import io.vertx.core.AsyncResult;
@@ -35,16 +35,16 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * An extension to {@link ParallelConsumerImpl} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
+ * An extension to {@link ParallelEoSStreamProcessorImpl} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
  * blocking clients to process messages.
  *
  * @param <K>
  * @param <V>
- * @see ParallelConsumerImpl
+ * @see ParallelEoSStreamProcessorImpl
  * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
  */
 @Slf4j
-public class VertxParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K, V> {
+public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessorImpl<K, V> {
 
     /**
      * @see WorkContainer#getWorkType()
@@ -54,12 +54,12 @@ public class VertxParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K, V> 
     /**
      * The Vertx engine to use
      */
-    final private Vertx vertx;
+    private final Vertx vertx;
 
     /**
      * The Vertx webclient for making HTTP requests
      */
-    final private WebClient webClient;
+    private final WebClient webClient;
 
     /**
      * Extension point for running after Vertx {@link io.vertx.core.Verticle}s finish.
@@ -69,9 +69,9 @@ public class VertxParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K, V> 
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public VertxParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                     Producer<K, V> producer,
-                                     ParallelConsumerOptions options) {
+    public VertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                           Producer<K, V> producer,
+                                           ParallelConsumerOptions options) {
         this(consumer, producer, Vertx.vertx(), null, options);
     }
 
@@ -80,10 +80,10 @@ public class VertxParallelConsumerImpl<K, V> extends ParallelConsumerImpl<K, V> 
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency.
      */
-    public VertxParallelConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer,
-                                     Vertx vertx,
-                                     WebClient webClient,
-                                     ParallelConsumerOptions options) {
+    public VertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer,
+                                           Vertx vertx,
+                                           WebClient webClient,
+                                           ParallelConsumerOptions options) {
         super(consumer, producer, options);
         if (vertx == null)
             vertx = Vertx.vertx();

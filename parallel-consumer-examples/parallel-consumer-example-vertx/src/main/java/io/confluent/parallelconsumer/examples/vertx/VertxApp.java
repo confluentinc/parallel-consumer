@@ -5,8 +5,8 @@ package io.confluent.parallelconsumer.examples.vertx;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.vertx.StreamingParallelVertxConsumerImpl;
-import io.confluent.parallelconsumer.vertx.VertxParallelConsumerImpl.RequestInfo;
+import io.confluent.parallelconsumer.vertx.JStreamVertxParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -33,7 +33,7 @@ public class VertxApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    StreamingParallelVertxConsumerImpl<String, String> parallelConsumer;
+    JStreamVertxParallelEoSStreamProcessor<String, String> parallelConsumer;
 
 
     void run() {
@@ -46,7 +46,7 @@ public class VertxApp {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
         setupSubscription(kafkaConsumer);
 
-        parallelConsumer = new StreamingParallelVertxConsumerImpl<>(kafkaConsumer,
+        parallelConsumer = new JStreamVertxParallelEoSStreamProcessor<>(kafkaConsumer,
                 getKafkaProducer(), options);
 
         // tag::example[]

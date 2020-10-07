@@ -4,7 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelConsumerImplTestBase;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImplTestBase;
 import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,7 @@ import static org.mockito.Mockito.mock;
  * Mocked out comparative volume tests
  */
 @Slf4j
-public class VolumeTests extends ParallelConsumerImplTestBase {
+public class VolumeTests extends ParallelEoSStreamProcessorImplTestBase {
 
     KafkaTestUtils ku = new KafkaTestUtils(consumerSpy);
 

@@ -42,7 +42,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Timeout(value = 10, unit = SECONDS)
 @Slf4j
-public class ParallelConsumerImplTest extends ParallelConsumerImplTestBase {
+public class ParallelEoSStreamProcessorImplTest extends ParallelEoSStreamProcessorImplTestBase {
 
     static class MyAction implements Function<ConsumerRecord<String, String>, String> {
 

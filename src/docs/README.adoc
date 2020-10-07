@@ -346,10 +346,10 @@ NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disa
 
 After this setup, one then has the choice of interfaces:
 
-* `ParallelConsumer`
-* `VertxParallelConsumer`
-* `StreamingParallelConsumer`
-* `StreamingParallelVertxConsumer`
+* `ParallelEoSStreamProcessorImpl`
+* `VertxParallelEoSStreamProcessor`
+* `JStreamParallelEoSStreamProcessorImpl`
+* `JStreamVertxParallelEoSStreamProcessor`
 
 
 === Core
@@ -378,8 +378,8 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 
 You have the option to either use callbacks to be notified of events, or use the `Streaming` versions of the API, which use the `java.util.stream.Stream` system:
 
-* `StreamingParallelConsumer`
-* `StreamingParallelVertxConsumer`
+* `JStreamParallelEoSStreamProcessorImpl`
+* `JStreamVertxParallelEoSStreamProcessor`
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
 
@@ -595,7 +595,7 @@ This will leave the container running after the JUnit test is complete for reuse
 > instead of the JUnit rule.
 
 Testcontainers detects if a container is reusable by hashing the container creation parameters from the JUnit test.
-If an existing container is _not_ reusable, a new container will be created **but the old container will not be removed**.
+If an existing container is _not_ reusable, a new container will be created, **but the old container will not be removed**.
 
 Target | Description
 --- | ---

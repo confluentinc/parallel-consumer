@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.examples.streams;
  */
 
 
-import io.confluent.parallelconsumer.ParallelConsumerImpl;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -40,7 +40,7 @@ public class StreamsApp {
 
     KafkaStreams streams;
 
-    ParallelConsumerImpl<String, String> parallelConsumer;
+    ParallelEoSStreamProcessorImpl<String, String> parallelConsumer;
 
     AtomicInteger messageCount = new AtomicInteger();
 
@@ -86,7 +86,7 @@ public class StreamsApp {
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
 
-        parallelConsumer = new ParallelConsumerImpl<>(kafkaConsumer, getKafkaProducer(), options);
+        parallelConsumer = new ParallelEoSStreamProcessorImpl<>(kafkaConsumer, getKafkaProducer(), options);
         parallelConsumer.subscribe(UniLists.of(outputTopicName));
     }
 
