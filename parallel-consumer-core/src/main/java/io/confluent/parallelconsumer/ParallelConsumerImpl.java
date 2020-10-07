@@ -5,10 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.WallClock;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
@@ -40,22 +37,17 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
- * Asynchronous / concurrent message consumer for Kafka.
- *
- * @param <K> key consume / produce key type
- * @param <V> value consume / produce value type
- * @see #poll(Consumer)
- * @see #pollAndProduce(Function, Consumer)
+ * @see ParallelConsumer
  */
 @Slf4j
-public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Closeable {
+public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Closeable, ParallelConsumer<K, V> {
 
     protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
 
     /**
      * Injectable clock for testing
      */
-    @Setter
+    @Setter(AccessLevel.PACKAGE)
     private WallClock clock = new WallClock();
 
     @Setter
@@ -76,7 +68,7 @@ public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Cl
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
-    @Getter
+    @Getter(AccessLevel.PACKAGE)
     protected WorkManager<K, V> wm;
 
     /**
@@ -177,22 +169,26 @@ public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Cl
         }
     }
 
+    @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
         consumer.subscribe(topics, this);
     }
 
+    @Override
     public void subscribe(Pattern pattern) {
         log.debug("Subscribing to {}", pattern);
         consumer.subscribe(pattern, this);
     }
 
+    @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
         usersConsumerRebalanceListener = Optional.of(callback);
         consumer.subscribe(topics, this);
     }
 
+    @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
         usersConsumerRebalanceListener = Optional.of(callback);
@@ -257,11 +253,7 @@ public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Cl
         }
     }
 
-    /**
-     * Register a function to be applied in parallel to each received message
-     *
-     * @param usersVoidConsumptionFunction the function
-     */
+    @Override
     public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
         Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
@@ -272,12 +264,7 @@ public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Cl
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
-    /**
-     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
-     * ProducerRecord} to be sent back to the broker.
-     *
-     * @param callback applied after the produced message is acknowledged by kafka
-     */
+    @Override
     @SneakyThrows
     public void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
@@ -866,43 +853,6 @@ public class ParallelConsumerImpl<K, V> implements ConsumerRebalanceListener, Cl
 
     public void setLongPollTimeout(Duration ofMillis) {
         BrokerPollSystem.setLongPollTimeout(ofMillis);
-    }
-
-    /**
-     * A simple tuple structure.
-     *
-     * @param <L>
-     * @param <R>
-     */
-    @Data
-    public static class Tuple<L, R> {
-        final private L left;
-        final private R right;
-
-        public static <LL, RR> Tuple<LL, RR> pairOf(LL l, RR r) {
-            return new Tuple<>(l, r);
-        }
-    }
-
-    /**
-     * A simple triple structure to capture the set of coinciding data.
-     *
-     * <ul>
-     *     <li>the record consumer</li>
-     *     <li>any producer record produced as a result of it's procssing</li>
-     *     <li>the metadata for publishing that record</li>
-     * </ul>
-     *
-     * @param <K>  in key
-     * @param <V>  in value
-     * @param <KK> out key
-     * @param <VV> out value
-     */
-    @Data
-    public static class ConsumeProduceResult<K, V, KK, VV> {
-        final private ConsumerRecord<K, V> in;
-        final private ProducerRecord<KK, VV> out;
-        final private RecordMetadata meta;
     }
 
 }
