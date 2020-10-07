@@ -1,16 +1,12 @@
 package io.confluent.parallelconsumer;
 
 import lombok.Data;
-import lombok.SneakyThrows;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 
+import java.time.Duration;
 import java.util.Collection;
-import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -48,6 +44,37 @@ public interface ParallelConsumer<K, V> {
      * @param usersVoidConsumptionFunction the function
      */
     void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
+
+    /**
+     * Close the consumer.
+     * <p>
+     * Uses a default timeout.
+     *
+     * @see #close(Duration, boolean)
+     */
+    void close();
+
+    /**
+     * TODO docs
+     *
+     * @param waitForInflight
+     */
+    void close(boolean waitForInflight);
+
+    /**
+     * Close the consumer.
+     *
+     * @param timeout         how long to wait before giving up
+     * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
+     */
+    void close(Duration timeout, boolean waitForInFlight);
+
+    /**
+     * Of the records consumed from the broker, how many do we have remaining in our local queues
+     *
+     * @return the number of consumed but outstanding records to process
+     */
+    int workRemaining();
 
     /**
      * A simple tuple structure.

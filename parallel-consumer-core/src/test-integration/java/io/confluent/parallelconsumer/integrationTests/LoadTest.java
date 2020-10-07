@@ -4,7 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelConsumerImpl;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -75,7 +75,7 @@ public class LoadTest extends DbTest {
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.KEY).build();
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
         newConsumer.subscribe(Pattern.compile(topic));
-        var async = new ParallelConsumerImpl<>(newConsumer, kcu.createNewProducer(true), options);
+        var async = new ParallelEoSStreamProcessorImpl<>(newConsumer, kcu.createNewProducer(true), options);
         AtomicInteger msgCount = new AtomicInteger(0);
 
         ProgressBar pb = new ProgressBarBuilder()

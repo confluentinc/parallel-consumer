@@ -26,10 +26,10 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
- * Result streaming version of {@link VertxParallelConsumerImpl}.
+ * Result streaming version of {@link VertxParallelEoSStreamProcessor}.
  */
 @Slf4j
-public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsumerImpl<K, V> {
+public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelEoSStreamProcessor<K, V> {
 
     /**
      * The stream of results, constructed from the Queue {@link #userProcessResultsStream}
@@ -46,11 +46,11 @@ public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsu
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency.
      */
-    public StreamingParallelVertxConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                              Producer<K, V> producer,
-                                              Vertx vertx,
-                                              WebClient webClient,
-                                              ParallelConsumerOptions options) {
+    public JStreamVertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                                  Producer<K, V> producer,
+                                                  Vertx vertx,
+                                                  WebClient webClient,
+                                                  ParallelConsumerOptions options) {
         super(consumer, producer, vertx, webClient, options);
 
         userProcessResultsStream = new ConcurrentLinkedDeque<>();
@@ -61,16 +61,16 @@ public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsu
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public StreamingParallelVertxConsumerImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                              Producer<K, V> producer,
-                                              ParallelConsumerOptions options) {
+    public JStreamVertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                                  Producer<K, V> producer,
+                                                  ParallelConsumerOptions options) {
         this(consumer, producer, null, null, options);
     }
     
     /**
      * Streaming version
      * 
-     * @see VertxParallelConsumerImpl#vertxHttpReqInfo
+     * @see VertxParallelEoSStreamProcessor#vertxHttpReqInfo
      */
     public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
 
@@ -99,7 +99,7 @@ public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsu
     /**
      * Streaming version
      *
-     * @see VertxParallelConsumerImpl#vertxHttpRequest
+     * @see VertxParallelEoSStreamProcessor#vertxHttpRequest
      */
     public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
 
@@ -127,7 +127,7 @@ public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsu
     /**
      * Streaming version
      *
-     * @see VertxParallelConsumerImpl#vertxHttpWebClient
+     * @see VertxParallelEoSStreamProcessor#vertxHttpWebClient
      */
     public Stream<VertxCPResult<K, V>> vertxHttpWebClientStream(
             BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
