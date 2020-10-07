@@ -210,7 +210,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void loadCompressedRunLengthEncoding() {
         byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
-        ParallelConsumerImpl.Tuple<Long, Set<Long>> longs = om.decodeCompressedOffsets(finalOffsetForPartition, bytes);
+        ParallelConsumer.Tuple<Long, Set<Long>> longs = om.decodeCompressedOffsets(finalOffsetForPartition, bytes);
         assertThat(longs.getRight().toArray()).containsExactly(incomplete.toArray());
     }
 
@@ -316,7 +316,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     void compressionCycle() {
         byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
 
-        ParallelConsumerImpl.Tuple<Long, Set<Long>> deserialised = om.decodeCompressedOffsets(finalOffsetForPartition, serialised);
+        ParallelConsumer.Tuple<Long, Set<Long>> deserialised = om.decodeCompressedOffsets(finalOffsetForPartition, serialised);
 
         assertThat(deserialised.getRight()).isEqualTo(incomplete);
     }
@@ -350,7 +350,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 byte[] result = encoder.packEncoding(pair);
 
                 //
-                ParallelConsumerImpl.Tuple<Long, Set<Long>> recoveredIncompleteOffsetTuple = om.decodeCompressedOffsets(finalOffsetForPartition, result);
+                ParallelConsumer.Tuple<Long, Set<Long>> recoveredIncompleteOffsetTuple = om.decodeCompressedOffsets(finalOffsetForPartition, result);
                 Set<Long> recoveredIncompletes = recoveredIncompleteOffsetTuple.getRight();
 
                 //
@@ -393,7 +393,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         encoder.invoke();
         byte[] bytes = encoder.packSmallest();
         EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(bytes);
-        ParallelConsumerImpl.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
+        ParallelConsumer.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
         assertThat(decodedIncompletes.getRight()).containsExactlyInAnyOrderElementsOf(incompletes);
     }
 
