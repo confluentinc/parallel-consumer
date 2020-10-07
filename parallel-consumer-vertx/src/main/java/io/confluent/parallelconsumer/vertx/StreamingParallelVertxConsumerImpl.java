@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.csid.utils.Java8StreamUtils;
 import io.vertx.core.Future;
@@ -158,7 +157,7 @@ public class StreamingParallelVertxConsumerImpl<K, V> extends VertxParallelConsu
     /**
      * @param <K>
      * @param <V>
-     * @see ParallelConsumer.ConsumeProduceResult
+     * @see ConsumeProduceResult
      */
     @Getter
     @Builder
