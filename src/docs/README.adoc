@@ -646,4 +646,6 @@ See https://github.com/testcontainers/testcontainers-java/pull/1781[this testcon
 
 == Attribution
 
+The project is licensed under the [Confluent Community License](LICENSE).
+
 http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.

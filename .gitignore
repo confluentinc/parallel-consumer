@@ -26,3 +26,23 @@ hs_err_pid*
 
 .idea/*
 !.idea/runConfigurations
+
+# Build products
+target/
+*/target/
+docs/_build/
+
+# IntelliJ data
+*.iml
+*.iws
+*.ipr
+.idea/
+
+# VSCode data
+.vscode/
+
+# Other
+.DS_Store
+.dumbjump
+*classes
+*~
