@@ -8,7 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * The options for the {@link ParallelEoSStreamProcessorImpl} system.
+ * The options for the {@link ParallelEoSStreamProcessor} system.
  */
 @Getter
 @Builder

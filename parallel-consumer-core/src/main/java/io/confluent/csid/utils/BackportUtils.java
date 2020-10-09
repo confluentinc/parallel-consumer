@@ -19,14 +19,14 @@ public class BackportUtils {
     /**
      * @see Duration#toSeconds() intro'd in Java 9
      */
-    static public long toSeconds(Duration duration) {
+    public static long toSeconds(Duration duration) {
         return duration.toMillis() / 1000;
     }
 
     /**
      * @see Optional#isEmpty()  intro'd java 11
      */
-    static public boolean isEmpty(Optional<?> optional) {
+    public static boolean isEmpty(Optional<?> optional) {
         return !optional.isPresent();
     }
 

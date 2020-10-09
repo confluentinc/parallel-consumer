@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.lang.Math.min;
 import static lombok.AccessLevel.PACKAGE;
 
@@ -50,7 +52,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see K
      * @see #maybeGetWork()
      */
-    final private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     /**
      * Map of partitions to Map of offsets to WorkUnits
@@ -60,7 +62,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
-    final private Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
+    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -126,9 +128,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Clear offset map for revoked partitions
      * <p>
-     * {@link ParallelEoSStreamProcessorImpl#onPartitionsRevoked} handles committing off offsets upon revoke
+     * {@link ParallelEoSStreamProcessor#onPartitionsRevoked} handles committing off offsets upon revoke
      *
-     * @see ParallelEoSStreamProcessorImpl#onPartitionsRevoked
+     * @see ParallelEoSStreamProcessor#onPartitionsRevoked
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
@@ -305,7 +307,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     log.trace("Work ({}) still delayed or is in flight, can't take...", wc);
                 }
 
-                if (options.getOrdering() == ParallelConsumerOptions.ProcessingOrder.UNORDERED) {
+                ProcessingOrder ordering = options.getOrdering();
+                if (ordering == UNORDERED) {
                     // continue - we don't care about processing order, so check the next message
                     continue;
                 } else {
