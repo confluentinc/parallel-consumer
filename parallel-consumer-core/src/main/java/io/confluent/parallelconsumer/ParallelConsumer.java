@@ -4,19 +4,24 @@ import lombok.Data;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
-import java.time.Duration;
 import java.util.Collection;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+// tag::javadoc[]
 /**
  * Asynchronous / concurrent message consumer for Kafka.
+ * <p>
+ * Currently there is no direct implementation, only the {@link ParallelStreamProcessor} version (see {@link
+ * ParallelEoSStreamProcessor}), but there may be in the future.
  *
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
+ * @see ParallelEoSStreamProcessor
  * @see #poll(Consumer)
  */
-public interface ParallelConsumer<K, V> {
+// end::javadoc[]
+public interface ParallelConsumer<K, V> extends DrainingCloseable {
 
     /**
      * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Collection)
@@ -24,17 +29,17 @@ public interface ParallelConsumer<K, V> {
     void subscribe(Collection<String> topics);
 
     /**
-     * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Pattern) 
+     * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Pattern)
      */
     void subscribe(Pattern pattern);
 
     /**
-     * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Collection, ConsumerRebalanceListener) 
+     * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Collection, ConsumerRebalanceListener)
      */
     void subscribe(Collection<String> topics, ConsumerRebalanceListener callback);
 
     /**
-     * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Pattern, ConsumerRebalanceListener) 
+     * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Pattern, ConsumerRebalanceListener)
      */
     void subscribe(Pattern pattern, ConsumerRebalanceListener callback);
 
@@ -46,37 +51,6 @@ public interface ParallelConsumer<K, V> {
     void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
 
     /**
-     * Close the consumer.
-     * <p>
-     * Uses a default timeout.
-     *
-     * @see #close(Duration, boolean)
-     */
-    void close();
-
-    /**
-     * TODO docs
-     *
-     * @param waitForInflight
-     */
-    void close(boolean waitForInflight);
-
-    /**
-     * Close the consumer.
-     *
-     * @param timeout         how long to wait before giving up
-     * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
-     */
-    void close(Duration timeout, boolean waitForInFlight);
-
-    /**
-     * Of the records consumed from the broker, how many do we have remaining in our local queues
-     *
-     * @return the number of consumed but outstanding records to process
-     */
-    int workRemaining();
-
-    /**
      * A simple tuple structure.
      *
      * @param <L>
@@ -84,8 +58,8 @@ public interface ParallelConsumer<K, V> {
      */
     @Data
     public static class Tuple<L, R> {
-        final private L left;
-        final private R right;
+        private final L left;
+        private final R right;
 
         public static <LL, RR> Tuple<LL, RR> pairOf(LL l, RR r) {
             return new Tuple<>(l, r);

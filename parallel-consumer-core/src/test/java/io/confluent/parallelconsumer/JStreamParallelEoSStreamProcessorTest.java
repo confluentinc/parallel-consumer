@@ -26,9 +26,9 @@ import static org.mockito.internal.verification.VerificationModeFactory.times;
 
 // TODO this class shouldn't have access to the non streaming async consumer - refactor out another super class layer
 @Slf4j
-public class JStreamParallelEoSStreamProcessorImplTest extends ParallelEoSStreamProcessorImplTestBase {
+public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
-    JStreamParallelEoSStreamProcessorImpl<String, String> streaming;
+    JStreamParallelEoSStreamProcessor<String, String> streaming;
 
     @BeforeEach
     public void setupData() {
@@ -36,9 +36,9 @@ public class JStreamParallelEoSStreamProcessorImplTest extends ParallelEoSStream
     }
 
     @Override
-    protected ParallelEoSStreamProcessorImpl initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().build();
-        streaming = new JStreamParallelEoSStreamProcessorImpl<>(consumerSpy, producerSpy, options);
+        streaming = new JStreamParallelEoSStreamProcessor<>(consumerSpy, producerSpy, options);
 
         return streaming;
     }

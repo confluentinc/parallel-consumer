@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public class DbTest extends KafkaTest<String, String> {
 
-    final static protected PostgreSQLContainer dbc;
+    protected static final PostgreSQLContainer dbc;
 
     /**
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers

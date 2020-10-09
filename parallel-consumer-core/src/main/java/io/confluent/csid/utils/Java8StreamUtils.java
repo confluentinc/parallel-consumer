@@ -4,6 +4,8 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import lombok.experimental.UtilityClass;
+
 import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -11,9 +13,10 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+@UtilityClass
 public class Java8StreamUtils {
 
-    static public <T> Stream<T> setupStreamFromDeque(ConcurrentLinkedDeque<T> userProcessResultsStream) {
+    public static <T> Stream<T> setupStreamFromDeque(ConcurrentLinkedDeque<T> userProcessResultsStream) {
         Spliterator<T> spliterator = Spliterators.spliterator(new Iterator<>() {
             @Override
             public boolean hasNext() {

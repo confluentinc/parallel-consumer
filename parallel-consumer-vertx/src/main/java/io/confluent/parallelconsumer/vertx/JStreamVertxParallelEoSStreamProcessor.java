@@ -25,21 +25,19 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-/**
- * Result streaming version of {@link VertxParallelEoSStreamProcessor}.
- */
 @Slf4j
-public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelEoSStreamProcessor<K, V> {
+public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelEoSStreamProcessor<K, V>
+        implements JStreamVertxParallelStreamProcessor<K, V> {
 
     /**
      * The stream of results, constructed from the Queue {@link #userProcessResultsStream}
      */
-    final private Stream<VertxCPResult<K, V>> stream;
+    private final Stream<VertxCPResult<K, V>> stream;
 
     /**
      * The Queue of results
      */
-    final private ConcurrentLinkedDeque<VertxCPResult<K, V>> userProcessResultsStream;
+    private final ConcurrentLinkedDeque<VertxCPResult<K, V>> userProcessResultsStream;
 
     /**
      * Provide your own instances of the Vertx engine and it's webclient.
@@ -53,9 +51,9 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
                                                   ParallelConsumerOptions options) {
         super(consumer, producer, vertx, webClient, options);
 
-        userProcessResultsStream = new ConcurrentLinkedDeque<>();
+        this.userProcessResultsStream = new ConcurrentLinkedDeque<>();
 
-        stream = Java8StreamUtils.setupStreamFromDeque(userProcessResultsStream);
+        this.stream = Java8StreamUtils.setupStreamFromDeque(this.userProcessResultsStream);
     }
 
     /**
@@ -66,12 +64,8 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
                                                   ParallelConsumerOptions options) {
         this(consumer, producer, null, null, options);
     }
-    
-    /**
-     * Streaming version
-     * 
-     * @see VertxParallelEoSStreamProcessor#vertxHttpReqInfo
-     */
+
+    @Override
     public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
@@ -96,11 +90,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
         return stream;
     }
 
-    /**
-     * Streaming version
-     *
-     * @see VertxParallelEoSStreamProcessor#vertxHttpRequest
-     */
+    @Override
     public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
@@ -124,11 +114,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
         return stream;
     }
 
-    /**
-     * Streaming version
-     *
-     * @see VertxParallelEoSStreamProcessor#vertxHttpWebClient
-     */
+    @Override
     public Stream<VertxCPResult<K, V>> vertxHttpWebClientStream(
             BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
 
@@ -162,15 +148,15 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
     @Getter
     @Builder
     public static class VertxCPResult<K, V> {
-        final private ConsumerRecord<K, V> in;
-        final private Future<HttpResponse<Buffer>> asr;
+        private final ConsumerRecord<K, V> in;
+        private final Future<HttpResponse<Buffer>> asr;
 
         // todo change to class generic type variables? 2 fields become 1. Not worth the hassle atm.
         // Currently our vertx usage has two types of results. This is a quick way to model that. Should consider improving.
         @Builder.Default
-        final private Optional<RequestInfo> requestInfo = Optional.empty();
+        private final Optional<RequestInfo> requestInfo = Optional.empty();
         @Builder.Default
-        final private Optional<HttpRequest<Buffer>> httpReq = Optional.empty();
+        private final Optional<HttpRequest<Buffer>> httpReq = Optional.empty();
     }
 
 }

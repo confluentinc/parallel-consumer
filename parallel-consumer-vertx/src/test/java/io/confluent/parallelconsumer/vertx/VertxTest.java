@@ -7,9 +7,9 @@ package io.confluent.parallelconsumer.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImplTestBase;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -48,13 +48,13 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
-public class VertxTest extends ParallelEoSStreamProcessorImplTestBase {
+public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
 
     protected static WireMockServer stubServer;
 
-    static final protected String stubResponse = "Good times.";
+    protected static final String stubResponse = "Good times.";
 
     VertxParallelEoSStreamProcessor.RequestInfo getGoodHost() {
         return new VertxParallelEoSStreamProcessor.RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
@@ -65,7 +65,7 @@ public class VertxTest extends ParallelEoSStreamProcessorImplTestBase {
     }
 
     @BeforeAll
-    static public void setupWireMock() {
+    public static void setupWireMock() {
         WireMockConfiguration options = wireMockConfig().dynamicPort();
         stubServer = new WireMockServer(options);
         stubServer.start();
@@ -77,7 +77,7 @@ public class VertxTest extends ParallelEoSStreamProcessorImplTestBase {
     }
 
     @Override
-    protected ParallelEoSStreamProcessorImpl initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);

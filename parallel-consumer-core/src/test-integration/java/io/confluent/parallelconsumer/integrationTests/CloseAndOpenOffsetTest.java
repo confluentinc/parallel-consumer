@@ -4,7 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -73,7 +73,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         //
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        var asyncOne = new ParallelEoSStreamProcessorImpl<>(newConsumerOne, producerOne, options);
+        var asyncOne = new ParallelEoSStreamProcessor<>(newConsumerOne, producerOne, options);
 
         //
         asyncOne.subscribe(UniLists.of(rebalanceTopic));
@@ -106,13 +106,13 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         // commit what we've done so far, don't wait for failing messages to be retried (message 4)
         log.info("Closing consumer, committing offset map");
-        asyncOne.close(false);
+        asyncOne.closeDontDrainFirst();
 
         //
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        try (var asyncThree = new ParallelEoSStreamProcessorImpl<>(newConsumerThree, producerThree, options)) {
+        try (var asyncThree = new ParallelEoSStreamProcessor<>(newConsumerThree, producerThree, options)) {
             asyncThree.subscribe(UniLists.of(rebalanceTopic));
 
             // read what we're given
@@ -162,7 +162,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
 
-        try (var asyncOne = new ParallelEoSStreamProcessorImpl<>(consumer, producerOne, options)) {
+        try (var asyncOne = new ParallelEoSStreamProcessor<>(consumer, producerOne, options)) {
 
             asyncOne.subscribe(UniLists.of(topic));
 
@@ -181,7 +181,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
 
-        try (var asyncThree = new ParallelEoSStreamProcessorImpl<>(newConsumerThree, producerThree, options)) {
+        try (var asyncThree = new ParallelEoSStreamProcessor<>(newConsumerThree, producerThree, options)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given
@@ -221,7 +221,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
-        var asyncOne = new ParallelEoSStreamProcessorImpl<>(consumer, producerOne, options);
+        var asyncOne = new ParallelEoSStreamProcessor<>(consumer, producerOne, options);
 
         asyncOne.subscribe(UniLists.of(topic));
 
@@ -243,13 +243,13 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         //
         // TODO: fatal vs retriable exceptions. Retry limits particularly for draining state?
-        asyncOne.close(false);
+        asyncOne.closeDontDrainFirst();
 
         //
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        try (var asyncThree = new ParallelEoSStreamProcessorImpl<>(newConsumerThree, producerThree, options)) {
+        try (var asyncThree = new ParallelEoSStreamProcessor<>(newConsumerThree, producerThree, options)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given

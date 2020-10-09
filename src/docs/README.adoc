@@ -17,7 +17,7 @@
 :toclevels: 3
 :numbered: 1
 
-:github_name: async-consumer
+:github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
 
@@ -324,11 +324,18 @@ NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disa
 
 After this setup, one then has the choice of interfaces:
 
-* `ParallelEoSStreamProcessorImpl`
-* `VertxParallelEoSStreamProcessor`
-* `JStreamParallelEoSStreamProcessorImpl`
-* `JStreamVertxParallelEoSStreamProcessor`
+* `ParallelStreamProcessor`
+* `VertxParallelStreamProcessor`
+* `JStreamParallelStreamProcessor`
+* `JStreamVertxParallelStreamProcessor`
 
+There is another interface: `ParallelConsumer` which is integrated, however there is currently no immediate implementation.
+See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
+
+[source,java]
+----
+include::{project_root}/parallel-consumer-core/src/main/java/io/confluent/parallelconsumer/ParallelConsumer.java[tag=javadoc]
+----
 
 === Core
 
@@ -356,8 +363,8 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 
 You have the option to either use callbacks to be notified of events, or use the `Streaming` versions of the API, which use the `java.util.stream.Stream` system:
 
-* `JStreamParallelEoSStreamProcessorImpl`
-* `JStreamVertxParallelEoSStreamProcessor`
+* `JStreamParallelStreamProcessor`
+* `JStreamVertxParallelStreamProcessor`
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
 
@@ -518,7 +525,6 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 * Non-blocking I/O work management
 ** More customisable handling of HTTP interactions
 ** Chance to batch multiple consumer records into a single or multiple http request objects
-* Support https://jitpack.io/ version
 * Distributed tracing integration
 * Metrics
 
@@ -558,11 +564,11 @@ The unit test code is set to run at a very high frequency, which can make it dif
 If you want to debug the code or view the main logs, consider changing the below:
 
 // replace with code inclusion from readme branch
-.AsyncConsumerTestBase
+.ParallelEoSStreamProcessorTestBase
 [source]
 ----
-AsyncConsumerTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
-AsyncConsumerTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
+ParallelEoSStreamProcessorTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
+ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 ----
 
 === Readme

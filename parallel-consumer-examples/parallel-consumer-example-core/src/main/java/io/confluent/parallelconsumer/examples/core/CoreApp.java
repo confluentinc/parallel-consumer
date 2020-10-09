@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.examples.core;
  */
 
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -42,17 +41,19 @@ public class CoreApp {
 
     ParallelStreamProcessor<String, String> parallelConsumer;
 
+    @SuppressWarnings("UnqualifiedFieldAccess")
     void run() {
-        parallelConsumer = setupConsumer();
+        this.parallelConsumer = setupConsumer();
 
         // tag::example[]
-        parallelConsumer.poll(record -> {
-            log.info("Concurrently processing a record: {}", record);
-        });
+        parallelConsumer.poll(record ->
+                log.info("Concurrently processing a record: {}", record)
+        );
         // end::example[]
     }
 
-    ParallelEoSStreamProcessorImpl<String, String> setupConsumer() {
+    @SuppressWarnings({"FeatureEnvy", "MagicNumber"})
+    ParallelStreamProcessor<String, String> setupConsumer() {
         // tag::exampleSetup[]
         var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
@@ -65,30 +66,28 @@ public class CoreApp {
             kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
         }
 
-        ParallelStreamProcessor eosProcessor = ParallelStreamProcessor.createEosProcessor(kafkaConsumer, getKafkaProducer(), options);
-
-        return new ParallelEoSStreamProcessorImpl<>(kafkaConsumer, getKafkaProducer(), options);
+        return ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, getKafkaProducer(), options);
         // end::exampleSetup[]
     }
 
     void close() {
-        parallelConsumer.close();
+        this.parallelConsumer.close();
     }
 
     void runPollAndProduce() {
-        parallelConsumer = setupConsumer();
+        this.parallelConsumer = setupConsumer();
 
         // tag::exampleProduce[]
-        parallelConsumer.pollAndProduce((record) -> {
-            var result = processBrokerRecord(record);
-            ProducerRecord<String, String> produceRecord =
-                    new ProducerRecord<>(outputTopic, "a-key", result.payload);
-            return UniLists.of(produceRecord);
-        }, (consumeProduceResult) -> {
-            log.info("Message {} saved to broker at offset {}",
-                    consumeProduceResult.getOut(),
-                    consumeProduceResult.getMeta().offset());
-        });
+        this.parallelConsumer.pollAndProduce(record -> {
+                    var result = processBrokerRecord(record);
+                    ProducerRecord<String, String> produceRecord =
+                            new ProducerRecord<>(outputTopic, "a-key", result.payload);
+                    return UniLists.of(produceRecord);
+                }, consumeProduceResult ->
+                        log.info("Message {} saved to broker at offset {}",
+                                consumeProduceResult.getOut(),
+                                consumeProduceResult.getMeta().offset())
+        );
         // end::exampleProduce[]
     }
 
@@ -97,7 +96,7 @@ public class CoreApp {
     }
 
     @Value
-    class Result {
+    static class Result {
         String payload;
     }
 

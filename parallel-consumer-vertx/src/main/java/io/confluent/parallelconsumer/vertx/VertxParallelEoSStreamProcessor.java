@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.WorkContainer;
 import io.vertx.core.AsyncResult;
@@ -34,17 +34,9 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/**
- * An extension to {@link ParallelEoSStreamProcessorImpl} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
- * blocking clients to process messages.
- *
- * @param <K>
- * @param <V>
- * @see ParallelEoSStreamProcessorImpl
- * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
- */
 @Slf4j
-public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessorImpl<K, V> {
+public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V>
+        implements VertxParallelStreamProcessor<K, V> {
 
     /**
      * @see WorkContainer#getWorkType()
@@ -93,14 +85,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
         this.webClient = webClient;
     }
 
-    /**
-     * Consume from the broker concurrently, just give us the {@link RequestInfo}, we'll do the rest.
-     * <p>
-     * Useful for when the web request is very straight forward.
-     *
-     * @param requestInfoFunction  a function taking a {@link ConsumerRecord} and returns a {@link RequestInfo} object
-     * @param onWebRequestComplete
-     */
+    @Override
     public void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
@@ -115,12 +100,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
         }, onSend, onWebRequestComplete);
     }
 
-    /**
-     * Consume from the broker concurrently, give us the {@link HttpRequest}, we'll do the rest.
-     *
-     * @param webClientRequestFunction Given the {@link WebClient} and a {@link ConsumerRecord}, return us the {@link
-     *                                 HttpRequest}
-     */
+    @Override
     public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) { // TODO remove, redundant over onSend?
@@ -139,17 +119,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
         }, onSend);
     }
 
-    /**
-     * Consume from the broker concurrently, initiating your own {@link HttpRequest#send()} call, give us the {@link
-     * Future}.
-     * <p>
-     * Useful for when the request if complicated and needs to be handled in a special way.
-     * <p>
-     * Note that an alternative is to pass into the constructor a configured {@link WebClient} instead.
-     *
-     * @see #vertxHttpReqInfo
-     * @see #vertxHttpRequest
-     */
+    @Override
     public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                                    Consumer<Future<HttpResponse<Buffer>>> onSend) {
 
@@ -205,9 +175,9 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     @AllArgsConstructor
     public static class RequestInfo {
         public static final int DEFAULT_PORT = 8080;
-        final private String host;
-        final private int port;
-        final private String contextPath;
+        private final String host;
+        private final int port;
+        private final String contextPath;
         private Map<String, String> params;
 
         public RequestInfo(String host, String contextPath, Map<String, String> params) {
@@ -255,15 +225,15 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     /**
      * Close the concurrent Vertx consumer system
      *
-     * @param timeout         how long to wait before giving up
-     * @param waitForInFlight wait for messages already consumed from the broker to be processed before closing
+     * @param timeout   how long to wait before giving up
+     * @param drainMode wait for messages already consumed from the broker to be processed before closing
      */
     @SneakyThrows
     @Override
-    public void close(Duration timeout, boolean waitForInFlight) {
+    public void close(Duration timeout, DrainingMode drainMode) {
         log.info("Vert.x async consumer closing...");
         waitForNoInFlight(timeout);
-        super.close(timeout, waitForInFlight);
+        super.close(timeout, drainMode);
         webClient.close();
         Future<Void> close = vertx.close();
         var timer = Time.SYSTEM.timer(timeout);
