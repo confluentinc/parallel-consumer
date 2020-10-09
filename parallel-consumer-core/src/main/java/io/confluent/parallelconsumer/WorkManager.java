@@ -50,7 +50,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see K
      * @see #maybeGetWork()
      */
-    final private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     /**
      * Map of partitions to Map of offsets to WorkUnits
@@ -60,7 +60,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
-    final private Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
+    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -126,9 +126,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Clear offset map for revoked partitions
      * <p>
-     * {@link ParallelEoSStreamProcessorImpl#onPartitionsRevoked} handles committing off offsets upon revoke
+     * {@link ParallelEoSStreamProcessor#onPartitionsRevoked} handles committing off offsets upon revoke
      *
-     * @see ParallelEoSStreamProcessorImpl#onPartitionsRevoked
+     * @see ParallelEoSStreamProcessor#onPartitionsRevoked
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {

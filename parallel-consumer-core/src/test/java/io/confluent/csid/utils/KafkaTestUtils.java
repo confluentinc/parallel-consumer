@@ -22,8 +22,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorImplTestBase.CONSUMER_GROUP_ID;
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorImplTestBase.INPUT_TOPIC;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.CONSUMER_GROUP_ID;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.INPUT_TOPIC;
 import static io.confluent.csid.utils.Range.range;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +37,7 @@ public class KafkaTestUtils {
 
     int offset = 0;
 
-    static public final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
+    public static final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
 
     public static void setupConsumer(MockConsumer mc) {
         when(mc.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);

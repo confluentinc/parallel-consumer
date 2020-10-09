@@ -42,7 +42,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Timeout(value = 10, unit = SECONDS)
 @Slf4j
-public class ParallelEoSStreamProcessorImplTest extends ParallelEoSStreamProcessorImplTestBase {
+public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
     static class MyAction implements Function<ConsumerRecord<String, String>, String> {
 
@@ -303,7 +303,7 @@ public class ParallelEoSStreamProcessorImplTest extends ParallelEoSStreamProcess
 
         // close and retrieve exception in control loop
         assertThatThrownBy(() -> {
-            parallelConsumer.close(false);
+            parallelConsumer.closeDontDrainFirst();
         }).hasMessageContainingAll("Error", "poll", "thread", "fake control");
     }
 
@@ -641,7 +641,7 @@ public class ParallelEoSStreamProcessorImplTest extends ParallelEoSStreamProcess
 
     @Test
     public void closeWithoutRunningShouldBeEventBasedFast() {
-        parallelConsumer.close(false);
+        parallelConsumer.closeDontDrainFirst();
     }
 
     @Test

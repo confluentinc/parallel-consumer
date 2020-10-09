@@ -11,15 +11,18 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
+ * Parallel message consumer which also can optionally produce 0 or many {@link ProducerRecord} results to be published
+ * back to Kafka.
+ *
  * @see #pollAndProduce(Function, Consumer)
  */
-public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V> {
+public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
 
-    static <KK, VV> ParallelStreamProcessor<KK, VV> createEosProcessor(
-            org.apache.kafka.clients.consumer.Consumer<KK, VV> c,
-            org.apache.kafka.clients.producer.Producer<KK, VV> p,
-            ParallelConsumerOptions o) {
-        return new ParallelEoSStreamProcessorImpl<>(c, p, o);
+    static <KK, VV> ParallelStreamProcessor<KK, VV> createEosStreamProcessor(
+            org.apache.kafka.clients.consumer.Consumer<KK, VV> consumer,
+            org.apache.kafka.clients.producer.Producer<KK, VV> producer,
+            ParallelConsumerOptions options) {
+        return new ParallelEoSStreamProcessor<>(consumer, producer, options);
     }
 
     /**

@@ -33,23 +33,23 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @Slf4j
 public class BrokerPollSystem<K, V> {
 
-    final private org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+    private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
-    public ParallelEoSStreamProcessorImpl.State state = ParallelEoSStreamProcessorImpl.State.running;
+    public ParallelEoSStreamProcessor.State state = ParallelEoSStreamProcessor.State.running;
 
     private Optional<Future<Boolean>> pollControlThreadFuture;
 
-    volatile private boolean paused = false;
+    private volatile boolean paused = false;
 
-    private final ParallelEoSStreamProcessorImpl<K, V> pc;
+    private final ParallelEoSStreamProcessor<K, V> pc;
 
     @Setter
     @Getter
-    static private Duration longPollTimeout = Duration.ofMillis(2000);
+    private static Duration longPollTimeout = Duration.ofMillis(2000);
 
-    final private WorkManager<K, V> wm;
+    private final WorkManager<K, V> wm;
 
-    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelEoSStreamProcessorImpl<K, V> pc) {
+    public BrokerPollSystem(Consumer<K, V> consumer, WorkManager<K, V> wm, ParallelEoSStreamProcessor<K, V> pc) {
         this.consumer = consumer;
         this.wm = wm;
         this.pc = pc;
@@ -65,7 +65,7 @@ public class BrokerPollSystem<K, V> {
     private boolean controlLoop() {
         Thread.currentThread().setName("broker-poll");
         log.trace("Broker poll control loop start");
-        while (state != ParallelEoSStreamProcessorImpl.State.closed) {
+        while (state != ParallelEoSStreamProcessor.State.closed) {
             log.trace("Loop: Poll broker");
             ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
 
@@ -81,7 +81,7 @@ public class BrokerPollSystem<K, V> {
                 case draining -> {
                     doPause();
                     // transition to closing
-                    state = ParallelEoSStreamProcessorImpl.State.closing;
+                    state = ParallelEoSStreamProcessor.State.closing;
                 }
                 case closing -> {
                     if (polledRecords.isEmpty()) {
@@ -98,15 +98,15 @@ public class BrokerPollSystem<K, V> {
 
     private void doClose() {
         log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
-        this.consumer.close(ParallelEoSStreamProcessorImpl.defaultTimeout);
+        this.consumer.close(DrainingCloseable.DEFAULT_TIMEOUT);
         log.debug("Consumer closed.");
-        state = ParallelEoSStreamProcessorImpl.State.closed;
+        state = ParallelEoSStreamProcessor.State.closed;
     }
 
     private ConsumerRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
 
-        Duration thisLongPollTimeout = (state == ParallelEoSStreamProcessorImpl.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
+        Duration thisLongPollTimeout = (state == ParallelEoSStreamProcessor.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
         log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if no data available on broker.", toSeconds(thisLongPollTimeout)); // java 8
         ConsumerRecords<K, V> records;
@@ -125,9 +125,9 @@ public class BrokerPollSystem<K, V> {
      */
     public void drain() {
         // idempotent
-        if (state != ParallelEoSStreamProcessorImpl.State.draining) {
+        if (state != ParallelEoSStreamProcessor.State.draining) {
             log.debug("Poll system signaling to drain...");
-            state = ParallelEoSStreamProcessorImpl.State.draining;
+            state = ParallelEoSStreamProcessor.State.draining;
             consumer.wakeup();
         }
     }
@@ -153,7 +153,7 @@ public class BrokerPollSystem<K, V> {
             boolean interrupted = true;
             while(interrupted) {
                 try {
-                    Boolean pollShutdownSuccess = pollControlResult.get(ParallelEoSStreamProcessorImpl.defaultTimeout.toMillis(), MILLISECONDS);
+                    Boolean pollShutdownSuccess = pollControlResult.get(DrainingCloseable.DEFAULT_TIMEOUT.toMillis(), MILLISECONDS);
                     interrupted = false;
                     if (!pollShutdownSuccess) {
                         log.warn("Broker poll control thread not closed cleanly.");
@@ -170,7 +170,7 @@ public class BrokerPollSystem<K, V> {
     }
 
     private void transitionToClosing() {
-        state = ParallelEoSStreamProcessorImpl.State.closing;
+        state = ParallelEoSStreamProcessor.State.closing;
         consumer.wakeup();
     }
 

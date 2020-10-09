@@ -16,15 +16,15 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 @Slf4j
-public class JStreamParallelEoSStreamProcessorImpl<K, V> extends ParallelEoSStreamProcessorImpl<K, V> {
+public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V> implements JStreamParallelStreamProcessor<K, V> {
 
     private final Stream<ConsumeProduceResult<K, V, K, V>> stream;
 
     private final ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
 
-    public JStreamParallelEoSStreamProcessorImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                                 Producer<K, V> producer,
-                                                 ParallelConsumerOptions parallelConsumerOptions) {
+    public JStreamParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                             Producer<K, V> producer,
+                                             ParallelConsumerOptions parallelConsumerOptions) {
         super(consumer, producer, parallelConsumerOptions);
 
         this.userProcessResultsStream = new ConcurrentLinkedDeque<>();
@@ -32,12 +32,7 @@ public class JStreamParallelEoSStreamProcessorImpl<K, V> extends ParallelEoSStre
         this.stream = Java8StreamUtils.setupStreamFromDeque(this.userProcessResultsStream);
     }
 
-    /**
-     * Like {@link ParallelEoSStreamProcessorImpl#pollAndProduce} but instead of callbacks, streams the results instead, after the
-     * produce result is ack'd by Kafka.
-     *
-     * @return a stream of results of applying the function to the polled records
-     */
+    @Override
     public Stream<ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
         super.pollAndProduce(userFunction, (result) -> {
             log.trace("Wrapper callback applied, sending result to stream. Input: {}", result);

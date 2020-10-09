@@ -17,7 +17,7 @@
 :toclevels: 3
 :numbered: 1
 
-:github_name: async-consumer
+:github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
 
@@ -58,9 +58,9 @@ situations where;
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        parallelConsumer.poll(record -> {
-            log.info("Concurrently processing a record: {}", record);
-        });
+        parallelConsumer.poll(record ->
+                log.info("Concurrently processing a record: {}", record)
+        );
 ----
 
 
@@ -357,7 +357,7 @@ Where `${project.version}` is the version to be used.
             kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
         }
 
-        return new ParallelConsumeThenProduceImpl<>(kafkaConsumer, getKafkaProducer(), options);
+        return ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, getKafkaProducer(), options);
 ----
 <1> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
@@ -371,11 +371,28 @@ NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disa
 
 After this setup, one then has the choice of interfaces:
 
-* `ParallelEoSStreamProcessorImpl`
-* `VertxParallelEoSStreamProcessor`
-* `JStreamParallelEoSStreamProcessorImpl`
-* `JStreamVertxParallelEoSStreamProcessor`
+* `ParallelStreamProcessor`
+* `VertxParallelStreamProcessor`
+* `JStreamParallelStreamProcessor`
+* `JStreamVertxParallelStreamProcessor`
 
+There is another interface: `ParallelConsumer` which is integrated, however there is currently no immediate implementation.
+See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
+
+[source,java]
+----
+/**
+ * Asynchronous / concurrent message consumer for Kafka.
+ * <p>
+ * Currently there is no direct implementation, only the {@link ParallelStreamProcessor} version (see {@link
+ * ParallelEoSStreamProcessor}), but there may be in the future.
+ *
+ * @param <K> key consume / produce key type
+ * @param <V> value consume / produce value type
+ * @see ParallelEoSStreamProcessor
+ * @see #poll(Consumer)
+ */
+----
 
 === Core
 
@@ -385,9 +402,9 @@ This is the only thing you need to do, in order to get massively concurrent proc
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.poll(record -> {
-            log.info("Concurrently processing a record: {}", record);
-        });
+        parallelConsumer.poll(record ->
+                log.info("Concurrently processing a record: {}", record)
+        );
 
 See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 
@@ -398,24 +415,24 @@ You can also optionally provide a callback function to be run after the message(
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.pollAndProduce((record) -> {
-            var result = processBrokerRecord(record);
-            ProducerRecord<String, String> produceRecord =
-                    new ProducerRecord<>(outputTopic, "a-key", result.payload);
-            return UniLists.of(produceRecord);
-        }, (consumeProduceResult) -> {
-            log.info("Message {} saved to broker at offset {}",
-                    consumeProduceResult.getOut(),
-                    consumeProduceResult.getMeta().offset());
-        });
+        this.parallelConsumer.pollAndProduce(record -> {
+                    var result = processBrokerRecord(record);
+                    ProducerRecord<String, String> produceRecord =
+                            new ProducerRecord<>(outputTopic, "a-key", result.payload);
+                    return UniLists.of(produceRecord);
+                }, consumeProduceResult ->
+                        log.info("Message {} saved to broker at offset {}",
+                                consumeProduceResult.getOut(),
+                                consumeProduceResult.getMeta().offset())
+        );
 
 
 ==== Callbacks vs Streams
 
 You have the option to either use callbacks to be notified of events, or use the `Streaming` versions of the API, which use the `java.util.stream.Stream` system:
 
-* `JStreamParallelEoSStreamProcessorImpl`
-* `JStreamVertxParallelEoSStreamProcessor`
+* `JStreamParallelStreamProcessor`
+* `JStreamVertxParallelStreamProcessor`
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
 
@@ -426,7 +443,7 @@ In future versions, we plan to look at supporting other streaming systems like h
 ----
         var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
-            Map params = UniMaps.of("recordKey", record.key(), "payload", record.value());
+            Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
             return new RequestInfo("localhost", "/api", params); // <1>
         });
 ----
@@ -571,7 +588,6 @@ One can then use this library to consume from an input topic, produced by KS to 
 * Non-blocking I/O work management
 ** More customisable handling of HTTP interactions
 ** Chance to batch multiple consumer records into a single or multiple http request objects
-* Support https://jitpack.io/ version
 * Distributed tracing integration
 * Metrics
 
@@ -610,11 +626,11 @@ One can then use this library to consume from an input topic, produced by KS to 
 The unit test code is set to run at a very high frequency, which can make it difficult to read debug logs (or impossible). If you want to debug the code or view the main logs, consider changing the below:
 
 // replace with code inclusion from readme branch
-.AsyncConsumerTestBase
+.ParallelEoSStreamProcessorTestBase
 [source]
 ----
-AsyncConsumerTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
-AsyncConsumerTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
+ParallelEoSStreamProcessorTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
+ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 ----
 
 === Readme

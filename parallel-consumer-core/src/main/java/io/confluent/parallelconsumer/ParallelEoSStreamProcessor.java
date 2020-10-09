@@ -27,7 +27,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorImpl.State.*;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
@@ -43,9 +43,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * ParallelEoSConsumer
  */
 @Slf4j
-public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
-
-    protected static final Duration defaultTimeout = Duration.ofSeconds(10); // can increase if debugging
+public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
 
     /**
      * Injectable clock for testing
@@ -127,9 +125,9 @@ public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProce
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessorImpl(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                          org.apache.kafka.clients.producer.Producer<K, V> producer,
-                                          ParallelConsumerOptions options) {
+    public ParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                                      org.apache.kafka.clients.producer.Producer<K, V> producer,
+                                      ParallelConsumerOptions options) {
         log.debug("Confluent async consumer initialise");
 
         Objects.requireNonNull(consumer);
@@ -318,29 +316,25 @@ public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProce
     @Override
     public void close() {
         // use a longer timeout, to cover for evey other step using the default
-        Duration timeout = defaultTimeout.multipliedBy(2);
-        close(timeout, true);
-    }
-
-    @Override
-    public void close(boolean waitForInflight) {
-        this.close(defaultTimeout, waitForInflight);
+        Duration timeout = DrainingCloseable.DEFAULT_TIMEOUT.multipliedBy(2);
+        closeDrainFirst(timeout);
     }
 
     @Override
     @SneakyThrows
-    public void close(Duration timeout, boolean waitForInFlight) {
+    public void close(Duration timeout, DrainingMode drainMode) {
         if (state == closed) {
             log.info("Already closed, checking end state..");
         } else {
             log.info("Signaling to close...");
 
-            if (waitForInFlight) {
-                log.info("Will wait for all in flight to complete before");
-                transitionToDraining();
-            } else {
-                log.info("Not waiting for in flight to complete, will transition directly to closing");
-                transitionToClosing();
+            switch (drainMode){
+                case DRAIN:
+                    log.info("Will wait for all in flight to complete before");
+                    transitionToDraining();
+                case DONT_DRAIN:
+                    log.info("Not waiting for in flight to complete, will transition directly to closing");
+                    transitionToClosing();
             }
 
             waitForClose(timeout);
@@ -398,7 +392,7 @@ public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProce
         while (interrupted) {
             log.warn("Still interrupted");
             try {
-                boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(defaultTimeout), SECONDS);
+                boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(DrainingCloseable.DEFAULT_TIMEOUT), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
                     log.warn("workerPool await timeout!");
@@ -493,7 +487,7 @@ public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProce
                     controlLoop(userFunction, callback);
                 } catch (Exception e) {
                     log.error("Error from poll control thread ({}), will attempt controlled shutdown, then rethrow...", e.getMessage(), e);
-                    doClose(defaultTimeout); // attempt to close
+                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
                 }
             }
@@ -534,7 +528,7 @@ public class ParallelEoSStreamProcessorImpl<K, V> implements ParallelStreamProce
         log.debug("Current state: {}", state);
         switch (state) {
             case draining -> drain();
-            case closing -> doClose(defaultTimeout);
+            case closing -> doClose(DrainingCloseable.DEFAULT_TIMEOUT);
         }
 
         // end of loop
