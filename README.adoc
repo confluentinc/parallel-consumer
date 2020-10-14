@@ -42,6 +42,8 @@ image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build S
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
+WARNING: This is not a Confluent supported product. It is an experimental alpha stage accelerator. See the <<Support and Issues>> section for more information.
+
 [[intro]]
 If your use case fits - process your Kafka messages _orders of magnitudes *faster*_, with much lower latency, *without* adjusting your partitions or managing more client instances.
 
@@ -167,11 +169,16 @@ A very common example of a scenario where this helps tremulously, is in "slow co
 
 == Support and Issues
 
-This library is experimental, and Confluent does not currently offer support for this library.
-If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
+WARNING: This library is experimental, and Confluent does not currently offer support for this library.
 
-We are very interested to hear about your experiences!
-You can also reach out to the maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
+If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker.
+Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
+
+We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
+
+NOTE: We are very interested to hear about your experiences!
+
+You can also otherwise, reach the primary maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
 
 == License
 
@@ -650,7 +657,7 @@ See what plugins or dependencies are avaible to be updated::
 
 We use the excellent https://testcontainers.org[Testcontainers] library for integration testing with JUnit.
 
-To speed up test execution, you can enable container reused across test runs by setting the following in your https://www.testcontainers.org/features/configuration/[`~/.testcontainers.properties` file]:
+To speed up test execution, you can enable container reuse across test runs by setting the following in your https://www.testcontainers.org/features/configuration/[`~/.testcontainers.properties` file]:
 
 [source]
 ----
