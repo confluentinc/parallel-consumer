@@ -237,10 +237,13 @@ Actual results will vary wildly depending upon the setup being deployed into.
 
 For example, if you have hundreds of thousands of keys in your topic, randomly distributed, even with hundreds of partitions, with only a handful of this wrapper deployed, you will probably see many orders of magnitude performance improvements - massively out performing dozens of vanila Kafka consumer clients.
 
+.Time taken to process a large number of messages with a Single Parallel Consumer vs a single Kafka Consumer, for different key space sizes
 image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1691474082&amp;format=image[]
 
+.Consumer group size affect on message latency vs a single Parallel Consumer
 image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1161363385&format=image[]
 
+.Kafka Consumer group size affect on total proessing time vs a single Parallel Consumer
 image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=938493158&format=image[]
 
 As an illustrative example of relative performance, given:
@@ -444,6 +447,7 @@ In future versions, we plan to look at supporting other streaming systems like h
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/parallelconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
 
+[[streams-usage-code]]
 === Kafka Streams Concurrent Processing
 
 .Preprocess in Kafka Streams, then process concurrently
@@ -562,6 +566,11 @@ Kafka Streams (KS) doesn't yet (https://cwiki.apache.org/confluence/display/KAFK
 https://cwiki.apache.org/confluence/display/KAFKA/KIP-408%3A+Add+Asynchronous+Processing+To+Kafka+Streams[KIP-408]) have parallel processing of messages.
 However, any given preprocessing can be done in KS, preparing the messages.
 One can then use this library to consume from an input topic, produced by KS to process the messages in parallel.
+
+For a code example, see the <<streams-usage-code>> section.
+
+.Example usage with Kafka Streams
+image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage]
 
 [[roadmap]]
 == Roadmap
@@ -706,13 +715,15 @@ See https://github.com/testcontainers/testcontainers-java/pull/1781[this testcon
 Concurrency is controlled by the size of the thread pool (`worker pool` in the diagram).
 Work is performed in a blocking manner, by the users submitted lambda functions.
 
-image:https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59ed/image.png[Core Architecture]
+.Core Architecture
+image::https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59ed/image.png[Core Architecture]
 
 === Vert.x Architecture
 
 Concurrency is controlled by a max parallel requests setting, and work is performed asynchronously on the Vert.x engine by a core count thread pool using Vert.x asynchronous IO plugins (https://vertx.io/docs/vertx-core/java/#_verticles[verticles]).
 
-image:https://lucid.app/publicSegments/view/ed92fdd7-949a-4db1-8cbc-bbe709a940fe/image.png[Vert.x Architecture]
+.Vert.x Architecture
+image::https://lucid.app/publicSegments/view/ed92fdd7-949a-4db1-8cbc-bbe709a940fe/image.png[Vert.x Architecture]
 
 === Offset Map
 
