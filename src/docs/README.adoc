@@ -636,6 +636,19 @@ See https://github.com/testcontainers/testcontainers-java/pull/1781[this testcon
 
 == Implementation Details
 
+=== Core Architecture
+
+Concurrency is controlled by the size of the thread pool (`worker pool` in the diagram).
+Work is performed in a blocking manner, by the users submitted lambda functions.
+
+image:https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59ed/image.png[Core Architecture]
+
+=== Vert.x Architecture
+
+Concurrency is controlled by a max parallel requests setting, and work is performed asynchronously on the Vert.x engine by a core count thread pool using Vert.x asynchronous IO plugins (https://vertx.io/docs/vertx-core/java/#_verticles[verticles]).
+
+image:https://lucid.app/publicSegments/view/ed92fdd7-949a-4db1-8cbc-bbe709a940fe/image.png[Vert.x Architecture]
+
 === Offset Map
 
 ==== Storage
