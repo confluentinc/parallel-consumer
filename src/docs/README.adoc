@@ -319,6 +319,13 @@ As an illustrative example of relative performance, given:
 
 === Maven
 
+Until we release the first version of the project, you can install this in your local repository and deploy it to your local snapshot repository with:
+
+[source,bash]
+----
+↪ mvn install -DskipTests
+----
+
 Where `${project.version}` is the version to be used.
 
 .Core Module Dependency
@@ -329,10 +336,10 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 [source,xml,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/pom.xml[tag=exampleDep]
 
-
-.Repository
-[source,xml,indent=0]
-include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/pom.xml[tag=exampleRepo]
+// uncomment once version deployed
+//.Repository
+//[source,xml,indent=0]
+//include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/pom.xml[tag=exampleRepo]
 
 === Common Preparation
 
