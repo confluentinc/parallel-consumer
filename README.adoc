@@ -79,6 +79,15 @@ Save money by not needing to add resources or reduce resources deployed, achieve
 When reading the below, keep in mind that the unit of concurrency and thus performance, is restricted by the number of partitions (degree of sharding / concurrency).
 Currently, you can't adjust the number of partitions in your kafka topics without jumping through a lot of hoops, or breaking your key ordering.
 
+==== Before
+.The slow consumer situation with the raw Apache Kafka Consumer client
+image::https://lucid.app/publicSegments/view/98ad200f-97b2-479b-930c-2805491b2ce7/image.png[]
+
+==== After
+.Example usage of the Parallel Consumer
+image::https://lucid.app/publicSegments/view/2cb3b7e2-bfdf-4e78-8247-22ec394de965/image.png[]
+
+==== FAQ
 [qanda]
 Why not just run more consumers?::
 The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic. This is effective in many situations, but falls short in a lot too.
@@ -450,6 +459,11 @@ See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example
 [[streams-usage-code]]
 === Kafka Streams Concurrent Processing
 
+Use your Streams app to process your data first, then send anything needed to be processed concurrently to an output topic, to be consumed by the parallel consumer.
+
+.Example usage with Kafka Streams
+image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage]
+
 .Preprocess in Kafka Streams, then process concurrently
 [source,java,indent=0]
 ----
@@ -488,6 +502,7 @@ See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example
 <2> For the slow consumer part of your Topology, drop down into the parallel consumer, and use massive concurrency
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/parallelconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
+
 
 == Order enforced commit sync per partition
 
