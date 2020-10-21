@@ -182,7 +182,7 @@ You can also otherwise, reach the primary maintainer via link:mailto:antony@conf
 
 == License
 
-This library is copyright Confluent Inc, and licensed under the XXX.
+This library is copyright Confluent Inc, and licensed under the Apache License Version 2.0.
 
 == Testing
 
