@@ -503,11 +503,11 @@ The message publishing metadata can be streamed back to your client code.
 == Apache Kafka EoS Transaction Model
 
 The system uses Kafka's Exactly Once Semantics (EoS) system.
-This causes all messages produced as a result of processing a message to be committed within a transaction.
+This causes all messages produced as a result of processing a message to be committed within a transaction, along with their source offset.
 This means that even under failure, the results will exist exactly once in the Kafka output topic. If as a part of
 your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
 
-CAUTION: This cannot be true for any externally integrated third party system, unless that system is Idempotent.
+CAUTION: This cannot be true for any externally integrated third party system, unless that system is __idempotent__.
 
 [[streams-usage]]
 == Using with Kafka Streams
@@ -673,7 +673,7 @@ image::https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59e
 Concurrency is controlled by a max parallel requests setting, and work is performed asynchronously on the Vert.x engine by a core count thread pool using Vert.x asynchronous IO plugins (https://vertx.io/docs/vertx-core/java/#_verticles[verticles]).
 
 .Vert.x Architecture
-image::https://lucid.app/publicSegments/view/ed92fdd7-949a-4db1-8cbc-bbe709a940fe/image.png[Vert.x Architecture]
+image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture]
 
 === Offset Map
 
