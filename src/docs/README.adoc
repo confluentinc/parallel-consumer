@@ -85,7 +85,19 @@ image::https://lucid.app/publicSegments/view/98ad200f-97b2-479b-930c-2805491b2ce
 .Example usage of the Parallel Consumer
 image::https://lucid.app/publicSegments/view/2cb3b7e2-bfdf-4e78-8247-22ec394de965/image.png[]
 
-==== FAQ
+
+=== Background
+
+The core Kafka consumer client gives you a batch of messages to process one at a time.
+Processing these in parallel on thread pools is difficult, particularly due to ensuring correctness of offset management, especially when trying to process concurrent by message key.
+
+You also need to manage your consume loop, and commit transactions properly if using Exactly Once semantics.
+
+This wrapper library for the core Kafka client handles all this for you, you just supply your processing function.
+
+A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typically CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
+
+=== FAQ
 [qanda]
 Why not just run more consumers?::
 The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic. This is effective in many situations, but falls short in a lot too.
@@ -162,40 +174,6 @@ The end-to-end latency of the responses to these answers needs to be as low as t
 ** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance. We can break out as described below into the tool for for processing that step, then return to the Kafka Streams context.
 * Provisinoing extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
-
-=== Background
-
-The core Kafka consumer client gives you a batch of messages to process one at a time.
-Processing these in parallel on thread pools is difficult, particularly due to ensuring correctness of offset management, especially when trying to process concurrent by message key.
-
-You also need to manage your consume loop, and commit transactions properly if using Exactly Once semantics.
-
-This wrapper library for the core Kafka client handles all this for you, you just supply your processing function.
-
-A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typically CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
-
-== Support and Issues
-
-WARNING: This library is experimental, and Confluent does not currently offer support for this library.
-
-If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker.
-Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
-
-We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
-
-NOTE: We are very interested to hear about your experiences!
-
-You can also otherwise, reach the primary maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
-
-== License
-
-This library is copyright Confluent Inc, and licensed under the Apache License Version 2.0.
-
-== Testing
-
-The project has good automated test coverage, of all features.
-Including integration tests running against real Kafka broker and database.
-If you want to run the tests yourself, clone the repository and run the command: `mvn test`. The tests require an active docker server on `localhost`.
 
 == Feature List
 * Have massively parallel consumption processing without running hundreds or thousands of
@@ -326,6 +304,26 @@ As an illustrative example of relative performance, given:
 |2.829s
 |As there is no order restriction, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
 |===
+
+
+== Support and Issues
+
+WARNING: This library is experimental, and Confluent does not currently offer support for this library.
+
+If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker.
+Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
+
+We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
+
+NOTE: We are very interested to hear about your experiences!
+
+You can also otherwise, reach the primary maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
+
+
+== License
+
+This library is copyright Confluent Inc, and licensed under the Apache License Version 2.0.
+
 
 == Usage
 
@@ -613,6 +611,13 @@ See what profiles are active::
 
 See what plugins or dependencies are avaible to be updated::
 `mvn versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates`
+
+
+=== Testing
+
+The project has good automated test coverage, of all features.
+Including integration tests running against real Kafka broker and database.
+If you want to run the tests yourself, clone the repository and run the command: `mvn test`. The tests require an active docker server on `localhost`.
 
 ==== Integration Testing with TestContainers
 //https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
