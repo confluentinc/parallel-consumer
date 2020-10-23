@@ -174,7 +174,7 @@ The end-to-end latency of the responses to these answers needs to be as low as t
 ** We can use the tool ourselves to improve our system performance without touching the cluster / topic setup.
 * Kafka Streams app that had a slow stage
 ** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance. We can break out as described below into the tool for for processing that step, then return to the Kafka Streams context.
-* Provisinoing extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
+* Provisioning extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
 
 == Feature List
@@ -766,6 +766,7 @@ image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b
 ** Not being able to fit the map into the metadata, depends on how many partitions we're assigned (it's 4096 bytes total for all assigned partitions, not each unfortunately), and the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit hundreds of partitions))
 *** To improve this situation, we could introduce the option of a dynamic backpressure system, where the size of the serialised offset map is monitored, and if it is growing too large, we pause work until it can fit again
 ** @see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`
+
 
 == Attribution
 
