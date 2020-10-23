@@ -329,7 +329,7 @@ image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b
 
 == What's next?
 
-Go clone the https://github.com/confluentinc/parallel-consumer/[respoitory] and try it out in your projects! Use the Github issues system to send us any feedback or issues you have.
+Go clone the https://github.com/confluentinc/parallel-consumer/[repository] and try it out in your projects! Use the Github issues system to send us any feedback or issues you have.
 
 WARNING: This library is experimental, and Confluent does not currently offer support for this library.
 
