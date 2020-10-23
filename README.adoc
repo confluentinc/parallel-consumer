@@ -42,7 +42,9 @@ image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build S
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
-WARNING: This is not a Confluent supported product. It is an experimental alpha stage accelerator. See the <<Support and Issues>> section for more information.
+WARNING: This is not a Confluent supported product.
+It is an experimental alpha stage accelerator.
+See the <<Support and Issues>> section for more information.
 
 [[intro]]
 If your use case fits - process your Kafka messages _orders of magnitudes *faster*_, with much lower latency, *without* adjusting your partitions or managing more client instances.
@@ -77,7 +79,7 @@ If your use case is a fit, dramatically increased performance, lower latency, an
 Save money by not needing to add resources or reduce resources deployed, achieve high-performance in under provisioned or miss-configured environments (partition counts), without unnecessarily burdening your Kafka Broker side with extra partition load or large consumer groups.
 
 When reading the below, keep in mind that the unit of concurrency and thus performance, is restricted by the number of partitions (degree of sharding / concurrency).
-Currently, you can't adjust the number of partitions in your kafka topics without jumping through a lot of hoops, or breaking your key ordering.
+Currently, you can't adjust the number of partitions in your Kafka topics without jumping through a lot of hoops, or breaking your key ordering.
 
 ==== Before
 .The slow consumer situation with the raw Apache Kafka Consumer client
@@ -102,7 +104,8 @@ A very common example of a scenario where this helps tremulously, is in "slow co
 === FAQ
 [qanda]
 Why not just run more consumers?::
-The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic. This is effective in many situations, but falls short in a lot too.
+The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic.
+This is effective in many situations, but falls short in a lot too.
 * Primarily: You cannot use more consumers than you have partitions available to read from.
 +
 For example, if you have a topic with five partitions, you cannot use more than five consumers to read from it.
@@ -111,12 +114,14 @@ For example, if you have a topic with five partitions, you cannot use more than 
 ** You can increase partition counts by first copying all topic data to a new topic, but that doubles the data requirements for the topic, adds another processing step that has to be monitored, and increases minimum latency in end to end processing.
 Then your level of concurrency (and thus latency and throughput) is then _still_ restricted to the number of partitions and consumer instances available.
 ** Large numbers of partitions in a Kafka broker system is one of the primary causes of instability and performance problems with over burdened cluster systems.
-* Running more extra consumers has resource implications - each consumer takes up resources on both the client  and broker side. Each consumer adds a lot of overhead in terms of memory, CPU, and network bandwidth.
+* Running more extra consumers has resource implications - each consumer takes up resources on both the client  and broker side
+Each consumer adds a lot of overhead in terms of memory, CPU, and network bandwidth.
 * Large consumer groups (especially many large groups) can cause a lot of strain on the consumer group coordination system, such as rebalance storms.
 * Even with several partitions, you cannot achieve the performance levels obtainable by *per-key* ordered or unordered concurrent processing
 
 Why not run more consumers __within__ your application instance?::
-* This is in some respects a slightly easier way of running more consumer instances, and in others a more complicated way. However, you are still restricted by all the per consumer restrictions as described above.
+* This is in some respects a slightly easier way of running more consumer instances, and in others a more complicated way.
+However, you are still restricted by all the per consumer restrictions as described above.
 
 Why not use the Vert.x library yourself in your processing loop?::
 * Vert.x us used in this library to provide a non-blocking IO system in the message processing step.
@@ -132,7 +137,7 @@ Below are some real world use cases which illustrate concrete situations where t
 * Slow consumer systems in transactional systems (online vs offline or reporting systems)
 ** Notification system:
 +
-*** Notification processing system which sends push notifications to a user to acknowledge a two-factor authentication request on their mobile and authorizing a login to a website, requires optimal end-to-end latency for a good user experience.
+*** Notification processing system which sends push notifications to a user to acknowledge a two-factor authentication request on their mobile and authorising a login to a website, requires optimal end-to-end latency for a good user experience.
 *** A specific message in this queue uncharacteristically takes a long time to process because the third party system is sometimes unpredictably slow to respond and so holds up the processing for *ALL* other notifications for other users that are in the same partition behind this message.
 *** Using key order concurrent processing will allow notifications to proceed while this message either slowly succeeds or times out and retires.
 ** Slow GPS tracking system (slow HTTP service interfaces that can scale horizontally)
@@ -144,7 +149,7 @@ Below are some real world use cases which illustrate concrete situations where t
 *** The maximum rate of message processing is then:
 +
 `1 second / 50 ms * 10 partitions = 200 messages per second.`
-*** By using this library, the 10 partitions can all be processed in key order a potential.
+*** By using this library, the 10 partitions can all be processed in key order.
 +
 `1 second / 50ms × 100,000 keys = 2,000,000 messages per second`
 +
@@ -164,16 +169,17 @@ While the HTTP system probably cannot handle 2,000,000 messages per second, more
 The end-to-end latency of the responses to these answers needs to be as low as technically possible, even if the processing step is quick.
 *** Instead of a vanilla client where each user response waits in a virtual queue with others to be processed, this library allows every single response to be processed in parallel.
 * Legacy partition structure
-** Any existing setups where we need higher performance eihter in throughput or latency where there are not enough partitions for needed concurrency level, the tool can be applied.
+** Any existing setups where we need higher performance either in throughput or latency where there are not enough partitions for needed concurrency level, the tool can be applied.
 * Partition overloaded brokers
-** Clusters with under-provisioned hardware and with too many partitions already - where we cannot expand partitions even if were able to.
+** Clusters with under-provisioned hardware and with too many partitions already - where we cannot expand partitions even if we were able to.
 ** Similar to the above, but from the operations perspective, our system is already over partitioned, perhaps in order to support existing parallel workloads which aren't using the tool (and so need large numbers of partitions).
 ** We encourage our development teams to migrate to the tool, and then being a process of actually __lowering__ the number of partitions in our partitions in order to reduce operational complexity, improve reliability and perhaps save on infrastructure costs.
 * Server side resources are controlled by a different team we can't influence
 ** The cluster our team is working with is not in our control, we cannot change the partition setup, or perhaps even the consumer layout.
 ** We can use the tool ourselves to improve our system performance without touching the cluster / topic setup.
 * Kafka Streams app that had a slow stage
-** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance. We can break out as described below into the tool for for processing that step, then return to the Kafka Streams context.
+** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance.
+We can break out as described below into the tool for processing that step, then return to the Kafka Streams context.
 * Provisioning extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
 
@@ -202,7 +208,7 @@ And more <<roadmap,to come>>!
 
 In the best case, you don't care about ordering at all.In which case, the degree of concurrency achievable is simply set by max thread and concurrency settings, or with the VertX extension, the Vertx Vertical being used - e.g. non-blocking HTTP calls.
 
-For example, instead of having to run 1,000 consumer to process 1,000 messages at the same time, we can process all 1,000 concurrently on a single consumer instance.
+For example, instead of having to run 1,000 consumers to process 1,000 messages at the same time, we can process all 1,000 concurrently on a single consumer instance.
 
 More typically though you probably still want the per key ordering grantees that Kafka provides.
 For this there is the per key ordering setting.
@@ -222,16 +228,16 @@ This performance comparison results below, even though are based on real perform
 To see how the performance of the tool is related to instance counts, partition counts, key distribution and how it would relate to the vanilla client.
 Actual results will vary wildly depending upon the setup being deployed into.
 
-For example, if you have hundreds of thousands of keys in your topic, randomly distributed, even with hundreds of partitions, with only a handful of this wrapper deployed, you will probably see many orders of magnitude performance improvements - massively out performing dozens of vanila Kafka consumer clients.
+For example, if you have hundreds of thousands of keys in your topic, randomly distributed, even with hundreds of partitions, with only a handful of this wrapper deployed, you will probably see many orders of magnitude performance improvements - massively out performing dozens of vanilla Kafka consumer clients.
 
-.Time taken to process a large number of messages with a Single Parallel Consumer vs a single Kafka Consumer, for different key space sizes
+.Time taken to process a large number of messages with a Single Parallel Consumer vs a single Kafka Consumer, for different key space sizes. As the number of unique keys in the data set increases, the key ordered Parallel Consumer performance starts to approach that of the unordered Parallel Consumer. The raw Kafka consumer performance remains unaffected by the key distribution.
 image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1691474082&amp;format=image[]
 
-.Consumer group size affect on message latency vs a single Parallel Consumer
-image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1161363385&format=image[]
-
-.Kafka Consumer group size affect on total proessing time vs a single Parallel Consumer
+.Consumer group size effect on total processing time vs a single Parallel Consumer. As instances are added to the consumer group, it's performance starts to approach that of the single instance Parallel Consumer. Key ordering is faster than partition ordering, with unordered being the fastest.
 image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=938493158&format=image[]
+
+.Consumer group size effect on message latency vs a single Parallel Consumer. As instances are added to the consumer group, it's performance starts to approach that of the single instance Parallel Consumer.
+image::https://docs.google.com/spreadsheets/d/e/2PACX-1vQffkAFG-_BzH-LKfGCVnytdzAHiCNIrixM6X2vF8cqw2YVz6KyW3LBXTB-lVazMAJxW0UDuFILKvtK/pubchart?oid=1161363385&format=image[]
 
 As an illustrative example of relative performance, given:
 
@@ -312,14 +318,14 @@ As an illustrative example of relative performance, given:
 
 WARNING: This library is experimental, and Confluent does not currently offer support for this library.
 
-If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker.
+If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
 Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
 
 We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
 
 NOTE: We are very interested to hear about your experiences!
 
-You can also otherwise, reach the primary maintainer via link:mailto:antony@confluent.io[email] or https://twitter.com/psynikal[twitter].
+You can also otherwise, reach the primary maintainer via link:mailto:antony@confluent.io[email].
 
 
 == License
@@ -502,7 +508,7 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/parallelconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
 
 
-== Order enforced commit sync per partition
+== Ordering Guarantees
 
 The user has the option to either choose ordered, or unordered message processing.
 
@@ -517,36 +523,37 @@ CAUTION: `Unordered` processing could cause problems for third party integration
 
 CAUTION: Beware of third party systems which are not idempotent, or are key order sensitive.
 
+== Ordering Guarantees
+
+The user has the option to either choose key ordered, partition ordered, or unordered message processing.
+
 === Unordered
 
-Unordered processing is where there is no such restriction on there being multiple messages processed per partition.
-However, regardless of how far along the partition the processing progresses, the earliest outstanding message will block committing of offsets.
-
-WARNING: If the system fails with many messages processed ahead of a single old message, ALL these messages will be processed again.
+Unordered processing is where there is no restriction on the order of multiple messages processed per partition, allowing for highest level of concurrency.
 
 === Ordered by Partition
 
 At most only one message from any given input partition will be in flight at any given time.
 This means that concurrent processing is restricted to the number of input partitions.
 
-The advantage of ordered processing mode, is that for an input of 1000 partitions, you do not need to run 1000 application instances or threads, to process the partitions in parallel.
+The advantage of ordered processing mode, is that for an assignment of 1000 partitions to a single consumer, you do not need to run 1000 consumer instances or threads, to process the partitions in parallel.
+
+Note that for a given partition, a slow processing message _will_ prevent messages behind it from being processed.
+However, messages in other partitions assigned to the consumer _will_ continue processing.
 
 === Ordered by Key
 
-Most similar to ordered by partition, this mode ensures process ordering by key.
+Most similar to ordered by partition, this mode ensures process ordering by *key* (per partition).
 
-The advantage of this mode, is that a given input topic may not have many partitions, it may have a ~large number of keys.
-Each of these key/message sets can actually possibly be processed concurrently, bringing concurrent processing to a per key level, without having to increase the number of input partitions, whilst keeping key ordering for the integrated systems.
+The advantage of this mode, is that a given input topic may not have many partitions, it may have a ~large number of unique keys.
+Each of these key -> message sets can actually be processed concurrently, bringing concurrent processing to a per key level, without having to increase the number of input partitions, whilst keeping strong ordering by key.
 
-And as usual, the order of offset commit's will be correct such that under failure, the system will resume from the most recently committed message in the input partitions.
-
-CAUTION: Beware of retries, idempotency and rollbacks
+As usual, the offset tracking will be correct, regardless of the ordering of unique keys on the partition or adjacency to the committed offset, such that after failure or rebalance, the system will not replay messages already marked as successful.
 
 === Retries and Ordering
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
-During `ordered` processing, retries will cause a partitions messages to be held up either until the message is given up on and sent to the DLQ.
 
 == Result Models
 
@@ -567,7 +574,8 @@ The message publishing metadata can be streamed back to your client code.
 
 The system uses Kafka's Exactly Once Semantics (EoS) system.
 This causes all messages produced as a result of processing a message to be committed within a transaction, along with their source offset.
-This means that even under failure, the results will exist exactly once in the Kafka output topic. If as a part of
+This means that even under failure, the results will exist exactly once in the Kafka output topic.
+If as a part of
 your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
 
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is __idempotent__.
@@ -639,7 +647,8 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 
 === Notes
 
-The unit test code is set to run at a very high frequency, which can make it difficult to read debug logs (or impossible). If you want to debug the code or view the main logs, consider changing the below:
+The unit test code is set to run at a very high frequency, which can make it difficult to read debug logs (or impossible).
+If you want to debug the code or view the main logs, consider changing the below:
 
 // replace with code inclusion from readme branch
 .AsyncConsumerTestBase
@@ -682,7 +691,8 @@ See what plugins or dependencies are avaible to be updated::
 
 The project has good automated test coverage, of all features.
 Including integration tests running against real Kafka broker and database.
-If you want to run the tests yourself, clone the repository and run the command: `mvn test`. The tests require an active docker server on `localhost`.
+If you want to run the tests yourself, clone the repository and run the command: `mvn test`.
+The tests require an active docker server on `localhost`.
 
 ==== Integration Testing with TestContainers
 //https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
@@ -750,7 +760,7 @@ image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b
 ==== Storage
 
 * Runtime data model creates list of incomplete offsets
-* Then builds a full complete / not complete bit map from the base offset to be comitted
+* Then builds a full complete / not complete bit map from the base offset to be committed
 * Dynamically switching storage
 ** encodes into a `BitSet`, and a `ByteBuffer`, then compresses both using zstd, then uses the smallest and tags as such in the encoded String
 ** Which is smallest can depend on the size and information density of the offset map
@@ -758,7 +768,7 @@ image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b
 *** Larger maps are usually better in compressed `ByteBuffer` ~(13750 entry map bitset: compressed: 63 Bytes, uncompressed: 1719 Bytes, compressed ByteBuffer: 41 Bytes)
 *** Completely random offset maps, compressed and uncompressed `BitSet` is roughly the same (2000 entries, uncompressed bitset: 250, compressed: 259, compressed bytes array: 477)
 *** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again.
-*** A large map with a single oustanding message (2000 entries, 1 outstanding at a random position) compressed `BitSet` and `ByteArray` come out the same (23 vs 22 bytes, vs 250 for uncompressed `BitSet`)
+*** A large map with a single outstanding message (2000 entries, 1 outstanding at a random position) compressed `BitSet` and `ByteArray` come out the same (23 vs 22 bytes, vs 250 for uncompressed `BitSet`)
 * Stores along with base offset for each partition, in the offset commitsync metadata string
 * The offset commit metadata has a hardcoded limit of 4096 bytes
 ** Because of this, if our map doesn't fit into this, we have to drop it and not use it, loosing the shorter replay benefits
