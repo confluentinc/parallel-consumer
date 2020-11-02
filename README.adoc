@@ -325,7 +325,7 @@ We also encourage participation, so if you have any feature ideas etc, please ge
 
 NOTE: We are very interested to hear about your experiences!
 
-You can also otherwise, reach the primary maintainer via link:mailto:antony@confluent.io[email].
+If you have questions, head over to the https://launchpass.com/confluentcommunity[Confluent Slack community], or raise an https://github.com/confluentinc/parallel-consumer/issues[issue] on GitHub.
 
 
 == License
