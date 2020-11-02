@@ -47,17 +47,7 @@ It is an experimental alpha stage accelerator.
 See the <<Support and Issues>> section for more information.
 
 [[intro]]
-If your use case fits - process your Kafka messages _orders of magnitudes *faster*_, with much lower latency, *without* adjusting your partitions or managing more client instances.
-
-As processing speed and response time isn't bound to the number of partitions in a topic anymore, go faster in
-situations where;
-
-* partition counts are fixed such as legacy setups
-* production deployments where partitions can't otherwise be changed
-* where brokers are overloaded with too many partitions already
-* where the partition count is out of your control,
-* where running large consumer groups
-* many consumer clients isn't desirable
+This library lets you process messages in parallel via a single Kafka Consumer meaning you can increase consumer parallelism without increasing the number of partitions in the topic you intend to process. For many use cases this improves both throughput and latency by reducing load on your brokers. It also opens up new use cases like extreme parallelism, external data enrichment, and queuing.
 
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
@@ -72,9 +62,15 @@ toc::[]
 
 === Why would I need this?
 
-If your use case is a fit, dramatically increased performance, lower latency, and save developers months of error prone work trying to implement concurrent processing themselves.
+The unit of parallelism in Kafka’s consumers is the partition but sometimes you want to break away from this approach and manage parallelism yourself using threads rather than new instances of a Consumer. Notable use cases include:
 
-Save money by not needing to add resources or reduce resources deployed, achieve high-performance in under provisioned or miss-configured environments (partition counts), without unnecessarily burdening your Kafka Broker side with extra partition load or large consumer groups.
+* Where partition counts are difficult to change and you need more parallelism than the current configuration allows.
+
+* You wish to avoid over provisioning partitions in topics due to unknown future requirements.
+
+* You wish to reduce the broker-side resource utilization associated with highly-parallel consumer groups.
+
+* You need queue-like semantics that use message level acknowledgment, for example to process a work queue with short- and long-running tasks.
 
 When reading the below, keep in mind that the unit of concurrency and thus performance, is restricted by the number of partitions (degree of sharding / concurrency).
 Currently, you can't adjust the number of partitions in your Kafka topics without jumping through a lot of hoops, or breaking your key ordering.
@@ -91,27 +87,19 @@ image::https://lucid.app/publicSegments/view/2cb3b7e2-bfdf-4e78-8247-22ec394de96
 === Background
 
 The core Kafka consumer client gives you a batch of messages to process one at a time.
-Processing these in parallel on thread pools is difficult, particularly due to ensuring correctness of offset management, especially when trying to process concurrent by message key.
+Processing these in parallel on thread pools is difficult, particularly when considering offset management and strong ordering guarentees. You also need to manage your consume loop, and commit transactions properly if using Exactly Once semantics.
 
-You also need to manage your consume loop, and commit transactions properly if using Exactly Once semantics.
+This wrapper library for the Apache Kafka Java client handles all this for you, you just supply your processing function.
 
-This wrapper library for the core Kafka client handles all this for you, you just supply your processing function.
-
-A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other.Slow processing can be typically CPU bound, IO bound or bound by third party.The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
+A very common example of a scenario where this helps tremulously, is in "slow consumer" situations, where processing a single message in your topic is slow, but the messages aren't so dependent on each other. Slow processing can be typically CPU bound, IO bound or bound by third party. The VertX extension to this library supplies many non-blocking interfaces allowing you to achieve high levels of concurrency easily.
 
 === FAQ
 [qanda]
 Why not just run more consumers?::
 The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic.
 This is effective in many situations, but falls short in a lot too.
-* Primarily: You cannot use more consumers than you have partitions available to read from.
-+
-For example, if you have a topic with five partitions, you cannot use more than five consumers to read from it.
 
-** You can use this library to process messages concurrently up to the number of keys available, without worrying about increasing partition counts.
-** You can increase partition counts by first copying all topic data to a new topic, but that doubles the data requirements for the topic, adds another processing step that has to be monitored, and increases minimum latency in end to end processing.
-Then your level of concurrency (and thus latency and throughput) is then _still_ restricted to the number of partitions and consumer instances available.
-** Large numbers of partitions in a Kafka broker system is one of the primary causes of instability and performance problems with over burdened cluster systems.
+* Primarily: You cannot use more consumers than you have partitions available to read from. For example, if you have a topic with five partitions, you cannot use a group with more than five consumers to read from it.
 * Running more extra consumers has resource implications - each consumer takes up resources on both the client  and broker side
 Each consumer adds a lot of overhead in terms of memory, CPU, and network bandwidth.
 * Large consumer groups (especially many large groups) can cause a lot of strain on the consumer group coordination system, such as rebalance storms.
@@ -125,60 +113,9 @@ Why not use the Vert.x library yourself in your processing loop?::
 * Vert.x us used in this library to provide a non-blocking IO system in the message processing step.
 Using Vert.x without using this library with *ordered* processing requires dealing with the quite complicated, and not straight forward, aspect of handling offset commits with Vert.x asynchronous processing system.
 +
-*Unordered* processing with Vert.x is somewhat easier, however offset management is still quite complicated, to  ensure that offsets are not committed, which would cause other not-yet-processed offsets to be incorrectly committed.
+*Unordered* processing with Vert.x is somewhat easier, however offset management is still quite complicated, and the Parallel Consumer also provides optimizations for message-level acknowledgment in this case.
 This library handles offset commits for both ordered and unordered processing cases.
 
-=== Scenarios
-
-Below are some real world use cases which illustrate concrete situations where the described advantages massively improve performance.
-
-* Slow consumer systems in transactional systems (online vs offline or reporting systems)
-** Notification system:
-+
-*** Notification processing system which sends push notifications to a user to acknowledge a two-factor authentication request on their mobile and authorising a login to a website, requires optimal end-to-end latency for a good user experience.
-*** A specific message in this queue uncharacteristically takes a long time to process because the third party system is sometimes unpredictably slow to respond and so holds up the processing for *ALL* other notifications for other users that are in the same partition behind this message.
-*** Using key order concurrent processing will allow notifications to proceed while this message either slowly succeeds or times out and retires.
-** Slow GPS tracking system (slow HTTP service interfaces that can scale horizontally)
-*** GPS tracking messages from 100,000 different field devices pour through at a high rate into an input topic.
-*** For each message, the GPS location coordinates is checked to be within allowed ranges using a legacy HTTP services, dictated by business rules behind the service.
-*** The service takes 50ms to process each message, however can be scaled out horizontally without restriction.
-*** The input topic only has 10 partitions and for various reasons (see above) cannot be changed.
-*** With the vanilla consumer, messages on each partition must be consumed one after the other in serial order.
-*** The maximum rate of message processing is then:
-+
-`1 second / 50 ms * 10 partitions = 200 messages per second.`
-*** By using this library, the 10 partitions can all be processed in key order.
-+
-`1 second / 50ms × 100,000 keys = 2,000,000 messages per second`
-+
-While the HTTP system probably cannot handle 2,000,000 messages per second, more importantly, your system is no longer the bottleneck.
-
-** Slow CPU bound model processing for fraud prediction
-*** Consider a system where message data is passed through a fraud prediction model which takes CPU cycles, instead of an external system being slow.
-*** We can scale easily the number of CPUs on our virtual machine where the processing is being run, but we choose not to scale the partitions or consumers (see above).
-*** By deploying onto machines with far more CPUs available, we can run our prediction model massively parallel, increasing our throughput and reducing our end-to-end response times.
-* Spikey load with latency sensitive non-functional requirements
-** An upstream system regularly floods our input topic daily at close of business with settlement totals data from retail outlets.
-*** Situations like this are common where systems are designed to comfortably handle average day time load, but are not provisioned to handle sudden increases in traffic as they don't happen often enough to justify the increased spending on processing capacity that would otherwise remain idle.
-*** Without adjusting the available partitions or running consumers, we can reduce our maximum end-to-end latency and increase throughout to get our global days outlet reports to division managers so action can be taken, before close of business.
-** Natural consumer behaviour
-*** Consider scenarios where bursts of data flooding input topics are generated by sudden user behaviour such as sales or television events ("Oprah" moments).
-*** For example, an evening, prime-time game show on TV where users send in quiz answers on their devices.
-The end-to-end latency of the responses to these answers needs to be as low as technically possible, even if the processing step is quick.
-*** Instead of a vanilla client where each user response waits in a virtual queue with others to be processed, this library allows every single response to be processed in parallel.
-* Legacy partition structure
-** Any existing setups where we need higher performance either in throughput or latency where there are not enough partitions for needed concurrency level, the tool can be applied.
-* Partition overloaded brokers
-** Clusters with under-provisioned hardware and with too many partitions already - where we cannot expand partitions even if we were able to.
-** Similar to the above, but from the operations perspective, our system is already over partitioned, perhaps in order to support existing parallel workloads which aren't using the tool (and so need large numbers of partitions).
-** We encourage our development teams to migrate to the tool, and then being a process of actually __lowering__ the number of partitions in our partitions in order to reduce operational complexity, improve reliability and perhaps save on infrastructure costs.
-* Server side resources are controlled by a different team we can't influence
-** The cluster our team is working with is not in our control, we cannot change the partition setup, or perhaps even the consumer layout.
-** We can use the tool ourselves to improve our system performance without touching the cluster / topic setup.
-* Kafka Streams app that had a slow stage
-** We use Kafka Streams for our message processing, but one of it's steps have characteristics of the above and we need better performance.
-We can break out as described below into the tool for processing that step, then return to the Kafka Streams context.
-* Provisioning extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
 
 == Feature List
