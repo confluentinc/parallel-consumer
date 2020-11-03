@@ -123,10 +123,12 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                                    Consumer<Future<HttpResponse<Buffer>>> onSend) {
 
-        Function<ConsumerRecord<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (record) -> {
-
+        Function<List<ConsumerRecord<K, V>>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (recordList) -> {
+            if (recordList.size() != 1) {
+                throw new IllegalArgumentException("Bug: Function only takes a single element");
+            }
+            var record = recordList.get(0);
             Future<HttpResponse<Buffer>> send = carefullyRun(webClientRequestFunction, webClient, record);
-
             // send callback
             onSend.accept(send);
 

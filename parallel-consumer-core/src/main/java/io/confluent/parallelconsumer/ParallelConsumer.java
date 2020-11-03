@@ -9,6 +9,7 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -53,6 +54,8 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
      * @param usersVoidConsumptionFunction the function
      */
     void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
+
+    void pollBatch(int batchLevel, Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction);
 
     /**
      * A simple tuple structure.
