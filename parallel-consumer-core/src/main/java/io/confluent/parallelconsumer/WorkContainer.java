@@ -45,8 +45,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     @Getter
     private static Duration retryDelay = Duration.ofSeconds(10);
 
-    @Getter
-    @Setter(AccessLevel.PACKAGE)
+//    @Getter
+//    @Setter(AccessLevel.PACKAGE)
     private Future<List<Object>> future;
 
     public WorkContainer(ConsumerRecord<K, V> cr) {
