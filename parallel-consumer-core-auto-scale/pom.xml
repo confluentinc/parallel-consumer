@@ -13,7 +13,9 @@
         <version>0.1-SNAPSHOT</version>
     </parent>
 
+    <!-- tag::artifact[] -->
     <artifactId>parallel-consumer-core-auto-scale</artifactId>
+    <!-- end::artifact[] -->
 
     <modelVersion>4.0.0</modelVersion>
 

@@ -139,6 +139,7 @@ without operational burden or harming the clusters performance
 ** Efficient individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
+* <<Automatic concurrency scaling,auto-scaling>> (self scaling thread pool)
 * Vert.x non-blocking library integration (HTTP currently)
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
@@ -324,8 +325,9 @@ NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disa
 
 After this setup, one then has the choice of interfaces:
 
-* `ParallelStreamProcessor`
-* `VertxParallelStreamProcessor`
+* `ParallelStreamProcessor` - <<core>>
+* `AutoScalingProcessor` - <<auto-scaling>>
+* `VertxParallelStreamProcessor` - <<http-with-vertx>>
 * `JStreamParallelStreamProcessor`
 * `JStreamVertxParallelStreamProcessor`
 
@@ -337,6 +339,7 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 include::{project_root}/parallel-consumer-core/src/main/java/io/confluent/parallelconsumer/ParallelConsumer.java[tag=javadoc]
 ----
 
+[[core]]
 === Core
 
 ==== Simple Message Process
@@ -367,6 +370,48 @@ You have the option to either use callbacks to be notified of events, or use the
 * `JStreamVertxParallelStreamProcessor`
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
+
+[[auto-scaling]]
+=== Automatic Concurrency Scaling (self configuring)
+
+`AutoScalingProcessor`
+
+Prevents the user from having to choose a level of concurrency with either the core engine or the vertx engine.
+Selecting the correct concurrency level in a system can be extremely complicated.
+Especially as the system evolves, or the systems integrated with change.
+By implementing a self tuning system, this burden is removed, and the system itself continuously tunes itself to adapt to the conditions it's running in.
+
+Netflix's https://medium.com/@NetflixTechBlog/performance-under-load-3e6fa9a60581[blog post] on their project has a great explanation of the concepts.
+To summarises, the system executes on a special thread pool, which measures the time taken for the jobs to run.
+The thread pool is then gradually expanded, until it measures that the time taken to execute a job starts to degrade, or the job actually fails.
+At which point it contracts the thread-pool, and continues measuring.
+
+WARNING:: This approach may cause more duplicates in integrated systems when jobs timeout. If minimising failure or duplication is a concern, either stick to <<core>> or use a https://github.com/Netflix/concurrency-limits/tree/18692b09e55a0574bea94d92e95a03c3e89012d2/concurrency-limits-core/src/main/java/com/netflix/concurrency/limits/limit[limit] that has a https://github.com/Netflix/concurrency-limits/blob/18692b09e55a0574bea94d92e95a03c3e89012d2/concurrency-limits-core/src/main/java/com/netflix/concurrency/limits/limit/Gradient2Limit.java#L114[maximum setting] available.
+
+This uses concepts from https://en.wikipedia.org/wiki/TCP_congestion_control#Congestion_window[TCP congestion control] to set the thread pool size by measuring performance of execution.
+This was originally planned to be done from near scratch, using concepts from https://en.wikipedia.org/wiki/Control_theory#PID_feedback_control[Engineering Control Theory], but Netflix has developed a library for the exact same thing with it's https://github.com/Netflix/concurrency-limits[concurrency-limits library], which uses very similar theory from http://intronetworks.cs.luc.edu/1/html/newtcps.html#tcp-vegas[TCP congestion] http://pages.cs.wisc.edu/~akella/CS740/F08/740-Papers/BOP94.pdf[control theory].
+
+==== Dependency
+
+This functionality is in a seperate module, in order to keep to the policy that the `core` should have no dependencies within reason.
+
+.Dependency ArtifactId
+[source,xml,indent=0]
+include::{project_root}/parallel-consumer-core-auto-scale/pom.xml[tag=artifact]
+
+==== Usage
+
+Simply construct the `AutoScalingProcessor` The changes are all under the hood, the system otherwise operates as normal.
+
+.Auto Scaling Module
+[source,java,indent=0]
+include::{project_root}/parallel-consumer-core-auto-scale/src/test/java/io/confluent/parallelconsumer/vertx/RegressionTest.java[tag=construct]
+
+If you wish to see the `concurrency-limit` engine doing it's work, turn on logging:
+
+.Limit logging
+[source,xml,indent=0]
+<logger name="com.netflix.concurrency.limits.limit" level="debug"/>
 
 [[http-with-vertx]]
 === HTTP with the Vert.x Module

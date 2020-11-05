@@ -16,7 +16,9 @@ public class RegressionTest extends ParallelEoSStreamProcessorTest {
 
     @Override
     protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        // tag::construct[]
         parallelConsumer = new AutoScalingProcessor<>(consumerSpy, producerSpy, parallelConsumerOptions);
+        // end::construct[]
         return parallelConsumer;
     }
 
