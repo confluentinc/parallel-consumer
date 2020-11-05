@@ -37,6 +37,7 @@
 
     <modules>
         <module>parallel-consumer-core</module>
+        <module>parallel-consumer-core-auto-scale</module>
         <module>parallel-consumer-vertx</module>
         <module>parallel-consumer-examples</module>
     </modules>
