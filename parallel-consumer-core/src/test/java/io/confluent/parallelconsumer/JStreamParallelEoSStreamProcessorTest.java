@@ -46,7 +46,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     @Test
     public void testStream() {
         var latch = new CountDownLatch(1);
-        Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
+        Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.register((record) -> {
             ProducerRecord mock = mock(ProducerRecord.class);
             log.info("Consumed and produced record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
             myRecordProcessingAction.apply(record);
@@ -71,7 +71,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     @Test
     public void testConsumeAndProduce() {
         var latch = new CountDownLatch(1);
-        var stream = streaming.pollProduceAndStream((record) -> {
+        var stream = streaming.register((record) -> {
             String apply = myRecordProcessingAction.apply(record);
             ProducerRecord<String, String> result = new ProducerRecord<>(OUTPUT_TOPIC, "akey", apply);
             log.info("Consumed a record ({}), and returning a derivative result record to be produced: {}", record, result);
@@ -106,7 +106,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     @Test
     public void testFlatMapProduce() {
         var latch = new CountDownLatch(1);
-        var myResultStream = streaming.pollProduceAndStream((record) -> {
+        var myResultStream = streaming.register((record) -> {
             String apply1 = myRecordProcessingAction.apply(record);
             String apply2 = myRecordProcessingAction.apply(record);
 

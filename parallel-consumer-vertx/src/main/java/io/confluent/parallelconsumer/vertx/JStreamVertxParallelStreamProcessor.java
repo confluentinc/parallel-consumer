@@ -6,8 +6,6 @@ package io.confluent.parallelconsumer.vertx;
 
 import io.confluent.parallelconsumer.DrainingCloseable;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
@@ -34,23 +32,23 @@ public interface JStreamVertxParallelStreamProcessor<K, V> extends DrainingClose
     /**
      * Streaming version
      *
-     * @see VertxParallelEoSStreamProcessor#vertxHttpReqInfo
+     * @see VertxParallelEoSStreamProcessor#register
      */
-    Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>,
+    Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> register(Function<ConsumerRecord<K, V>,
             VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction);
 
     /**
      * Streaming version
      *
-     * @see VertxParallelEoSStreamProcessor#vertxHttpRequest
+     * @see VertxParallelEoSStreamProcessor#register
      */
-    Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient,
+    Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> register(BiFunction<WebClient,
             ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction);
 
     /**
      * Streaming version
      *
-     * @see VertxParallelEoSStreamProcessor#vertxHttpWebClient
+     * @see VertxParallelEoSStreamProcessor#register
      */
     Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpWebClientStream(
             BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction);

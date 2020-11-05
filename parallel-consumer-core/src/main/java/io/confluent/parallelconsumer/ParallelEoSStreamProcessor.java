@@ -252,7 +252,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     @Override
-    public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
+    public void register(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
         Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
             usersVoidConsumptionFunction.accept(record);
@@ -264,8 +264,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     @Override
     @SneakyThrows
-    public void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                               Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+    public void register(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                         Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // wrap user func to add produce function
         Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
             List<ProducerRecord<K, V>> recordListToProduce = userFunction.apply(consumedRecord);
@@ -290,9 +290,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * Produce a message back to the broker.
      * <p>
      * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the common use
-     * case ({@link #poll(Consumer)}).
+     * case ({@link #register(Consumer)}).
      *
-     * @see #pollAndProduce(Function, Consumer)
+     * @see #register(Function, Consumer)
      */
     RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
         // only needed if not using tx

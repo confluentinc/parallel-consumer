@@ -18,7 +18,7 @@ import java.util.function.Function;
  * Parallel message consumer which also can optionally produce 0 or many {@link ProducerRecord} results to be published
  * back to Kafka.
  *
- * @see #pollAndProduce(Function, Consumer)
+ * @see #register(Function, Consumer)
  */
 public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
 
@@ -36,8 +36,8 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      * @param callback applied after the produced message is acknowledged by kafka
      */
     @SneakyThrows
-    void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                        Consumer<ConsumeProduceResult<K, V, K, V>> callback);
+    void register(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                  Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**
      * A simple triple structure to capture the set of coinciding data.

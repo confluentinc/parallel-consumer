@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.examples.streams;
  */
 
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,7 +70,7 @@ public class StreamsApp {
     void concurrentProcess() {
         setupConsumer();
 
-        parallelConsumer.poll(record -> {
+        parallelConsumer.register(record -> {
             log.info("Concurrently processing a record: {}", record);
             messageCount.getAndIncrement();
         });

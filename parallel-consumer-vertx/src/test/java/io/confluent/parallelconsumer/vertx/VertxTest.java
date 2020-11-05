@@ -110,7 +110,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var tupleStream =
-                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> {
+                vertxAsync.register((ConsumerRecord<String, String> rec) -> {
                     VertxParallelEoSStreamProcessor.RequestInfo badHost = getBadHost();
                     return badHost;
                 });
@@ -137,7 +137,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
-                vertxAsync.vertxHttpReqInfoStream((rec) -> {
+                vertxAsync.register((rec) -> {
                     log.debug("Inner user function");
                     return getBadHost();
                 });
@@ -167,7 +167,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
-                vertxAsync.vertxHttpReqInfoStream((rec) -> {
+                vertxAsync.register((rec) -> {
                     log.debug("Inner user function");
                     VertxParallelEoSStreamProcessor.RequestInfo goodHost = getGoodHost();
                     var params = UniMaps.of("randomParam", rec.value());
@@ -199,7 +199,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
-                vertxAsync.vertxHttpRequestStream((webClient, rec) -> {
+                vertxAsync.register((webClient, rec) -> {
                     log.debug("Inner user function");
                     var data = rec.value();
                     VertxParallelEoSStreamProcessor.RequestInfo reqInfo = getGoodHost();

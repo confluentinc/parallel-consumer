@@ -33,8 +33,8 @@ public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamPr
     }
 
     @Override
-    public Stream<ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
-        super.pollAndProduce(userFunction, (result) -> {
+    public Stream<ConsumeProduceResult<K, V, K, V>> register(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
+        super.register(userFunction, (result) -> {
             log.trace("Wrapper callback applied, sending result to stream. Input: {}", result);
             this.userProcessResultsStream.add(result);
         });

@@ -86,10 +86,10 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     }
 
     @Override
-    public void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
-                                 Consumer<Future<HttpResponse<Buffer>>> onSend,
-                                 Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
-        vertxHttpRequest((WebClient wc, ConsumerRecord<K, V> rec) -> {
+    public void register(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
+                         Consumer<Future<HttpResponse<Buffer>>> onSend,
+                         Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
+        register((WebClient wc, ConsumerRecord<K, V> rec) -> {
             RequestInfo reqInf = requestInfoFunction.apply(rec);
             HttpRequest<Buffer> req = wc.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
             Map<String, String> params = reqInf.getParams();
@@ -101,11 +101,11 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     }
 
     @Override
-    public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
-                                 Consumer<Future<HttpResponse<Buffer>>> onSend,
-                                 Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) { // TODO remove, redundant over onSend?
+    public void register(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
+                         Consumer<Future<HttpResponse<Buffer>>> onSend,
+                         Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) { // TODO remove, redundant over onSend?
 
-        vertxHttpWebClient((webClient, record) -> {
+        register((webClient, record) -> {
             HttpRequest<Buffer> call = webClientRequestFunction.apply(webClient, record);
 
             Future<HttpResponse<Buffer>> send = call.send(); // dispatches the work to vertx
@@ -120,8 +120,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     }
 
     @Override
-    public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
-                                   Consumer<Future<HttpResponse<Buffer>>> onSend) {
+    public void register(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
+                         Consumer<Future<HttpResponse<Buffer>>> onSend) {
 
         Function<ConsumerRecord<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (record) -> {
             Future<HttpResponse<Buffer>> send = webClientRequestFunction.apply(webClient, record);

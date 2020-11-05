@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
  * @see ParallelEoSStreamProcessor
- * @see #poll(Consumer)
+ * @see #register(Consumer)
  */
 // end::javadoc[]
 public interface ParallelConsumer<K, V> extends DrainingCloseable {
@@ -52,7 +52,7 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
      *
      * @param usersVoidConsumptionFunction the function
      */
-    void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
+    void register(Handler<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
 
     /**
      * A simple tuple structure.

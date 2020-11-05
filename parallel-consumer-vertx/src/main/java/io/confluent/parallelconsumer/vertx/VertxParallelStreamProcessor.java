@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.vertx;
 import io.confluent.parallelconsumer.DrainingCloseable;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
@@ -27,7 +26,7 @@ import java.util.function.Function;
  * @param <K>
  * @param <V>
  * @see ParallelEoSStreamProcessor
- * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
+ * @see #register(Function, Consumer, Consumer)
  */
 public interface VertxParallelStreamProcessor<K, V> extends DrainingCloseable {
 
@@ -47,9 +46,9 @@ public interface VertxParallelStreamProcessor<K, V> extends DrainingCloseable {
      * @param requestInfoFunction  a function taking a {@link ConsumerRecord} and returns a {@link
      *                             VertxParallelEoSStreamProcessor.RequestInfo} object
      */
-    void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction,
-                          Consumer<Future<HttpResponse<Buffer>>> onSend,
-                          Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
+    void register(Function<ConsumerRecord<K, V>, VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction,
+                  Consumer<Future<HttpResponse<Buffer>>> onSend,
+                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
 
     /**
      * Consume from the broker concurrently, give us the {@link HttpRequest}, we'll do the rest.
@@ -57,9 +56,9 @@ public interface VertxParallelStreamProcessor<K, V> extends DrainingCloseable {
      * @param webClientRequestFunction Given the {@link WebClient} and a {@link ConsumerRecord}, return us the {@link
      *                                 HttpRequest}
      */
-    void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
-                          Consumer<Future<HttpResponse<Buffer>>> onSend,
-                          Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
+    void register(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
+                  Consumer<Future<HttpResponse<Buffer>>> onSend,
+                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
 
     /**
      * Consume from the broker concurrently, initiating your own {@link HttpRequest#send()} call, give us the {@link
@@ -69,9 +68,9 @@ public interface VertxParallelStreamProcessor<K, V> extends DrainingCloseable {
      * <p>
      * Note that an alternative is to pass into the constructor a configured {@link WebClient} instead.
      *
-     * @see #vertxHttpReqInfo
-     * @see #vertxHttpRequest
+     * @see #register
+     * @see #register
      */
-    void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
-                            Consumer<Future<HttpResponse<Buffer>>> onSend);
+    void register(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
+                  Consumer<Future<HttpResponse<Buffer>>> onSend);
 }

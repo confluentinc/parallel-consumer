@@ -21,11 +21,11 @@ public interface JStreamParallelStreamProcessor<K, V> extends DrainingCloseable 
     }
 
     /**
-     * Like {@link ParallelEoSStreamProcessor#pollAndProduce} but instead of callbacks, streams the results instead,
+     * Like {@link ParallelEoSStreamProcessor#register} but instead of callbacks, streams the results instead,
      * after the produce result is ack'd by Kafka.
      *
      * @return a stream of results of applying the function to the polled records
      */
-    Stream<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<ConsumerRecord<K, V>,
+    Stream<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> register(Function<ConsumerRecord<K, V>,
             List<ProducerRecord<K, V>>> userFunction);
 }

@@ -83,7 +83,7 @@ public class LoadTest extends DbTest {
                 .build();
 
         try (pb) {
-            async.poll(r -> {
+            async.register(r -> {
                 // message processing function
                 int simulatedCPUMessageProcessingDelay = nextInt(0, 5); // random delay between 0,5
                 try {

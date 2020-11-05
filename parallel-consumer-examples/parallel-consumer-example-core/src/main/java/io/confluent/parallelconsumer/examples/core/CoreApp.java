@@ -46,7 +46,7 @@ public class CoreApp {
         this.parallelConsumer = setupConsumer();
 
         // tag::example[]
-        parallelConsumer.poll(record ->
+        parallelConsumer.register(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
         // end::example[]
@@ -78,7 +78,7 @@ public class CoreApp {
         this.parallelConsumer = setupConsumer();
 
         // tag::exampleProduce[]
-        this.parallelConsumer.pollAndProduce(record -> {
+        this.parallelConsumer.register(record -> {
                     var result = processBrokerRecord(record);
                     ProducerRecord<String, String> produceRecord =
                             new ProducerRecord<>(outputTopic, "a-key", result.payload);

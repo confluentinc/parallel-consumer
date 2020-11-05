@@ -66,7 +66,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
     }
 
     @Override
-    public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
+    public Stream<VertxCPResult<K, V>> register(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
@@ -84,14 +84,14 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
             userProcessResultsStream.add(build);
         };
 
-        super.vertxHttpReqInfo(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {
+        super.register(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {
         });
 
         return stream;
     }
 
     @Override
-    public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
+    public Stream<VertxCPResult<K, V>> register(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
@@ -109,7 +109,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
             userProcessResultsStream.add(build);
         };
 
-        super.vertxHttpRequest(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {
+        super.register(requestInfoFunctionWrapped, onSendCallBack, (ignore) -> {
         });
         return stream;
     }
@@ -135,7 +135,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
             userProcessResultsStream.add(build);
         };
 
-        super.vertxHttpWebClient(wrappedFunc, onSendCallBack);
+        super.register(wrappedFunc, onSendCallBack);
 
         return stream;
     }

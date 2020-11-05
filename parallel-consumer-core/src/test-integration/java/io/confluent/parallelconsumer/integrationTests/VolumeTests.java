@@ -56,7 +56,7 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 
         CountDownLatch latch = new CountDownLatch(quantityOfMessagesToProduce);
 
-        parallelConsumer.pollAndProduce((rec) -> {
+        parallelConsumer.register((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
@@ -182,7 +182,7 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 
         Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
 
-        parallelConsumer.pollAndProduce((rec) -> {
+        parallelConsumer.register((rec) -> {
             processingCheck.add(rec);
             int rangeOfTimeSimulatedProcessingTakesMs = 5;
             long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);

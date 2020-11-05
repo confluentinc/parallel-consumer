@@ -50,7 +50,7 @@ public class VertxApp {
                 getKafkaProducer(), options);
 
         // tag::example[]
-        var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
+        var resultStream = parallelConsumer.register(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
             return new RequestInfo("localhost", "/api", params); // <1>

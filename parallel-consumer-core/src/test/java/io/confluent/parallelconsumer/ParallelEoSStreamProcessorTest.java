@@ -61,7 +61,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @Test
     @SneakyThrows
     public void failingActionNothingCommitted() {
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             throw new RuntimeException("My user's function error");
         });
 
@@ -100,7 +100,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             startBarrierLatch.countDown();
             int offset = (int) ignore.offset();
             awaitLatch(locks, offset);
@@ -158,7 +158,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         CountDownLatch startLatch = new CountDownLatch(1);
 
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -239,7 +239,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock);
 
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -297,7 +297,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.setClock(mock);
 
         //
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             // ignore
         });
 
@@ -312,7 +312,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void testVoid() {
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
-        parallelConsumer.poll((record) -> {
+        parallelConsumer.register((record) -> {
             waitForInitialBootstrapCommit();
             myRecordProcessingAction.apply(record);
             msgCompleteBarrier.countDown();
@@ -437,7 +437,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             return o;
         }).when(consumerSpy).poll(any());
 
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
@@ -567,7 +567,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             return records;
         }).when(consumerSpy).poll(any());
 
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             int offset = (int) ignore.offset();
             CountDownLatch countDownLatch = locks.get(offset);
             if (countDownLatch != null) try {
@@ -616,7 +616,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void closeAfterSingleMessageShouldBeEventBasedFast() {
         var msgCompleteBarrier = new CountDownLatch(1);
 
-        parallelConsumer.poll((ignore) -> {
+        parallelConsumer.register((ignore) -> {
             waitForInitialBootstrapCommit();
             log.info("Message processed: {} - noop", ignore.offset());
             msgCompleteBarrier.countDown();
@@ -646,10 +646,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
     @Test
     public void ensureLibraryCantBeUsedTwice() {
-        parallelConsumer.poll(ignore -> {
+        parallelConsumer.register(ignore -> {
         });
         assertThatIllegalStateException().isThrownBy(() -> {
-            parallelConsumer.poll(ignore -> {
+            parallelConsumer.register(ignore -> {
             });
         });
     }
