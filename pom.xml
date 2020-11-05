@@ -65,7 +65,7 @@
         <!-- version numbers -->
         <!-- plugins -->
         <mycila.version>4.0.rc2</mycila.version>
-        <lombok.version>1.18.12</lombok.version>
+        <lombok.version>1.18.16</lombok.version>
         <auto-service.version>1.0-rc7</auto-service.version>
         <surefire.version>3.0.0-M5</surefire.version>
 
@@ -204,13 +204,13 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.17.2</version>
+            <version>3.18.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>3.5.13</version>
+            <version>3.6.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>

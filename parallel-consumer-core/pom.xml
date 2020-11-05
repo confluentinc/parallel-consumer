@@ -74,7 +74,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.2.16.jre7</version>
+            <version>42.2.18.jre7</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
