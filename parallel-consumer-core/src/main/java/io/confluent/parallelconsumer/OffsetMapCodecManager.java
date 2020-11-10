@@ -22,7 +22,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * <p>
  * TODO: consider IO exception management - question sneaky throws usage?
  * <p>
- * TODO: enforce max uncommitted < encoding length (Short.MAX)
+ * TODO: enforce max uncommitted {@literal <} encoding length (Short.MAX)
  * <p>
  * Bitset serialisation format:
  * <ul>
@@ -37,8 +37,8 @@ public class OffsetMapCodecManager<K, V> {
     /**
      * Maximum size of the commit offset metadata
      *
-     * @link https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52
-     * @link kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize
+     * @see <a href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
+     * @see "kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize"
      */
     public static final int DefaultMaxMetadataSize = 4096;
 

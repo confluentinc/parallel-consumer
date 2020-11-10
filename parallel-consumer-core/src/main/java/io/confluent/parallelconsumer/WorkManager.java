@@ -259,7 +259,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Depth first work retrieval.
      *
-     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#getMaxConcurrency()}
+     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#maxConcurrency}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
         int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxConcurrency()), options.getMaxUncommittedMessagesToHandlePerPartition());

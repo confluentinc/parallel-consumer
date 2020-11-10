@@ -41,6 +41,18 @@
         <module>parallel-consumer-examples</module>
     </modules>
 
+    <developers>
+        <developer>
+            <id>antony@confluent.io</id>
+            <name>Antony Stubbs</name>
+            <email>antony@confluent.io</email>
+            <url>http://confluent.io</url>
+            <organization>Confluent</organization>
+            <organizationUrl>http://confluent.io</organizationUrl>
+            <timezone>Europe/London</timezone>
+        </developer>
+    </developers>
+
     <scm>
         <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
@@ -558,20 +570,27 @@
                 <artifactId>maven-project-info-reports-plugin</artifactId>
                 <version>3.1.0</version>
             </plugin>
-            <!-- Disabled for jabel error -->
-<!--            <plugin>-->
-<!--                <groupId>org.apache.maven.plugins</groupId>-->
-<!--                <artifactId>maven-javadoc-plugin</artifactId>-->
-<!--                <version>3.1.1</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>attach-javadocs</id>-->
-<!--                        <goals>-->
-<!--                            <goal>jar</goal>-->
-<!--                        </goals>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.1.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Jabel marker -->
+                            <additionalJOption>--enable-preview</additionalJOption>
+                            <source>13</source>
+                            <release>13</release>
+                            <!-- Source goals - change to true? -->
+                            <failOnWarnings>false</failOnWarnings>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
