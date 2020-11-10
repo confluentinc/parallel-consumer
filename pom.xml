@@ -42,11 +42,22 @@
     </modules>
 
     <scm>
-        <connection>scm:git:git://github.com:confluentinc/async-consumer.git</connection>
-        <developerConnection>scm:git:git@github.com:confluentinc/async-consumer.git</developerConnection>
-        <url>https://github.com/confluentinc/async-consumer.git</url>
+        <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
+        <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
+        <url>https://github.com/confluentinc/parallel-consumer.git</url>
         <tag>HEAD</tag>
     </scm>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
 
     <properties>
         <!-- when running mvn locally from cmd line, use default jvm for jvm8 -->
@@ -144,6 +155,50 @@
                     <url>https://maven.pkg.github.com/whelk-io/asciidoc-template-maven-plugin</url>
                 </pluginRepository>
             </pluginRepositories>
+        </profile>
+        <profile>
+            <id>maven-central</id>
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <distributionManagement>
+                <snapshotRepository>
+                    <id>ossrh</id>
+                    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+                </snapshotRepository>
+            </distributionManagement>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>1.5</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.plugins</groupId>
+                        <artifactId>nexus-staging-maven-plugin</artifactId>
+                        <version>1.6.8</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <serverId>ossrh</serverId>
+                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 
@@ -307,6 +362,10 @@
                         <licenseSet>
                             <inlineHeader>Copyright (C) ${license.git.copyrightYears} ${project.organization.name}
                             </inlineHeader>
+                            <includes>
+                                <include>pom.xml</include>
+                                <include>src/**</include>
+                            </includes>
                             <excludes>
                                 <exclude>**/README*</exclude>
                                 <exclude>.ci/**/*</exclude>
@@ -498,6 +557,33 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-project-info-reports-plugin</artifactId>
                 <version>3.1.0</version>
+            </plugin>
+            <!-- Disabled for jabel error -->
+<!--            <plugin>-->
+<!--                <groupId>org.apache.maven.plugins</groupId>-->
+<!--                <artifactId>maven-javadoc-plugin</artifactId>-->
+<!--                <version>3.1.1</version>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>attach-javadocs</id>-->
+<!--                        <goals>-->
+<!--                            <goal>jar</goal>-->
+<!--                        </goals>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.4</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
 
