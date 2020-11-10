@@ -283,14 +283,11 @@ This library is copyright Confluent Inc, and licensed under the Apache License V
 
 === Maven
 
-Until we release the first version of the project, you can install this in your local repository and deploy it to your local snapshot repository with:
+This project is available in maven central, https://repo1.maven.org/maven2/io/confluent/parallelconsumer/[repo1].
 
-[source,bash]
-----
-↪ mvn install -DskipTests
-----
+Latest version can be seen https://search.maven.org/artifact/io.confluent.parallelconsumer/parallel-consumer-core[here].
 
-Where `${project.version}` is the version to be used.
+Where `${project.version}` is the version to be used:
 
 .Core Module Dependency
 [source,xml,indent=0]
@@ -300,10 +297,6 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 [source,xml,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/pom.xml[tag=exampleDep]
 
-// uncomment once version deployed
-//.Repository
-//[source,xml,indent=0]
-//include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/pom.xml[tag=exampleRepo]
 
 === Common Preparation
 
