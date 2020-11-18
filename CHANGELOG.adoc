@@ -1,0 +1,47 @@
+= Change Log
+
+== v0.2-SNAPSHOT
+
+* Features:
+** Choice of commit modes: Consumer Asynchronous, Synchronous and Producer Transactions
+** Producer instance is now optional
+** Using a _transactional_ Producer is now optional
+** Use the Kafka Consumer to commit `offsets` Synchronously or Asynchronously
+
+* Improvements:
+** Memory performance - garbage collect empty shards when in KEY ordering mode
+** Select tests adapted to non transactional (multiple commit modes) as well
+** Adds supervision to broker poller
+** Fixes a performance issue with the async committer not being woken up
+** Make committer thread revoke partitions and commit
+** Have onPartitionsRevoked be responsible for committing on close, instead of an explicit call to commit by controller
+** Make sure Broker Poller now drains properly, committing any waiting work
+
+* Fixes:
+** Fixes bug in commit linger, remove genesis offset (0) from testing (avoid races), add ability to request commit
+** Fixes #25 https://github.com/confluentinc/parallel-consumer/issues/25:
+*** Sometimes a transaction error occurs - Cannot call send in state COMMITTING_TRANSACTION #25
+** ReentrantReadWrite lock protects non-thread safe transactional producer from incorrect multithreaded use
+** Wider lock to prevent transaction's containing produced messages that they shouldn't
+** Must start tx in MockProducer as well
+** Fixes example app tests - incorrectly testing wrong thing and MockProducer not configured to auto complete
+** Add missing revoke flow to MockConsumer wrapper
+** Add missing latch timeout check
+
+== v0.1
+
+* Features:
+** Have massively parallel consumption processing without running hundreds or thousands of
+*** Kafka consumer clients
+*** topic partitions
++
+without operational burden or harming the clusters performance
+** Efficient individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
+** Per `key` concurrent processing, per `partition` and unordered message processing
+** `Offsets` committed correctly, in order, of only processed messages, regardless of concurrency level or retries
+** Vert.x non-blocking library integration (HTTP currently)
+** Fair partition traversal
+** Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
+** Java 8 compatibility
+** Throttle control and broker liveliness management
+** Clean draining shutdown cycle

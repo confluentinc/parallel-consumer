@@ -661,6 +661,8 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 [[roadmap]]
 == Roadmap
 
+For released changes, see the link:CHANGELOG.adoc[CHANGELOG].
+
 === Short Term - What we're working on nowish ⏰
 
 * Depth~ first or breadth first partition traversal
@@ -682,7 +684,6 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 
 * Apache Kafka KIP?
 * Call backs only offset has been committed
-* resilience4j example / integration
 
 
 == Usage Requirements
