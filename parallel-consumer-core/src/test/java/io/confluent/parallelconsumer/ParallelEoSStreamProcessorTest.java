@@ -74,27 +74,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         // let it process
-        int loops = 3;
-        waitForSomeLoopCycles(loops);
+        waitForSomeLoopCycles(3);
+
+        parallelConsumer.close();
 
         //
-        assertCommits(of(), "All erroring, nothing committed except initial");
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = getCommitHistory();
-        assertThat(maps).isNotEmpty();
-        List<OffsetAndMetadata> metas = new ArrayList<>();
-        for (final Map<String, Map<TopicPartition, OffsetAndMetadata>> map : maps) {
-            for (final Map<TopicPartition, OffsetAndMetadata> value : map.values()) {
-                for (final OffsetAndMetadata offsetAndMetadata : value.values()) {
-                    metas.add(offsetAndMetadata);
-                }
-            }
-        }
-        for (final OffsetAndMetadata meta : metas) {
-            assertThat(meta.offset()).isEqualTo(0L);
-            TreeSet<Long> incompletes =
-                    OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, meta.metadata()).getRight();
-            assertThat(incompletes).containsExactly(0L);
-        }
+        assertCommits(of(), "All erroring, so nothing committed except initial");
     }
 
     @ParameterizedTest()
