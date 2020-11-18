@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
@@ -120,6 +121,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     // visible for testing
     long MISSING_HIGH_WATER_MARK = -1L;
+
+    /**
+     * Get's set to true whenever work is returned completed, so that we know when a commit needs to be made.
+     * <p>
+     * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
+     * chances no work has completed in the last second.
+     */
+    private AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
     public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.options = options;
@@ -402,6 +411,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public void success(WorkContainer<K, V> wc) {
+        workStateIsDirtyNeedsCommitting.set(true);
         ConsumerRecord<K, V> cr = wc.getCr();
         log.trace("Work success ({}), removing from processing shard queue", wc);
         wc.succeed();
@@ -660,4 +670,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getInFlightCount() != 0;
     }
 
+    public boolean isClean() {
+        return !isDirty();
+    }
+
+    private boolean isDirty() {
+        return this.workStateIsDirtyNeedsCommitting.get();
+    }
 }
