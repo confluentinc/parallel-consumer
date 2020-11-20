@@ -123,7 +123,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         awaitLatch(latch);
 
         //
-        assertCommits(of(0));
+        assertCommits(of());
 
         // check results are failures
         var res = getResults(tupleStream);
@@ -189,7 +189,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         // verify
         var res = getResults(futureStream);
 
-        KafkaTestUtils.assertCommits(producerSpy, of(0, 1));
+        KafkaTestUtils.assertCommits(producerSpy, of(1));
 
         // test results are successes
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);

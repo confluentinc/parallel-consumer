@@ -45,7 +45,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-//@Timeout(value = 10, unit = SECONDS)
+@Timeout(value = 10, unit = SECONDS)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -78,7 +78,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         waitForSomeLoopCycles(loops);
 
         //
-        assertCommits(of(0), "All erroring, nothing committed except initial");
+        assertCommits(of(), "All erroring, nothing committed except initial");
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = getCommitHistory();
         assertThat(maps).isNotEmpty();
         List<OffsetAndMetadata> metas = new ArrayList<>();
@@ -126,8 +126,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish processing 1
         releaseAndWait(locks, 1);
 
+        parallelConsumer.requestCommitAsap();
+
         // make sure no offsets are committed
-        assertCommits(of(0), "Partition is blocked");
+        assertCommits(of(), "Partition is blocked");
 
         // So it's data is setup can be used in other tests, finish 0
         releaseAndWait(locks, 0);
@@ -160,7 +162,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         log.info("Test start");
 
         // next expected offset is now 2
-        assertCommits(of(0, 2), "Only one of the two offsets committed, as they were coalesced for efficiency");
+        assertCommits(of(2), "Only one of the two offsets committed, as they were coalesced for efficiency");
     }
 
     @Disabled
@@ -279,29 +281,32 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish processing 1
         releaseAndWait(locks, 1);
 
+        parallelConsumer.requestCommitAsap();
+
         waitForSomeLoopCycles(2);
 
         // make sure only base offsets are committed
-        assertCommits(of(0, 2));
-        assertCommitLists(of(of(0), of(2)));
+//        assertCommits(of(2));
+        assertCommitLists(of(of(), of(2)));
 
         // finish 2
         releaseAndWait(locks, 2);
+        parallelConsumer.requestCommitAsap();
         waitForOneLoopCycle();
 
         // make sure only 2 on it's partition of committed
-        assertCommits(of(0, 2, 3));
-        assertCommitLists(of(of(0), of(2, 3)));
+//        assertCommits(of(2, 3));
+        assertCommitLists(of(of(), of(2, 3)));
 
         // finish 0
         releaseAndWait(locks, 0);
 
-        // async consumer is slower to execute the commit. We could just wait, or we could add an event to the async consumer commit cycle
-        if (isUsingAsyncCommits())
-            waitForOneLoopCycle();
+        parallelConsumer.requestCommitAsap();
+
+        waitForOneLoopCycle();
 
         // make sure offset 0 and 1 is committed
-        assertCommitLists(of(of(0, 2), of(2, 3)));
+        assertCommitLists(of(of(2), of(2, 3)));
 
         // finish 3
         releaseAndWait(locks, 3);
@@ -311,7 +316,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             waitForOneLoopCycle();
 
         //
-        assertCommitLists(of(of(0, 2), of(2, 3, 4)));
+        assertCommitLists(of(of(2), of(2, 3, 4)));
     }
 
     @Test
@@ -359,7 +364,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
         parallelConsumer.poll((record) -> {
-            waitForInitialBootstrapCommit();
             myRecordProcessingAction.apply(record);
             msgCompleteBarrier.countDown();
         });
@@ -370,7 +374,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         parallelConsumer.close();
 
-        assertCommits(of(0, 1));
+        assertCommits(of(1));
 
         verify(myRecordProcessingAction, times(expected)).apply(any());
 
@@ -380,16 +384,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             verify(producerSpy, atLeastOnce()).commitTransaction();
             verify(producerSpy, atLeastOnce()).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
         }
-    }
-
-    /**
-     * Allow time for offset zero to be committed
-     */
-    private void waitForInitialBootstrapCommit() {
-        await("for initial commit")
-                .pollDelay(ofMillis(0))
-                .pollInterval(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS / 2))
-                .untilAsserted(() -> assertCommits(of(0)));
     }
 
     @Test
@@ -666,7 +660,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var msgCompleteBarrier = new CountDownLatch(1);
 
         parallelConsumer.poll((ignore) -> {
-            waitForInitialBootstrapCommit();
             log.info("Message processed: {} - noop", ignore.offset());
             msgCompleteBarrier.countDown();
         });
@@ -676,11 +669,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // allow for offset to be committed
         waitForOneLoopCycle();
 
-        if (isUsingAsyncCommits()) {
-            waitForOneLoopCycle();
-        }
+        parallelConsumer.requestCommitAsap();
 
-        assertCommits(of(0, 1));
+        waitForOneLoopCycle();
+
+        assertCommits(of(1));
 
         // close
         Duration time = time(() -> {
@@ -728,6 +721,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             parallelConsumer = initAsyncConsumer(optionsWithClients);
             attachLoopCounter(parallelConsumer);
 
+            subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
             setupData();
 
             parallelConsumer.poll((ignore) -> {
@@ -739,7 +733,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             parallelConsumer.closeDrainFirst();
 
             //
-            assertCommits(of(0, 0, 1));
+            assertCommits(of(1));
         }
     }
 
@@ -767,6 +761,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .commitMode(CONSUMER_ASYNCHRONOUS)
                 .build();
 
+        setupParallelConsumerInstance(optionsWithClients);
+
+        subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
+
         setupData();
 
         var parallel = initAsyncConsumer(optionsWithClients);
@@ -787,11 +785,20 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // let it process
         waitForSomeLoopCycles(2);
 
+        parallelConsumer.requestCommitAsap();
+//        requestCommitAndPause();
+
         parallelConsumer.closeDrainFirst();
 
         //
-        assertCommits(of(0, 1));
+        assertCommits(of(1));
 
         assertThat(producerSpy.history()).hasSize(1);
     }
+
+    private void requestCommitAndPause() {
+        parallelConsumer.requestCommitAsap();
+        waitForSomeLoopCycles(2);
+    }
 }
+

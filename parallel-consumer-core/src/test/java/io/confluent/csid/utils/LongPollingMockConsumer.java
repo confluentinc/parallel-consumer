@@ -117,7 +117,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
         // execute
         if (consumerRebalanceListener == null) {
-            log.debug("No rebalance listener assigned - on revoke can't fire");
+            log.warn("No rebalance listener assigned - on revoke can't fire");
         } else {
             Set<TopicPartition> assignment = super.assignment();
             consumerRebalanceListener.onPartitionsRevoked(assignment);

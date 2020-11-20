@@ -125,7 +125,7 @@ public class TransactionAndCommitModeTest extends KafkaTest<String, String> {
         // wait for all pre-produced messages to be processed and produced
         String failureMessage = "All keys sent to input-topic should be processed and produced";
         try {
-            waitAtMost(ofSeconds(10)).alias(failureMessage).untilAsserted(() -> {
+            waitAtMost(ofSeconds(30)).alias(failureMessage).untilAsserted(() -> {
                 log.debug("Processed-count: " + processedCount.get());
                 log.debug("Produced-count: " + producedCount.get());
                 List<String> processedAndProducedKeysCopy = new ArrayList<>(processedAndProducedKeys); // avoid concurrent-modification in assert

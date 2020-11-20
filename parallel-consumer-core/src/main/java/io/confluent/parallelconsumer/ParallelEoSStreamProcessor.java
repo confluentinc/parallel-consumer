@@ -99,6 +99,11 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private final OffsetCommitter committer;
 
     /**
+     * Used to request a commit asap
+     */
+    private final AtomicBoolean commitCommand = new AtomicBoolean(false);
+
+    /**
      * The run state of the controller.
      *
      * @see #state
@@ -661,7 +666,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
         boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
-        if (commitFrequencyOK || lingeringOnCommitWouldBeBeneficial()) {
+        boolean shouldCommitNow = commitFrequencyOK || !lingeringOnCommitWouldBeBeneficial() || isCommandedToCommit();
+        if (shouldCommitNow) {
             if (!commitFrequencyOK) {
                 log.debug("Commit too frequent, but no benefit in lingering");
             }
@@ -682,14 +688,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * @return
      */
     private boolean lingeringOnCommitWouldBeBeneficial() {
-        // no work is waiting to be done
+        // work is waiting to be done
         boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeCompletedSuccessfully();
         // no work is currently being done
-        boolean noWorkInFlight = wm.hasWorkInFlight();
+        boolean noWorkInFlight = !wm.hasWorkInFlight();
         // work mailbox is empty
-        boolean workMailBoxEmpty = workMailBox.isEmpty();
-
-        return workIsWaitingToBeCompletedSuccessfully || noWorkInFlight || workMailBoxEmpty;
+        boolean workWaitingInMailbox = !workMailBox.isEmpty();
+        log.trace("workIsWaitingToBeCompletedSuccessfully {} || noWorkInFlight {} || workWaitingInMailbox {};", workIsWaitingToBeCompletedSuccessfully, noWorkInFlight, workWaitingInMailbox);
+        return workIsWaitingToBeCompletedSuccessfully || noWorkInFlight || workWaitingInMailbox;
     }
 
     private Duration getTimeToNextCommit() {
@@ -838,6 +844,27 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     public void setLongPollTimeout(Duration ofMillis) {
         BrokerPollSystem.setLongPollTimeout(ofMillis);
+    }
+
+    /**
+     * Request a commit as soon as possible (ASAP), overriding other constraints.
+     */
+    public void requestCommitAsap() {
+        log.debug("Registering command to commit next chance");
+        synchronized (commitCommand) {
+            this.commitCommand.set(true);
+        }
+    }
+
+    private boolean isCommandedToCommit() {
+        synchronized (commitCommand) {
+            boolean commitAsap = this.commitCommand.get();
+            if (commitAsap) {
+                log.debug("Command to commit asap received, clearing");
+                this.commitCommand.set(false);
+            }
+            return commitAsap;
+        }
     }
 
 }
