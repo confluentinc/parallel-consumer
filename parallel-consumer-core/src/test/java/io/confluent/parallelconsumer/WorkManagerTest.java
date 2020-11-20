@@ -318,7 +318,7 @@ public class WorkManagerTest {
     public void maxInFlight() {
         //
         var opts = ParallelConsumerOptions.builder();
-        opts.maxUncommittedMessagesToHandle(1);
+        opts.maxNumberMessagesBeyondBaseCommitOffset(1);
         setupWorkManager(opts.build());
 
         //
@@ -333,7 +333,7 @@ public class WorkManagerTest {
     public void maxConcurrency() {
         //
         var opts = ParallelConsumerOptions.builder();
-        opts.maxConcurrency(1);
+        opts.maxMessagesToQueue(1);
         setupWorkManager(opts.build());
 
         //
@@ -372,8 +372,8 @@ public class WorkManagerTest {
         var opts = ParallelConsumerOptions.builder();
         opts.ordering(UNORDERED);
 
-        opts.maxUncommittedMessagesToHandle(3);
-        opts.maxConcurrency(2);
+        opts.maxNumberMessagesBeyondBaseCommitOffset(3);
+        opts.maxMessagesToQueue(2);
 
         setupWorkManager(opts.build());
 
@@ -609,8 +609,8 @@ public class WorkManagerTest {
     public void workQueuesEmptyWhenAllWorkComplete() {
         ParallelConsumerOptions build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
-                .maxConcurrency(10)
-                .maxUncommittedMessagesToHandle(10)
+                .maxMessagesToQueue(10)
+                .maxNumberMessagesBeyondBaseCommitOffset(10)
                 .build();
         setupWorkManager(build);
         registerSomeWork();
