@@ -26,8 +26,16 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.T
 @ToString
 public class ParallelConsumerOptions<K, V> {
 
+    /**
+     * Required parameter for all use.
+     */
     private final Consumer<K, V> consumer;
 
+    /**
+     * Supplying a producer is only needed if using the produce flows.
+     *
+     * @see ParallelStreamProcessor
+     */
     private final Producer<K, V> producer;
 
     /**

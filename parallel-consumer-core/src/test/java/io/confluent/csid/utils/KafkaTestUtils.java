@@ -47,6 +47,19 @@ public class KafkaTestUtils {
         mc.updateBeginningOffsets(beginningOffsets);
     }
 
+    /**
+     * It's a race to see if the genesis offset gets committed or not. So lets remove it if it exists, and all tests can
+     * assume it doesnt.
+     */
+    public static List<Integer> trimAllGeneisOffset(final List<Integer> collect) {
+        while (!collect.isEmpty() && collect.get(0) == 0) {
+            int genesisOffset = collect.get(0);
+            if (genesisOffset == 0)
+                collect.remove(0);
+        }
+        return collect;
+    }
+
     public ConsumerRecord<String, String> makeRecord(String key, String value) {
         return makeRecord(0, key, value);
     }
@@ -70,7 +83,7 @@ public class KafkaTestUtils {
         log.debug("Asserting commits of {}", expectedOffsets);
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
-        Set<Integer> set = history.stream().flatMap(histories -> {
+        List<Integer> set = history.stream().flatMap(histories -> {
             // get all partition offsets and flatten
             var results = new ArrayList<Integer>();
             var group = histories.get(CONSUMER_GROUP_ID);
@@ -79,8 +92,9 @@ public class KafkaTestUtils {
                 int offset = (int) commit.offset();
                 results.add(offset);
             }
-            return results.stream();
-        }).collect(Collectors.toSet()); // set - ignore repeated commits ({@link OffsetMap})
+            List<Integer> integers = KafkaTestUtils.trimAllGeneisOffset(results);
+            return integers.stream();
+        }).collect(Collectors.toList()); // set - ignore repeated commits ({@link OffsetMap})
 
         assertThat(set).describedAs(description.orElse("Which offsets are committed and in the expected order"))
                 .containsExactlyElementsOf(expectedOffsets);
@@ -92,7 +106,7 @@ public class KafkaTestUtils {
 
     /**
      * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager}).
-     *
+     * <p>
      * Ignores duplicates.
      *
      * @see OffsetMapCodecManager
@@ -102,7 +116,7 @@ public class KafkaTestUtils {
 
         AtomicReference<String> topicName = new AtomicReference<>("");
         var partitionToCommittedOffsets = new HashMap<TopicPartition, Set<Integer>>(); // set - ignore repeated commits ({@link OffsetMap})
-        history.stream().forEachOrdered(histories -> {
+        new ArrayList<>(history).stream().forEachOrdered(histories -> {
             // get all partition offsets and flatten
             var partitionCommits = histories.get(CONSUMER_GROUP_ID);
             for (var singlePartitionCommit : partitionCommits.entrySet()) {
@@ -110,7 +124,10 @@ public class KafkaTestUtils {
                 topicName.set(key.topic());
                 OffsetAndMetadata commit = singlePartitionCommit.getValue();
                 int offset = (int) commit.offset();
-                partitionToCommittedOffsets.computeIfAbsent(key, x -> new HashSet<>()).add(offset);
+                partitionToCommittedOffsets.computeIfAbsent(key, x -> new HashSet<>());
+                // ignore genesis commits
+                if (offset != 0)
+                    partitionToCommittedOffsets.get(key).add(offset);
             }
         });
 

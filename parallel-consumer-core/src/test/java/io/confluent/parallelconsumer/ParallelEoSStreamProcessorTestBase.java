@@ -22,6 +22,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.KafkaTestUtils.trimAllGeneisOffset;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
@@ -48,7 +49,7 @@ public class ParallelEoSStreamProcessorTestBase {
      *
      * @see LongPollingMockConsumer#poll(Duration)
      */
-    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 1000;
+    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
 
     /**
      * The commit interval for the main {@link ParallelEoSStreamProcessor} control thread. Actually the timeout that we
@@ -58,7 +59,7 @@ public class ParallelEoSStreamProcessorTestBase {
      * @see ParallelEoSStreamProcessor#workMailBox
      * @see ParallelEoSStreamProcessor#processWorkCompleteMailBox
      */
-    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 1000;
+    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected LongPollingMockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
@@ -113,8 +114,6 @@ public class ParallelEoSStreamProcessorTestBase {
 
         ktu = new KafkaTestUtils(consumerSpy);
 
-        KafkaTestUtils.assignConsumerToTopic(this.consumerSpy);
-
         return consumerSpy;
     }
 
@@ -152,6 +151,8 @@ public class ParallelEoSStreamProcessorTestBase {
                 .build();
 
         parallelConsumer = initAsyncConsumer(optionsWithClients);
+
+        subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
 
         parallelConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
         parallelConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
@@ -268,13 +269,19 @@ public class ParallelEoSStreamProcessorTestBase {
             assertThat(extractAllPartitionsOffsetsSequentially()).isEmpty();
         } else {
             List<Integer> collect = extractAllPartitionsOffsetsSequentially();
+            collect = trimAllGeneisOffset(collect);
             // duplicates are ok
             // is there a nicer optional way?
             // {@link Optional#ifPresentOrElse} only @since 9
             if (description.isPresent()) {
                 assertThat(collect).as(description.get()).hasSameElementsAs(offsets);
             } else {
-                assertThat(collect).hasSameElementsAs(offsets);
+                try {
+                    assertThat(collect).hasSameElementsAs(offsets);
+                } catch (AssertionError e) {
+                    log.error("", e);
+                    throw e;
+                }
             }
 
             KafkaTestUtils.assertCommits(producerSpy, UniLists.of(), Optional.of("Empty"));
@@ -305,7 +312,8 @@ public class ParallelEoSStreamProcessorTestBase {
         if (isUsingTransactionalProducer()) {
             KafkaTestUtils.assertCommitLists(producerSpy, offsets, Optional.empty());
         } else {
-            KafkaTestUtils.assertCommitLists(consumerSpy.getCommitHistoryWithGropuId(), offsets, Optional.empty());
+            List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistoryWithGropuId = consumerSpy.getCommitHistoryWithGropuId();
+            KafkaTestUtils.assertCommitLists(commitHistoryWithGropuId, offsets, Optional.empty());
         }
     }
 
