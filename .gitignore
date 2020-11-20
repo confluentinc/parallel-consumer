@@ -33,3 +33,6 @@ target/
 
 # JENV
 .java-version
+
+delombok/
+**/*.releaseBackup
