@@ -56,7 +56,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private Instant lastCommit = Instant.now();
 
-    final ProducerManager<K, V> producerManager;
+    private final Optional<ProducerManager<K, V>> producerManager;
 
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
@@ -125,38 +125,37 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> newConsumer,
-                                      org.apache.kafka.clients.producer.Producer<K, V> newProducer,
-                                      ParallelConsumerOptions newOptions) {
-        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
+    public ParallelEoSStreamProcessor(ParallelConsumerOptions newOptions) {
+        Objects.requireNonNull(newOptions, "Options must be supplied");
 
-        Objects.requireNonNull(newConsumer);
-        Objects.requireNonNull(newProducer);
-        Objects.requireNonNull(newOptions);
+        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
 
         options = newOptions;
         options.validate();
 
-        checkNotSubscribed(newConsumer);
-        checkAutoCommitIsDisabled(newConsumer);
+        this.consumer = options.getConsumer();
 
-        this.consumer = newConsumer;
+        checkNotSubscribed(consumer);
+        checkAutoCommitIsDisabled(consumer);
 
         this.workerPool = Executors.newFixedThreadPool(newOptions.getNumberOfThreads());
 
-        this.wm = new WorkManager<>(newOptions, newConsumer);
+        this.wm = new WorkManager<>(newOptions, consumer);
 
-        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(newConsumer);
-        this.producerManager = new ProducerManager<>(newProducer, consumerMgr, this.wm, options);
+        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
-        if (options.isUsingTransactionalProducer()) {
-            this.committer = this.producerManager;
+        if (options.isProducerSupplied()) {
+            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            if (options.isUsingTransactionalProducer())
+                this.committer = this.producerManager.get();
+            else
+                this.committer = this.brokerPollSubsystem;
         } else {
+            this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
-
     }
 
     private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
@@ -277,8 +276,13 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     @Override
     @SneakyThrows
-    public void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                               Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+    public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                   Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        // todo refactor out the producer system to a sub class
+        if (!options.isProducerSupplied()) {
+            throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
+        }
+
         // wrap user func to add produce function
         Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
 
@@ -291,7 +295,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
             List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
             for (ProducerRecord<K, V> toProduce : recordListToProduce) {
-                RecordMetadata produceResultMeta = producerManager.produceMessage(toProduce);
+                RecordMetadata produceResultMeta = producerManager.get().produceMessage(toProduce);
                 var result = new ConsumeProduceResult<>(consumedRecord, toProduce, produceResultMeta);
                 results.add(result);
             }
@@ -299,6 +303,31 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         };
 
         supervisorLoop(wrappedUserFunc, callback);
+    }
+
+    @Override
+    @SneakyThrows
+    public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
+        pollAndProduceMany(userFunction, (record) -> {
+            // no op call back
+            log.trace("No-op user callback");
+        });
+    }
+
+    @Override
+    @SneakyThrows
+    public void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction) {
+        pollAndProduce(userFunction, (record) -> {
+            // no op call back
+            log.trace("No-op user callback");
+        });
+    }
+
+    @Override
+    @SneakyThrows
+    public void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction,
+                               Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        pollAndProduceMany((record) -> UniLists.of(userFunction.apply(record)), callback);
     }
 
     @Override
@@ -368,7 +397,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         maybeCloseConsumer();
 
-        producerManager.close(timeout);
+        producerManager.ifPresent(x -> x.close(timeout));
 
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerPool.shutdownNow();
@@ -417,7 +446,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @SneakyThrows
     public void waitForProcessedNotCommitted(Duration timeout) {
-        log.debug("Waiting processed but not commmitted...");
+        log.debug("Waiting processed but not committed...");
         var timer = Time.SYSTEM.timer(timeout);
         while (wm.isRecordsAwaitingToBeCommitted()) {
             log.trace("Waiting for no in processing...");
@@ -757,7 +786,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         }
     }
 
-
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         addToMailbox(wc);
     }
@@ -783,7 +811,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     void notifyNewWorkRegistered() {
         if (currentlyPollingWorkCompleteMailBox.get()) {
-            if (!producerManager.isTransactionInProgress()) {
+            if (producerManager.isPresent() && !producerManager.get().isTransactionInProgress()) {
                 log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
                 this.blockableControlThread.interrupt();
             } else {

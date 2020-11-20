@@ -53,10 +53,8 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
     @EnumSource(CommitMode.class)
     public void load(CommitMode commitMode) {
         setupClients();
-        boolean useTxProducer = commitMode.equals(TRANSACTIONAL_PRODUCER);
         setupParallelConsumerInstance(ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
-                .usingTransactionalProducer(useTxProducer)
                 .commitMode(commitMode)
                 .build());
 
@@ -68,14 +66,13 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 
         CountDownLatch allMessagesConsumedLatch = new CountDownLatch(quantityOfMessagesToProduce);
 
-        parallelConsumer.pollAndProduce((rec) -> {
+        parallelConsumer.pollAndProduceMany((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
 //            log.debug(x.toString());
             allMessagesConsumedLatch.countDown();
         });
-
 
         //
         allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
@@ -87,7 +84,7 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
         List<ProducerRecord<String, String>> history = producerSpy.history();
         assertThat(history).hasSize(quantityOfMessagesToProduce);
 
-        if (useTxProducer) {
+        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
             // assert order of commits
             assertCommitsAlwaysIncrease();
 
@@ -147,11 +144,8 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
         var quantityOfMessagesToProduce = 10_00;
         var defaultNumKeys = 20;
 
-        boolean useTxProducer = commitMode.equals(TRANSACTIONAL_PRODUCER);
-
         ParallelConsumerOptions baseOptions = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
-                .usingTransactionalProducer(useTxProducer)
                 .commitMode(commitMode)
                 .build();
 
@@ -219,7 +213,7 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 
         Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
 
-        parallelConsumer.pollAndProduce((rec) -> {
+        parallelConsumer.pollAndProduceMany((rec) -> {
             processingCheck.add(rec);
             int rangeOfTimeSimulatedProcessingTakesMs = 5;
             long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);

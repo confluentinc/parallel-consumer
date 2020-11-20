@@ -20,7 +20,7 @@ public class VertxNonVertxOperations extends ParallelEoSStreamProcessorTest {
     protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
-        parallelConsumer = new VertxParallelEoSStreamProcessor<>(consumerSpy, producerSpy, vertx, WebClient.create(vertx), parallelConsumerOptions);
+        parallelConsumer = new VertxParallelEoSStreamProcessor<>(vertx, WebClient.create(vertx), parallelConsumerOptions);
 
         return parallelConsumer;
     }

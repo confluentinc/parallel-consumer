@@ -60,12 +60,12 @@ public class CoreApp {
     @SuppressWarnings({"FeatureEnvy", "MagicNumber"})
     ParallelStreamProcessor<String, String> setupParallelConsumer() {
         // tag::exampleSetup[]
-        ParallelConsumerOptions options = getOptions();
-
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
-        ParallelStreamProcessor<String, String> eosStreamProcessor = ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, kafkaProducer, options);
+        var options = getOptions().toBuilder().consumer(kafkaConsumer).producer(kafkaProducer).build();
+
+        ParallelStreamProcessor<String, String> eosStreamProcessor = ParallelStreamProcessor.createEosStreamProcessor(options);
         if (!(kafkaConsumer instanceof MockConsumer)) {
             eosStreamProcessor.subscribe(UniLists.of(inputTopic)); // <5>
         }
@@ -93,7 +93,7 @@ public class CoreApp {
         // tag::exampleProduce[]
         this.parallelConsumer.pollAndProduce(record -> {
                     var result = processBrokerRecord(record);
-                    return UniLists.of(new ProducerRecord<>(outputTopic, record.key(), result.payload));
+                    return new ProducerRecord<>(outputTopic, record.key(), result.payload);
                 }, consumeProduceResult -> {
                     log.debug("Message {} saved to broker at offset {}",
                             consumeProduceResult.getOut(),

@@ -83,8 +83,10 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
-        ParallelConsumerOptions build = ParallelConsumerOptions.builder().commitMode(TRANSACTIONAL_PRODUCER).usingTransactionalProducer(true).build();
-        vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(consumerSpy, producerSpy, vertx, wc, build);
+        var build = parallelConsumerOptions.toBuilder()
+                .commitMode(TRANSACTIONAL_PRODUCER) // force tx
+                .build();
+        vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(vertx, wc, build);
 
         return vertxAsync;
     }

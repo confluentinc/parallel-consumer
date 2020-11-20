@@ -24,11 +24,8 @@ import java.util.stream.Stream;
  */
 public interface JStreamVertxParallelStreamProcessor<K, V> extends DrainingCloseable {
 
-    static <KK, VV> JStreamVertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(
-            org.apache.kafka.clients.consumer.Consumer<KK, VV> consumer,
-            org.apache.kafka.clients.producer.Producer<KK, VV> producer,
-            ParallelConsumerOptions options) {
-        return new JStreamVertxParallelEoSStreamProcessor<>(consumer, producer, options);
+    static <KK, VV> JStreamVertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
+        return new JStreamVertxParallelEoSStreamProcessor<>(options);
     }
 
     /**

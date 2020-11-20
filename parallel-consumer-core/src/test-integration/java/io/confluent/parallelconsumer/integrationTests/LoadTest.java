@@ -72,12 +72,17 @@ public class LoadTest extends DbTest {
         // subscribe in advance, it can be a few seconds
         kcu.consumer.subscribe(UniLists.of(topic));
 
+        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
         //
         boolean tx = true;
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.KEY).usingTransactionalProducer(tx).commitMode(TRANSACTIONAL_PRODUCER).build();
-        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
+        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
+                .commitMode(TRANSACTIONAL_PRODUCER)
+                .producer(kcu.createNewProducer(tx))
+                .consumer(newConsumer)
+                .build();
         newConsumer.subscribe(Pattern.compile(topic));
-        var async = new ParallelEoSStreamProcessor<>(newConsumer, kcu.createNewProducer(tx), options);
+        ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);
         AtomicInteger msgCount = new AtomicInteger(0);
 
         ProgressBar pb = new ProgressBarBuilder()

@@ -18,16 +18,37 @@ import java.util.function.Function;
  * Parallel message consumer which also can optionally produce 0 or many {@link ProducerRecord} results to be published
  * back to Kafka.
  *
- * @see #pollAndProduce(Function, Consumer)
+ * @see #pollAndProduceMany(Function, Consumer)
  */
 public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
 
-    static <KK, VV> ParallelStreamProcessor<KK, VV> createEosStreamProcessor(
-            org.apache.kafka.clients.consumer.Consumer<KK, VV> consumer,
-            org.apache.kafka.clients.producer.Producer<KK, VV> producer,
-            ParallelConsumerOptions options) {
-        return new ParallelEoSStreamProcessor<>(consumer, producer, options);
+    static <KK, VV> ParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
+        return new ParallelEoSStreamProcessor(options);
     }
+
+    /**
+     * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link
+     * ProducerRecord}s to be sent back to the broker.
+     *
+     * @param callback applied after the produced message is acknowledged by kafka
+     */
+    @SneakyThrows
+    void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                            Consumer<ConsumeProduceResult<K, V, K, V>> callback);
+
+    /**
+     * Register a function to be applied in parallel to each received message, which in turn returns one or many {@link
+     * ProducerRecord}s to be sent back to the broker.
+     */
+    @SneakyThrows
+    void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction);
+
+    /**
+     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
+     * ProducerRecord} to be sent back to the broker.
+     */
+    @SneakyThrows
+    void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction);
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns a {@link
@@ -36,7 +57,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      * @param callback applied after the produced message is acknowledged by kafka
      */
     @SneakyThrows
-    void pollAndProduce(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+    void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction,
                         Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**
