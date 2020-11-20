@@ -13,15 +13,12 @@ import java.util.stream.Stream;
 
 public interface JStreamParallelStreamProcessor<K, V> extends DrainingCloseable {
 
-    static <KK, VV> JStreamParallelStreamProcessor<KK, VV> createJStreamEosStreamProcessor(
-            org.apache.kafka.clients.consumer.Consumer<KK, VV> consumer,
-            org.apache.kafka.clients.producer.Producer<KK, VV> producer,
-            ParallelConsumerOptions options) {
-        return new JStreamParallelEoSStreamProcessor<>(consumer, producer, options);
+    static <KK, VV> JStreamParallelStreamProcessor<KK, VV> createJStreamEosStreamProcessor(ParallelConsumerOptions options) {
+        return new JStreamParallelEoSStreamProcessor<>(options);
     }
 
     /**
-     * Like {@link ParallelEoSStreamProcessor#pollAndProduce} but instead of callbacks, streams the results instead,
+     * Like {@link ParallelEoSStreamProcessor#pollAndProduceMany} but instead of callbacks, streams the results instead,
      * after the produce result is ack'd by Kafka.
      *
      * @return a stream of results of applying the function to the polled records

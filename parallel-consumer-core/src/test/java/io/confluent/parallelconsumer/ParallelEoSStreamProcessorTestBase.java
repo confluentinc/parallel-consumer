@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
-import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.BeforeEach;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -147,7 +146,12 @@ public class ParallelEoSStreamProcessorTestBase {
     protected void setupParallelConsumerInstance(ParallelConsumerOptions parallelConsumerOptions) {
         setupClients();
 
-        parallelConsumer = initAsyncConsumer(parallelConsumerOptions);
+        var optionsWithClients = parallelConsumerOptions.toBuilder()
+                .consumer(consumerSpy)
+                .producer(producerSpy)
+                .build();
+
+        parallelConsumer = initAsyncConsumer(optionsWithClients);
 
         parallelConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
         parallelConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
@@ -160,7 +164,7 @@ public class ParallelEoSStreamProcessorTestBase {
     }
 
     protected ParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        parallelConsumer = new ParallelEoSStreamProcessor<>(consumerSpy, producerSpy, parallelConsumerOptions);
+        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
 
         return parallelConsumer;
     }
@@ -223,12 +227,15 @@ public class ParallelEoSStreamProcessorTestBase {
         waitAtMost(defaultTimeout).until(booleanCallable);
     }
 
+    /**
+     * Make sure the latch is attached, if this times out unexpectedly
+     */
     @SneakyThrows
     private void blockingLoopLatchTrigger(int waitForCount) {
         log.debug("Waiting on {} cycles on loop latch...", waitForCount);
         loopLatchV = new CountDownLatch(waitForCount);
-        boolean await = loopLatchV.await(defaultTimeoutSeconds, SECONDS);
-        if (!await)
+        boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
+        if (timeout)
             throw new TimeoutException(msg("Timeout {} waiting for latch", defaultTimeoutSeconds));
     }
 

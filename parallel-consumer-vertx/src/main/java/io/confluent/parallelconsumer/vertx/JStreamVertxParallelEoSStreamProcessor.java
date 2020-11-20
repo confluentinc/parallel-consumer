@@ -46,12 +46,10 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency.
      */
-    public JStreamVertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                                  Producer<K, V> producer,
-                                                  Vertx vertx,
+    public JStreamVertxParallelEoSStreamProcessor(Vertx vertx,
                                                   WebClient webClient,
-                                                  ParallelConsumerOptions options) {
-        super(consumer, producer, vertx, webClient, options);
+                                                  ParallelConsumerOptions<K, V> options) {
+        super(vertx, webClient, options);
 
         this.userProcessResultsStream = new ConcurrentLinkedDeque<>();
 
@@ -61,10 +59,8 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public JStreamVertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                                  Producer<K, V> producer,
-                                                  ParallelConsumerOptions options) {
-        this(consumer, producer, null, null, options);
+    public JStreamVertxParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> options) {
+        this(null, null, options);
     }
 
     @Override

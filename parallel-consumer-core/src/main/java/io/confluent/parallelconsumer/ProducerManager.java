@@ -48,10 +48,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         producerIsConfiguredForTransactions = setupReflection();
 
-        initProducer(newProducer);
+        initProducer();
     }
 
-    private void initProducer(final Producer<K, V> newProducer) {
+    private void initProducer() {
         producerTransactionLock = new ReentrantReadWriteLock(true);
 
         // String transactionIdProp = options.getProducerConfig().getProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
@@ -70,7 +70,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             }
         } else {
             if (producerIsConfiguredForTransactions) {
-                throw new IllegalArgumentException("Not using non-transactional option, but Producer has a transaction ID - Producer must not have a transaction ID for this option");
+                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " +
+                        "the Producer must not have a transaction ID for this option. This is because having such an ID forces the " +
+                        "Producer into transactional mode - i.e. you cannot use it without using transactions.");
             }
         }
     }
@@ -109,7 +111,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * use case where messages aren't produced.
      *
      * @see ParallelConsumer#poll
-     * @see ParallelStreamProcessor#pollAndProduce
+     * @see ParallelStreamProcessor#pollAndProduceMany
      */
     RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
         // only needed if not using tx

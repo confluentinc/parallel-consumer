@@ -7,9 +7,9 @@ package io.confluent.parallelconsumer.integrationTests;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.integrationTests.KafkaTest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.core.ConditionTimeoutException;
@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -102,12 +103,19 @@ public class TransactionAndCommitModeTest extends KafkaTest<String, String> {
 
         // run parallel-consumer
         log.info("Starting application...");
-        ParallelEoSStreamProcessor<String, String> pc = new ParallelEoSStreamProcessor<>(kcu.consumer, kcu.producer, ParallelConsumerOptions.builder().build());
+        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(TRANSACTIONAL_PRODUCER));
+
+        var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
+                .ordering(KEY)
+                .consumer(kcu.createNewConsumer())
+                .producer(newProducer)
+                .commitMode(commitMode)
+                .build());
         pc.subscribe(UniLists.of(inputName)); // <5>
 
         pc.pollAndProduce(record -> {
                     processedCount.incrementAndGet();
-                    return UniLists.of(new ProducerRecord<>(outputName, record.key(), "data"));
+                    return new ProducerRecord<String, String>(outputName, record.key(), "data");
                 }, consumeProduceResult -> {
                     producedCount.incrementAndGet();
                     processedAndProducedKeys.add(consumeProduceResult.getIn().key());

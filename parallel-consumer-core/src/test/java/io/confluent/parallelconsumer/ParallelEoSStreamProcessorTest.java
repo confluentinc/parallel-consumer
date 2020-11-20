@@ -11,6 +11,7 @@ import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -20,6 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.*;
@@ -29,6 +31,7 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.time.Duration.ofMillis;
@@ -36,12 +39,13 @@ import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
+import static org.awaitility.Awaitility.setDefaultConditionEvaluationListener;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 10, unit = SECONDS)
+//@Timeout(value = 10, unit = SECONDS)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -141,9 +145,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     }
 
     private ParallelConsumerOptions getBaseOptions(final CommitMode commitMode) {
-        return ParallelConsumerOptions.builder()
+        return ParallelConsumerOptions.<String, String>builder()
                 .commitMode(commitMode)
-                .usingTransactionalProducer(commitMode.equals(TRANSACTIONAL_PRODUCER))
+                .consumer(consumerSpy)
+                .producer(producerSpy)
                 .build();
     }
 
@@ -248,8 +253,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void offsetCommitsAreIsolatedPerPartition(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
-//        @Test
-//    public void offsetCommitsAreIsolatedPerPartition() {
         sendSecondRecord(consumerSpy);
 
         // send three messages - 0,1, to one partition and 3,4 to another partition petitions
@@ -276,7 +279,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish processing 1
         releaseAndWait(locks, 1);
 
-        waitForSomeLoopCycles(5);
+        waitForSomeLoopCycles(2);
 
         // make sure only base offsets are committed
         assertCommits(of(0, 2));
@@ -331,12 +334,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
         setupData();
 
-
         // cause a control loop error
         parallelConsumer.addLoopEndCallBack(() -> {
             throw new RuntimeException("My fake control loop error");
         });
-
 
         //
         parallelConsumer.poll((ignore) -> {
@@ -431,7 +432,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         setupParallelConsumerInstance(ParallelConsumerOptions.builder()
                 .commitMode(commitMode)
                 .ordering(KEY)
-                .usingTransactionalProducer(commitMode.equals(TRANSACTIONAL_PRODUCER))
                 .build());
         // created a new client above, so have to send the prime record again
         primeFirstRecord();
@@ -710,4 +710,88 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
     }
 
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    void consumeFlowDoesntRequireProducer(CommitMode commitMode) {
+        setupClients();
+
+        var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
+                .consumer(consumerSpy)
+                .commitMode(commitMode)
+                .build();
+
+        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
+            assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Producer", "Transaction");
+        } else {
+            parallelConsumer = initAsyncConsumer(optionsWithClients);
+            attachLoopCounter(parallelConsumer);
+
+            setupData();
+
+            parallelConsumer.poll((ignore) -> {
+                //ignore
+            });
+
+            waitForSomeLoopCycles(2);
+
+            parallelConsumer.closeDrainFirst();
+
+            //
+            assertCommits(of(0, 0, 1));
+        }
+    }
+
+    @Test
+    void produceMessageFlowRequiresProducer() {
+        setupClients();
+
+        var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
+                .consumer(consumerSpy)
+                .commitMode(TRANSACTIONAL_PRODUCER)
+                .build();
+
+        assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Producer", "Transaction");
+    }
+
+    @Test
+    void cantUseProduceFlowWithWrongOptions() throws InterruptedException {
+        setupClients();
+
+        // forget to supply producer
+        var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
+                .consumer(consumerSpy)
+                .commitMode(CONSUMER_ASYNCHRONOUS)
+                .build();
+
+        setupData();
+
+        var parallel = initAsyncConsumer(optionsWithClients);
+
+        assertThatThrownBy(() -> parallel.pollAndProduce((record) ->
+                new ProducerRecord<>(INPUT_TOPIC, "hi there")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Producer", "Transaction");
+    }
+
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void produceMessageFlow(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
+        parallelConsumer.pollAndProduce((ignore) -> new ProducerRecord<>("Hello", "there"));
+
+        // let it process
+        waitForSomeLoopCycles(2);
+
+        parallelConsumer.closeDrainFirst();
+
+        //
+        assertCommits(of(0, 1));
+
+        assertThat(producerSpy.history()).hasSize(1);
+    }
 }

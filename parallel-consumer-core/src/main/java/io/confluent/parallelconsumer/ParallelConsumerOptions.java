@@ -4,23 +4,31 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.StringUtils;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.producer.Producer;
 
-import java.util.Properties;
+import java.util.Objects;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 
 /**
  * The options for the {@link ParallelEoSStreamProcessor} system.
+ *
+ * @see #builder()
+ * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder
  */
 @Getter
 @Builder(toBuilder = true)
 @ToString
-public class ParallelConsumerOptions {
+public class ParallelConsumerOptions<K, V> {
+
+    private final Consumer<K, V> consumer;
+
+    private final Producer<K, V> producer;
 
     /**
      * The ordering guarantee to use.
@@ -52,6 +60,9 @@ public class ParallelConsumerOptions {
         /**
          * Commits through the Producer using transactions. Slowest fot he options, but no duplicates in Kafka
          * guaranteed (message replay may cause duplicates in external systems which is unavoidable with Kafka).
+         * <p>
+         * This is separate from using an IDEMPOTENT Producer, which can be used, along with {@link
+         * CommitMode#CONSUMER_SYNC} or {@link CommitMode#CONSUMER_ASYNCHRONOUS}.
          */
         TRANSACTIONAL_PRODUCER,
         /**
@@ -76,22 +87,6 @@ public class ParallelConsumerOptions {
     private final CommitMode commitMode = CommitMode.CONSUMER_ASYNCHRONOUS;
 
     /**
-     * When using a produce flow, when producing the message, either
-     * <p>
-     * This is separate from using an IDEMPOTENT Producer, which can be used, along with {@link
-     * CommitMode#CONSUMER_SYNC} or {@link CommitMode#CONSUMER_ASYNCHRONOUS}.
-     * <p>
-     * Must be set to true if being used with a transactional producer. Producers state. However, forcing it to be
-     * specified makes the choice more verbose?
-     * <p>
-     * TODO we could just auto detect this from the
-     * <p>
-     * TODO delete in favor of CommitMode
-     */
-    @Builder.Default
-    private final boolean usingTransactionalProducer = false;
-
-    /**
      * Don't have more than this many uncommitted messages in process
      * <p>
      * TODO docs - needs renaming. Messages aren't "uncommitted", they're just in the comitted offset map instead of the
@@ -114,17 +109,20 @@ public class ParallelConsumerOptions {
     @Builder.Default
     private final int numberOfThreads = 16;
 
-    // TODO remove - or include when checking passed property arguments instead of instances
-    //    using reflection instead
-//    @Builder.Default
-//    private final Properties producerConfig = new Properties();
-
     public void validate() {
-        boolean commitModeIsTx = commitMode.equals(TRANSACTIONAL_PRODUCER);
-        if (this.isUsingTransactionalProducer() ^ commitModeIsTx) {
-            throw new IllegalArgumentException(msg("Using transaction producer mode ({}) without matching commit mode ({})",
-                    this.isUsingTransactionalProducer(),
+        Objects.requireNonNull(consumer, "A consumer must be supplied");
+
+        if (isUsingTransactionalProducer() && producer == null) {
+            throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
                     commitMode));
         }
+    }
+
+    protected boolean isUsingTransactionalProducer() {
+        return commitMode.equals(TRANSACTIONAL_PRODUCER);
+    }
+
+    public boolean isProducerSupplied() {
+        return getProducer() != null;
     }
 }

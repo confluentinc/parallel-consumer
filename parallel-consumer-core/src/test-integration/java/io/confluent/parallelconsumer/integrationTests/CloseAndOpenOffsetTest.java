@@ -80,17 +80,18 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         }
 
         // 1 client
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+        KafkaConsumer<String, String> newConsumerOne = kcu.createNewConsumer();
+        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+        var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .usingTransactionalProducer(true)
                 .commitMode(TRANSACTIONAL_PRODUCER)
+                .consumer(newConsumerOne)
+                .producer(producerOne)
                 .build();
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "ONE-my-client");
-        KafkaConsumer<String, String> newConsumerOne = kcu.createNewConsumer();
 
         //
-        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        var asyncOne = new ParallelEoSStreamProcessor<>(newConsumerOne, producerOne, options);
+        var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
 
         //
         asyncOne.subscribe(UniLists.of(rebalanceTopic));
@@ -153,7 +154,8 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        try (var asyncThree = new ParallelEoSStreamProcessor<>(newConsumerThree, producerThree, options)) {
+        var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
+        try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
             asyncThree.subscribe(UniLists.of(rebalanceTopic));
 
             // read what we're given
@@ -203,13 +205,14 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+        var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .usingTransactionalProducer(true)
+                .consumer(consumer)
+                .producer(producerOne)
                 .commitMode(TRANSACTIONAL_PRODUCER)
                 .build();
 
-        try (var asyncOne = new ParallelEoSStreamProcessor<>(consumer, producerOne, options)) {
+        try (var asyncOne = new ParallelEoSStreamProcessor<String, String>(options)) {
 
             asyncOne.subscribe(UniLists.of(topic));
 
@@ -233,8 +236,11 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-
-        try (var asyncThree = new ParallelEoSStreamProcessor<>(newConsumerThree, producerThree, options)) {
+        ParallelConsumerOptions<String, String> optionsThree = options.toBuilder()
+                .consumer(newConsumerThree)
+                .producer(producerThree)
+                .build();
+        try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given
@@ -273,12 +279,13 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+        var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .usingTransactionalProducer(true)
+                .consumer(consumer)
+                .producer(producerOne)
                 .commitMode(TRANSACTIONAL_PRODUCER)
                 .build();
-        var asyncOne = new ParallelEoSStreamProcessor<>(consumer, producerOne, options);
+        var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
 
         asyncOne.subscribe(UniLists.of(topic));
 
@@ -306,7 +313,11 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        try (var asyncThree = new ParallelEoSStreamProcessor<>(newConsumerThree, producerThree, options)) {
+        var optionsThree = options.toBuilder()
+                .consumer(newConsumerThree)
+                .producer(producerThree)
+                .build();
+        try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given

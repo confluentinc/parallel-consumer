@@ -64,7 +64,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     public VertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
                                            Producer<K, V> producer,
                                            ParallelConsumerOptions options) {
-        this(consumer, producer, Vertx.vertx(), null, options);
+        this(Vertx.vertx(), null, options);
     }
 
     /**
@@ -72,11 +72,10 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency.
      */
-    public VertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Producer<K, V> producer,
-                                           Vertx vertx,
+    public VertxParallelEoSStreamProcessor(Vertx vertx,
                                            WebClient webClient,
                                            ParallelConsumerOptions options) {
-        super(consumer, producer, options);
+        super(options);
         if (vertx == null)
             vertx = Vertx.vertx();
         this.vertx = vertx;
