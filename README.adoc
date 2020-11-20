@@ -195,6 +195,7 @@ without operational burden or harming the clusters performance
 * Vert.x non-blocking library integration (HTTP currently)
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
+* Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
 
@@ -646,21 +647,20 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 
 === Short Term - What we're working on nowish ⏰
 
-* Producer is optional
-* Transactions optional
 * Depth~ first or breadth first partition traversal
 * JavaRX and other streaming modules
 
 === Medium Term - What's up next ⏲
 
-* Automatic fanout (automatic selection of concurrency level based on downstream back pressure)
+* https://github.com/confluentinc/parallel-consumer/issues/21[Automatic fanout] (automatic selection of concurrency level based on downstream back pressure) (https://github.com/confluentinc/parallel-consumer/pull/22[draft PR])
 * Support for general Vert.x Verticles (non-blocking libraries)
 * Dead Letter Queue (DLQ) handling
 * Non-blocking I/O work management
 ** More customisable handling of HTTP interactions
 ** Chance to batch multiple consumer records into a single or multiple http request objects
-* Distributed tracing integration
-* Metrics
+* https://github.com/confluentinc/parallel-consumer/issues/28[Distributed tracing integration]
+* https://github.com/confluentinc/parallel-consumer/issues/24[Distributed rate limiting]
+* https://github.com/confluentinc/parallel-consumer/issues/27[Metrics]
 
 === Long Term - The future ☁️
 

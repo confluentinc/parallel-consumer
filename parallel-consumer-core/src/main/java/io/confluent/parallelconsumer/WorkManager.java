@@ -19,11 +19,9 @@ import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
@@ -75,7 +73,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private int inFlightCount = 0;
 
     /**
-     * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting
+     * The multiple of {@link ParallelConsumerOptions#getMaxMessagesToQueue()} that should be pre-loaded awaiting
      * processing. Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
      * <p>
      * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
@@ -258,7 +256,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public <R> List<WorkContainer<K, V>> maybeGetWork() {
-        return maybeGetWork(options.getMaxConcurrency());
+        return maybeGetWork(options.getMaxMessagesToQueue());
     }
 
     /**
@@ -267,7 +265,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#maxConcurrency}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
-        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxConcurrency()), options.getMaxUncommittedMessagesToHandle());
+        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxMessagesToQueue()), options.getMaxNumberMessagesBeyondBaseCommitOffset());
         int workToGetDelta = minWorkToGetSetting - getInFlightCount();
 
         // optimise early
@@ -542,8 +540,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     boolean isSufficientlyLoaded() {
         int remaining = getPartitionWorkRemainingCount();
-        boolean loadedEnoughInPipeline = remaining > options.getMaxConcurrency() * loadingFactor;
-        boolean overMaxUncommitted = remaining > options.getMaxUncommittedMessagesToHandle();
+        boolean loadedEnoughInPipeline = remaining > options.getMaxMessagesToQueue() * loadingFactor;
+        boolean overMaxUncommitted = remaining > options.getMaxNumberMessagesBeyondBaseCommitOffset();
         boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
         if (remainingIsSufficient) {
             log.debug("loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);

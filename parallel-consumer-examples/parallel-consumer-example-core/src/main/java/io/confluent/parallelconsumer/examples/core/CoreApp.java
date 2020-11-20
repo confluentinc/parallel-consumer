@@ -77,8 +77,8 @@ public class CoreApp {
     ParallelConsumerOptions getOptions() {
         var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
-                .maxConcurrency(1000) // <2>
-                .maxUncommittedMessagesToHandle(1000) // <3>
+                .maxMessagesToQueue(1000) // <2>
+                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <3>
                 .build();
         return options;
     }
