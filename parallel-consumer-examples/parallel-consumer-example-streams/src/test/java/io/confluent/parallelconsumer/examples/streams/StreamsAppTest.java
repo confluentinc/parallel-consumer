@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.examples.streams;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.integrationTests.KafkaTest;
+import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -15,7 +15,7 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 
 @Slf4j
-public class StreamsAppTest extends KafkaTest<String, String> {
+public class StreamsAppTest extends BrokerIntegrationTest<String, String> {
 
     @SneakyThrows
     @Test
@@ -57,7 +57,7 @@ public class StreamsAppTest extends KafkaTest<String, String> {
 
         @Override
         String getServerConfig() {
-            return KafkaTest.kafkaContainer.getBootstrapServers();
+            return BrokerIntegrationTest.kafkaContainer.getBootstrapServers();
         }
     }
 }

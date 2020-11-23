@@ -44,7 +44,7 @@ import static org.mockito.Mockito.mock;
  * Mocked out comparative volume tests
  */
 @Slf4j
-public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
+public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
     KafkaTestUtils ku = new KafkaTestUtils(consumerSpy);
 
