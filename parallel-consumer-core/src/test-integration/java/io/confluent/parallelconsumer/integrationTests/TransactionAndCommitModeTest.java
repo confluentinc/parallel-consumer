@@ -126,6 +126,7 @@ public class TransactionAndCommitModeTest extends KafkaTest<String, String> {
         pc.subscribe(UniLists.of(inputName)); // <5>
 
         pc.pollAndProduce(record -> {
+                    log.trace("Still going {}", record);
                     processedCount.incrementAndGet();
                     return new ProducerRecord<String, String>(outputName, record.key(), "data");
                 }, consumeProduceResult -> {
@@ -135,7 +136,7 @@ public class TransactionAndCommitModeTest extends KafkaTest<String, String> {
         );
 
         // wait for all pre-produced messages to be processed and produced
-        String failureMessage = "All keys sent to input-topic should be processed and produced";
+        String failureMessage = "All keys sent to input-topic should be processed and produced, within time";
         try {
             waitAtMost(ofSeconds(10)).alias(failureMessage).untilAsserted(() -> {
                 log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
@@ -158,8 +159,7 @@ public class TransactionAndCommitModeTest extends KafkaTest<String, String> {
 
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
-
-        pc.close();
+        assertThat(processedAndProducedKeys).hasSameSizeAs(expectedKeys);
     }
 
 }

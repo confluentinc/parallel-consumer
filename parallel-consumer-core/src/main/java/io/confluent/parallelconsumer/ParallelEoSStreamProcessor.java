@@ -109,7 +109,19 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * @see #state
      */
     enum State {
-        unused, running, draining, closing, closed;
+        unused,
+        running,
+        /**
+         * When draining, the system will stop polling for more records, but will attempt to process all already
+         * downloaded records. Note that if you choose to close without draining, records already processed will still
+         * be committed first before closing.
+         *
+         * @see #closeDrainFirst()
+         * @see #close()
+         */
+        draining,
+        closing,
+        closed;
     }
 
     /**
@@ -335,11 +347,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         pollAndProduceMany((record) -> UniLists.of(userFunction.apply(record)), callback);
     }
 
+    /**
+     * Close the system, without draining.
+     *
+     * @see State#draining
+     */
     @Override
     public void close() {
         // use a longer timeout, to cover for evey other step using the default
         Duration timeout = DrainingCloseable.DEFAULT_TIMEOUT.multipliedBy(2);
-        closeDrainFirst(timeout);
+        closeDontDrainFirst(timeout);
     }
 
     @Override
@@ -386,8 +403,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 // ignore
                 log.trace("Interrupted", e);
             } catch (ExecutionException | TimeoutException e) {
-                log.error("Execution or timeout exception while waiting for the control thread to close cleanly - lock " +
-                        "problem? If not, try increasing your time out to allow the system to drain, if closing in drain mode.", e);
+                log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
+                        "(state was {}). Try increasing your time-out to allow the system to drain, or close withing " +
+                        "draining.", state, e);
                 throw e;
             }
             log.trace("Still waiting for system to close...");
@@ -700,7 +718,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     private Duration getTimeToNextCommit() {
-        if (state == running) {
+        // draining is a normal running mode for the controller
+        if (state == running || state == draining) {
             return getTimeBetweenCommits().minus(getTimeSinceLastCommit());
         } else {
             log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
