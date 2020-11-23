@@ -38,7 +38,7 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 
-image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"] image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
+image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central] image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"] image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
@@ -111,10 +111,12 @@ This is effective in many situations, but falls short in a lot too.
 
 * Primarily: You cannot use more consumers than you have partitions available to read from.
 For example, if you have a topic with five partitions, you cannot use a group with more than five consumers to read from it.
-* Running more extra consumers has resource implications - each consumer takes up resources on both the client  and broker side
+* Running more extra consumers has resource implications - each consumer takes up resources on both the client  and broker side.
 Each consumer adds a lot of overhead in terms of memory, CPU, and network bandwidth.
 * Large consumer groups (especially many large groups) can cause a lot of strain on the consumer group coordination system, such as rebalance storms.
-* Even with several partitions, you cannot achieve the performance levels obtainable by *per-key* ordered or unordered concurrent processing
+* Even with several partitions, you cannot achieve the performance levels obtainable by *per-key* ordered or unordered concurrent processing.
+* A single slow or failing message will also still block all messages behind the problematic message, ie. the entire partition.
+The process may recover, but the latency of all the messages behind the problematic one will be negatively impacted severely.
 
 Why not run more consumers __within__ your application instance?::
 * This is in some respects a slightly easier way of running more consumer instances, and in others a more complicated way.
@@ -340,6 +342,11 @@ This project is available in maven central, https://repo1.maven.org/maven2/io/co
 Latest version can be seen https://search.maven.org/artifact/io.confluent.parallelconsumer/parallel-consumer-core[here].
 
 Where `${project.version}` is the version to be used:
+
+* group ID: `io.confluent.parallelconsumer`
+* artifact ID: `parallel-consumer-core`
+* version: image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
+
 
 .Core Module Dependency
 [source,xml,indent=0]
