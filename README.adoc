@@ -375,25 +375,31 @@ Where `${project.version}` is the version to be used:
 .Setup the client
 [source,java,indent=0]
 ----
-        Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
+        Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
-        var options = getOptions().toBuilder().consumer(kafkaConsumer).producer(kafkaProducer).build();
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(KEY) // <2>
+                .maxMessagesToQueue(1000) // <3>
+                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
+                .consumer(kafkaConsumer)
+                .producer(kafkaProducer)
+                .build();
 
-        ParallelStreamProcessor<String, String> eosStreamProcessor = ParallelStreamProcessor.createEosStreamProcessor(options);
-        if (!(kafkaConsumer instanceof MockConsumer)) {
-            eosStreamProcessor.subscribe(UniLists.of(inputTopic)); // <5>
-        }
+        ParallelStreamProcessor<String, String> eosStreamProcessor =
+                ParallelStreamProcessor.createEosStreamProcessor(options);
+
+        eosStreamProcessor.subscribe(of(inputTopic)); // <5>
 
         return eosStreamProcessor;
 ----
-<1> Choose your ordering type, `KEY` in this case.
+<1> Setup your clients as per normal. A Producer is only required if using the `produce` flows.
+<2> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
-<2> The maximum number of concurrent processing operations to be performing at any given time
-<3> Regardless of the level of concurrency, don't have more than this many messages uncommitted at any given time.
+<3> The maximum number of concurrent processing operations to be performing at any given time
+<4> Regardless of the level of concurrency, don't have more than this many messages uncommitted at any given time.
 Also, because the library coordinates offsets, `enable.auto.commit` must be disabled in your consumer.
-<4> Setup your consumer client as per normal
-<5> Setup your topic subscriptions - (when using the `MockConsumer` you must use the `MockConsumer#assign` method)
+<5> Subscribe to your topics
 
 NOTE: Because the library coordinates offsets, `enable.auto.commit` must be disabled.
 
@@ -443,7 +449,7 @@ You can also optionally provide a callback function to be run after the message(
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        this.parallelConsumer.pollAndProduce(record -> {
+        parallelConsumer.pollAndProduce(record -> {
                     var result = processBrokerRecord(record);
                     return new ProducerRecord<>(outputTopic, record.key(), result.payload);
                 }, consumeProduceResult -> {

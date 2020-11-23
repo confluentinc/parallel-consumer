@@ -136,6 +136,6 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
             beginningOffsets.put(tp, 0L);
         }
         super.updateBeginningOffsets(beginningOffsets);
-
     }
+
 }
