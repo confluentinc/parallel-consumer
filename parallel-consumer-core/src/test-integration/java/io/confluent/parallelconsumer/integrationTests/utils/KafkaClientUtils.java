@@ -14,6 +14,7 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
@@ -93,9 +94,15 @@ public class KafkaClientUtils {
     }
 
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup) {
+        return createNewConsumer(newConsumerGroup, new Properties());
+    }
+
+    @NotNull
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup, Properties options) {
         if (newConsumerGroup) {
             props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt()); // new group
         }
+        props.putAll(options);
         KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(props);
         log.debug("New consume {}", kvKafkaConsumer);
         return kvKafkaConsumer;
