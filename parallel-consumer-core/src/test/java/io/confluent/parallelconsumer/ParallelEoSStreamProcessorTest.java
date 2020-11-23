@@ -4,20 +4,20 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.WallClock;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
@@ -26,12 +26,13 @@ import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.time.Duration.ofMillis;
-
+import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
@@ -58,9 +59,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         primeFirstRecord();
     }
 
-    @Test
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void failingActionNothingCommitted() {
+    public void failingActionNothingCommitted(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
         parallelConsumer.poll((ignore) -> {
             throw new RuntimeException("My user's function error");
         });
@@ -71,7 +75,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         //
         assertCommits(of(0), "All erroring, nothing committed except initial");
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = producerSpy.consumerGroupOffsetsHistory();
+        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> maps = getCommitHistory();
+        assertThat(maps).isNotEmpty();
         List<OffsetAndMetadata> metas = new ArrayList<>();
         for (final Map<String, Map<TopicPartition, OffsetAndMetadata>> map : maps) {
             for (final Map<TopicPartition, OffsetAndMetadata> value : map.values()) {
@@ -88,9 +93,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         }
     }
 
-    @Test
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void offsetsAreNeverCommittedForMessagesStillInFlightSimplest() {
+    public void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
         sendSecondRecord(consumerSpy);
 
         var locks = constructLatches(2);
@@ -117,7 +125,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // make sure no offsets are committed
         assertCommits(of(0), "Partition is blocked");
 
-        // So it's data setup can be used in other tests, finish 0
+        // So it's data is setup can be used in other tests, finish 0
         releaseAndWait(locks, 0);
 
         log.debug("Closing...");
@@ -126,26 +134,36 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertThat(processedStates.values()).as("sanity - all expected messages are processed").containsExactly(true, true);
     }
 
-    @Test
-    public void offsetsAreNeverCommittedForMessagesStillInFlightShort() {
-        offsetsAreNeverCommittedForMessagesStillInFlightSimplest();
+    private void setupParallelConsumerInstance(final CommitMode commitMode) {
+        setupParallelConsumerInstance(getBaseOptions(commitMode));
+        // created a new client above, so have to send the prime record again
+        primeFirstRecord();
+    }
 
+    private ParallelConsumerOptions getBaseOptions(final CommitMode commitMode) {
+        return ParallelConsumerOptions.builder()
+                .commitMode(commitMode)
+                .usingTransactionalProducer(commitMode.equals(TRANSACTIONAL_PRODUCER))
+                .build();
+    }
+
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    @SneakyThrows
+    public void offsetsAreNeverCommittedForMessagesStillInFlightShort(CommitMode commitMode) {
+        offsetsAreNeverCommittedForMessagesStillInFlightSimplest(commitMode);
         log.info("Test start");
 
-        // make sure offset 1, not 0 is committed
-        // check only 1 is now committed, not committing 0 as well is a performance thing
-        verify(producerSpy,
-                after(verificationWaitDelay)
-                        .atLeast(1)
-                        .description("wait for at least one commit call"))
-                .commitTransaction();
-
+        // next expected offset is now 2
         assertCommits(of(0, 2), "Only one of the two offsets committed, as they were coalesced for efficiency");
     }
 
     @Disabled
-    @Test
-    public void offsetsAreNeverCommittedForMessagesStillInFlightLong() {
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void offsetsAreNeverCommittedForMessagesStillInFlightLong(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
         sendSecondRecord(consumerSpy);
 
         // send three messages - 0, 1, 2
@@ -224,8 +242,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.close();
     }
 
-    @Test
-    public void offsetCommitsAreIsolatedPerPartition() {
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    @SneakyThrows
+    public void offsetCommitsAreIsolatedPerPartition(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
+//        @Test
+//    public void offsetCommitsAreIsolatedPerPartition() {
         sendSecondRecord(consumerSpy);
 
         // send three messages - 0,1, to one partition and 3,4 to another partition petitions
@@ -252,6 +276,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish processing 1
         releaseAndWait(locks, 1);
 
+        waitForSomeLoopCycles(5);
+
         // make sure only base offsets are committed
         assertCommits(of(0, 2));
         assertCommitLists(of(of(0), of(2)));
@@ -267,11 +293,19 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish 0
         releaseAndWait(locks, 0);
 
+        // async consumer is slower to execute the commit. We could just wait, or we could add an event to the async consumer commit cycle
+        if (isUsingAsyncCommits())
+            waitForOneLoopCycle();
+
         // make sure offset 0 and 1 is committed
         assertCommitLists(of(of(0, 2), of(2, 3)));
 
         // finish 3
         releaseAndWait(locks, 3);
+
+        // async consumer is slower to execute the commit. We could just wait, or we could add an event to the async consumer commit cycle
+        if (isUsingAsyncCommits())
+            waitForOneLoopCycle();
 
         //
         assertCommitLists(of(of(0, 2), of(2, 3, 4)));
@@ -288,28 +322,39 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertThat(false).isTrue();
     }
 
-    @Test
-    @SneakyThrows
-    public void controlFlowException() {
-        //
-        WallClock mock = mock(WallClock.class);
-        when(mock.getNow()).thenThrow(new RuntimeException("My fake control loop error"));
-        parallelConsumer.setClock(mock);
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void controlFlowException(CommitMode commitMode) {
+        // setup again manually to use subscribe instead of assign (for revoke testing)
+        instantiateConsumerProducer();
+        parallelConsumer = initAsyncConsumer(getBaseOptions(commitMode));
+        subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
+        setupData();
+
+
+        // cause a control loop error
+        parallelConsumer.addLoopEndCallBack(() -> {
+            throw new RuntimeException("My fake control loop error");
+        });
+
 
         //
         parallelConsumer.poll((ignore) -> {
-            // ignore
+            log.info("Ignoring {}", ignore);
         });
 
         // close and retrieve exception in control loop
         assertThatThrownBy(() -> {
-            parallelConsumer.closeDontDrainFirst();
+            parallelConsumer.closeDrainFirst(ofSeconds(10));
         }).hasMessageContainingAll("Error", "poll", "thread", "fake control");
     }
 
-    @Test
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void testVoid() {
+    public void testVoid(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
         parallelConsumer.poll((record) -> {
@@ -322,11 +367,18 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         waitForSomeLoopCycles(1);
 
+        parallelConsumer.close();
+
         assertCommits(of(0, 1));
 
         verify(myRecordProcessingAction, times(expected)).apply(any());
-        verify(producerSpy, atLeastOnce()).commitTransaction();
-        verify(producerSpy, atLeastOnce()).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
+
+        // assert internal methods - shouldn't really need this as we already check the commit history above through the
+        // spy, so can leave in for the old producer style
+        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
+            verify(producerSpy, atLeastOnce()).commitTransaction();
+            verify(producerSpy, atLeastOnce()).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
+        }
     }
 
     /**
@@ -337,16 +389,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .pollDelay(ofMillis(0))
                 .pollInterval(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS / 2))
                 .untilAsserted(() -> assertCommits(of(0)));
-    }
-
-    @Test
-    public void testProducerStep() {
-        ProducerRecord<String, String> outMsg = new ProducerRecord(OUTPUT_TOPIC, "");
-        RecordMetadata prodResult = parallelConsumer.produceMessage(outMsg);
-        assertThat(prodResult).isNotNull();
-
-        List<ProducerRecord<String, String>> history = producerSpy.history();
-        assertThat(history).hasSize(1);
     }
 
     @Test
@@ -381,17 +423,21 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void ifTooManyMessagesAreInFlightDontPollBrokerForMore() {
     }
 
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
     @SneakyThrows
-    @Test
     @Disabled
-    public void processInKeyOrder() {
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(KEY).build();
-        setupAsyncConsumerInstance(options);
+    public void processInKeyOrder(CommitMode commitMode) {
+        setupParallelConsumerInstance(ParallelConsumerOptions.builder()
+                .commitMode(commitMode)
+                .ordering(KEY)
+                .usingTransactionalProducer(commitMode.equals(TRANSACTIONAL_PRODUCER))
+                .build());
+        // created a new client above, so have to send the prime record again
+        primeFirstRecord();
 
         // sanity check
         assertThat(parallelConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
-
-        primeFirstRecord();
 
         sendSecondRecord(consumerSpy);
 
@@ -534,7 +580,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @Test
     public void processInKeyOrderWorkNotReturnedDoesntBreakCommits() {
         ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(KEY).build();
-        setupAsyncConsumerInstance(options);
+        setupParallelConsumerInstance(options);
         primeFirstRecord();
 
         sendSecondRecord(consumerSpy);
@@ -612,8 +658,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         }
     }
 
-    @Test
-    public void closeAfterSingleMessageShouldBeEventBasedFast() {
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void closeAfterSingleMessageShouldBeEventBasedFast(CommitMode commitMode) {
+        setupParallelConsumerInstance(commitMode);
+
         var msgCompleteBarrier = new CountDownLatch(1);
 
         parallelConsumer.poll((ignore) -> {
@@ -627,6 +676,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // allow for offset to be committed
         waitForOneLoopCycle();
 
+        if (isUsingAsyncCommits()) {
+            waitForOneLoopCycle();
+        }
+
         assertCommits(of(0, 1));
 
         // close
@@ -639,8 +692,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .isLessThan(ofMillis(500));
     }
 
-    @Test
-    public void closeWithoutRunningShouldBeEventBasedFast() {
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void closeWithoutRunningShouldBeEventBasedFast(CommitMode commitMode) {
+        setupParallelConsumerInstance(getBaseOptions(commitMode));
+
         parallelConsumer.closeDontDrainFirst();
     }
 

@@ -4,9 +4,7 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.WorkContainer;
+import io.confluent.parallelconsumer.*;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -33,6 +31,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
 
 @Slf4j
 public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V>
@@ -90,7 +90,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
         vertxHttpRequest((WebClient wc, ConsumerRecord<K, V> rec) -> {
-            RequestInfo reqInf = requestInfoFunction.apply(rec);
+            RequestInfo reqInf = carefullyRun(requestInfoFunction, rec);
+
             HttpRequest<Buffer> req = wc.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
             Map<String, String> params = reqInf.getParams();
             for (var entry : params.entrySet()) {
@@ -106,7 +107,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) { // TODO remove, redundant over onSend?
 
         vertxHttpWebClient((webClient, record) -> {
-            HttpRequest<Buffer> call = webClientRequestFunction.apply(webClient, record);
+            HttpRequest<Buffer> call = carefullyRun(webClientRequestFunction, webClient, record);
 
             Future<HttpResponse<Buffer>> send = call.send(); // dispatches the work to vertx
 
@@ -124,7 +125,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
                                    Consumer<Future<HttpResponse<Buffer>>> onSend) {
 
         Function<ConsumerRecord<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (record) -> {
-            Future<HttpResponse<Buffer>> send = webClientRequestFunction.apply(webClient, record);
+
+            Future<HttpResponse<Buffer>> send = carefullyRun(webClientRequestFunction, webClient, record);
 
             // send callback
             onSend.accept(send);
@@ -232,7 +234,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     @Override
     public void close(Duration timeout, DrainingMode drainMode) {
         log.info("Vert.x async consumer closing...");
-        waitForNoInFlight(timeout);
+        waitForProcessedNotCommitted(timeout);
         super.close(timeout, drainMode);
         webClient.close();
         Future<Void> close = vertx.close();

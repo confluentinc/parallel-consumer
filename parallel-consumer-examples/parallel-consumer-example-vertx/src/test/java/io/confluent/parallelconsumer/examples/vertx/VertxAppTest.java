@@ -4,7 +4,10 @@ package io.confluent.parallelconsumer.examples.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import io.confluent.parallelconsumer.vertx.VertxTest;
+import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -13,7 +16,6 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
-import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -22,9 +24,8 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.concurrent.TimeoutException;
 
-import static io.confluent.csid.utils.KafkaTestUtils.DEFAULT_GROUP_METADATA;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
 
 @Slf4j
 public class VertxAppTest {
@@ -36,7 +37,10 @@ public class VertxAppTest {
     @Test
     public void test() {
         log.info("Test start");
-        VertxAppAppUnderTest coreApp = new VertxAppAppUnderTest();
+        VertxTest.setupWireMock();
+        int port = VertxTest.stubServer.port();
+
+        VertxAppAppUnderTest coreApp = new VertxAppAppUnderTest(port);
 
         coreApp.run();
 
@@ -45,16 +49,16 @@ public class VertxAppTest {
         coreApp.mockConsumer.addRecord(new ConsumerRecord(VertxApp.inputTopic, 0, 2, "a key 3", "a value"));
 
         Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(()->{
-            Assertions.assertThat(coreApp.mockConsumer.position(tp)).isEqualTo(3);
+            KafkaTestUtils.assertLastCommitIs(coreApp.mockConsumer, 3);
         });
 
-        Assertions.assertThatExceptionOfType(TimeoutException.class)
-                .as("no server to receive request, should timeout trying to close. Could also setup wire mock...")
-                .isThrownBy(coreApp::close)
-                .withMessageContainingAll("Waiting", "records", "flight");
+        coreApp.close();
     }
 
+    @RequiredArgsConstructor
     class VertxAppAppUnderTest extends VertxApp {
+
+        private final int port;
 
         LongPollingMockConsumer<String, String> mockConsumer = Mockito.spy(new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
@@ -69,12 +73,17 @@ public class VertxAppTest {
 
         @Override
         Producer<String, String> getKafkaProducer() {
-            return new MockProducer<>();
+            return new MockProducer<>(true, null, null);
         }
 
         @Override
         void setupSubscription(Consumer<String, String> kafkaConsumer) {
             mockConsumer.assign(UniLists.of(tp));
+        }
+
+        @Override
+        protected int getPort() {
+            return port;
         }
     }
 }

@@ -30,6 +30,7 @@ import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.*;
 import static me.tongfei.progressbar.ProgressBar.wrap;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
@@ -72,10 +73,11 @@ public class LoadTest extends DbTest {
         kcu.consumer.subscribe(UniLists.of(topic));
 
         //
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.KEY).build();
+        boolean tx = true;
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.KEY).usingTransactionalProducer(tx).commitMode(TRANSACTIONAL_PRODUCER).build();
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
         newConsumer.subscribe(Pattern.compile(topic));
-        var async = new ParallelEoSStreamProcessor<>(newConsumer, kcu.createNewProducer(true), options);
+        var async = new ParallelEoSStreamProcessor<>(newConsumer, kcu.createNewProducer(tx), options);
         AtomicInteger msgCount = new AtomicInteger(0);
 
         ProgressBar pb = new ProgressBarBuilder()

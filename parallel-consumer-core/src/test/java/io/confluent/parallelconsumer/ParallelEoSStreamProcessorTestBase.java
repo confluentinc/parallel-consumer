@@ -6,28 +6,33 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
+import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.BeforeEach;
+import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class ParallelEoSStreamProcessorTestBase {
@@ -36,24 +41,27 @@ public class ParallelEoSStreamProcessorTestBase {
     public static final String OUTPUT_TOPIC = "output";
     public static final String CONSUMER_GROUP_ID = "my-group";
 
+    public static final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
+
     /**
      * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
      * lower value shouldn't affect test speed much unless many different batches of messages are "published".
+     *
      * @see LongPollingMockConsumer#poll(Duration)
      */
-    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
+    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 1000;
 
     /**
-     * The commit interval for the main {@link ParallelEoSStreamProcessor} control thread. Actually the timeout that we poll the
-     * {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop cycles, making our
-     * test waiting go faster.
+     * The commit interval for the main {@link ParallelEoSStreamProcessor} control thread. Actually the timeout that we
+     * poll the {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop cycles,
+     * making our test waiting go faster.
      *
      * @see ParallelEoSStreamProcessor#workMailBox
      * @see ParallelEoSStreamProcessor#processWorkCompleteMailBox
      */
-    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
+    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 1000;
 
-    protected MockConsumer<String, String> consumerSpy;
+    protected LongPollingMockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
 
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
@@ -62,7 +70,7 @@ public class ParallelEoSStreamProcessorTestBase {
 
     protected static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
-    protected static Duration infiniteTimeout = Duration.ofMinutes(20);
+    protected static Duration effectivelyInfiniteTimeout = Duration.ofMinutes(20);
 
     ParallelEoSStreamProcessorTest.MyAction myRecordProcessingAction;
 
@@ -84,13 +92,13 @@ public class ParallelEoSStreamProcessorTestBase {
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
-        setupAsyncConsumerInstance(ParallelConsumerOptions.builder().build());
+        setupParallelConsumerInstance(ParallelConsumerOptions.builder().commitMode(CONSUMER_SYNC).build());
     }
 
     protected List<WorkContainer<String, String>> successfulWork = Collections.synchronizedList(new ArrayList<>());
 
     private void setupWorkManager(WorkManager<String, String> wm) {
-        wm.getSuccessfulWorkListeners().add((work)->{
+        wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Test work listener heard some successful work: {}", work);
             successfulWork.add(work);
         });
@@ -102,25 +110,41 @@ public class ParallelEoSStreamProcessorTestBase {
     }
 
     protected MockConsumer<String, String> setupClients() {
-        MockConsumer<String, String> consumer = new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST);
+        instantiateConsumerProducer();
+
+        ktu = new KafkaTestUtils(consumerSpy);
+
+        KafkaTestUtils.assignConsumerToTopic(this.consumerSpy);
+
+        return consumerSpy;
+    }
+
+    protected void instantiateConsumerProducer() {
+        LongPollingMockConsumer<String, String> consumer = new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST);
         MockProducer<String, String> producer = new MockProducer<>(true, null, null); // TODO do async testing
 
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
         myRecordProcessingAction = mock(ParallelEoSStreamProcessorTest.MyAction.class);
 
-        ktu = new KafkaTestUtils(consumerSpy);
-
-        KafkaTestUtils.setupConsumer(this.consumerSpy);
-
-        return consumerSpy;
+        when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
     }
 
-    protected void setupAsyncConsumerInstance(ParallelConsumerOptions.ProcessingOrder order) {
-        setupAsyncConsumerInstance(ParallelConsumerOptions.builder().ordering(order).build());
+    /**
+     * Need to make sure we only use {@link ParallelEoSStreamProcessor#subscribe} methods, and not do manual assignment,
+     * otherwise rebalance listeneres don't fire (because there are never rebalances).
+     */
+    protected void subscribeParallelConsumerAndMockConsumerTo(String topic) {
+        List<String> of = of(topic);
+        parallelConsumer.subscribe(of);
+        consumerSpy.subscribeWithRebalanceAndAssignment(of, 2);
     }
 
-    protected void setupAsyncConsumerInstance(ParallelConsumerOptions parallelConsumerOptions) {
+    protected void setupParallelConsumerInstance(ProcessingOrder order) {
+        setupParallelConsumerInstance(ParallelConsumerOptions.builder().ordering(order).build());
+    }
+
+    protected void setupParallelConsumerInstance(ParallelConsumerOptions parallelConsumerOptions) {
         setupClients();
 
         parallelConsumer = initAsyncConsumer(parallelConsumerOptions);
@@ -203,7 +227,9 @@ public class ParallelEoSStreamProcessorTestBase {
     private void blockingLoopLatchTrigger(int waitForCount) {
         log.debug("Waiting on {} cycles on loop latch...", waitForCount);
         loopLatchV = new CountDownLatch(waitForCount);
-        loopLatchV.await(defaultTimeoutSeconds, TimeUnit.SECONDS);
+        boolean await = loopLatchV.await(defaultTimeoutSeconds, SECONDS);
+        if (!await)
+            throw new TimeoutException(msg("Timeout {} waiting for latch", defaultTimeoutSeconds));
     }
 
     @SneakyThrows
@@ -222,16 +248,76 @@ public class ParallelEoSStreamProcessorTestBase {
                 any(ConsumerGroupMetadata.class));
     }
 
-    public void assertCommits(List<Integer> integers, String description) {
-        KafkaTestUtils.assertCommits(producerSpy, integers, Optional.of(description));
+    public void assertCommits(List<Integer> offsets, String description) {
+        assertCommits(offsets, Optional.of(description));
     }
 
-    public void assertCommits(List<Integer> integers) {
-        KafkaTestUtils.assertCommits(producerSpy, integers, Optional.empty());
+    /**
+     * Flattens the offsets of all partitions into a single sequential list
+     */
+    public void assertCommits(List<Integer> offsets, Optional<String> description) {
+        if (isUsingTransactionalProducer()) {
+            KafkaTestUtils.assertCommits(producerSpy, offsets, description);
+            assertThat(extractAllPartitionsOffsetsSequentially()).isEmpty();
+        } else {
+            List<Integer> collect = extractAllPartitionsOffsetsSequentially();
+            // duplicates are ok
+            // is there a nicer optional way?
+            // {@link Optional#ifPresentOrElse} only @since 9
+            if (description.isPresent()) {
+                assertThat(collect).as(description.get()).hasSameElementsAs(offsets);
+            } else {
+                assertThat(collect).hasSameElementsAs(offsets);
+            }
+
+            KafkaTestUtils.assertCommits(producerSpy, UniLists.of(), Optional.of("Empty"));
+        }
     }
 
-    public void assertCommitLists(List<List<Integer>> integers) {
-        KafkaTestUtils.assertCommitLists(producerSpy, integers, Optional.empty());
+    /**
+     * Flattens the offsets of all partitions into a single sequential list
+     */
+    private List<Integer> extractAllPartitionsOffsetsSequentially() {
+        var result = new ArrayList<Integer>();
+        // copy the list for safe concurrent access
+        List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
+        return history.stream()
+                .flatMap(commits ->
+                        commits.values().stream().map(meta -> (int) meta.offset())
+                ).collect(Collectors.toList());
+    }
+
+    public void assertCommits(List<Integer> offsets) {
+        assertCommits(offsets, Optional.empty());
+    }
+
+    /**
+     * Checks a list of commits of a list of partitions
+     */
+    public void assertCommitLists(List<List<Integer>> offsets) {
+        if (isUsingTransactionalProducer()) {
+            KafkaTestUtils.assertCommitLists(producerSpy, offsets, Optional.empty());
+        } else {
+            KafkaTestUtils.assertCommitLists(consumerSpy.getCommitHistoryWithGropuId(), offsets, Optional.empty());
+        }
+    }
+
+    protected List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> getCommitHistory() {
+        if (isUsingTransactionalProducer()) {
+            return producerSpy.consumerGroupOffsetsHistory();
+        } else {
+            return consumerSpy.getCommitHistoryWithGropuId();
+        }
+    }
+
+    protected boolean isUsingTransactionalProducer() {
+        ParallelConsumerOptions.CommitMode commitMode = parallelConsumer.getWm().getOptions().getCommitMode();
+        return commitMode.equals(TRANSACTIONAL_PRODUCER);
+    }
+
+    protected boolean isUsingAsyncCommits() {
+        ParallelConsumerOptions.CommitMode commitMode = parallelConsumer.getWm().getOptions().getCommitMode();
+        return commitMode.equals(CONSUMER_ASYNCHRONOUS);
     }
 
     protected void awaitLatch(List<CountDownLatch> latches, int latchIndex) {

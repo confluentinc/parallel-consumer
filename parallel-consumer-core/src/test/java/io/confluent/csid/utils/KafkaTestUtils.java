@@ -9,12 +9,12 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
+import org.assertj.core.api.Assertions;
 import org.assertj.core.util.Lists;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -22,12 +22,11 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.CONSUMER_GROUP_ID;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.INPUT_TOPIC;
-import static io.confluent.csid.utils.Range.range;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -37,11 +36,7 @@ public class KafkaTestUtils {
 
     int offset = 0;
 
-    public static final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
-
-    public static void setupConsumer(MockConsumer mc) {
-        when(mc.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
-
+    public static void assignConsumerToTopic(final MockConsumer mc) {
         TopicPartition tp1 = new TopicPartition(INPUT_TOPIC, 1);
         TopicPartition tp0 = new TopicPartition(INPUT_TOPIC, 0);
         mc.assign(Lists.list(tp0, tp1));
@@ -91,29 +86,35 @@ public class KafkaTestUtils {
                 .containsExactlyElementsOf(expectedOffsets);
     }
 
+    public static void assertCommitLists(MockProducer mp, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
+        assertCommitLists(mp.consumerGroupOffsetsHistory(), expectedPartitionOffsets, description);
+    }
+
     /**
-     * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager})
+     * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager}).
+     *
+     * Ignores duplicates.
      *
      * @see OffsetMapCodecManager
      */
-    public static void assertCommitLists(MockProducer mp, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
+    public static void assertCommitLists(List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
         log.info("Asserting commits of {}", expectedPartitionOffsets);
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
         AtomicReference<String> topicName = new AtomicReference<>("");
-        var results = new HashMap<TopicPartition, Set<Integer>>(); // set - ignore repeated commits ({@link OffsetMap})
+        var partitionToCommittedOffsets = new HashMap<TopicPartition, Set<Integer>>(); // set - ignore repeated commits ({@link OffsetMap})
         history.stream().forEachOrdered(histories -> {
             // get all partition offsets and flatten
-            var group = histories.get(CONSUMER_GROUP_ID);
-            for (var actualPartitionOffsets : group.entrySet()) {
-                TopicPartition key = actualPartitionOffsets.getKey();
+            var partitionCommits = histories.get(CONSUMER_GROUP_ID);
+            for (var singlePartitionCommit : partitionCommits.entrySet()) {
+                TopicPartition key = singlePartitionCommit.getKey();
                 topicName.set(key.topic());
-                OffsetAndMetadata commit = actualPartitionOffsets.getValue();
+                OffsetAndMetadata commit = singlePartitionCommit.getValue();
                 int offset = (int) commit.offset();
-                results.computeIfAbsent(key, x -> new HashSet<>()).add(offset);
+                partitionToCommittedOffsets.computeIfAbsent(key, x -> new HashSet<>()).add(offset);
             }
         });
 
+        // compute the matching expected map
         var expectedMap = new HashMap<TopicPartition, Set<Integer>>();
         for (int i = 0; i < expectedPartitionOffsets.size(); i++) {
             List<Integer> offsets = expectedPartitionOffsets.get(i);
@@ -121,8 +122,15 @@ public class KafkaTestUtils {
             expectedMap.put(tp, new HashSet<>(offsets));
         }
 
-        assertThat(results).describedAs(description.orElse("Which offsets are committed and in the expected order"))
+        assertThat(partitionToCommittedOffsets).describedAs(description.orElse("Which offsets are committed and in the expected order"))
                 .containsExactlyEntriesOf(expectedMap);
+    }
+
+    public static void assertLastCommitIs(final LongPollingMockConsumer<String, String> mockConsumer, final int expected) {
+        List<Map<TopicPartition, OffsetAndMetadata>> commits = mockConsumer.getCommitHistoryInt();
+        Assertions.assertThat(commits).isNotEmpty();
+        long offset = (int) commits.get(commits.size() - 1).values().iterator().next().offset();
+        Assertions.assertThat(offset).isEqualTo(expected);
     }
 
     public List<ConsumerRecord<String, String>> generateRecords(int quantity) {

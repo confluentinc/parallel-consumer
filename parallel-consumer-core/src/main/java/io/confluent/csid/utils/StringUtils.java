@@ -9,7 +9,11 @@ import org.slf4j.helpers.MessageFormatter;
 public class StringUtils {
 
     public static String msg(String s, Object... args) {
-        String message = MessageFormatter.basicArrayFormat(s, args);
-        return message;
+        return MessageFormatter.basicArrayFormat(s, args);
+    }
+
+    public static boolean isBlank(final String property) {
+        if (property == null) return true;
+        else return property.trim().isEmpty(); // isBlank @since 11
     }
 }

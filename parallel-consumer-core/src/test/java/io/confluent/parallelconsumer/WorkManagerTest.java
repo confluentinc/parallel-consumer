@@ -318,7 +318,7 @@ public class WorkManagerTest {
     public void maxInFlight() {
         //
         var opts = ParallelConsumerOptions.builder();
-        opts.maxUncommittedMessagesToHandlePerPartition(1);
+        opts.maxUncommittedMessagesToHandle(1);
         setupWorkManager(opts.build());
 
         //
@@ -372,7 +372,7 @@ public class WorkManagerTest {
         var opts = ParallelConsumerOptions.builder();
         opts.ordering(UNORDERED);
 
-        opts.maxUncommittedMessagesToHandlePerPartition(3);
+        opts.maxUncommittedMessagesToHandle(3);
         opts.maxConcurrency(2);
 
         setupWorkManager(opts.build());
@@ -610,7 +610,7 @@ public class WorkManagerTest {
         ParallelConsumerOptions build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
                 .maxConcurrency(10)
-                .maxUncommittedMessagesToHandlePerPartition(10)
+                .maxUncommittedMessagesToHandle(10)
                 .build();
         setupWorkManager(build);
         registerSomeWork();

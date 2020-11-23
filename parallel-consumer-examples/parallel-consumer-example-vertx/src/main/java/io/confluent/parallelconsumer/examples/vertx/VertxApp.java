@@ -40,7 +40,7 @@ public class VertxApp {
         var options = ParallelConsumerOptions.builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
-                .maxUncommittedMessagesToHandlePerPartition(10000)
+                .maxUncommittedMessagesToHandle(10000)
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
@@ -49,18 +49,24 @@ public class VertxApp {
         this.parallelConsumer = JStreamVertxParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer,
                 getKafkaProducer(), options);
 
+        int port = getPort();
+
         // tag::example[]
         var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
-            return new RequestInfo("localhost", "/api", params); // <1>
+            return new RequestInfo("localhost", port, "/api", params); // <1>
         });
         // end::example[]
 
-        resultStream.forEach(x->{
+        resultStream.forEach(x -> {
             log.info("From result stream: {}", x);
         });
 
+    }
+
+    protected int getPort() {
+        return 8080;
     }
 
     void setupSubscription(Consumer<String, String> kafkaConsumer) {

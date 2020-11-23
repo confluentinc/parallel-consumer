@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.examples.streams;
  */
 
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,7 +68,7 @@ public class StreamsApp {
     }
 
     void concurrentProcess() {
-        setupConsumer();
+        setupParallelConsumer();
 
         parallelConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
@@ -78,16 +77,18 @@ public class StreamsApp {
     }
     // end::example[]
 
-    private void setupConsumer() {
+    private void setupParallelConsumer() {
         var options = ParallelConsumerOptions.builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
-                .maxUncommittedMessagesToHandlePerPartition(10000)
+                .maxUncommittedMessagesToHandle(10000)
                 .build();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
 
-        parallelConsumer = ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, getKafkaProducer(), options);
+        Producer<String, String> kafkaProducer = getKafkaProducer();
+        
+        parallelConsumer = ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, kafkaProducer, options);
         parallelConsumer.subscribe(UniLists.of(outputTopicName));
     }
 

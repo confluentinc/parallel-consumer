@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -18,11 +17,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.util.concurrent.ExecutionException;
+
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @Slf4j
+// TODO rename to broker integration test
 public abstract class KafkaTest<K, V> {
 
     int numPartitions = 2; // as default consumer settings are max request 50 max per partition 1 - 50/1=50
@@ -37,6 +39,8 @@ public abstract class KafkaTest<K, V> {
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
+            // try to speed up initial consumer group formation
+            .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
             .withReuse(true);
 
     static {
@@ -45,13 +49,13 @@ public abstract class KafkaTest<K, V> {
 
     protected KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
-  @BeforeAll
-  static void followKafkaLogs(){
-    if(log.isDebugEnabled()) {
-      FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
-      kafkaContainer.followOutput(logConsumer);
+    @BeforeAll
+    static void followKafkaLogs() {
+        if (log.isDebugEnabled()) {
+            FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
+            kafkaContainer.followOutput(logConsumer);
+        }
     }
-  }
 
     @BeforeEach
     void open() {
@@ -64,18 +68,30 @@ public abstract class KafkaTest<K, V> {
     }
 
     void setupTopic() {
-        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
-
-        topic = LoadTest.class.getSimpleName() + "-" + nextInt();
-
-        ensureTopic(topic, numPartitions);
+        String name = LoadTest.class.getSimpleName();
+        setupTopic(name);
     }
 
-    @SneakyThrows
+    protected String setupTopic(String name) {
+        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
+
+        topic = name + "-" + nextInt();
+
+        ensureTopic(topic, numPartitions);
+
+        return name;
+    }
+
     protected void ensureTopic(String topic, int numPartitions) {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.admin.createTopics(UniLists.of(e1));
-        Void all = topics.all().get();
+        try {
+            Void all = topics.all().get();
+        } catch (ExecutionException e) {
+            // fine
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }

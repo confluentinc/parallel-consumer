@@ -4,6 +4,8 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
+import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
@@ -11,12 +13,11 @@ import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.csid.utils.Range;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -25,12 +26,16 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -43,7 +48,7 @@ import static org.awaitility.Awaitility.await;
 public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
     Duration normalTimeout = ofSeconds(5);
-    Duration debugTimeout = Duration.ofMinutes(10);
+    Duration debugTimeout = Duration.ofMinutes(1);
 
     // use debug timeout while debugging
 //    Duration timeoutToUse = debugTimeout;
@@ -56,6 +61,14 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         rebalanceTopic = "close-and-open-" + RandomUtils.nextInt();
     }
 
+    /**
+     * publish some messages some fail shutdown startup again consume again - check we only consume the failed messages
+     * <p>
+     * Sometimes fails as 5 is not comitted in the first run and comes out in the 2nd
+     * <p>
+     * NB: messages 4 and 2 are made to fail
+     */
+    @Timeout(value = 60)
     @SneakyThrows
     @Test
     void offsetsOpenClose() {
@@ -67,7 +80,11 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         }
 
         // 1 client
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .usingTransactionalProducer(true)
+                .commitMode(TRANSACTIONAL_PRODUCER)
+                .build();
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "ONE-my-client");
         KafkaConsumer<String, String> newConsumerOne = kcu.createNewConsumer();
 
@@ -79,7 +96,7 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         asyncOne.subscribe(UniLists.of(rebalanceTopic));
 
         // read some messages
-        var readByOne = new ArrayList<ConsumerRecord<String, String>>();
+        var readByOne = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
         asyncOne.poll(x -> {
             log.info("Read by consumer ONE: {}", x);
             if (x.value().equals("4")) {
@@ -93,6 +110,9 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
             readByOne.add(x);
         });
 
+        // wait for initial 0 commit
+        Thread.sleep(500);
+
         //
         send(rebalanceTopic, 0, 0);
         send(rebalanceTopic, 0, 1);
@@ -102,11 +122,32 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
         send(rebalanceTopic, 0, 5);
 
         // all are processed except msg 2 and 4, which holds up the queue
-        await().atMost(debugTimeout).untilAsserted(() -> assertThat(readByOne).hasSize(4));
+        await().alias("check all except 2 and 4 are processed").atMost(normalTimeout).untilAsserted(() -> {
+                    ArrayList<ConsumerRecord<String, String>> copy = new ArrayList<>(readByOne);
+                    assertThat(copy.stream()
+                            .map(x -> x.value()).collect(Collectors.toList()))
+                            .containsOnly("0", "1", "3", "5");
+                }
+        );
+
+        // wait until all expected records have been processed and committed
+        // need to wait for final message processing's offset data to be committed
+        // TODO test for event/trigger instead - could consume offsets topic but have to decode the binary
+        // could listen to a produce topic, but currently it doesn't use the produce flow
+        // could add a commit listener to the api, but that's heavy just for this?
+        // could use Consumer#committed to check and decode, but it's not thread safe
+        // sleep is lazy but much much simpler
+        Thread.sleep(500);
 
         // commit what we've done so far, don't wait for failing messages to be retried (message 4)
         log.info("Closing consumer, committing offset map");
         asyncOne.closeDontDrainFirst();
+
+        await().alias("check all except 2 and 4 are processed").atMost(normalTimeout).untilAsserted(() ->
+                assertThat(readByOne.stream()
+                        .map(x -> x.value()).collect(Collectors.toList()))
+                        .containsOnly("0", "1", "3", "5"));
+
 
         //
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
@@ -116,14 +157,16 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
             asyncThree.subscribe(UniLists.of(rebalanceTopic));
 
             // read what we're given
-            var readByThree = new ArrayList<ConsumerRecord<String, String>>();
+            var readByThree = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
             asyncThree.poll(x -> {
                 log.info("Read by consumer THREE: {}", x.value());
                 readByThree.add(x);
             });
 
             // only 2 and 4 should be delivered again, as everything else was processed successfully
-            await().atMost(timeoutToUse).untilAsserted(() -> assertThat(readByThree).extracting(ConsumerRecord::value).containsExactlyInAnyOrder("2", "4"));
+            await().atMost(timeoutToUse).untilAsserted(() ->
+                    assertThat(readByThree).extracting(ConsumerRecord::value)
+                            .containsExactlyInAnyOrder("2", "4"));
         }
     }
 
@@ -160,23 +203,33 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .usingTransactionalProducer(true)
+                .commitMode(TRANSACTIONAL_PRODUCER)
+                .build();
 
         try (var asyncOne = new ParallelEoSStreamProcessor<>(consumer, producerOne, options)) {
 
             asyncOne.subscribe(UniLists.of(topic));
 
             var readByOne = new ArrayList<ConsumerRecord<String, String>>();
-            asyncOne.poll(readByOne::add);
+            asyncOne.poll(msg -> {
+                log.debug("Reading {}", msg);
+                readByOne.add(msg);
+            });
 
             // the single message is processed
             await().untilAsserted(() -> assertThat(readByOne)
                     .extracting(ConsumerRecord::value)
                     .containsExactly("0"));
 
+        } finally {
+            log.debug("asyncOne closed");
         }
 
         //
+        log.debug("Starting up new client");
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
         KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
@@ -220,7 +273,11 @@ public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
 
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .usingTransactionalProducer(true)
+                .commitMode(TRANSACTIONAL_PRODUCER)
+                .build();
         var asyncOne = new ParallelEoSStreamProcessor<>(consumer, producerOne, options);
 
         asyncOne.subscribe(UniLists.of(topic));

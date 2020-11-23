@@ -25,6 +25,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
+
 @Slf4j
 public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelEoSStreamProcessor<K, V>
         implements JStreamVertxParallelStreamProcessor<K, V> {
@@ -72,7 +74,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
 
         Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunctionWrapped = x -> {
             result.in(x);
-            RequestInfo apply = requestInfoFunction.apply(x);
+            RequestInfo apply = carefullyRun(requestInfoFunction, x);
             result.requestInfo(Optional.of(apply));
             return apply;
         };
@@ -97,7 +99,8 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
 
         BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> requestInfoFunctionWrapped = (wc, x) -> {
             result.in(x);
-            HttpRequest<Buffer> apply = webClientRequestFunction.apply(wc, x);
+            HttpRequest<Buffer> apply = carefullyRun(webClientRequestFunction, wc, x);
+
             result.httpReq(Optional.of(apply));
             return apply;
         };
@@ -123,7 +126,8 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
         BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> wrappedFunc = (x, y) -> {
             // capture
             result.in(y);
-            Future<HttpResponse<Buffer>> apply = webClientRequestFunction.apply(x, y);
+            Future<HttpResponse<Buffer>> apply = carefullyRun(webClientRequestFunction, x, y);
+
             result.asr(apply);
             return apply;
         };
