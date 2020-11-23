@@ -16,7 +16,7 @@
     </root>
 
     <logger name="io.confluent.csid" level="info" />
-<!--    <logger name="io.confluent.csid" level="debug" />-->
+    <logger name="io.confluent.parallelconsumer" level="debug" />
 <!--    <logger name="io.confluent.csid" level="trace" />-->
 
     <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />-->

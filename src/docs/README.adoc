@@ -528,15 +528,32 @@ When your function is actually run, a result object will be streamed back to you
 After your operation completes, you can also choose to publish a result message back to Kafka.
 The message publishing metadata can be streamed back to your client code.
 
-== Apache Kafka EoS Transaction Model
+== Commit Mode
 
-The system uses Kafka's Exactly Once Semantics (EoS) system.
+The system gives you three choices for how to do offset commits.
+The simplest of the three are the two Consummer commits modes.
+They are of course, `sycnhronous` and `asynchronous` mode.
+The `transactional` mode is explained in the next section.
+
+`Asychornous` mode is faster, as it doesn't block the control loop.
+
+`Sycnhronous` will block the processing loop until a successful commit response is received, however, `asycnhronous` will still be capped by the max processing settings in the `Options` class.
+
+If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asychornous` mode being similar to this.
+We suggest starting with this mode, and it is the default.
+
+=== Apache Kafka EoS Transaction Model
+
+There is also the option to use Kafka's Exactly Once Semantics (EoS) system.
 This causes all messages produced as a result of processing a message to be committed within a transaction, along with their source offset.
 This means that even under failure, the results will exist exactly once in the Kafka output topic.
-If as a part of
-your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
+If as a part of your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
+
+NOTE:: As with the `synchronous` processing mode, this will also block the processing loop until a successful transaction completes
 
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is __idempotent__.
+
+For implementations details, see the <<Transactional System Architecture>> section.
 
 [[streams-usage]]
 == Using with Kafka Streams
@@ -723,6 +740,10 @@ Instead of the work thread pool count being the degree of concurrency, it is con
 
 .Vert.x Architecture
 image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture, align="center"]
+
+=== Transactional System Architecture
+
+image::https://lucid.app/publicSegments/view/7480d948-ed7d-4370-a308-8ec12e6b453b/image.png[]
 
 === Offset Map
 

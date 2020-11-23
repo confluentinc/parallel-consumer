@@ -18,7 +18,11 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 
@@ -28,8 +32,9 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 @Slf4j
 public class CoreApp {
 
-    static String inputTopic = "input-topic-" + RandomUtils.nextInt();
-    static String outputTopic = "output-topic-" + RandomUtils.nextInt();
+
+    String inputTopic = "input-topic-" + RandomUtils.nextInt();
+    String outputTopic = "output-topic-" + RandomUtils.nextInt();
 
     Consumer<String, String> getKafkaConsumer() {
         return new KafkaConsumer<>(new Properties());
@@ -43,7 +48,7 @@ public class CoreApp {
 
     @SuppressWarnings("UnqualifiedFieldAccess")
     void run() {
-        this.parallelConsumer = setupConsumer();
+        this.parallelConsumer = setupParallelConsumer();
 
         // tag::example[]
         parallelConsumer.poll(record ->
@@ -53,21 +58,29 @@ public class CoreApp {
     }
 
     @SuppressWarnings({"FeatureEnvy", "MagicNumber"})
-    ParallelStreamProcessor<String, String> setupConsumer() {
+    ParallelStreamProcessor<String, String> setupParallelConsumer() {
         // tag::exampleSetup[]
+        ParallelConsumerOptions options = getOptions();
+
+        Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
+        Producer<String, String> kafkaProducer = getKafkaProducer();
+
+        ParallelStreamProcessor<String, String> eosStreamProcessor = ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, kafkaProducer, options);
+        if (!(kafkaConsumer instanceof MockConsumer)) {
+            eosStreamProcessor.subscribe(UniLists.of(inputTopic)); // <5>
+        }
+
+        return eosStreamProcessor;
+        // end::exampleSetup[]
+    }
+
+    ParallelConsumerOptions getOptions() {
         var options = ParallelConsumerOptions.builder()
                 .ordering(KEY) // <1>
                 .maxConcurrency(1000) // <2>
-                .maxUncommittedMessagesToHandlePerPartition(10000) // <3>
+                .maxUncommittedMessagesToHandle(1000) // <3>
                 .build();
-
-        Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
-        if (!(kafkaConsumer instanceof MockConsumer)) {
-            kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
-        }
-
-        return ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, getKafkaProducer(), options);
-        // end::exampleSetup[]
+        return options;
     }
 
     void close() {
@@ -75,18 +88,17 @@ public class CoreApp {
     }
 
     void runPollAndProduce() {
-        this.parallelConsumer = setupConsumer();
+        this.parallelConsumer = setupParallelConsumer();
 
         // tag::exampleProduce[]
         this.parallelConsumer.pollAndProduce(record -> {
                     var result = processBrokerRecord(record);
-                    ProducerRecord<String, String> produceRecord =
-                            new ProducerRecord<>(outputTopic, "a-key", result.payload);
-                    return UniLists.of(produceRecord);
-                }, consumeProduceResult ->
-                        log.info("Message {} saved to broker at offset {}",
-                                consumeProduceResult.getOut(),
-                                consumeProduceResult.getMeta().offset())
+                    return UniLists.of(new ProducerRecord<>(outputTopic, record.key(), result.payload));
+                }, consumeProduceResult -> {
+                    log.debug("Message {} saved to broker at offset {}",
+                            consumeProduceResult.getOut(),
+                            consumeProduceResult.getMeta().offset());
+                }
         );
         // end::exampleProduce[]
     }

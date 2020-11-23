@@ -52,7 +52,7 @@ public class StreamsAppTest extends KafkaTest<String, String> {
 
         @Override
         Producer<String, String> getKafkaProducer() {
-            return kcu.createNewProducer(true);
+            return kcu.createNewProducer(false);
         }
 
         @Override

@@ -4,6 +4,8 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
@@ -16,8 +18,8 @@ import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.util.Lists;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.shaded.com.google.common.collect.Maps;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -25,13 +27,17 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_SYNC;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
 import static java.util.Comparator.comparing;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -43,10 +49,16 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
     KafkaTestUtils ku = new KafkaTestUtils(consumerSpy);
 
     @SneakyThrows
-    @Test
-    public void load() {
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void load(CommitMode commitMode) {
         setupClients();
-        setupAsyncConsumerInstance(UNORDERED);
+        boolean useTxProducer = commitMode.equals(TRANSACTIONAL_PRODUCER);
+        setupParallelConsumerInstance(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .usingTransactionalProducer(useTxProducer)
+                .commitMode(commitMode)
+                .build());
 
 //        int quantityOfMessagesToProduce = 1_000_000;
         int quantityOfMessagesToProduce = 500;
@@ -54,42 +66,44 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
         List<ConsumerRecord<String, String>> records = ku.generateRecords(quantityOfMessagesToProduce);
         ku.send(consumerSpy, records);
 
-        CountDownLatch latch = new CountDownLatch(quantityOfMessagesToProduce);
+        CountDownLatch allMessagesConsumedLatch = new CountDownLatch(quantityOfMessagesToProduce);
 
         parallelConsumer.pollAndProduce((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
 //            log.debug(x.toString());
-            latch.countDown();
+            allMessagesConsumedLatch.countDown();
         });
 
 
         //
+        allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
 //        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
-        latch.await(defaultTimeoutSeconds, SECONDS);
-        parallelConsumer.waitForNoInFlight(defaultTimeout.multipliedBy(10));
+        parallelConsumer.waitForProcessedNotCommitted(defaultTimeout.multipliedBy(10));
         parallelConsumer.close();
-
 
         // assert quantity of produced messages
         List<ProducerRecord<String, String>> history = producerSpy.history();
         assertThat(history).hasSize(quantityOfMessagesToProduce);
 
-        // assert order of produced messages
+        if (useTxProducer) {
+            // assert order of commits
+            assertCommitsAlwaysIncrease();
 
+            // producer (tx) commits
+            List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> producerCommits = producerSpy.consumerGroupOffsetsHistory();
+            assertThat(producerCommits).isNotEmpty();
+            long mostRecentProducerCommitOffset = findMostRecentCommitOffset(producerSpy); // tx
+            assertThat(mostRecentProducerCommitOffset).isEqualTo(quantityOfMessagesToProduce);
+        } else {
+            // assert commit messages
+            List<Map<TopicPartition, OffsetAndMetadata>> consumerCommitHistory = consumerSpy.getCommitHistoryInt();
 
-        // assert order of commits
-//        int keySize = ku.getKeys().size();
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistory = producerSpy.consumerGroupOffsetsHistory();
-        Map<String, Map<TopicPartition, OffsetAndMetadata>> mostRecent = commitHistory.get(commitHistory.size() - 1);
-        Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = mostRecent.get(CONSUMER_GROUP_ID);
-        OffsetAndMetadata mostRecentTPCommit = topicPartitionOffsetAndMetadataMap.get(new TopicPartition(INPUT_TOPIC, 0));
-
-        assertCommitsAlwaysIncrease();
-
-        long mostRecentCommitOffset = findMostRecentCommitOffset(producerSpy);
-        assertThat(mostRecentCommitOffset).isEqualTo(quantityOfMessagesToProduce);
+            assertThat(consumerCommitHistory).isNotEmpty();
+            long mostRecentConsumerCommitOffset = consumerCommitHistory.get(consumerCommitHistory.size() - 1).values().stream().collect(Collectors.toList()).get(0).offset(); // non-tx
+            assertThat(mostRecentConsumerCommitOffset).isEqualTo(quantityOfMessagesToProduce);
+        }
 
         // TODO: Assert process ordering
     }
@@ -114,6 +128,7 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 
     private long findMostRecentCommitOffset(MockProducer<?, ?> producerSpy) {
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistory = producerSpy.consumerGroupOffsetsHistory();
+        assertThat(commitHistory).as("No offsets committed").hasSizeGreaterThan(0);
         Map<String, Map<TopicPartition, OffsetAndMetadata>> mostRecent = commitHistory.get(commitHistory.size() - 1);
         Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = mostRecent.get(CONSUMER_GROUP_ID);
         OffsetAndMetadata mostRecentTPCommit = topicPartitionOffsetAndMetadataMap.get(new TopicPartition(INPUT_TOPIC, 0));
@@ -126,41 +141,63 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
      * <p>
      * Doesn't currently compare different key sizes, only partition order vs key order vs unordered
      */
-    @Test
-    public void timingOfDifferentOrderingTypes() {
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    public void timingOfDifferentOrderingTypes(CommitMode commitMode) {
         var quantityOfMessagesToProduce = 10_00;
         var defaultNumKeys = 20;
 
+        boolean useTxProducer = commitMode.equals(TRANSACTIONAL_PRODUCER);
+
+        ParallelConsumerOptions baseOptions = ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .usingTransactionalProducer(useTxProducer)
+                .commitMode(commitMode)
+                .build();
+
+        setupParallelConsumerInstance(baseOptions);
+
         Duration unorderedDuration = null;
         for (var round : range(2)) { // warm up round first
-            setupAsyncConsumerInstance(UNORDERED);
+            setupParallelConsumerInstance(baseOptions.toBuilder().ordering(UNORDERED).build());
             log.debug("No order");
             unorderedDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
             log.info("Duration for Unordered processing in round {} with {} keys was {}", round, defaultNumKeys, unorderedDuration);
         }
 
         var keyResults = Maps.<Integer, Duration>newTreeMap();
-        setupAsyncConsumerInstance(KEY);
         for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
-            setupAsyncConsumerInstance(KEY);
+            setupParallelConsumerInstance(baseOptions.toBuilder().ordering(KEY).build());
             log.debug("By key, {} keys", keySize);
             Duration keyOrderDuration = time(() -> testTiming(keySize, quantityOfMessagesToProduce));
             log.info("Duration for Key order processing {} keys was {}", keySize, keyOrderDuration);
             keyResults.put(keySize, keyOrderDuration);
         }
 
-        setupAsyncConsumerInstance(PARTITION);
+        setupParallelConsumerInstance(baseOptions.toBuilder().ordering(PARTITION).build());
         log.debug("By partition");
         Duration partitionOrderDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
         log.info("Duration for Partition order processing {} keys was {}", defaultNumKeys, partitionOrderDuration);
 
         log.info("Key duration results:\n{}", keyResults);
 
+        log.info("Unordered duration: {}", unorderedDuration);
+
         int numOfKeysToCompare = 5; // needs to be small enough that there's a significant difference between unordered and key of x
         Duration keyOrderHalfDefaultKeySize = keyResults.get(numOfKeysToCompare);
-        assertThat(unorderedDuration).as("UNORDERED is faster than PARTITION order").isLessThan(partitionOrderDuration);
-        assertThat(unorderedDuration).as("UNORDERED is faster than KEY order, keySize of: " + numOfKeysToCompare).isLessThan(keyOrderHalfDefaultKeySize);
-        assertThat(keyOrderHalfDefaultKeySize).as("KEY order is faster than PARTITION order").isLessThan(partitionOrderDuration);
+        assertThat(unorderedDuration).as("UNORDERED should be faster than PARTITION order")
+                .isLessThan(partitionOrderDuration);
+
+        if (commitMode.equals(CONSUMER_SYNC)) {
+            assertThat(unorderedDuration).as("Committing synchronously from the controller causes a large overhead, making UNORDERED very close in speed to KEY order, keySize of: " + numOfKeysToCompare)
+                    .isCloseTo(keyOrderHalfDefaultKeySize, keyOrderHalfDefaultKeySize.plus(keyOrderHalfDefaultKeySize.dividedBy(5))); // within 20%
+        } else {
+            assertThat(unorderedDuration).as("UNORDERED should be faster than KEY order, keySize of: " + numOfKeysToCompare)
+                    .isLessThan(keyOrderHalfDefaultKeySize);
+        }
+
+        assertThat(keyOrderHalfDefaultKeySize).as("KEY order is faster than PARTITION order")
+                .isLessThan(partitionOrderDuration);
     }
 
     /**
@@ -188,7 +225,6 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
             long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);
             sleep(sleepTime);
             ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "Processing took: " + sleepTime + ". SourceV:" + rec.value());
-//            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), rec.value());
             bar.stepTo(producerSpy.history().size());
             return UniLists.of(stub);
         }, (x) -> {
@@ -196,7 +232,7 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 //            log.debug(x.toString());
         });
 
-        Awaitility.waitAtMost(defaultTimeout.multipliedBy(10)).untilAsserted(() -> {
+        waitAtMost(defaultTimeout.multipliedBy(10)).untilAsserted(() -> {
             assertThat(super.successfulWork.size()).as("All messages expected messages were processed and successful").isEqualTo(quantityOfMessagesToProduce);
             assertThat(producerSpy.history().size()).as("All messages expected messages were processed and results produced").isEqualTo(quantityOfMessagesToProduce);
         });
@@ -204,8 +240,6 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
 
         log.info("Closing async client");
         parallelConsumer.close();
-
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> groupOffsetsHistory = producerSpy.consumerGroupOffsetsHistory();
 
         assertCommitsAlwaysIncrease();
 
@@ -250,7 +284,13 @@ public class VolumeTests extends ParallelEoSStreamProcessorTestBase {
         }
 
         assertThat(producerSpy.history().size()).as("Finally, all messages expected messages were produced").isEqualTo(quantityOfMessagesToProduce);
-        assertThat(groupOffsetsHistory).as("No offsets committed").hasSizeGreaterThan(0);
+        if (isUsingTransactionalProducer()) {
+            List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> groupOffsetsHistory = producerSpy.consumerGroupOffsetsHistory(); // tx
+            assertThat(groupOffsetsHistory).as("No offsets committed").hasSizeGreaterThan(0); // tx
+        } else {
+            List<Map<TopicPartition, OffsetAndMetadata>> commitHistory = consumerSpy.getCommitHistoryInt();
+            assertThat(commitHistory).as("No offsets committed").hasSizeGreaterThan(0); // non-tx
+        }
 
         // clear messages
         super.successfulWork.clear();

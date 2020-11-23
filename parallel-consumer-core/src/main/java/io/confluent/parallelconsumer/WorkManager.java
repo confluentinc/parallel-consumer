@@ -19,9 +19,11 @@ import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
@@ -73,10 +75,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private int inFlightCount = 0;
 
     /**
-     * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting processing.
-     * Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
+     * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting
+     * processing. Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
+     * <p>
+     * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
+     * factor is low, there may not be enough messages queued up to satisfy demand.
      */
-    private final int loadingFactor = 2;
+    private final int loadingFactor = 3;
 
     /**
      * Useful for testing
@@ -262,7 +267,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#maxConcurrency}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
-        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxConcurrency()), options.getMaxUncommittedMessagesToHandlePerPartition());
+        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxConcurrency()), options.getMaxUncommittedMessagesToHandle());
         int workToGetDelta = minWorkToGetSetting - getInFlightCount();
 
         // optimise early
@@ -321,8 +326,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             work.addAll(shardWork);
         }
 
-        log.debug("Returning {} records of work", work.size());
+        log.debug("Got {} records of work", work.size());
         inFlightCount += work.size();
+
         return work;
     }
 
@@ -367,8 +373,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return count;
     }
 
-    boolean isWorkRemaining() {
-        return getPartitionWorkRemainingCount() > 0;
+    boolean isRecordsAwaitingProcessing() {
+        int partitionWorkRemainingCount = getShardWorkRemainingCount();
+        return partitionWorkRemainingCount > 0;
+    }
+
+    boolean isRecordsAwaitingToBeCommitted() {
+        int partitionWorkRemainingCount = getPartitionWorkRemainingCount();
+        return partitionWorkRemainingCount > 0;
     }
 
     public WorkContainer<K, V> getWorkContainerForRecord(ConsumerRecord<K, V> rec) {
@@ -388,7 +400,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     /**
-     * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as work is submitted and returned.
+     * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as
+     * work is submitted and returned.
      */
     @SneakyThrows
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
@@ -480,7 +493,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Once all the offset maps have been calculated, check if they're too big, and if so, remove all of them.
      * <p>
-     * Implication of this is that if the system has to recover from this offset, then it will have to replay all the messages that were otherwise complete.
+     * Implication of this is that if the system has to recover from this offset, then it will have to replay all the
+     * messages that were otherwise complete.
      *
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
@@ -491,7 +505,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         //  retaining the offset map feature, at the cost of potential performance by hitting a soft maximum in our uncommitted concurrent processing.
         if (totalOffsetMetaSize > OffsetMapCodecManager.DefaultMaxMetadataSize) {
             log.warn("Offset map data too large (size: {}) to fit in metadata payload - stripping offset map out. " +
-                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096",
+                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096",
                     totalOffsetMetaSize);
             // strip payload
             for (var entry : offsetsToSend.entrySet()) {
@@ -507,7 +521,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * Truncate our tracked offsets as a commit was successful, so the low water mark rises, and we dont' need to track
      * as much anymore.
      * <p>
-     * When commits are made to broker, we can throw away all the individually tracked offsets before the committed offset.
+     * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
+     * offset.
      */
     public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
@@ -522,18 +537,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean shouldThrottle() {
-        return isOverMax();
+        return isSufficientlyLoaded();
     }
 
-    private boolean isOverMax() {
+    boolean isSufficientlyLoaded() {
         int remaining = getPartitionWorkRemainingCount();
-        boolean loadedEnough = remaining > options.getMaxConcurrency() * loadingFactor;
-        boolean overMaxInFlight = remaining > options.getMaxUncommittedMessagesToHandlePerPartition();
-        boolean isOverMax = loadedEnough || overMaxInFlight;
-        if (isOverMax) {
-            log.debug("loadedEnough {} || overMaxInFlight {}", loadedEnough, overMaxInFlight);
+        boolean loadedEnoughInPipeline = remaining > options.getMaxConcurrency() * loadingFactor;
+        boolean overMaxUncommitted = remaining > options.getMaxUncommittedMessagesToHandle();
+        boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
+        if (remainingIsSufficient) {
+            log.debug("loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
         }
-        return isOverMax;
+        return remainingIsSufficient;
     }
 
     public int getInFlightCount() {

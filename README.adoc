@@ -364,18 +364,17 @@ Where `${project.version}` is the version to be used:
 .Setup the client
 [source,java,indent=0]
 ----
-        var options = ParallelConsumerOptions.builder()
-                .ordering(KEY) // <1>
-                .maxConcurrency(1000) // <2>
-                .maxUncommittedMessagesToHandlePerPartition(10000) // <3>
-                .build();
+        ParallelConsumerOptions options = getOptions();
 
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
+        Producer<String, String> kafkaProducer = getKafkaProducer();
+
+        ParallelStreamProcessor<String, String> eosStreamProcessor = ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, kafkaProducer, options);
         if (!(kafkaConsumer instanceof MockConsumer)) {
-            kafkaConsumer.subscribe(UniLists.of(inputTopic)); // <5>
+            eosStreamProcessor.subscribe(UniLists.of(inputTopic)); // <5>
         }
 
-        return ParallelStreamProcessor.createEosStreamProcessor(kafkaConsumer, getKafkaProducer(), options);
+        return eosStreamProcessor;
 ----
 <1> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
@@ -435,13 +434,12 @@ You can also optionally provide a callback function to be run after the message(
 [source,java,indent=0]
         this.parallelConsumer.pollAndProduce(record -> {
                     var result = processBrokerRecord(record);
-                    ProducerRecord<String, String> produceRecord =
-                            new ProducerRecord<>(outputTopic, "a-key", result.payload);
-                    return UniLists.of(produceRecord);
-                }, consumeProduceResult ->
-                        log.info("Message {} saved to broker at offset {}",
-                                consumeProduceResult.getOut(),
-                                consumeProduceResult.getMeta().offset())
+                    return UniLists.of(new ProducerRecord<>(outputTopic, record.key(), result.payload));
+                }, consumeProduceResult -> {
+                    log.debug("Message {} saved to broker at offset {}",
+                            consumeProduceResult.getOut(),
+                            consumeProduceResult.getMeta().offset());
+                }
         );
 
 
@@ -463,7 +461,7 @@ In future versions, we plan to look at supporting other streaming systems like h
         var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
             log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
             Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
-            return new RequestInfo("localhost", "/api", params); // <1>
+            return new RequestInfo("localhost", port, "/api", params); // <1>
         });
 ----
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
@@ -504,7 +502,7 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
     }
 
     void concurrentProcess() {
-        setupConsumer();
+        setupParallelConsumer();
 
         parallelConsumer.poll(record -> {
             log.info("Concurrently processing a record: {}", record);
@@ -603,15 +601,32 @@ When your function is actually run, a result object will be streamed back to you
 After your operation completes, you can also choose to publish a result message back to Kafka.
 The message publishing metadata can be streamed back to your client code.
 
-== Apache Kafka EoS Transaction Model
+== Commit Mode
 
-The system uses Kafka's Exactly Once Semantics (EoS) system.
+The system gives you three choices for how to do offset commits.
+The simplest of the three are the two Consummer commits modes.
+They are of course, `sycnhronous` and `asynchronous` mode.
+The `transactional` mode is explained in the next section.
+
+`Asychornous` mode is faster, as it doesn't block the control loop.
+
+`Sycnhronous` will block the processing loop until a successful commit response is received, however, `asycnhronous` will still be capped by the max processing settings in the `Options` class.
+
+If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asychornous` mode being similar to this.
+We suggest starting with this mode, and it is the default.
+
+=== Apache Kafka EoS Transaction Model
+
+There is also the option to use Kafka's Exactly Once Semantics (EoS) system.
 This causes all messages produced as a result of processing a message to be committed within a transaction, along with their source offset.
 This means that even under failure, the results will exist exactly once in the Kafka output topic.
-If as a part of
-your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
+If as a part of your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
+
+NOTE:: As with the `synchronous` processing mode, this will also block the processing loop until a successful transaction completes
 
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is __idempotent__.
+
+For implementations details, see the <<Transactional System Architecture>> section.
 
 [[streams-usage]]
 == Using with Kafka Streams
@@ -798,6 +813,10 @@ Instead of the work thread pool count being the degree of concurrency, it is con
 
 .Vert.x Architecture
 image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture, align="center"]
+
+=== Transactional System Architecture
+
+image::https://lucid.app/publicSegments/view/7480d948-ed7d-4370-a308-8ec12e6b453b/image.png[]
 
 === Offset Map
 

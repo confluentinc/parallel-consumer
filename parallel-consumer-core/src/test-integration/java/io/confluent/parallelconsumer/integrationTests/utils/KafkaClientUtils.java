@@ -105,7 +105,12 @@ public class KafkaClientUtils {
         var txProps = new Properties();
         txProps.putAll(props);
         if (tx) {
-            txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName()); // required for tx
+            // random number so we get a unique producer tx session each time. Normally wouldn't do this in production,
+            // but sometimes running in the test suite our producers step on each other between test runs and this causes
+            // Producer Fenced exceptions:
+            // Error looks like: Producer attempted an operation with an old epoch. Either there is a newer producer with
+            // the same transactionalId, or the producer's transaction has been expired by the broker.
+            txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + RandomUtils.nextInt()); // required for tx
         }
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
         log.debug("New producer {}", kvKafkaProducer);

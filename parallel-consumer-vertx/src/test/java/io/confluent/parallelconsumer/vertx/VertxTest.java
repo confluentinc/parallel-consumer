@@ -41,6 +41,7 @@ import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -52,7 +53,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
 
-    protected static WireMockServer stubServer;
+    public static WireMockServer stubServer;
 
     protected static final String stubResponse = "Good times.";
 
@@ -68,12 +69,13 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
     public static void setupWireMock() {
         WireMockConfiguration options = wireMockConfig().dynamicPort();
         stubServer = new WireMockServer(options);
-        stubServer.start();
         MappingBuilder mappingBuilder = get(urlPathEqualTo("/"))
                 .willReturn(aResponse()
                         .withBody(stubResponse));
-        stubServer.stubFor(
-                mappingBuilder);
+        stubServer.stubFor(mappingBuilder);
+        stubServer.stubFor(get(urlPathEqualTo("/api")).
+                willReturn(aResponse().withBody(stubResponse)));
+        stubServer.start();
     }
 
     @Override
@@ -81,7 +83,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
-        ParallelConsumerOptions build = ParallelConsumerOptions.builder().build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().commitMode(TRANSACTIONAL_PRODUCER).usingTransactionalProducer(true).build();
         vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(consumerSpy, producerSpy, vertx, wc, build);
 
         return vertxAsync;

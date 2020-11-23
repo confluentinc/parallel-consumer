@@ -27,29 +27,30 @@
 
     <!-- primary -->
     <logger name="io.confluent.parallelconsumer" level="info"/>
-<!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
+    <logger name="io.confluent.parallelconsumer" level="debug"/>
 <!--    <logger name="io.confluent.parallelconsumer" level="trace"/>-->
 <!--        <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="trace"/>-->
 <!--    <logger name="io.confluent.parallelconsumer.integrationTests.KafkaTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
     <logger name="io.confluent.csid" level="info"/>
 <!--    <logger name="io.confluent.csid" level="debug"/>-->
-<!--            <logger name="io.confluent.csid" level="trace" />-->
+
+<!--            <logger name="io.confluent.parallelconsumer" level="trace" />-->
 
     <!-- notable specifics -->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.VolumeTests" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumerTestBase" level="trace"/>-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="trace" />-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumer" level="info" />-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.OffsetMapCodecManager" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.VolumeTests" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumerTestBase" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.WorkManager" level="trace" />-->
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumer" level="info" />-->
+    <!--    <logger name="io.confluent.parallelconsumer.OffsetMapCodecManager" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
 
     <!-- containers -->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.DbTest" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid.asyncconsumer.integrationTests.KafkaTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.KafkaTest" level="debug"/>-->
 
     <!-- related -->
+<!--    <logger name="org.apache.kafka.clients" level="trace"/>-->
     <logger name="org.apache.kafka.clients" level="warn"/>
-<!--    <logger name="org.apache.kafka.clients" level="info"/>-->
 <!--    <logger name="org.apache.kafka.clients" level="debug"/>-->
 
     <logger name="org.postgresql" level="info"/>

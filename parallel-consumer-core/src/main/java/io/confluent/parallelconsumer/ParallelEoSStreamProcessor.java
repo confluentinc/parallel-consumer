@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.producer.*;
-import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
@@ -32,6 +31,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -41,6 +41,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @Slf4j
 public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
+
+    private final ParallelConsumerOptions options;
 
     /**
      * Injectable clock for testing
@@ -54,9 +56,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private Instant lastCommit = Instant.now();
 
-    private boolean inTransaction = false;
+    final ProducerManager<K, V> producerManager;
 
-    private final org.apache.kafka.clients.producer.Producer<K, V> producer;
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -95,6 +96,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
+    private final OffsetCommitter committer;
+
     /**
      * The run state of the controller.
      *
@@ -122,47 +125,47 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                      org.apache.kafka.clients.producer.Producer<K, V> producer,
-                                      ParallelConsumerOptions options) {
-        log.debug("Confluent async consumer initialise");
+    public ParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> newConsumer,
+                                      org.apache.kafka.clients.producer.Producer<K, V> newProducer,
+                                      ParallelConsumerOptions newOptions) {
+        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
 
-        Objects.requireNonNull(consumer);
-        Objects.requireNonNull(producer);
-        Objects.requireNonNull(options);
+        Objects.requireNonNull(newConsumer);
+        Objects.requireNonNull(newProducer);
+        Objects.requireNonNull(newOptions);
 
-        checkNotSubscribed(consumer);
-        checkAutoCommitIsDisabled(consumer);
+        options = newOptions;
+        options.validate();
 
-        //
-        this.producer = producer;
-        this.consumer = consumer;
+        checkNotSubscribed(newConsumer);
+        checkAutoCommitIsDisabled(newConsumer);
 
-        workerPool = Executors.newFixedThreadPool(options.getNumberOfThreads());
+        this.consumer = newConsumer;
 
-        //
-        this.wm = new WorkManager<>(options, consumer);
+        this.workerPool = Executors.newFixedThreadPool(newOptions.getNumberOfThreads());
 
-        //
-        this.brokerPollSubsystem = new BrokerPollSystem<>(consumer, wm, this);
+        this.wm = new WorkManager<>(newOptions, newConsumer);
 
-        //
-        try {
-            log.debug("Initialising producer transaction session...");
-            producer.initTransactions();
-        } catch (KafkaException e) {
-            log.error("Make sure your producer is setup for transactions - specifically make sure it's {} is set.", ProducerConfig.TRANSACTIONAL_ID_CONFIG, e);
-            throw e;
+        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(newConsumer);
+        this.producerManager = new ProducerManager<>(newProducer, consumerMgr, this.wm, options);
+
+        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+
+        if (options.isUsingTransactionalProducer()) {
+            this.committer = this.producerManager;
+        } else {
+            this.committer = this.brokerPollSubsystem;
         }
+
     }
 
-    private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        if (consumer instanceof MockConsumer)
+    private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
+        if (consumerToCheck instanceof MockConsumer)
             // disabled for unit tests which don't test rebalancing
             return;
-        Set<String> subscription = consumer.subscription();
-        Set<TopicPartition> assignment = consumer.assignment();
-        if (subscription.size() != 0 || assignment.size() != 0) {
+        Set<String> subscription = consumerToCheck.subscription();
+        Set<TopicPartition> assignment = consumerToCheck.assignment();
+        if (!subscription.isEmpty() || !assignment.isEmpty()) {
             throw new IllegalStateException("Consumer subscription must be managed by this class. Use " + this.getClass().getName() + "#subcribe methods instead.");
         }
     }
@@ -195,12 +198,19 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     /**
      * Commit our offsets
+     * <p>
+     * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        commitOffsetsThatAreReady();
-        wm.onPartitionsRevoked(partitions);
-        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
+        try {
+            log.debug("Partitions revoked (onPartitionsRevoked), state: {}", state);
+            commitOffsetsThatAreReady();
+            wm.onPartitionsRevoked(partitions);
+            usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
+        } catch (Exception e) {
+            throw new InternalError("onPartitionsRevoked event error", e);
+        }
     }
 
     /**
@@ -255,7 +265,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
         Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
-            usersVoidConsumptionFunction.accept(record);
+
+            carefullyRun(usersVoidConsumptionFunction, record);
+
+            log.trace("asyncPoll - user function finished ok.");
             return UniLists.of(); // user function returns no produce records, so we satisfy our api
         };
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
@@ -268,15 +281,17 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                                Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // wrap user func to add produce function
         Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
-            List<ProducerRecord<K, V>> recordListToProduce = userFunction.apply(consumedRecord);
+
+            List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, consumedRecord);
+
             if (recordListToProduce.isEmpty()) {
                 log.warn("No result returned from function to send.");
             }
-            log.trace("asyncPoll and Stream - Consumed and a record ({}), and returning a derivative result record to be produced: {}", consumedRecord, recordListToProduce);
+            log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", consumedRecord, recordListToProduce);
 
             List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
             for (ProducerRecord<K, V> toProduce : recordListToProduce) {
-                RecordMetadata produceResultMeta = produceMessage(toProduce);
+                RecordMetadata produceResultMeta = producerManager.produceMessage(toProduce);
                 var result = new ConsumeProduceResult<>(consumedRecord, toProduce, produceResultMeta);
                 results.add(result);
             }
@@ -284,30 +299,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         };
 
         supervisorLoop(wrappedUserFunc, callback);
-    }
-
-    /**
-     * Produce a message back to the broker.
-     * <p>
-     * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the common use
-     * case ({@link #poll(Consumer)}).
-     *
-     * @see #pollAndProduce(Function, Consumer)
-     */
-    RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
-        // only needed if not using tx
-        Callback callback = (RecordMetadata metadata, Exception exception) -> {
-            if (exception != null) {
-                log.error("Error producing result message", exception);
-                throw new RuntimeException("Error producing result message", exception);
-            }
-        };
-        Future<RecordMetadata> send = producer.send(outMsg, callback);
-        try {
-            return send.get();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     @Override
@@ -325,20 +316,22 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         } else {
             log.info("Signaling to close...");
 
-            switch (drainMode){
-                case DRAIN:
+            switch (drainMode) {
+                case DRAIN -> {
                     log.info("Will wait for all in flight to complete before");
                     transitionToDraining();
-                case DONT_DRAIN:
+                }
+                case DONT_DRAIN -> {
                     log.info("Not waiting for in flight to complete, will transition directly to closing");
                     transitionToClosing();
+                }
             }
 
             waitForClose(timeout);
         }
 
         if (controlThreadFuture.isPresent()) {
-            log.trace("Checking for control thread exception...");
+            log.debug("Checking for control thread exception...");
             Future<?> future = controlThreadFuture.get();
             future.get(toSeconds(timeout), SECONDS); // throws exception if supervisor saw one
         }
@@ -349,9 +342,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
         while (!state.equals(closed)) {
-            log.trace("Still waiting for system to close...");
             try {
-                boolean signaled = this.controlThreadFuture.get().get(toSeconds(timeout), SECONDS);
+                Future<Boolean> booleanFuture = this.controlThreadFuture.get();
+                log.debug("Blocking on control future");
+                boolean signaled = booleanFuture.get(toSeconds(timeout), SECONDS);
                 if (!signaled)
                     throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
             } catch (InterruptedException e) {
@@ -361,6 +355,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 log.error("Execution or timeout exception", e);
                 throw e;
             }
+            log.trace("Still waiting for system to close...");
         }
     }
 
@@ -371,12 +366,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
 
-        log.debug("Closing producer, assuming no more in flight...");
-        if (this.inTransaction) {
-            // close started after tx began, but before work was done, otherwise a tx wouldn't have been started
-            producer.abortTransaction();
-        }
-        producer.close(timeout);
+        maybeCloseConsumer();
+
+        producerManager.close(timeout);
 
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerPool.shutdownNow();
@@ -387,7 +379,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.trace("Awaiting worker pool termination...");
         boolean interrupted = true;
         while (interrupted) {
-            log.warn("Still interrupted");
+            log.debug("Still interrupted");
             try {
                 boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(DrainingCloseable.DEFAULT_TIMEOUT), SECONDS);
                 interrupted = false;
@@ -407,25 +399,42 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     /**
+     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
+     * This way, if partitions are revoked, the commit can be made inline.
+     */
+    private void maybeCloseConsumer() {
+        if (isResponsibleForCommits()) {
+            consumer.close();
+        }
+    }
+
+    private boolean isResponsibleForCommits() {
+        return (committer instanceof ProducerManager);
+    }
+
+    /**
      * Block the calling thread until no more messages are being processed.
      */
     @SneakyThrows
-    public void waitForNoInFlight(Duration timeout) {
-        log.debug("Waiting for no in flight...");
+    public void waitForProcessedNotCommitted(Duration timeout) {
+        log.debug("Waiting processed but not commmitted...");
         var timer = Time.SYSTEM.timer(timeout);
-        while (!noInFlight()) {
-            log.trace("Waiting for no in flight...");
+        while (wm.isRecordsAwaitingToBeCommitted()) {
+            log.trace("Waiting for no in processing...");
             Thread.sleep(100);
             timer.update();
             if (timer.isExpired()) {
-                throw new TimeoutException("Waiting for no more records in-flight");
+                throw new TimeoutException("Waiting for no more records in processing");
             }
         }
         log.debug("No longer anything in flight.");
     }
 
-    private boolean noInFlight() {
-        return !wm.isWorkRemaining() || areMyThreadsDone();
+    private boolean isRecordsAwaitingProcessing() {
+        boolean isRecordsAwaitingProcessing = wm.isRecordsAwaitingProcessing();
+        boolean threadsDone = areMyThreadsDone();
+        log.trace("isRecordsAwaitingProcessing {} || threadsDone {}", isRecordsAwaitingProcessing, threadsDone);
+        return isRecordsAwaitingProcessing || threadsDone;
     }
 
     private void transitionToDraining() {
@@ -462,6 +471,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     protected <R> void supervisorLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                       Consumer<R> callback) {
+        log.info("Control loop starting up...");
+
         if (state != State.unused) {
             throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
                     "state is {})", state));
@@ -469,26 +480,22 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             state = running;
         }
 
-        //
-        producer.beginTransaction();
-        this.inTransaction = true;
-
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
-            log.trace("Control task scheduled");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("control");
+            log.trace("Control task scheduled");
             this.blockableControlThread = controlThread;
             while (state != closed) {
                 try {
                     controlLoop(userFunction, callback);
                 } catch (Exception e) {
-                    log.error("Error from poll control thread ({}), will attempt controlled shutdown, then rethrow...", e.getMessage(), e);
+                    log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
                 }
             }
-            log.trace("Poll task ended (state:{}).", state);
+            log.info("Control loop ending clean (state:{})...", state);
             return true;
         };
 
@@ -503,8 +510,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * Main control loop
      */
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
-                                 Consumer<R> callback) throws TimeoutException, ExecutionException {
-        if (state == running) {
+                                 Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
+        if (state == running || state == draining) {
             log.trace("Loop: Get work");
             var records = wm.<R>maybeGetWork();
 
@@ -512,11 +519,21 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             submitWorkToPool(userFunction, callback, records);
         }
 
+        if (state == running) {
+            if (!wm.isSufficientlyLoaded()) {
+                log.debug("Found not enough messages queued up, ensuring poller is awake");
+                brokerPollSubsystem.wakeup();
+            }
+        }
+
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
-        log.trace("Loop: Maybe commit");
-        commitOffsetsMaybe();
+        if (state == running) {
+            // offsets will be committed when the consumer has its partitions revoked
+            log.trace("Loop: Maybe commit");
+            commitOffsetsMaybe();
+        }
 
         // run call back
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
@@ -524,9 +541,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         log.debug("Current state: {}", state);
         switch (state) {
-            case draining -> drain();
-            case closing -> doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+            case draining -> {
+                drain();
+            }
+            case closing -> {
+                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+            }
         }
+
+        // sanity - supervise the poller
+        brokerPollSubsystem.supervise();
 
         // end of loop
         log.trace("End of control loop, {} remaining in work manager. In state: {}", wm.getPartitionWorkRemainingCount(), state);
@@ -535,7 +559,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void drain() {
         log.debug("Signaling to drain...");
         brokerPollSubsystem.drain();
-        if (noInFlight()) {
+        if (!isRecordsAwaitingProcessing()) {
             transitionToClosing();
         }
     }
@@ -563,7 +587,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
-            log.debug("Blocking until next scheduled offset commit attempt for {}", timeout);
+            log.debug("Blocking poll on work until next scheduled offset commit attempt for {}", timeout);
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
             // wait for work, with a timeout for sanity
             firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
@@ -587,7 +611,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             try {
                 secondPollNonBlocking = workMailBox.poll(0, SECONDS);
             } catch (InterruptedException e) {
-                log.warn("Interrupted waiting on work results", e);
+                log.debug("Interrupted waiting on work results", e);
             }
             if (secondPollNonBlocking != null) {
                 results.add(secondPollNonBlocking);
@@ -610,7 +634,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
         if (commitFrequencyOK || lingeringOnCommitWouldBeBeneficial()) {
             if (!commitFrequencyOK) {
-                log.trace("Commit too frequent, but no benefit in lingering");
+                log.debug("Commit too frequent, but no benefit in lingering");
             }
             commitOffsetsThatAreReady();
             lastCommit = Instant.now();
@@ -643,7 +667,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         if (state == running) {
             return getTimeBetweenCommits().minus(getTimeSinceLastCommit());
         } else {
-            log.debug("System not {}, so don't wait to commit", running);
+            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
             return Duration.ZERO;
         }
     }
@@ -653,61 +677,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         return Duration.between(lastCommit, now);
     }
 
-    /**
-     * Get offsets from {@link WorkManager} that are ready to commit
-     */
     private void commitOffsetsThatAreReady() {
-        log.trace("Loop: Find completed work to commit offsets");
-        // todo shouldn't be removed until commit succeeds (there's no harm in committing the same offset twice)
-        Map<TopicPartition, OffsetAndMetadata> offsetsToSend = wm.findCompletedEligibleOffsetsAndRemove();
-        if (offsetsToSend.isEmpty()) {
-            log.trace("No offsets ready");
-        } else {
-            log.debug("Committing offsets for {} partition(s): {}", offsetsToSend.size(), offsetsToSend);
-            ConsumerGroupMetadata groupMetadata = consumer.groupMetadata();
-
-            producer.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
-            // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
-            boolean notCommitted = true;
-            int retryCount = 0;
-            int arbitrarilyChosenLimitForArbitraryErrorSituation = 200;
-            Exception lastErrorSavedForRethrow = null;
-            while (notCommitted) {
-                if (retryCount > arbitrarilyChosenLimitForArbitraryErrorSituation) {
-                    String msg = msg("Retired too many times ({} > limit of {}), giving up. See error above.", retryCount, arbitrarilyChosenLimitForArbitraryErrorSituation);
-                    log.error(msg, lastErrorSavedForRethrow);
-                    throw new RuntimeException(msg, lastErrorSavedForRethrow);
-                }
-                try {
-                    if (producer instanceof MockProducer) {
-                        // see bug https://issues.apache.org/jira/browse/KAFKA-10382
-                        // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
-                        synchronized (producer) {
-                            producer.commitTransaction();
-                        }
-                    } else {
-                        producer.commitTransaction();
-                    }
-
-                    this.inTransaction = false;
-
-                    wm.onOffsetCommitSuccess(offsetsToSend);
-
-                    notCommitted = false;
-                    if (retryCount > 0) {
-                        log.warn("Commit success, but took {} tries.", retryCount);
-                    }
-                } catch (Exception e) {
-                    log.warn("Commit exception, will retry, have tried {} times (see KafkaProducer#commit)", retryCount, e);
-                    lastErrorSavedForRethrow = e;
-                    retryCount++;
-                }
-            }
-
-            // begin tx for next cycle
-            producer.beginTransaction();
-            this.inTransaction = true;
-        }
+        committer.retrieveOffsetsAndCommit();
     }
 
     protected void handleFutureResult(WorkContainer<K, V> wc) {
@@ -737,14 +708,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private <R> void submitWorkToPool(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
                                       Consumer<R> callback,
                                       List<WorkContainer<K, V>> workToProcess) {
-
-        for (var work : workToProcess) {
-            // for each record, construct dispatch to the executor and capture a Future
-            log.trace("Sending work ({}) to pool", work);
-            Future outputRecordFuture = workerPool.submit(() -> {
-                return userFunctionRunner(usersFunction, callback, work);
-            });
-            work.setFuture(outputRecordFuture);
+        if (!workToProcess.isEmpty()) {
+            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerPool);
+            for (var work : workToProcess) {
+                // for each record, construct dispatch to the executor and capture a Future
+                log.trace("Sending work ({}) to pool", work);
+                Future outputRecordFuture = workerPool.submit(() -> {
+                    return userFunctionRunner(usersFunction, callback, work);
+                });
+                work.setFuture(outputRecordFuture);
+            }
         }
     }
 
@@ -777,7 +750,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.debug("Error in user function", e);
+            log.debug("Error processing record", e);
             wc.onUserFunctionFailure();
             addToMailbox(wc); // always add on error
             throw e; // trow again to make the future failed
@@ -797,6 +770,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     protected void addToMailbox(WorkContainer<K, V> wc) {
         log.trace("Adding {} to mailbox...", wc);
         workMailBox.add(wc);
+        log.trace("Finished adding. {}", wc);
     }
 
     /**
@@ -809,8 +783,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     void notifyNewWorkRegistered() {
         if (currentlyPollingWorkCompleteMailBox.get()) {
-            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-            this.blockableControlThread.interrupt();
+            if (!producerManager.isTransactionInProgress()) {
+                log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
+                this.blockableControlThread.interrupt();
+            } else {
+                log.trace("Would have interrupted control thread, but TX in progress");
+            }
         } else {
             log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next looop.");
         }
