@@ -26,9 +26,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
+import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static io.confluent.parallelconsumer.WorkContainer.getRetryDelay;
-import static io.confluent.csid.utils.Range.range;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -383,7 +383,7 @@ public class WorkManagerTest {
         registerSomeWork();
 
         //
-        assertThat(wm.getShardWorkRemainingCount()).isEqualTo(9);
+        assertThat(wm.getWorkRemainingCount()).isEqualTo(9);
 
         //
         var work = new FluentQueue<WorkContainer<String, String>>();
@@ -424,7 +424,7 @@ public class WorkManagerTest {
         //
         assertThat(wm.getInFlightCount()).isEqualTo(2);
         assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
-        assertThat(wm.getShardWorkRemainingCount()).isEqualTo(4);
+        assertThat(wm.getMappedShardWorkRemainingCount()).isEqualTo(4);
         Assertions.assertThat(successfulWork).hasSize(5);
 
         //
@@ -440,7 +440,7 @@ public class WorkManagerTest {
         assertThat(work.size()).isEqualTo(0);
         Assertions.assertThat(successfulWork).hasSize(9);
         assertThat(wm.getInFlightCount()).isEqualTo(0);
-        assertThat(wm.getShardWorkRemainingCount()).isEqualTo(0);
+        assertThat(wm.getMappedShardWorkRemainingCount()).isEqualTo(0);
         assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
     }
 
@@ -626,7 +626,7 @@ public class WorkManagerTest {
         }
 
         //
-        assertThat(wm.getShardWorkRemainingCount()).isZero();
+        assertThat(wm.getMappedShardWorkRemainingCount()).isZero();
         assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(3);
 
         // drain commit queue

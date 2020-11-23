@@ -36,7 +36,7 @@ public class LoopingResumingIteratorTest {
         map.put(1, "b");
         map.put(2, "c");
         map.put(3, "d");
-        var entries = new LoopingResumingIterator<>(2, map);
+        var entries = LoopingResumingIterator.build(2, map);
         ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
         for (var x : entries) {
             results.add(x);
@@ -52,7 +52,7 @@ public class LoopingResumingIteratorTest {
         map.put(1, "b");
         map.put(2, "c");
         map.put(3, "d");
-        var entries = new LoopingResumingIterator<>(3, map);
+        var entries = LoopingResumingIterator.build(3, map);
         ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
         for (var x : entries) {
             results.add(x);
@@ -67,7 +67,7 @@ public class LoopingResumingIteratorTest {
         map.put(1, "b");
         map.put(2, "c");
         map.put(3, "d");
-        var entries = new LoopingResumingIterator<>(0, map);
+        var entries = LoopingResumingIterator.build(0, map);
         ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
         for (var x : entries) {
             results.add(x);
@@ -82,7 +82,7 @@ public class LoopingResumingIteratorTest {
         map.put(1, "b");
         map.put(2, "c");
         map.put(3, "d");
-        var entries = new LoopingResumingIterator<>(88, map);
+        var entries = LoopingResumingIterator.build(88, map);
         ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
         for (var x : entries) {
             results.add(x);

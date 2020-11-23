@@ -5,9 +5,12 @@ package io.confluent.csid.utils;
  */
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
@@ -15,9 +18,11 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 /**
  * Loop implementations that will resume from a given key. Can be constructed and used as an iterable, or a function
  * passed into the static version {@link #iterateStartingFromKeyLooping}.
- *
- * The non functional version is useful when you want to use looping constructs such as {@code break} and {@code continue}.
+ * <p>
+ * The non functional version is useful when you want to use looping constructs such as {@code break} and {@code
+ * continue}.
  */
+@Slf4j
 public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<KEY, VALUE>>, Iterable<Map.Entry<KEY, VALUE>> {
 
     private Iterator<Map.Entry<KEY, VALUE>> iterator;
@@ -35,14 +40,21 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
 
     private final boolean stillIterateCollectionIfStartingPointDoesntExist = true;
 
-    public LoopingResumingIterator(KEY startingKey, Map<KEY, VALUE> map) {
-        this.iterationStartingPoint = Optional.ofNullable(startingKey);
+    public static <KKEY, VVALUE> LoopingResumingIterator<KKEY, VVALUE> build(KKEY startingKey, Map<KKEY, VVALUE> map) {
+        return new LoopingResumingIterator<>(Optional.ofNullable(startingKey), map);
+    }
+
+    /**
+     * Will resume from the startingKey, if it's present
+     */
+    public LoopingResumingIterator(Optional<KEY> startingKey, Map<KEY, VALUE> map) {
+        this.iterationStartingPoint = startingKey;
         this.map = map;
         this.iterator = map.entrySet().iterator();
     }
 
     public LoopingResumingIterator(Map<KEY, VALUE> map) {
-        this(null, map);
+        this(Optional.empty(), map);
     }
 
     @Override

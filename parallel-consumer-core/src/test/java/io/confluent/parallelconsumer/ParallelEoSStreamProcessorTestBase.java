@@ -297,7 +297,10 @@ public class ParallelEoSStreamProcessorTestBase {
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
         return history.stream()
                 .flatMap(commits ->
-                        commits.values().stream().map(meta -> (int) meta.offset())
+                        {
+                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values());
+                            return values.stream().map(meta -> (int) meta.offset());
+                        }
                 ).collect(Collectors.toList());
     }
 
