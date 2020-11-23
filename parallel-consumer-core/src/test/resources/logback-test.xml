@@ -49,8 +49,8 @@
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests.KafkaTest" level="debug"/>-->
 
     <!-- related -->
-<!--    <logger name="org.apache.kafka.clients" level="trace"/>-->
-    <logger name="org.apache.kafka.clients" level="warn"/>
+<!--    <logger name="org.apache.kafka.clients" level="info"/>-->
+<!--    <logger name="org.apache.kafka.clients" level="warn"/>-->
 <!--    <logger name="org.apache.kafka.clients" level="debug"/>-->
 
     <logger name="org.postgresql" level="info"/>

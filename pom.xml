@@ -269,6 +269,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- Junit Pioneer pulls in an older version - force the matched version -->
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-commons</artifactId>
+            <version>${junit.platform.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.18.0</version>

@@ -386,7 +386,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 // ignore
                 log.trace("Interrupted", e);
             } catch (ExecutionException | TimeoutException e) {
-                log.error("Execution or timeout exception", e);
+                log.error("Execution or timeout exception while waiting for the control thread to close cleanly - lock " +
+                        "problem? If not, try increasing your time out to allow the system to drain, if closing in drain mode.", e);
                 throw e;
             }
             log.trace("Still waiting for system to close...");
