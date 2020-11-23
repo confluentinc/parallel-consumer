@@ -24,6 +24,7 @@ import java.util.HashMap;
 
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
 import static org.mockito.Mockito.when;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class CoreAppTest {
@@ -48,13 +49,11 @@ public class CoreAppTest {
         coreApp.close();
     }
 
-
     @SneakyThrows
     @Test
     public void testPollAndProduce() {
         log.info("Test start");
         CoreAppUnderTest coreApp = new CoreAppUnderTest();
-        TopicPartition tp = new TopicPartition(coreApp.inputTopic, 0);
 
         coreApp.runPollAndProduce();
 
@@ -76,11 +75,7 @@ public class CoreAppTest {
 
         @Override
         Consumer<String, String> getKafkaConsumer() {
-            HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
-            beginningOffsets.put(tp, 0L);
-            mockConsumer.updateBeginningOffsets(beginningOffsets);
             when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
-            mockConsumer.assign(UniLists.of(tp));
             return mockConsumer;
         }
 
@@ -89,5 +84,9 @@ public class CoreAppTest {
             return new MockProducer<>(true, null, null);
         }
 
+        @Override
+        protected void postSetup() {
+            mockConsumer.subscribeWithRebalanceAndAssignment(of(inputTopic), 1);
+        }
     }
 }

@@ -25,6 +25,7 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Basic core examples
@@ -50,6 +51,8 @@ public class CoreApp {
     void run() {
         this.parallelConsumer = setupParallelConsumer();
 
+        postSetup();
+
         // tag::example[]
         parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
@@ -57,30 +60,31 @@ public class CoreApp {
         // end::example[]
     }
 
+    protected void postSetup() {
+        // ignore
+    }
+
     @SuppressWarnings({"FeatureEnvy", "MagicNumber"})
     ParallelStreamProcessor<String, String> setupParallelConsumer() {
         // tag::exampleSetup[]
-        Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <4>
+        Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
-        var options = getOptions().toBuilder().consumer(kafkaConsumer).producer(kafkaProducer).build();
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(KEY) // <2>
+                .maxMessagesToQueue(1000) // <3>
+                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
+                .consumer(kafkaConsumer)
+                .producer(kafkaProducer)
+                .build();
 
-        ParallelStreamProcessor<String, String> eosStreamProcessor = ParallelStreamProcessor.createEosStreamProcessor(options);
-        if (!(kafkaConsumer instanceof MockConsumer)) {
-            eosStreamProcessor.subscribe(UniLists.of(inputTopic)); // <5>
-        }
+        ParallelStreamProcessor<String, String> eosStreamProcessor =
+                ParallelStreamProcessor.createEosStreamProcessor(options);
+
+        eosStreamProcessor.subscribe(of(inputTopic)); // <5>
 
         return eosStreamProcessor;
         // end::exampleSetup[]
-    }
-
-    ParallelConsumerOptions getOptions() {
-        var options = ParallelConsumerOptions.builder()
-                .ordering(KEY) // <1>
-                .maxMessagesToQueue(1000) // <2>
-                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <3>
-                .build();
-        return options;
     }
 
     void close() {
@@ -90,8 +94,10 @@ public class CoreApp {
     void runPollAndProduce() {
         this.parallelConsumer = setupParallelConsumer();
 
+        postSetup();
+
         // tag::exampleProduce[]
-        this.parallelConsumer.pollAndProduce(record -> {
+        parallelConsumer.pollAndProduce(record -> {
                     var result = processBrokerRecord(record);
                     return new ProducerRecord<>(outputTopic, record.key(), result.payload);
                 }, consumeProduceResult -> {
