@@ -4,8 +4,6 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.csid.utils.KafkaTestUtils;
-import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
@@ -17,7 +15,6 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -32,7 +29,6 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -45,7 +41,7 @@ import static org.awaitility.Awaitility.await;
  */
 @Timeout(value = 60)
 @Slf4j
-public class CloseAndOpenOffsetTest extends KafkaTest<String, String> {
+public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
 
     Duration normalTimeout = ofSeconds(5);
     Duration debugTimeout = Duration.ofMinutes(1);

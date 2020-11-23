@@ -20,7 +20,7 @@ import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
-public class KafkaSanityTests extends KafkaTest<String, String> {
+public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
 
     /**
      * @link io.confluent.csid.asyncconsumer.BrokerPollSystem#pollBrokerForRecords

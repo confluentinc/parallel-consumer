@@ -24,8 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @Slf4j
-// TODO rename to broker integration test
-public abstract class KafkaTest<K, V> {
+public abstract class BrokerIntegrationTest<K, V> {
 
     int numPartitions = 2; // as default consumer settings are max request 50 max per partition 1 - 50/1=50
 

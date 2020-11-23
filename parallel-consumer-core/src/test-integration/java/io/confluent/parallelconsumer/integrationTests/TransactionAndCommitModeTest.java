@@ -49,7 +49,7 @@ import static org.awaitility.Awaitility.waitAtMost;
  * @see io.confluent.parallelconsumer.ProducerManager
  */
 @Slf4j
-public class TransactionAndCommitModeTest extends KafkaTest<String, String> {
+public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
 
     int LOW_MAX_POLL_RECORDS_CONFIG = 1;
     int DEFAULT_MAX_POLL_RECORDS_CONFIG = 500;
