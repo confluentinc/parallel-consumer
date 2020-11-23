@@ -22,9 +22,12 @@ import pl.tlinkowski.unij.api.UniSets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.lang.Math.min;
 import static lombok.AccessLevel.PACKAGE;
@@ -53,6 +56,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see #maybeGetWork()
      */
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+    private final LinkedBlockingQueue<ConsumerRecords<K, V>> workInbox = new LinkedBlockingQueue<>();
+
+    /**
+     * Used to make sure when we're garbage collecting empty shards for KEY ordering, that we don't cause issues for
+     * contentious keys.
+     *
+     * @see #registerWork
+     * @see #success
+     */
+//    private final ReentrantReadWriteLock shardsLock = new ReentrantReadWriteLock(true);
 
     /**
      * Map of partitions to Map of offsets to WorkUnits
@@ -196,13 +209,36 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * Work must be registered in offset order
+     * <p>
+     * Thread safe for use by control and broker poller thread.
      *
+     * @see #success
      * @see #raisePartitionHighWaterMark
      */
     public void registerWork(ConsumerRecords<K, V> records) {
+        workInbox.add(records);
+    }
+
+    /**
+     * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
+     */
+    private void processInbox() {
+        ArrayList<ConsumerRecords<K, V>> mail = new ArrayList<>();
+        workInbox.drainTo(mail);
+        for (final ConsumerRecords<K, V> records : mail) {
+            processInbox(records);
+        }
+    }
+
+    /**
+     * @see #processInbox()
+     */
+    private void processInbox(ConsumerRecords<K, V> records) {
         log.debug("Registering {} records of work", records.count());
         for (ConsumerRecord<K, V> rec : records) {
-            if (!isRecordPreviouslyProcessed(rec)) {
+            if (isRecordPreviouslyProcessed(rec)) {
+                log.trace("Record previously processed, skipping. offset: {}", rec.offset());
+            } else {
                 Object shardKey = computeShardKey(rec);
                 long offset = rec.offset();
                 var wc = new WorkContainer<K, V>(rec);
@@ -210,13 +246,44 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 TopicPartition tp = toTP(rec);
                 raisePartitionHighWaterMark(offset, tp);
 
-                processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>())
-                        .put(offset, wc);
+                processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
+
+                /**
+                 * This method gets called by {@link BrokerPollSystem}, so needs to be thread safe, and as
+                 * {@link #processingShards} can be edited on {@link #success}, need to synchronise write access to
+                 * computing shard keys
+                 * @see #success
+                 */
+//                ReentrantReadWriteLock.ReadLock readLock = shardsLock.readLock();
+//                readLock.lock();
+//                try {
+//                    processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
+//                if (!processingShards.containsKey(shardKey)) { // optimistic
+////                        readLock.unlock();
+//                    log.debug("Getting write lock");
+//                    ReentrantReadWriteLock.WriteLock writeLock = shardsLock.writeLock();
+//                    writeLock.lock();
+//                    try {
+//                        if (!processingShards.containsKey(shardKey)) {
+//                            processingShards.put(shardKey, new ConcurrentSkipListMap<>());
+//                        }
+//                    } finally {
+//                        writeLock.unlock();
+//                    }
+//                }
+////                    else {
+////                    log.warn("shard key already exists {}", shardKey);
+////                    }
+//                ReentrantReadWriteLock.ReadLock readLock = shardsLock.readLock();
+//                readLock.lock();
+//                try {
+//                    processingShards.get(shardKey).put(offset, wc);
+//                } finally {
+//                    readLock.unlock();
+//                }
 
                 partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
                         .put(offset, wc);
-            } else {
-                log.trace("Record previously processed, skipping. offset: {}", rec.offset());
             }
         }
     }
@@ -265,6 +332,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#maxConcurrency}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
+        processInbox();
+
         int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxMessagesToQueue()), options.getMaxNumberMessagesBeyondBaseCommitOffset());
         int workToGetDelta = minWorkToGetSetting - getInFlightCount();
 
@@ -332,10 +401,17 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void success(WorkContainer<K, V> wc) {
         ConsumerRecord<K, V> cr = wc.getCr();
-        log.trace("Work success ({}), removing from queue", wc);
+        log.trace("Work success ({}), removing from processing shard queue", wc);
         wc.succeed();
         Object key = computeShardKey(cr);
-        processingShards.get(key).remove(cr.offset());
+        NavigableMap<Long, WorkContainer<K, V>> shard = processingShards.get(key);
+        shard.remove(cr.offset());
+        // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
+        boolean keyOrdering = options.getOrdering().equals(KEY);
+        if (keyOrdering && shard.isEmpty()) {
+            log.debug("Removing empty shard (key: {})", key);
+            processingShards.remove(key);
+        }
         successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
         inFlightCount--;
     }
@@ -345,13 +421,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         putBack(wc);
     }
 
+    /**
+     * Idempotent - work may have not been removed, either way it's put back
+     */
     private void putBack(WorkContainer<K, V> wc) {
-        log.debug("Work FAILED, returning to queue");
+        log.debug("Work FAILED, returning to shard");
         ConsumerRecord<K, V> cr = wc.getCr();
         Object key = computeShardKey(cr);
-        var queue = processingShards.get(key);
+        var shard = processingShards.get(key);
         long offset = wc.getCr().offset();
-        queue.put(offset, wc);
+        shard.put(offset, wc);
         inFlightCount--;
     }
 
@@ -363,7 +442,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return count;
     }
 
-    public int getShardWorkRemainingCount() {
+    public int getWorkRemainingCount() {
+        return getMappedShardWorkRemainingCount() + workInbox.stream().map(x -> x.count()).reduce(0, (a, b) -> a + b);
+    }
+
+    public int getMappedShardWorkRemainingCount() {
         int count = 0;
         for (var e : this.processingShards.entrySet()) {
             count += e.getValue().size();
@@ -372,11 +455,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     boolean isRecordsAwaitingProcessing() {
-        int partitionWorkRemainingCount = getShardWorkRemainingCount();
-        return partitionWorkRemainingCount > 0;
+        int partitionWorkRemainingCount = getMappedShardWorkRemainingCount();
+        return partitionWorkRemainingCount > 0 || !workInbox.isEmpty();
     }
 
     boolean isRecordsAwaitingToBeCommitted() {
+        // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
         int partitionWorkRemainingCount = getPartitionWorkRemainingCount();
         return partitionWorkRemainingCount > 0;
     }

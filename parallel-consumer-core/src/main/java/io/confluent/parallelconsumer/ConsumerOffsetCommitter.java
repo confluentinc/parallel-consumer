@@ -8,6 +8,8 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
@@ -15,6 +17,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * Committer that uses the Kafka Consumer to commit either synchronously or asynchronously

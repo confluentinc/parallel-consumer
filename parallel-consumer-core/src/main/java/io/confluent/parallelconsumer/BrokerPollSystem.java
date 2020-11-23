@@ -264,11 +264,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Override
     public void retrieveOffsetsAndCommit() {
         // {@link Optional#ifPresentOrElse} only @since 9
-        ConsumerOffsetCommitter<K, V> comitter = committer.orElseThrow(() -> {
+        ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
             // shouldn't be here
             throw new IllegalStateException("No committer configured");
         });
-        comitter.commit();
+        committer.commit();
     }
 
     /**
