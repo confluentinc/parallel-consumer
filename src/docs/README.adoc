@@ -542,15 +542,15 @@ The message publishing metadata can be streamed back to your client code.
 == Commit Mode
 
 The system gives you three choices for how to do offset commits.
-The simplest of the three are the two Consummer commits modes.
-They are of course, `sycnhronous` and `asynchronous` mode.
+The simplest of the three are the two Consumer commits modes.
+They are of course, `synchronous` and `asynchronous` mode.
 The `transactional` mode is explained in the next section.
 
-`Asychornous` mode is faster, as it doesn't block the control loop.
+`Asynchronous mode is faster, as it doesn't block the control loop.
 
-`Sycnhronous` will block the processing loop until a successful commit response is received, however, `asycnhronous` will still be capped by the max processing settings in the `Options` class.
+`Synchronous will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `Options` class.
 
-If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asychornous` mode being similar to this.
+If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.
 
 === Apache Kafka EoS Transaction Model
@@ -667,9 +667,18 @@ Run any goal skipping tests (replace `<goalName>` e.g. `install`)::
 See what profiles are active::
 `mvn help:active-profiles`
 
-See what plugins or dependencies are avaible to be updated::
+See what plugins or dependencies are available to be updated::
 `mvn versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates`
 
+Run a specific integration test method in a submodule project, skipping unit tests::
+`mvn -Dit.test=TransactionAndCommitModeTest#testLowMaxPoll -DskipUTs=true verify  -DfailIfNoTests=false --projects parallel-consumer-core`
+
+Run `git bisect` to find a bad commit, edit the Maven command in `bisect.sh` and run::
+[source=bash]
+----
+git bisect start good bad
+git bisect run ./bisect.sh
+----
 
 === Testing
 
