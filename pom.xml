@@ -85,6 +85,10 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
+        <skipTests>false</skipTests>
+        <skipITs>${skipTests}</skipITs>
+        <skipUTs>${skipTests}</skipUTs>
+
         <!-- version numbers -->
         <!-- plugins -->
         <mycila.version>4.0.rc2</mycila.version>
@@ -455,6 +459,7 @@
                         <exclude>**/*IT.java</exclude>
                     </excludes>
                     <jvm>${jvm.location}/bin/java</jvm>
+                    <skipTests>${skipUTs}</skipTests>
                 </configuration>
             </plugin>
             <plugin>
@@ -475,6 +480,8 @@
                         <include>**/integrationTest*/**/*.java</include>
                     </includes>
                     <jvm>${jvm.location}/bin/java</jvm>
+                    <skipTests>${skipTests}</skipTests>
+                    <skipITs>${skipITs}</skipITs>
                 </configuration>
             </plugin>
             <plugin>
