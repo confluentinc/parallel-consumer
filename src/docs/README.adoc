@@ -11,7 +11,7 @@
 //
 
 
-= parallel-consumer (alpha)
+= parallel-consumer (beta)
 :icons:
 :toc: macro
 :toclevels: 3
