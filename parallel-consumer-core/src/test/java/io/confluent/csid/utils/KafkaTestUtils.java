@@ -5,6 +5,8 @@ package io.confluent.csid.utils;
  */
 
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.WorkContainer;
+import io.confluent.parallelconsumer.WorkManager;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -19,6 +21,7 @@ import org.assertj.core.util.Lists;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.*;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -162,7 +165,7 @@ public class KafkaTestUtils {
      */
     public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(List<Integer> keys, int quantity) {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
-        List<Integer> keyWork = UniLists.copyOf(keys);
+//        List<Integer> keyWork = UniLists.copyOf(keys);
 
         int count = 0;
         while (count < quantity) {
@@ -234,5 +237,27 @@ public class KafkaTestUtils {
         for (ConsumerRecord<String, String> record : sorted) {
             consumerSpy.addRecord(record);
         }
+    }
+
+
+    public static void completeWork(final WorkManager<String, String> wmm, List<WorkContainer<String, String>> work, long offset) {
+        WorkContainer<String, String> foundWork = work.stream()
+                .filter(x ->
+                        x.getCr().offset() == offset
+                )
+                .findFirst().get();
+        KafkaTestUtils.completeWork(wmm, foundWork);
+    }
+
+    public static void completeWork(final WorkManager<String, String> wmm, final WorkContainer<String, String> wc) {
+        FutureTask future = new FutureTask<>(() -> {
+            return true;
+        });
+        future.run();
+        assertThat(future).isDone();
+        wc.setFuture(future);
+        wc.onUserFunctionSuccess();
+        wmm.success(wc);
+        assertThat(wc.isUserFunctionComplete()).isTrue();
     }
 }

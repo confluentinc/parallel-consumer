@@ -12,7 +12,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -21,7 +20,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.*;
@@ -39,7 +37,6 @@ import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
-import static org.awaitility.Awaitility.setDefaultConditionEvaluationListener;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
@@ -106,7 +103,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(startBarrierLatch);
 
-        assertThat(parallelConsumer.getWm().getInFlightCount()).isEqualTo(2);
+        assertThat(parallelConsumer.getWm().getRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1
         releaseAndWait(locks, 1);

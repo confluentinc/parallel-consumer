@@ -4,6 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests.sanity;
 
+import io.confluent.csid.utils.ProgressBarUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.DelegatingProgressBarConsumer;
@@ -22,9 +23,7 @@ public class ProgressBarTest {
     @Test
     @Disabled("For reference sanity only")
     public void width() {
-        DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
-
-        ProgressBar build = new ProgressBarBuilder().setConsumer(delegatingProgressBarConsumer).setInitialMax(100).showSpeed().setTaskName("progress").setUnit("msg", 1).build();
+        ProgressBar build = ProgressBarUtils.getNewMessagesBar(log, 100);
         try (build) {
             while (build.getCurrent() < build.getMax()) {
                 build.step();

@@ -4,12 +4,12 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
-import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -18,7 +18,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.assertj.core.util.Lists;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -31,7 +31,8 @@ import java.util.stream.IntStream;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
-import static java.time.Duration.*;
+import static java.time.Duration.ofMillis;
+import static java.time.Duration.ofSeconds;
 import static me.tongfei.progressbar.ProgressBar.wrap;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,9 +86,7 @@ public class LoadTest extends DbTest {
         ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);
         AtomicInteger msgCount = new AtomicInteger(0);
 
-        ProgressBar pb = new ProgressBarBuilder()
-                .setInitialMax(total).showSpeed().setTaskName("Read async").setUnit("msg", 1)
-                .build();
+        ProgressBar pb = ProgressBarUtils.getNewMessagesBar(log, total);
 
         try (pb) {
             async.poll(r -> {
@@ -118,9 +117,7 @@ public class LoadTest extends DbTest {
         log.info("Starting to read back");
         final List<ConsumerRecord<String, String>> allRecords = Lists.newArrayList();
         time(() -> {
-            ProgressBar pb = new ProgressBarBuilder()
-                    .setInitialMax(total).showSpeed().setTaskName("Read").setUnit("msg", 1)
-                    .build();
+            ProgressBar pb = ProgressBarUtils.getNewMessagesBar(log, total);
 
             try (pb) {
                 await().atMost(ofSeconds(60)).untilAsserted(() -> {

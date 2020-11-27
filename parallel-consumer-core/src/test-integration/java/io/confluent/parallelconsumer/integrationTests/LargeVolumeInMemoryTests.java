@@ -4,6 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
@@ -204,12 +205,7 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
         HashMap<Integer, List<ConsumerRecord<String, String>>> records = ku.generateRecords(keys, quantityOfMessagesToProduce);
         ku.send(consumerSpy, records);
 
-        ProgressBar bar = new ProgressBarBuilder().setInitialMax(quantityOfMessagesToProduce)
-                .showSpeed()
-                .setUnit("msgs", 1)
-                .setUpdateIntervalMillis(100)
-                .build();
-        bar.maxHint(quantityOfMessagesToProduce);
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, quantityOfMessagesToProduce);
 
         Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
 

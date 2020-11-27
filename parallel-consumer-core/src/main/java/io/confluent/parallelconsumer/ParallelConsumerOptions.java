@@ -4,10 +4,12 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.StringUtils;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.util.Objects;
@@ -93,38 +95,6 @@ public class ParallelConsumerOptions<K, V> {
 
     @Builder.Default
     private final CommitMode commitMode = CommitMode.CONSUMER_ASYNCHRONOUS;
-
-    /**
-     * Total max number of messages to process beyond the base committed offsets.
-     * <p>
-     * This acts as a sort sort of upper limit on the number of messages we should allow our system to handle, when
-     * working with large quantities of messages that haven't been included in the normal Broker offset commit protocol.
-     * I.e. if there is a single message that is failing to process, without this limit we will continue on forever with
-     * our system, with the actual (normal) committed offset never moving, and relying totally on our {@link
-     * OffsetMapCodecManager} to encode the process status of our records and store in metadata next to the committed
-     * offset.
-     * <p>
-     * At the moment this is a sort of sanity check, and was chosen rather arbitriarly. However, one should consider
-     * that this is per client, and is a total across all assigned partitions.
-     * <p>
-     * It's important that this is small enough, that you're not at risk of the broker expiring log segments where the
-     * oldest offset resides.
-     */
-    @Builder.Default
-    private final int maxNumberMessagesBeyondBaseCommitOffset = 1000;
-
-    /**
-     * Max number of messages to queue up in our execution system and attempt to process concurrently.
-     * <p>
-     * In the core module, this will be constrained by the {@link #numberOfThreads} setting, as that is the max actual
-     * concurrency for processing the messages. To actually get this degree of concurrency, you would need to have a
-     * matching number of threads in the pool.
-     * <p>
-     * However with the VertX engine, this will control how many messages at a time are being submitted to the Vert.x
-     * engine to process. As Vert.x isn't constrained by a thread count, this will be the actual degree of concurrency.
-     */
-    @Builder.Default
-    private final int maxMessagesToQueue = 100;
 
     /**
      * Number of threads to use in the core's thread pool.

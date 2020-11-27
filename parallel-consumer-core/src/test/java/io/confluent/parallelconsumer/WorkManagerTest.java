@@ -31,6 +31,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static io.confluent.parallelconsumer.WorkContainer.getRetryDelay;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -318,7 +319,7 @@ public class WorkManagerTest {
     public void maxInFlight() {
         //
         var opts = ParallelConsumerOptions.builder();
-        opts.maxNumberMessagesBeyondBaseCommitOffset(1);
+//        opts.softMaxNumberMessagesBeyondBaseCommitOffset(1);
         setupWorkManager(opts.build());
 
         //
@@ -333,7 +334,7 @@ public class WorkManagerTest {
     public void maxConcurrency() {
         //
         var opts = ParallelConsumerOptions.builder();
-        opts.maxMessagesToQueue(1);
+//        opts.maxMessagesToQueue(1);
         setupWorkManager(opts.build());
 
         //
@@ -372,8 +373,8 @@ public class WorkManagerTest {
         var opts = ParallelConsumerOptions.builder();
         opts.ordering(UNORDERED);
 
-        opts.maxNumberMessagesBeyondBaseCommitOffset(3);
-        opts.maxMessagesToQueue(2);
+//        opts.softMaxNumberMessagesBeyondBaseCommitOffset(3);
+//        opts.maxMessagesToQueue(2);
 
         setupWorkManager(opts.build());
 
@@ -383,7 +384,7 @@ public class WorkManagerTest {
         registerSomeWork();
 
         //
-        assertThat(wm.getWorkRemainingCount()).isEqualTo(9);
+        assertThat(wm.getTotalWorkWaitingProcessing()).isEqualTo(9);
 
         //
         var work = new FluentQueue<WorkContainer<String, String>>();
@@ -422,9 +423,9 @@ public class WorkManagerTest {
         Assertions.assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
 
         //
-        assertThat(wm.getInFlightCount()).isEqualTo(2);
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
-        assertThat(wm.getMappedShardWorkRemainingCount()).isEqualTo(4);
+        assertThat(wm.getRecordsOutForProcessing()).isEqualTo(2);
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(9);
+        assertThat(wm.getWorkQueuedInShardsCount()).isEqualTo(4);
         Assertions.assertThat(successfulWork).hasSize(5);
 
         //
@@ -439,9 +440,9 @@ public class WorkManagerTest {
         //
         assertThat(work.size()).isEqualTo(0);
         Assertions.assertThat(successfulWork).hasSize(9);
-        assertThat(wm.getInFlightCount()).isEqualTo(0);
-        assertThat(wm.getMappedShardWorkRemainingCount()).isEqualTo(0);
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
+        assertThat(wm.getRecordsOutForProcessing()).isEqualTo(0);
+        assertThat(wm.getWorkQueuedInShardsCount()).isEqualTo(0);
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(9);
     }
 
     @Test
@@ -609,8 +610,8 @@ public class WorkManagerTest {
     public void workQueuesEmptyWhenAllWorkComplete() {
         ParallelConsumerOptions build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
-                .maxMessagesToQueue(10)
-                .maxNumberMessagesBeyondBaseCommitOffset(10)
+//                .maxMessagesToQueue(10)
+//                .softMaxNumberMessagesBeyondBaseCommitOffset(10)
                 .build();
         setupWorkManager(build);
         registerSomeWork();
@@ -626,12 +627,13 @@ public class WorkManagerTest {
         }
 
         //
-        assertThat(wm.getMappedShardWorkRemainingCount()).isZero();
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(3);
+        assertThat(wm.getWorkQueuedInShardsCount()).isZero();
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(3);
 
         // drain commit queue
         var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
         assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(0);
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(0);
     }
+
 }

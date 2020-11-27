@@ -9,7 +9,6 @@ import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -19,8 +18,6 @@ import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -65,10 +62,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
      * advancing offsets, as this isn't a guarantee of kafka's.
+     * <p>
+     * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
+     * ({@link #findCompletedEligibleOffsetsAndRemove})
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
+    //    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
+
+    private final BackoffAnalyser backoffer;
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -76,11 +79,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private Optional<Object> iterationResumePoint = Optional.empty();
 
-    private int inFlightCount = 0;
+    private int recordsOutForProcessing = 0;
 
     /**
-     * The multiple of {@link ParallelConsumerOptions#getMaxMessagesToQueue()} that should be pre-loaded awaiting
-     * processing. Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
+     * todo docs
+     * The multiple that should be pre-loaded awaiting processing. Consumer already pipelines, so we shouldn't need to
+     * pipeline ourselves too much.
      * <p>
      * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
      * factor is low, there may not be enough messages queued up to satisfy demand.
@@ -108,7 +112,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * The highest seen offset for a partition
      */
-    Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<TopicPartition, Long>();
+    Map<TopicPartition, Long> partitionOffsetHighWaterMarks = new HashMap<>();
 
     // visible for testing
     long MISSING_HIGH_WATER_MARK = -1L;
@@ -124,6 +128,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.options = options;
         this.consumer = consumer;
+
+        backoffer = new BackoffAnalyser(options.getNumberOfThreads() * 10);
     }
 
     /**
@@ -220,38 +226,152 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         workInbox.add(records);
     }
 
+    private final Queue<ConsumerRecords<K, V>> internalBatchMailQueue = new LinkedList<>();
+    private final Queue<ConsumerRecord<K, V>> internalFlattenedMailQueue = new LinkedList<>();
+
     /**
      * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
+     *
+     * @param requestedMaxWorkToRetrieve
      */
-    private void processInbox() {
-        ArrayList<ConsumerRecords<K, V>> mail = new ArrayList<>();
-        workInbox.drainTo(mail);
-        for (final ConsumerRecords<K, V> records : mail) {
-            processInbox(records);
+    private void processInbox(final int requestedMaxWorkToRetrieve) {
+        workInbox.drainTo(internalBatchMailQueue);
+
+        // flatten
+        while (!internalBatchMailQueue.isEmpty()) {
+            ConsumerRecords<K, V> consumerRecords = internalBatchMailQueue.poll();
+            log.debug("Flattening {} records", consumerRecords.count());
+            for (final ConsumerRecord<K, V> consumerRecord : consumerRecords) {
+                internalFlattenedMailQueue.add(consumerRecord);
+            }
         }
+
+        //
+//        int inFlight = getNumberOfEntriesInPartitionQueues();
+//        int max = getMaxToGoBeyondOffset();
+//        int gap = max - inFlight;
+        int gap = requestedMaxWorkToRetrieve;
+        int taken = 0;
+
+//        log.debug("Will register {} (max configured: {}) records of work ({} already registered)", gap, max, inFlight);
+        log.debug("Will attempt to register {} - {} available", requestedMaxWorkToRetrieve, internalFlattenedMailQueue.size());
+
+        //
+        while (taken < gap && !internalFlattenedMailQueue.isEmpty()) {
+            ConsumerRecord<K, V> poll = internalFlattenedMailQueue.poll();
+            processInbox(poll);
+            taken++;
+        }
+
+        log.debug("{} new records were registered.", taken);
+
+//        ArrayList<ConsumerRecords<K, V>> toRemove = new ArrayList<>();
+//        for (final ConsumerRecords<K, V> records : internalBatchMailQueue) {
+//            records.
+//
+//        }
+//        boolean moreRecordsCanBeAccepted = processInbox(records);
+//        if (moreRecordsCanBeAccepted)
+//            toRemove.add(records);
+//        internalBatchMailQueue.removeAll(toRemove);
+    }
+
+    private int getMaxToGoBeyondOffset() {
+        return backoffer.getCurrentTotalMaxCountBeyondOffset();
     }
 
     /**
+     * @return true if the records were accepted, false if they cannot be
      * @see #processInbox()
      */
-    private void processInbox(ConsumerRecords<K, V> records) {
-        log.debug("Registering {} records of work", records.count());
+    private boolean processInbox(ConsumerRecords<K, V> records) {
+        int partitionWorkRemainingCount = getWorkQueuedInShardsCount();
+        int recordsToAdd = records.count();
+        // we don't break up individual record sets (although we could, but "overhead") so need to queue up records even if it goes over by some amount
+        boolean overMax = partitionWorkRemainingCount - recordsToAdd >= getMaxToGoBeyondOffset();
+        if (overMax) {
+            log.debug("Work remaining in partition queues has surpassed max, so won't bring further messages in from the pipeline queued: {} / max: {}",
+                    partitionWorkRemainingCount, getMaxToGoBeyondOffset());
+            return false;
+        }
+
+//        if (!inboundOffsetWidthWithinRange(records)) {
+//            return false;
+//        }
+
+        //
+        log.debug("Registering {} records of work ({} already registered)", recordsToAdd, partitionWorkRemainingCount);
+
         for (ConsumerRecord<K, V> rec : records) {
-            if (isRecordPreviouslyProcessed(rec)) {
-                log.trace("Record previously processed, skipping. offset: {}", rec.offset());
-            } else {
-                Object shardKey = computeShardKey(rec);
-                long offset = rec.offset();
-                var wc = new WorkContainer<K, V>(rec);
+            processInbox(rec);
+        }
 
-                TopicPartition tp = toTP(rec);
-                raisePartitionHighWaterMark(offset, tp);
+        return true;
+    }
 
-                processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
+    private boolean inboundOffsetWidthWithinRange(final ConsumerRecords<K, V> records) {
+        // brute force - surely very slow. surely this info can be cached?
+        Map<TopicPartition, List<ConsumerRecord<K, V>>> inbound = new HashMap<>();
+        for (final ConsumerRecord<K, V> record : records) {
+            TopicPartition tp = new TopicPartition(record.topic(), record.partition());
+            inbound.computeIfAbsent(tp, (ignore) -> new ArrayList<>()).add(record);
+        }
 
-                partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
-                        .put(offset, wc);
+        Set<Map.Entry<TopicPartition, List<ConsumerRecord<K, V>>>> inboundPartitionQueues = inbound.entrySet();
+        for (final Map.Entry<TopicPartition, List<ConsumerRecord<K, V>>> inboundPartitionQueue : inboundPartitionQueues) {
+            // get highest start offset
+            long start = 0l;
+            TopicPartition tp = inboundPartitionQueue.getKey();
+            NavigableMap<Long, WorkContainer<K, V>> longWorkContainerNavigableMap = partitionCommitQueues.get(tp);
+            if (longWorkContainerNavigableMap != null) {
+                for (final Map.Entry<Long, WorkContainer<K, V>> longWorkContainerEntry : longWorkContainerNavigableMap.entrySet()) {
+                    WorkContainer<K, V> value = longWorkContainerEntry.getValue();
+                    boolean userFunctionSucceeded = value.isUserFunctionSucceeded();
+                    if (!userFunctionSucceeded) {
+                        start = value.getCr().offset();
+
+                        // now find any record what would make the width too big. Binary search?
+                        // brute force
+                        List<ConsumerRecord<K, V>> inboundRecordQueue = inboundPartitionQueue.getValue();
+//                        ConsumerRecord<K, V> highestOffsetInboundRecord = inboundRecordQueue.get(inboundRecordQueue.size() - 1);
+//                        long newEnd = highestOffsetInboundRecord.offset();
+
+                        for (final ConsumerRecord<K, V> inboundRecord : inboundRecordQueue) {
+                            long newEnd = inboundRecord.offset();
+                            long width = newEnd - start;
+
+                            if (width >= BitsetEncoder.MAX_LENGTH_ENCODABLE) {
+                                long oldWidth = partitionOffsetHighWaterMarks.get(tp) - start;
+                                // can't be more accurate unless we break up the inbound records and count them per queue
+                                log.debug("Incoming outstanding offset difference too large for BitSet encoder (incoming width: {}, old width: {}), will wait before adding these records until the width shrinks (below {})",
+                                        width, oldWidth, BitsetEncoder.MAX_LENGTH_ENCODABLE);
+                                return false;
+//                                break;
+                            } else {
+                                log.debug("Width was ok {}", width);
+                            }
+                        }
+                    }
+                }
             }
+        }
+        return true;
+    }
+
+    private void processInbox(final ConsumerRecord<K, V> rec) {
+        if (isRecordPreviouslyProcessed(rec)) {
+            log.trace("Record previously processed, skipping. offset: {}", rec.offset());
+        } else {
+            Object shardKey = computeShardKey(rec);
+            long offset = rec.offset();
+            var wc = new WorkContainer<>(rec);
+
+            TopicPartition tp = toTP(rec);
+            raisePartitionHighWaterMark(offset, tp);
+
+            processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
+
+            partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
         }
     }
 
@@ -290,24 +410,25 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public <R> List<WorkContainer<K, V>> maybeGetWork() {
-        return maybeGetWork(options.getMaxMessagesToQueue());
+        return maybeGetWork(getMaxMessagesToQueue());
     }
 
     /**
      * Depth first work retrieval.
-     *
-     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#maxConcurrency}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
-        processInbox();
-
-        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxMessagesToQueue()), options.getMaxNumberMessagesBeyondBaseCommitOffset());
-        int workToGetDelta = minWorkToGetSetting - getInFlightCount();
+        //int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, getMaxMessagesToQueue()), getMaxToGoBeyondOffset());
+//        int minWorkToGetSetting = min(requestedMaxWorkToRetrieve, getMaxToGoBeyondOffset());
+//        int workToGetDelta = requestedMaxWorkToRetrieve - getRecordsOutForProcessing();
+        int workToGetDelta = requestedMaxWorkToRetrieve;
 
         // optimise early
         if (workToGetDelta < 1) {
             return UniLists.of();
         }
+
+        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - getWorkQueuedInShardsCount();
+        processInbox(extraNeededFromInboxToSatisfy);
 
         //
         List<WorkContainer<K, V>> work = new ArrayList<>();
@@ -361,13 +482,28 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
 
 
-        log.debug("Got {} records of work", work.size());
-        inFlightCount += work.size();
+        log.debug("Got {} records of work. In-flight: {}, Awaiting: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        recordsOutForProcessing += work.size();
 
         return work;
     }
 
+    private int getMaxMessagesToQueue() {
+        //return options.getNumberOfThreads() * options.getLoadingFactor();
+        double rate = successRatePer5Seconds.getRate();
+        int newRatae = (int) rate * 2;
+        int max = Math.max(newRatae, options.getNumberOfThreads() * 10);
+        log.debug("max to queue: {}", max);
+        return max;
+//        return options.getNumberOfThreads() * 10;
+    }
+
+    private final WindowedEventRate successRatePer5Seconds = new WindowedEventRate(5);
+    private final ExponentialMovingAverage successRatePer5SecondsEMA = new ExponentialMovingAverage(0.5);
+
     public void success(WorkContainer<K, V> wc) {
+        successRatePer5Seconds.newEvent();
+//        successRatePer5SecondsEMA.
         workStateIsDirtyNeedsCommitting.set(true);
         ConsumerRecord<K, V> cr = wc.getCr();
         log.trace("Work success ({}), removing from processing shard queue", wc);
@@ -375,15 +511,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         Object key = computeShardKey(cr);
         // remove from processing queues
         NavigableMap<Long, WorkContainer<K, V>> shard = processingShards.get(key);
-        shard.remove(cr.offset());
+        long offset = cr.offset();
+        shard.remove(offset);
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
         boolean keyOrdering = options.getOrdering().equals(KEY);
         if (keyOrdering && shard.isEmpty()) {
-            log.debug("Removing empty shard (key: {})", key);
+            log.trace("Removing empty shard (key: {})", key);
             processingShards.remove(key);
         }
         successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
-        inFlightCount--;
+        recordsOutForProcessing--;
     }
 
     public void failed(WorkContainer<K, V> wc) {
@@ -401,10 +538,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         var shard = processingShards.get(key);
         long offset = wc.getCr().offset();
         shard.put(offset, wc);
-        inFlightCount--;
+        recordsOutForProcessing--;
     }
 
-    public int getPartitionWorkRemainingCount() {
+    public int getNumberOfEntriesInPartitionQueues() {
         int count = 0;
         for (var e : this.partitionCommitQueues.entrySet()) {
             count += e.getValue().size();
@@ -412,11 +549,40 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return count;
     }
 
-    public int getWorkRemainingCount() {
-        return getMappedShardWorkRemainingCount() + workInbox.stream().map(x -> x.count()).reduce(0, (a, b) -> a + b);
+    /**
+     * @return Work count in mailbox plus work added to the processing shards
+     */
+    public int getTotalWorkWaitingProcessing() {
+        return getWorkQueuedInShardsCount() + getWorkQueuedInMailboxCount();
     }
 
-    public int getMappedShardWorkRemainingCount() {
+    /**
+     * @return Work queued in the mail box, awaiting processing into shards
+     */
+    Integer getWorkQueuedInMailboxCount() {
+        int batchCount = 0;
+        for (final ConsumerRecords<K, V> inboxEntry : workInbox) {
+            batchCount += inboxEntry.count();
+        }
+//        for (final ConsumerRecords<K, V> consumerRecords : Collections.unmodifiableCollection(internalBatchMailQueue)) { // copy for concurrent access - as it holds batches of polled records, it should be relatively small
+        if (internalBatchMailQueue.size() > 10) {
+            log.warn("Larger than expected {}", internalBatchMailQueue.size());
+        }
+        for (final ConsumerRecords<K, V> consumerRecords : new ArrayList<>(internalBatchMailQueue)) { // copy for concurrent access - as it holds batches of polled records, it should be relatively small
+            if (consumerRecords != null) {
+                batchCount += consumerRecords.count();
+            }
+        }
+//        Integer batchCount = internalBatchMailQueue.stream()
+//                .map(ConsumerRecords::count)
+//                .reduce(0, Integer::sum);
+        return batchCount + internalFlattenedMailQueue.size();
+    }
+
+    /**
+     * @return Work ready in the processing shards, awaiting selection as work to do
+     */
+    public int getWorkQueuedInShardsCount() {
         int count = 0;
         for (var e : this.processingShards.entrySet()) {
             count += e.getValue().size();
@@ -425,13 +591,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     boolean isRecordsAwaitingProcessing() {
-        int partitionWorkRemainingCount = getMappedShardWorkRemainingCount();
-        return partitionWorkRemainingCount > 0 || !workInbox.isEmpty();
+        int partitionWorkRemainingCount = getWorkQueuedInShardsCount();
+        //return partitionWorkRemainingCount > 0 || !workInbox.isEmpty() || !internalMailQueue.isEmpty();
+        return partitionWorkRemainingCount > 0 || !internalBatchMailQueue.isEmpty() || !internalFlattenedMailQueue.isEmpty();
     }
 
     boolean isRecordsAwaitingToBeCommitted() {
         // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
-        int partitionWorkRemainingCount = getPartitionWorkRemainingCount();
+        int partitionWorkRemainingCount = getNumberOfEntriesInPartitionQueues();
         return partitionWorkRemainingCount > 0;
     }
 
@@ -447,13 +614,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
 
-    /**
-     * Expensive operation to see if anything is committable.
-     * <p>
-     * TODO Replace with dirty check
-     */
     boolean hasCommittableOffsets() {
-        return findCompletedEligibleOffsetsAndRemove(false).size() != 0;
+        return isDirty();
     }
 
     /**
@@ -514,7 +676,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
             // offset map building
             // Get final offset data, build the the offset map, and replace it in our map of offset data to send
-            // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made)
+            // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
             if (!incompleteOffsets.isEmpty()) {
                 long offsetOfNextExpectedMessage;
                 OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
@@ -533,6 +695,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
                 } catch (EncodingNotSupportedException e) {
                     log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
+                    backoffer.onFailure();
                 }
             }
 
@@ -571,15 +734,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             log.warn("Offset map data too large (size: {}) to fit in metadata payload - stripping offset map out. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096",
                     totalOffsetMetaCharacterLength);
-            // strip payload
+            // strip all payloads
+            // todo iteratively strip the largest payloads until we're under the limit
             for (var entry : offsetsToSend.entrySet()) {
                 TopicPartition key = entry.getKey();
                 OffsetAndMetadata v = entry.getValue();
                 OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
                 offsetsToSend.replace(key, stripped);
             }
-        } else {
+            backoffer.onFailure();
+        } else if (totalOffsetMetaCharacterLength != 0) {
             log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
+            backoffer.onSuccess();
         }
     }
 
@@ -606,19 +772,25 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return isSufficientlyLoaded();
     }
 
+    /**
+     * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
+     *         should be downloaded (or pipelined in the Consumer)
+     */
     boolean isSufficientlyLoaded() {
-        int remaining = getPartitionWorkRemainingCount();
-        boolean loadedEnoughInPipeline = remaining > options.getMaxMessagesToQueue() * loadingFactor;
-        boolean overMaxUncommitted = remaining > options.getMaxNumberMessagesBeyondBaseCommitOffset();
+        int total = getTotalWorkWaitingProcessing();
+        int inPartitions = getNumberOfEntriesInPartitionQueues();
+        int maxBeyondOffset = getMaxToGoBeyondOffset();
+        boolean loadedEnoughInPipeline = total > maxBeyondOffset * loadingFactor;
+        boolean overMaxUncommitted = inPartitions >= maxBeyondOffset;
         boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
-        if (remainingIsSufficient) {
-            log.debug("loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
-        }
+//        if (remainingIsSufficient) {
+        log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
+//        }
         return remainingIsSufficient;
     }
 
-    public int getInFlightCount() {
-        return inFlightCount;
+    public int getRecordsOutForProcessing() {
+        return recordsOutForProcessing;
     }
 
     public boolean workIsWaitingToBeCompletedSuccessfully() {
@@ -631,7 +803,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean hasWorkInFlight() {
-        return getInFlightCount() != 0;
+        return getRecordsOutForProcessing() != 0;
     }
 
     public boolean isClean() {
@@ -640,5 +812,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private boolean isDirty() {
         return this.workStateIsDirtyNeedsCommitting.get();
+    }
+
+    public boolean isNotPartitionedOrDrained() {
+        return getNumberOfEntriesInPartitionQueues() > 0 && getWorkQueuedInMailboxCount() > 0;
+
     }
 }
