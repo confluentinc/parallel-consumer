@@ -41,8 +41,6 @@ public class VertxApp {
         Producer<String, String> kafkaProducer = getKafkaProducer();
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
-                .maxMessagesToQueue(1000)
-                .maxNumberMessagesBeyondBaseCommitOffset(10000)
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();

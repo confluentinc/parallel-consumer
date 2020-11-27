@@ -380,8 +380,7 @@ Where `${project.version}` is the version to be used:
 
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
-                .maxMessagesToQueue(1000) // <3>
-                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
+                .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();
@@ -389,15 +388,14 @@ Where `${project.version}` is the version to be used:
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
-        eosStreamProcessor.subscribe(of(inputTopic)); // <5>
+        eosStreamProcessor.subscribe(of(inputTopic)); // <4>
 
         return eosStreamProcessor;
 ----
 <1> Setup your clients as per normal. A Producer is only required if using the `produce` flows.
 <2> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
-<3> The maximum number of concurrent processing operations to be performing at any given time
-<4> Regardless of the level of concurrency, don't have more than this many messages uncommitted at any given time.
+<3> The maximum number of concurrent processing operations to be performing at any given time.
 Also, because the library coordinates offsets, `enable.auto.commit` must be disabled in your consumer.
 <5> Subscribe to your topics
 

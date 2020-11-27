@@ -2,12 +2,19 @@
 
 == next
 
-* Fixes
-** https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs  2,147,483,647) for both BitSet and run-length encoding
+=== Features
+* Queueing and pressure system now self tuning, performance over default old tuning values (`softMaxNumberMessagesBeyondBaseCommitOffset` and `maxMessagesToQueue`) has doubled.
+** These options have been removed from the system.
+
+=== Improvements
+** Default ordering mode is now `KEY` ordering (was `UNORDERED`).
+*** This is a better default as it's the safest mode yet high performing mode.
+It maintains the partition ordering characteristic that all keys are processed in log order, yet for most use cases will be close to as fast as `UNORDERED` when the key space is large enough.
+** https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs  2,147,483,647) for both BitSet and run-length encoding.
 
 == v0.2.0.3
 
-* Fixes
+=== Fixes
 ** https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)] - gracefully drop BitSet or Runlength encoding as an option if offset difference too large (short overflow)
 *** A new serialisation format will be added in next version - see https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37]
 ** Gracefully drops encoding attempts if they can't be run
@@ -15,23 +22,23 @@
 
 == v0.2.0.2
 
-* Fixes
+=== Fixes
 ** Turns back on the https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)]
 
 == v0.2.0.1 DO NOT USE - has critical bug
 
-* Fixes
+=== Fixes
 ** Incorrectly turns off an over-flow check in https://github.com/confluentinc/parallel-consumer/issues/35[offset serialisation system (#35)]
 
 == v0.2.0.0
 
-* Features:
+=== Features
 ** Choice of commit modes: Consumer Asynchronous, Synchronous and Producer Transactions
 ** Producer instance is now optional
 ** Using a _transactional_ Producer is now optional
 ** Use the Kafka Consumer to commit `offsets` Synchronously or Asynchronously
 
-* Improvements:
+=== Improvements
 ** Memory performance - garbage collect empty shards when in KEY ordering mode
 ** Select tests adapted to non transactional (multiple commit modes) as well
 ** Adds supervision to broker poller
@@ -40,7 +47,7 @@
 ** Have onPartitionsRevoked be responsible for committing on close, instead of an explicit call to commit by controller
 ** Make sure Broker Poller now drains properly, committing any waiting work
 
-* Fixes:
+=== Fixes
 ** Fixes bug in commit linger, remove genesis offset (0) from testing (avoid races), add ability to request commit
 ** Fixes #25 https://github.com/confluentinc/parallel-consumer/issues/25:
 *** Sometimes a transaction error occurs - Cannot call send in state COMMITTING_TRANSACTION #25
@@ -53,7 +60,7 @@
 
 == v0.1
 
-* Features:
+=== Features:
 ** Have massively parallel consumption processing without running hundreds or thousands of
 *** Kafka consumer clients
 *** topic partitions

@@ -153,7 +153,6 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             this.commitPerformed = commitLock.newCondition();
             long currentCount = commitCount.get();
             requestCommitInternal();
-            consumerMgr.wakeup();
             while (currentCount == commitCount.get()) {
                 if (currentCount == commitCount.get()) {
                     log.debug("Requesting commit again");
@@ -178,6 +177,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         commitLock.lock();
         try {
             commitRequested.set(true);
+            consumerMgr.onCommitRequested();
             consumerMgr.wakeup();
         } finally {
             commitLock.unlock();
@@ -189,6 +189,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         commitLock.lock();
         try {
             if (commitRequested.get()) {
+                log.debug("Commit requested, performing...");
                 retrieveOffsetsAndCommit();
             }
         } finally {

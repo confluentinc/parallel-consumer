@@ -4,10 +4,12 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.StringUtils;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.util.Objects;
@@ -89,48 +91,29 @@ public class ParallelConsumerOptions<K, V> {
      * The order type to use
      */
     @Builder.Default
-    private final ProcessingOrder ordering = ProcessingOrder.UNORDERED;
+    private final ProcessingOrder ordering = ProcessingOrder.KEY;
 
     @Builder.Default
     private final CommitMode commitMode = CommitMode.CONSUMER_ASYNCHRONOUS;
 
     /**
-     * Total max number of messages to process beyond the base committed offsets.
+     * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
+     * maximum to prevent overloading them or to a degree, using up quotas.
      * <p>
-     * This acts as a sort sort of upper limit on the number of messages we should allow our system to handle, when
-     * working with large quantities of messages that haven't been included in the normal Broker offset commit protocol.
-     * I.e. if there is a single message that is failing to process, without this limit we will continue on forever with
-     * our system, with the actual (normal) committed offset never moving, and relying totally on our {@link
-     * OffsetMapCodecManager} to encode the process status of our records and store in metadata next to the committed
-     * offset.
+     * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
+     * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
+     * this to be properly addressed: https://github.com/confluentinc/parallel-consumer/issues/24 Add distributed rate
+     * limiting support #24.
      * <p>
-     * At the moment this is a sort of sanity check, and was chosen rather arbitriarly. However, one should consider
-     * that this is per client, and is a total across all assigned partitions.
+     * In the core module, this sets the number of threads to use in the core's thread pool.
      * <p>
-     * It's important that this is small enough, that you're not at risk of the broker expiring log segments where the
-     * oldest offset resides.
+     * It's recommended to set this quite high, much higher than core count, as it's expected that these threads will
+     * spend most of their time blocked waiting for IO. For automatic setting of this variable, look out for issue
+     * https://github.com/confluentinc/parallel-consumer/issues/21 Dynamic concurrency control with flow control or tcp
+     * congestion control theory #21.
      */
     @Builder.Default
-    private final int maxNumberMessagesBeyondBaseCommitOffset = 1000;
-
-    /**
-     * Max number of messages to queue up in our execution system and attempt to process concurrently.
-     * <p>
-     * In the core module, this will be constrained by the {@link #numberOfThreads} setting, as that is the max actual
-     * concurrency for processing the messages. To actually get this degree of concurrency, you would need to have a
-     * matching number of threads in the pool.
-     * <p>
-     * However with the VertX engine, this will control how many messages at a time are being submitted to the Vert.x
-     * engine to process. As Vert.x isn't constrained by a thread count, this will be the actual degree of concurrency.
-     */
-    @Builder.Default
-    private final int maxMessagesToQueue = 100;
-
-    /**
-     * Number of threads to use in the core's thread pool.
-     */
-    @Builder.Default
-    private final int numberOfThreads = 16;
+    private final int maxConcurrency = 16;
 
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");

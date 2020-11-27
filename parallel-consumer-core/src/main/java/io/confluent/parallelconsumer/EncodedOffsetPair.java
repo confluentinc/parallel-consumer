@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -95,8 +96,8 @@ final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
     }
 
     @SneakyThrows
-    public Tuple<Long, Set<Long>> getDecodedIncompletes(long baseOffset) {
-        Tuple<Long, Set<Long>> binaryArrayString = switch (encoding) {
+    public HighestOffsetAndIncompletes getDecodedIncompletes(long baseOffset) {
+        HighestOffsetAndIncompletes binaryArrayString = switch (encoding) {
 //            case ByteArray -> deserialiseByteArrayToBitMapString(data);
 //            case ByteArrayCompressed -> deserialiseByteArrayToBitMapString(decompressZstd(data));
             case BitSet -> deserialiseBitSetWrapToIncompletes(encoding, baseOffset, data);
