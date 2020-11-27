@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.WallClock;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -614,8 +615,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
 
+        Duration duration = Duration.ofMillis(10);
+        log.debug("Thread yield {}", duration);
+        try {
+            Thread.sleep(duration.toMillis());
+        } catch (InterruptedException e) {
+            log.debug("Woke up", e);
+        }
+
         // end of loop
-        log.trace("End of control loop, {} remaining in work manager. In state: {}", wm.getPartitionWorkRemainingCount(), state);
+        log.debug("End of control loop, waiting processing {}, remaining partition queues: {}, in flight: {}. In state: {}", wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getInFlightCount(), state);
     }
 
     private void drain() {
@@ -649,11 +658,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
-            log.debug("Blocking poll on work until next scheduled offset commit attempt for {}", timeout);
-            currentlyPollingWorkCompleteMailBox.getAndSet(true);
-            // wait for work, with a timeout for sanity
-            firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
-            currentlyPollingWorkCompleteMailBox.getAndSet(false);
+            if (workMailBox.isEmpty()) {
+                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}", timeout);
+                currentlyPollingWorkCompleteMailBox.getAndSet(true);
+                // wait for work, with a timeout for sanity
+                firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
+                currentlyPollingWorkCompleteMailBox.getAndSet(false);
+            } else {
+                // dont set the lock or log anything
+                firstBlockingPoll = workMailBox.poll();
+            }
         } catch (InterruptedException e) {
             log.debug("Interrupted waiting on work results");
         }
@@ -865,7 +879,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     @Override
     public int workRemaining() {
-        return wm.getPartitionWorkRemainingCount();
+        return wm.getNumberOfEntriesInPartitionQueues();
     }
 
     /**

@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.util.Objects;
@@ -97,9 +98,19 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Total max number of messages to process beyond the base committed offsets.
      * <p>
+     * Note this could be double, because we don't break up {@link org.apache.kafka.clients.consumer.ConsumerRecords}
+     * sets from the {@link org.apache.kafka.clients.consumer.KafkaConsumer} (although we could, but would need to
+     * spend
+     * cycles copying references).
+     * <p>
+     * Tbe actual max will float between this value, and {@link ConsumerConfig#MAX_POLL_RECORDS_CONFIG} is configured
+     * as.
+     * <p>
      * This acts as a sort sort of upper limit on the number of messages we should allow our system to handle, when
-     * working with large quantities of messages that haven't been included in the normal Broker offset commit protocol.
-     * I.e. if there is a single message that is failing to process, without this limit we will continue on forever with
+     * working with large quantities of messages that haven't been included in the normal Broker offset commit
+     * protocol.
+     * I.e. if there is a single message that is failing to process, without this limit we will continue on forever
+     * with
      * our system, with the actual (normal) committed offset never moving, and relying totally on our {@link
      * OffsetMapCodecManager} to encode the process status of our records and store in metadata next to the committed
      * offset.
@@ -111,7 +122,7 @@ public class ParallelConsumerOptions<K, V> {
      * oldest offset resides.
      */
     @Builder.Default
-    private final int maxNumberMessagesBeyondBaseCommitOffset = 1000;
+    private final int softMaxNumberMessagesBeyondBaseCommitOffset = 1000;
 
     /**
      * Max number of messages to queue up in our execution system and attempt to process concurrently.
@@ -138,6 +149,13 @@ public class ParallelConsumerOptions<K, V> {
         if (isUsingTransactionalProducer() && producer == null) {
             throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
                     commitMode));
+        }
+
+        // Factor of 2 because the records come in batches, a second large batch can be added, even if there's only a single space available
+        int loadingMultiple = 2;
+        if (getSoftMaxNumberMessagesBeyondBaseCommitOffset() * loadingMultiple > BitsetEncoder.MAX_LENGTH_ENCODABLE) {
+            throw new IllegalArgumentException(msg("Can't currently support processing more than {} messages at a time due to limitations in BitSet encoding. See #37",
+                    BitsetEncoder.MAX_LENGTH_ENCODABLE));
         }
     }
 

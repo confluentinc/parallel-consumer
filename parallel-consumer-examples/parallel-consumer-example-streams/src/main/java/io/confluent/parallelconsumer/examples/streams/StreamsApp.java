@@ -83,7 +83,7 @@ public class StreamsApp {
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxMessagesToQueue(1000)
-                .maxNumberMessagesBeyondBaseCommitOffset(10000)
+                .softMaxNumberMessagesBeyondBaseCommitOffset(10000)
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();

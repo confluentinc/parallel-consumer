@@ -12,17 +12,11 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -73,7 +67,7 @@ public class CoreApp {
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
                 .maxMessagesToQueue(1000) // <3>
-                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
+                .softMaxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();
