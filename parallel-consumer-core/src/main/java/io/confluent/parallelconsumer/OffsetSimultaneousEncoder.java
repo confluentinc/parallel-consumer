@@ -211,6 +211,10 @@ class OffsetSimultaneousEncoder {
         public BitsetEncoder(final int length) {
             // prep bit set buffer
             this.wrappedBitsetBytesBuffer = ByteBuffer.allocate(Short.BYTES + ((length / 8) + 1));
+            if (length > Short.MAX_VALUE) {
+                // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
+                throw new RuntimeException("Bitset too long to encode, bitset length overflows Short.MAX_VALUE: " + length + ". (max: " + Short.MAX_VALUE + ")");
+            }
             // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
             this.wrappedBitsetBytesBuffer.putShort((short) length);
             bitSet = new BitSet(length);

@@ -23,6 +23,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -59,6 +60,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
 
     @Test
+    @Disabled("See #35, $37")
     public void shouldNotThrowBitsetTooLongException() {
         runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.UNORDERED);
     }

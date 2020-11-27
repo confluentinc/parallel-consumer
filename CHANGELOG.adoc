@@ -1,5 +1,15 @@
 = Change Log
 
+== v0.2.0.2
+
+* Fixes
+** Turns back on the https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)]
+
+== v0.2.0.1 DO NOT USE
+
+* Fixes
+** Incorrectly turns off an over-flow check in https://github.com/confluentinc/parallel-consumer/issues/35[offset serialisation system (#35)]
+
 == v0.2.0.0
 
 * Features:
