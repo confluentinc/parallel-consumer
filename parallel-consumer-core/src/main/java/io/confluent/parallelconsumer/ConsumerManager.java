@@ -26,12 +26,19 @@ public class ConsumerManager<K, V> {
     private int erroneousWakups = 0;
     private int correctPollWakeups = 0;
     private int noWakeups = 0;
+    private boolean commitRequested;
 
-    ConsumerRecords<K, V> poll(Duration thisLongPollTimeout) {
+    ConsumerRecords<K, V> poll(Duration requestedLongPollTimeout) {
+        Duration timeoutToUse = requestedLongPollTimeout;
         ConsumerRecords<K, V> records;
         try {
+            if (commitRequested) {
+                log.debug("Commit requested, so will not long poll as need to perform the commit");
+                timeoutToUse = Duration.ofMillis(1);// disable long poll, as commit needs performing
+                commitRequested = false;
+            }
             pollingBroker.set(true);
-            records = consumer.poll(thisLongPollTimeout);
+            records = consumer.poll(timeoutToUse);
             log.debug("Poll completed normally and returned {}...", records.count());
         } catch (WakeupException w) {
             correctPollWakeups++;
@@ -112,4 +119,7 @@ public class ConsumerManager<K, V> {
         consumer.resume(pausedTopics);
     }
 
+    public void onCommitRequested() {
+        this.commitRequested = true;
+    }
 }

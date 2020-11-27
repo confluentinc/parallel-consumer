@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
+import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,15 +15,9 @@ import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.function.Supplier;
-
-import static io.confluent.parallelconsumer.OffsetEncoding.BitSet;
-import static io.confluent.parallelconsumer.OffsetEncoding.BitSetV2;
 
 @Slf4j
 @UtilityClass
@@ -77,14 +71,14 @@ public class OffsetRunLength {
     /**
      * @see #runLengthEncode
      */
-    static Tuple<Long, Set<Long>> runLengthDecodeToIncompletes(OffsetEncoding encoding, final long baseOffset, final ByteBuffer in) {
+    static HighestOffsetAndIncompletes runLengthDecodeToIncompletes(OffsetEncoding encoding, final long baseOffset, final ByteBuffer in) {
         in.rewind();
         final ShortBuffer v1ShortBuffer = in.asShortBuffer();
         final IntBuffer v2IntegerBuffer = in.asIntBuffer();
 
         final var incompletes = new HashSet<Long>(1); // we don't know the capacity yet
 
-        long highestWatermarkSeen = 0L;
+        long highestSeenOffset = 0L;
 
         Supplier<Boolean> hasRemainingTest = () -> {
             return switch (encoding.version) {
@@ -120,7 +114,7 @@ public class OffsetRunLength {
                     case v1 -> v1ShortBuffer.get();
                     case v2 -> v2IntegerBuffer.get();
                 };
-                highestWatermarkSeen = currentOffset + runLength.longValue();
+                highestSeenOffset = currentOffset + runLength.longValue();
 
                 if (currentRunlengthIsComplete) {
                     log.trace("Ignoring {} completed offset", runLength);
@@ -138,7 +132,7 @@ public class OffsetRunLength {
             }
             currentRunlengthIsComplete = !currentRunlengthIsComplete; // toggle
         }
-        return Tuple.pairOf(highestWatermarkSeen, incompletes);
+        return HighestOffsetAndIncompletes.of(highestSeenOffset, incompletes);
     }
 
     static List<Integer> runLengthDeserialise(final ByteBuffer in) {

@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer;
 
+import io.confluent.csid.utils.TimeUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
@@ -8,6 +9,7 @@ import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.clients.producer.internals.TransactionManager;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.utils.Timer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -15,10 +17,10 @@ import java.time.Duration;
 import java.util.ConcurrentModificationException;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.closing;
 
 @Slf4j
 public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
@@ -40,6 +42,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Field txManagerField;
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
+    private final long sendTimeoutSeconds = 2L;
 
     public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions options) {
         super(newConsumer, wm);
@@ -133,9 +136,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         // wait on the send results
         try {
-            return send.get();
+            log.trace("Blocking on produce result");
+            RecordMetadata recordMetadata = TimeUtils.time(() ->
+                    send.get(sendTimeoutSeconds, TimeUnit.SECONDS));
+            log.trace("Produce result received");
+            return recordMetadata;
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new InternalRuntimeError(e);
         }
     }
 
@@ -200,7 +207,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                         boolean ready = (lastErrorSavedForRethrow != null) ? !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION") : true;
                         if (ready) {
                             // try again
-                            log.error("Was already ready - tx completed between interrupt and retry");
+                            log.error("Transaction was already in READY state - tx completed between interrupt and retry");
                         }
                     } else {
                         // happy path

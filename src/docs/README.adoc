@@ -370,8 +370,7 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 <1> Setup your clients as per normal. A Producer is only required if using the `produce` flows.
 <2> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
-<3> The maximum number of concurrent processing operations to be performing at any given time
-<4> Regardless of the level of concurrency, don't have more than this many messages uncommitted at any given time.
+<3> The maximum number of concurrent processing operations to be performing at any given time.
 Also, because the library coordinates offsets, `enable.auto.commit` must be disabled in your consumer.
 <5> Subscribe to your topics
 

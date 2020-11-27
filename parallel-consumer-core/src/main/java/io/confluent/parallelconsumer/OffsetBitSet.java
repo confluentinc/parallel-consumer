@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
+import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
@@ -51,7 +51,7 @@ public class OffsetBitSet {
         return result.toString();
     }
 
-    static Tuple<Long, Set<Long>> deserialiseBitSetWrapToIncompletes(OffsetEncoding encoding, long baseOffset, ByteBuffer wrap) {
+    static HighestOffsetAndIncompletes deserialiseBitSetWrapToIncompletes(OffsetEncoding encoding, long baseOffset, ByteBuffer wrap) {
         wrap.rewind();
         int originalBitsetSize = switch(encoding) {
             case BitSet -> wrap.getShort();
@@ -60,8 +60,8 @@ public class OffsetBitSet {
         };
         ByteBuffer slice = wrap.slice();
         Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
-        long highwaterMark = baseOffset + originalBitsetSize;
-        return Tuple.pairOf(highwaterMark, incompletes);
+        long highestSeenOffset = baseOffset + originalBitsetSize;
+        return HighestOffsetAndIncompletes.of(highestSeenOffset, incompletes);
     }
 
     static Set<Long> deserialiseBitSetToIncompletes(long baseOffset, int originalBitsetSize, ByteBuffer inputBuffer) {
