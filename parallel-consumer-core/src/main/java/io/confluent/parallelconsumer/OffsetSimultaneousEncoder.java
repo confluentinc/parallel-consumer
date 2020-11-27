@@ -8,13 +8,9 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import static io.confluent.parallelconsumer.OffsetEncoding.*;
 import static io.confluent.csid.utils.Range.range;
 
 /**
@@ -99,9 +95,9 @@ class OffsetSimultaneousEncoder {
             log.debug("~Large input map size: {}", length);
         }
 
-        final Set<Encoder> encoders = new HashSet<>();
-        encoders.add(new BitsetEncoder(length));
-        encoders.add(new RunLengthEncoder());
+        final Set<OffsetEncoder> encoders = new HashSet<>();
+        encoders.add(new BitsetEncoder(length, this));
+        encoders.add(new RunLengthEncoder(this));
         // TODO: Remove? byte buffer seems to always be beaten by BitSet, which makes sense
         // encoders.add(new ByteBufferEncoder(length));
 
@@ -125,14 +121,14 @@ class OffsetSimultaneousEncoder {
         return this;
     }
 
-    private void registerEncodings(final Set<? extends Encoder> encoders) {
-        encoders.forEach(Encoder::register);
+    private void registerEncodings(final Set<? extends OffsetEncoder> encoders) {
+        encoders.forEach(OffsetEncoder::register);
 
         // compressed versions
         // sizes over LARGE_INPUT_MAP_SIZE_THRESHOLD bytes seem to benefit from compression
-        final boolean noEncodingsAreSmallEnough = encoders.stream().noneMatch(Encoder::quiteSmall);
+        final boolean noEncodingsAreSmallEnough = encoders.stream().noneMatch(OffsetEncoder::quiteSmall);
         if (noEncodingsAreSmallEnough) {
-            encoders.forEach(Encoder::registerCompressed);
+            encoders.forEach(OffsetEncoder::registerCompressed);
         }
     }
 
@@ -158,224 +154,4 @@ class OffsetSimultaneousEncoder {
         return result.array();
     }
 
-    private abstract class Encoder {
-
-        protected abstract OffsetEncoding getEncodingType();
-
-        protected abstract OffsetEncoding getEncodingTypeCompressed();
-
-        abstract void containsIndex(final int rangeIndex);
-
-        abstract void doesNotContainIndex(final int rangeIndex);
-
-        abstract byte[] serialise();
-
-        abstract int getEncodedSize();
-
-        boolean quiteSmall() {
-            return this.getEncodedSize() < LARGE_INPUT_MAP_SIZE_THRESHOLD;
-        }
-
-        byte[] compress() throws IOException {
-            return OffsetSimpleSerialisation.compressZstd(this.getEncodedBytes());
-        }
-
-        final void register() {
-            final byte[] bytes = this.serialise();
-            final OffsetEncoding encodingType = this.getEncodingType();
-            this.register(encodingType, bytes);
-        }
-
-        private void register(final OffsetEncoding type, final byte[] bytes) {
-            OffsetSimultaneousEncoder.this.sortedEncodings.add(new EncodedOffsetPair(type, ByteBuffer.wrap(bytes)));
-            OffsetSimultaneousEncoder.this.encodingMap.put(type, bytes);
-        }
-
-        @SneakyThrows
-        void registerCompressed() {
-            final byte[] compressed = compress();
-            final OffsetEncoding encodingType = this.getEncodingTypeCompressed();
-            this.register(encodingType, compressed);
-        }
-
-        protected abstract byte[] getEncodedBytes();
-    }
-
-    private class BitsetEncoder extends Encoder {
-
-        private final ByteBuffer wrappedBitsetBytesBuffer;
-        private final BitSet bitSet;
-
-        private Optional<byte[]> encodedBytes = Optional.empty();
-
-        public BitsetEncoder(final int length) {
-            // prep bit set buffer
-            this.wrappedBitsetBytesBuffer = ByteBuffer.allocate(Short.BYTES + ((length / 8) + 1));
-            if (length > Short.MAX_VALUE) {
-                // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
-                throw new RuntimeException("Bitset too long to encode, bitset length overflows Short.MAX_VALUE: " + length + ". (max: " + Short.MAX_VALUE + ")");
-            }
-            // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-            this.wrappedBitsetBytesBuffer.putShort((short) length);
-            bitSet = new BitSet(length);
-        }
-
-        @Override
-        protected OffsetEncoding getEncodingType() {
-            return BitSet;
-        }
-
-        @Override
-        protected OffsetEncoding getEncodingTypeCompressed() {
-            return BitSetCompressed;
-        }
-
-        @Override
-        public void containsIndex(final int rangeIndex) {
-            //noop
-        }
-
-        @Override
-        public void doesNotContainIndex(final int rangeIndex) {
-            bitSet.set(rangeIndex);
-        }
-
-        @Override
-        public byte[] serialise() {
-            final byte[] bitSetArray = this.bitSet.toByteArray();
-            this.wrappedBitsetBytesBuffer.put(bitSetArray);
-            final byte[] array = this.wrappedBitsetBytesBuffer.array();
-            this.encodedBytes = Optional.of(array);
-            return array;
-        }
-
-        @Override
-        public int getEncodedSize() {
-            return this.encodedBytes.get().length;
-        }
-
-        @Override
-        protected byte[] getEncodedBytes() {
-            return this.encodedBytes.get();
-        }
-
-    }
-
-    private class RunLengthEncoder extends Encoder {
-
-        private final AtomicInteger currentRunLengthCount;
-        private final AtomicBoolean previousRunLengthState;
-        private final List<Integer> runLengthEncodingIntegers;
-
-        private Optional<byte[]> encodedBytes = Optional.empty();
-
-        public RunLengthEncoder() {
-            // run length setup
-            currentRunLengthCount = new AtomicInteger();
-            previousRunLengthState = new AtomicBoolean(false);
-            runLengthEncodingIntegers = new ArrayList<>();
-        }
-
-        @Override
-        protected OffsetEncoding getEncodingType() {
-            return RunLength;
-        }
-
-        @Override
-        protected OffsetEncoding getEncodingTypeCompressed() {
-            return RunLengthCompressed;
-        }
-
-        @Override
-        public void containsIndex(final int rangeIndex) {
-            encodeRunLength(false);
-        }
-
-        @Override
-        public void doesNotContainIndex(final int rangeIndex) {
-            encodeRunLength(true);
-        }
-
-        @Override
-        public byte[] serialise() {
-            runLengthEncodingIntegers.add(currentRunLengthCount.get()); // add tail
-
-            ByteBuffer runLengthEncodedByteBuffer = ByteBuffer.allocate(runLengthEncodingIntegers.size() * Short.BYTES);
-            for (final Integer i : runLengthEncodingIntegers) {
-                final short value = i.shortValue();
-                runLengthEncodedByteBuffer.putShort(value);
-            }
-
-            byte[] array = runLengthEncodedByteBuffer.array();
-            encodedBytes = Optional.of(array);
-            return array;
-        }
-
-        @Override
-        public int getEncodedSize() {
-            return encodedBytes.get().length;
-        }
-
-        @Override
-        protected byte[] getEncodedBytes() {
-            return encodedBytes.get();
-        }
-
-        private void encodeRunLength(final boolean currentIsComplete) {
-            // run length
-            boolean currentOffsetMatchesOurRunLengthState = previousRunLengthState.get() == currentIsComplete;
-            if (currentOffsetMatchesOurRunLengthState) {
-                currentRunLengthCount.getAndIncrement();
-            } else {
-                previousRunLengthState.set(currentIsComplete);
-                runLengthEncodingIntegers.add(currentRunLengthCount.get());
-                currentRunLengthCount.set(1); // reset to 1
-            }
-        }
-    }
-
-    private class ByteBufferEncoder extends Encoder {
-
-        private final ByteBuffer bytesBuffer;
-
-        public ByteBufferEncoder(final int length) {
-            this.bytesBuffer = ByteBuffer.allocate(1 + length);
-        }
-
-        @Override
-        protected OffsetEncoding getEncodingType() {
-            return ByteArray;
-        }
-
-        @Override
-        protected OffsetEncoding getEncodingTypeCompressed() {
-            return ByteArrayCompressed;
-        }
-
-        @Override
-        public void containsIndex(final int rangeIndex) {
-            this.bytesBuffer.put((byte) 0);
-        }
-
-        @Override
-        public void doesNotContainIndex(final int rangeIndex) {
-            this.bytesBuffer.put((byte) 1);
-        }
-
-        @Override
-        public byte[] serialise() {
-            return this.bytesBuffer.array();
-        }
-
-        @Override
-        public int getEncodedSize() {
-            return this.bytesBuffer.capacity();
-        }
-
-        @Override
-        protected byte[] getEncodedBytes() {
-            return this.bytesBuffer.array();
-        }
-
-    }
 }
