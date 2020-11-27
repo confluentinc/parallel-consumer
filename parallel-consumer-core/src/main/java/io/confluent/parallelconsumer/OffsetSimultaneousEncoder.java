@@ -86,11 +86,12 @@ class OffsetSimultaneousEncoder {
      * TODO: optimisation - inline this into the partition iteration loop in {@link WorkManager}
      * <p>
      * TODO: optimisation - could double the run-length range from Short.MAX_VALUE (~33,000) to Short.MAX_VALUE * 2
-     *  (~66,000) by using unsigned shorts instead
+     *  (~66,000) by using unsigned shorts instead (higest representable relative offset is Short.MAX_VALUE because each
+     *  runlength entry is a Short)
      */
     @SneakyThrows
     public OffsetSimultaneousEncoder invoke() {
-        log.trace("Starting encode of incompletes of {}", this.incompleteOffsets);
+        log.trace("Starting encode of incompletes of {}, base offset is: {}", this.incompleteOffsets, lowWaterMark);
 
         final int length = (int) (this.nextExpectedOffset - this.lowWaterMark);
 
@@ -105,7 +106,7 @@ class OffsetSimultaneousEncoder {
         // encoders.add(new ByteBufferEncoder(length));
 
         //
-        log.debug("Encode loop start,end: [{},{}] length: {}", this.lowWaterMark, this.nextExpectedOffset, length);
+        log.debug("Encode loop offset start,end: [{},{}] length: {}", this.lowWaterMark, this.nextExpectedOffset, length);
         range(length).forEach(rangeIndex -> {
             final long offset = this.lowWaterMark + rangeIndex;
             if (this.incompleteOffsets.contains(offset)) {
@@ -211,8 +212,6 @@ class OffsetSimultaneousEncoder {
             // prep bit set buffer
             this.wrappedBitsetBytesBuffer = ByteBuffer.allocate(Short.BYTES + ((length / 8) + 1));
             // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-            if (length > Short.MAX_VALUE)
-                throw new RuntimeException("Bitset too long to encode: " + length + ". (max: " + Short.MAX_VALUE + ")");
             this.wrappedBitsetBytesBuffer.putShort((short) length);
             bitSet = new BitSet(length);
         }

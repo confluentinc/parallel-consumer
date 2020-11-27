@@ -19,11 +19,12 @@ import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
@@ -393,6 +394,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             work.addAll(shardWork);
         }
 
+
         log.debug("Got {} records of work", work.size());
         inFlightCount += work.size();
 
@@ -404,6 +406,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         log.trace("Work success ({}), removing from processing shard queue", wc);
         wc.succeed();
         Object key = computeShardKey(cr);
+        // remove from processing queues
         NavigableMap<Long, WorkContainer<K, V>> shard = processingShards.get(key);
         shard.remove(cr.offset());
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
@@ -477,7 +480,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
 
-    boolean hasComittableOffsets() {
+    /**
+     * Expensive operation to see if anything is committable.
+     * <p>
+     * TODO Replace with dirty check
+     */
+    boolean hasCommittableOffsets() {
         return findCompletedEligibleOffsetsAndRemove(false).size() != 0;
     }
 
@@ -491,7 +499,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         int count = 0;
         int removed = 0;
         log.trace("Scanning for in order in-flight work that has completed...");
-        int totalOffsetMetaSize = 0;
+        int totalOffsetMetaCharacterLength = 0;
         for (final var partitionQueueEntry : partitionCommitQueues.entrySet()) {
             TopicPartition topicPartitionKey = partitionQueueEntry.getKey();
             log.trace("Starting scan of partition: {}", topicPartitionKey);
@@ -551,21 +559,21 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this, this.consumer);
                 String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
-                totalOffsetMetaSize += offsetMapPayload.length();
+                totalOffsetMetaCharacterLength += offsetMapPayload.length();
                 OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
                 offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
             }
 
             if (remove) {
                 removed += workToRemove.size();
-                for (var w : workToRemove) {
-                    var offset = w.getCr().offset();
+                for (var workContainer : workToRemove) {
+                    var offset = workContainer.getCr().offset();
                     partitionQueue.remove(offset);
                 }
             }
         }
 
-        maybeStripOffsetPayload(offsetsToSend, totalOffsetMetaSize);
+        maybeStripOffsetPayload(offsetsToSend, totalOffsetMetaCharacterLength);
 
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
                 count, removed, offsetsToSend.size(), offsetsToSend);
@@ -577,18 +585,20 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * Implication of this is that if the system has to recover from this offset, then it will have to replay all the
      * messages that were otherwise complete.
+     * <p>
+     * Must be thread safe.
      *
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
-    private void maybeStripOffsetPayload(Map<TopicPartition, OffsetAndMetadata> offsetsToSend, int totalOffsetMetaSize) {
+    private void maybeStripOffsetPayload(Map<TopicPartition, OffsetAndMetadata> offsetsToSend, int totalOffsetMetaCharacterLength) {
         // TODO: Potential optimisation: if max metadata size is shared across partitions, the limit used could be relative to the number of
         //  partitions assigned to this consumer. In which case, we could derive the limit for the number of downloaded but not committed
         //  offsets, from this max over some estimate. This way we limit the possibility of hitting the hard limit imposed in the protocol, thus
         //  retaining the offset map feature, at the cost of potential performance by hitting a soft maximum in our uncommitted concurrent processing.
-        if (totalOffsetMetaSize > OffsetMapCodecManager.DefaultMaxMetadataSize) {
+        if (totalOffsetMetaCharacterLength > OffsetMapCodecManager.DefaultMaxMetadataSize) {
             log.warn("Offset map data too large (size: {}) to fit in metadata payload - stripping offset map out. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096",
-                    totalOffsetMetaSize);
+                    totalOffsetMetaCharacterLength);
             // strip payload
             for (var entry : offsetsToSend.entrySet()) {
                 TopicPartition key = entry.getKey();
