@@ -99,7 +99,7 @@ class OffsetSimultaneousEncoder {
         try {
             encoders.add(new BitsetEncoder(length, this, v1));
         } catch (BitSetEncodingNotSupportedException a) {
-            log.warn("Cannot use {} encoder ({})", BitsetEncoder.class.getSimpleName(), a.getMessage());
+            log.debug("Cannot use {} encoder ({})", BitsetEncoder.class.getSimpleName(), a.getMessage());
         }
 
         try {
@@ -187,7 +187,7 @@ class OffsetSimultaneousEncoder {
             try {
                 encoder.register();
             } catch (EncodingNotSupportedException e) {
-                log.warn("Removing {} encoder, not supported ({})", encoder.getEncodingType().description(), e.getMessage());
+                log.debug("Removing {} encoder, not supported ({})", encoder.getEncodingType().description(), e.getMessage());
                 toRemove.add(encoder);
             }
         }

@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer;
 
+import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -61,7 +62,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @ValueSource(longs = {
             10_000L,
             100_000L,
-            100_000_000L, // slow
+            100_000_0L,
+//            100_000_000L, // very~ slow
     })
     void largeIncompleteOffsetValues(long nextExpectedOffset) {
         var incompletes = new HashSet<Long>();
@@ -78,8 +80,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         //
         byte[] smallestBytes = encoder.packSmallest();
         EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(smallestBytes);
-        ParallelConsumer.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
-        assertThat(decodedIncompletes.getRight()).containsExactlyInAnyOrderElementsOf(incompletes);
+        OffsetMapCodecManager.HighestOffsetAndIncompletes decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
+        assertThat(decodedIncompletes.getIncompleteOffsets()).containsExactlyInAnyOrderElementsOf(incompletes);
 
         //
         for (OffsetEncoding encodingToUse : OffsetEncoding.values()) {
@@ -87,8 +89,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             byte[] bitsetBytes = encodingMap.get(encodingToUse);
             if (bitsetBytes != null) {
                 EncodedOffsetPair bitsetUnwrap = EncodedOffsetPair.unwrap(encoder.packEncoding(new EncodedOffsetPair(encodingToUse, ByteBuffer.wrap(bitsetBytes))));
-                ParallelConsumer.Tuple<Long, Set<Long>> decodedBitsets = bitsetUnwrap.getDecodedIncompletes(lowWaterMark);
-                assertThat(decodedBitsets.getRight())
+                OffsetMapCodecManager.HighestOffsetAndIncompletes decodedBitsets = bitsetUnwrap.getDecodedIncompletes(lowWaterMark);
+                assertThat(decodedBitsets.getIncompleteOffsets())
                         .as(encodingToUse.toString())
                         .containsExactlyInAnyOrderElementsOf(incompletes);
             } else {
@@ -140,10 +142,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         //
         ParallelConsumerOptions options = parallelConsumer.getWm().getOptions();
-        HashMap<TopicPartition, List<ConsumerRecord<String, String>>> objectObjectHashMap = new HashMap<>();
+        HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
-        objectObjectHashMap.put(tp, records);
-        ConsumerRecords<String, String> crs = new ConsumerRecords<>(objectObjectHashMap);
+        recordsMap.put(tp, records);
+        ConsumerRecords<String, String> crs = new ConsumerRecords<>(recordsMap);
 
         // write offsets
         Map<TopicPartition, OffsetAndMetadata> completedEligibleOffsetsAndRemove;
@@ -152,12 +154,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             wmm.registerWork(crs);
 
             List<WorkContainer<String, String>> work = wmm.maybeGetWork();
+            assertThat(work).hasSameSizeAs(records);
 
-            completeWork(wmm, work, 0);
+            KafkaTestUtils.completeWork(wmm, work, 0);
 
-            completeWork(wmm, work, 69);
+            KafkaTestUtils.completeWork(wmm, work, 69);
 
-            completeWork(wmm, work, 25_000);
+            KafkaTestUtils.completeWork(wmm, work, 25_000);
 
             completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
 
@@ -194,27 +197,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         }
     }
 
-    private void completeWork(final WorkManager<String, String> wmm, List<WorkContainer<String, String>> work, long offset) {
-        WorkContainer<String, String> foundWork = work.stream()
-                .filter(x ->
-                        x.getCr().offset() == offset
-                )
-                .findFirst().get();
-        completeWork(wmm, foundWork);
-    }
-
-    private void completeWork(final WorkManager<String, String> wmm, final WorkContainer<String, String> wc) {
-        FutureTask future = new FutureTask<>(() -> {
-            return true;
-        });
-        future.run();
-        assertThat(future).isDone();
-        wc.setFuture(future);
-        wc.onUserFunctionSuccess();
-        wmm.success(wc);
-        assertThat(wc.isUserFunctionComplete()).isTrue();
-    }
-
     /**
      * This version of non sequential test just test the encoder directly, and is only half the story, as at the
      * encoding stage they don't know which offsets have never been seen, and assume simply working with continuous
@@ -242,8 +224,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         //
         byte[] smallestBytes = encoder.packSmallest();
         EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(smallestBytes);
-        ParallelConsumer.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
-        assertThat(decodedIncompletes.getRight()).containsExactlyInAnyOrderElementsOf(incompletes);
+        OffsetMapCodecManager.HighestOffsetAndIncompletes decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
+        assertThat(decodedIncompletes.getIncompleteOffsets()).containsExactlyInAnyOrderElementsOf(incompletes);
 
         if (nextExpectedOffset - lowWaterMark > BitsetEncoder.MAX_LENGTH_ENCODABLE)
             assertThat(encodingMap.keySet()).as("Gracefully ignores that Bitset can't be supported").doesNotContain(OffsetEncoding.BitSet);
@@ -256,8 +238,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             byte[] bitsetBytes = encodingMap.get(encodingToUse);
             if (bitsetBytes != null) {
                 EncodedOffsetPair bitsetUnwrap = EncodedOffsetPair.unwrap(encoder.packEncoding(new EncodedOffsetPair(encodingToUse, ByteBuffer.wrap(bitsetBytes))));
-                ParallelConsumer.Tuple<Long, Set<Long>> decodedBitsets = bitsetUnwrap.getDecodedIncompletes(lowWaterMark);
-                assertThat(decodedBitsets.getRight())
+                OffsetMapCodecManager.HighestOffsetAndIncompletes decodedBitsets = bitsetUnwrap.getDecodedIncompletes(lowWaterMark);
+                assertThat(decodedBitsets.getIncompleteOffsets())
                         .as(encodingToUse.toString())
                         .containsExactlyInAnyOrderElementsOf(incompletes);
             } else {

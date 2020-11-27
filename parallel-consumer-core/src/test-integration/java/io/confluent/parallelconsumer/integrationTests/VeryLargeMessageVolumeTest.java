@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -12,6 +13,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import me.tongfei.progressbar.ProgressBar;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -23,18 +25,17 @@ import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -69,7 +70,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
      */
     @Test
     public void shouldNotThrowBitsetTooLongException() {
-        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.UNORDERED);
+        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
     }
 
     @SneakyThrows
@@ -79,7 +80,8 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
-        int expectedMessageCount = 1_000_000;
+//        int expectedMessageCount = 2_000_000;
+        int expectedMessageCount = 100_0000;
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
@@ -115,9 +117,8 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 .consumer(newConsumer)
                 .producer(newProducer)
                 .commitMode(commitMode)
-                .numberOfThreads(100)
-                .maxNumberMessagesBeyondBaseCommitOffset(10_000)
-                .maxMessagesToQueue(10_000)
+//                .numberOfThreads(1)
+                .maxConcurrency(1000)
                 .build());
         pc.subscribe(of(inputName));
 
@@ -129,8 +130,23 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         assertThat(beginOffsets.get(tp)).isEqualTo(0L);
 
 
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
         pc.pollAndProduce(record -> {
-                    log.trace("Still going {}", record);
+//                    try {
+//                        Thread.sleep(5);
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
+//                    try {
+//                        // 1/5 chance of taking a long time
+//                        int chance = 10;
+//                        int dice = RandomUtils.nextInt(0, chance);
+//                        if (dice == 0) {
+//                            Thread.sleep(100);
+//                        } else {
+//                            Thread.sleep(RandomUtils.nextInt(3, 20));
+//                        }
+                    bar.stepBy(1);
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
@@ -140,17 +156,18 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 }
         );
 
+
         // wait for all pre-produced messages to be processed and produced
         Assertions.useRepresentation(new TrimListRepresentation());
         var failureMessage = StringUtils.msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(120))
-                    // .failFast(()->pc.isClosedOrFailed()) requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+            waitAtMost(ofSeconds(1200))
+//                    .failFast(() -> pc.isClosedOrFailed(), () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
-                        log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
+                        log.trace("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
                         SoftAssertions all = new SoftAssertions();
                         all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
                         all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
@@ -159,6 +176,8 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         } catch (ConditionTimeoutException e) {
             fail(failureMessage + "\n" + e.getMessage());
         }
+
+        bar.close();
 
         pc.closeDrainFirst();
 
@@ -169,6 +188,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
         assertThat(producedKeysAcknowledged).hasSameSizeAs(expectedKeys);
+
     }
 
 }

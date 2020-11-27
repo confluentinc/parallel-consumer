@@ -12,7 +12,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.TopicPartition;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.*;
@@ -34,12 +33,12 @@ import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
-import static org.awaitility.Awaitility.setDefaultConditionEvaluationListener;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
@@ -86,9 +85,15 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @EnumSource(CommitMode.class)
     @SneakyThrows
     public void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
-        setupParallelConsumerInstance(commitMode);
+        ParallelConsumerOptions options = getBaseOptions(commitMode).toBuilder()
+                .ordering(UNORDERED)
+                .build();
+        setupParallelConsumerInstance(options);
 
+        primeFirstRecord();
         sendSecondRecord(consumerSpy);
+
+        assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(UNORDERED);
 
         var locks = constructLatches(2);
 
@@ -106,7 +111,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(startBarrierLatch);
 
-        assertThat(parallelConsumer.getWm().getInFlightCount()).isEqualTo(2);
+        assertThat(parallelConsumer.getWm().getTotalWorkWaitingProcessing()).isEqualTo(2);
+
+        assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1
         releaseAndWait(locks, 1);
@@ -238,11 +245,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @EnumSource(CommitMode.class)
     @SneakyThrows
     public void offsetCommitsAreIsolatedPerPartition(CommitMode commitMode) {
-        setupParallelConsumerInstance(commitMode);
+        setupParallelConsumerInstance(getBaseOptions(commitMode).toBuilder()
+                .ordering(UNORDERED)
+                .build());
+        primeFirstRecord();
 
         sendSecondRecord(consumerSpy);
 
-        // send three messages - 0,1, to one partition and 3,4 to another partition petitions
+        // send messages - 0,1, to one partition and 3,4 to another partition petitions
         consumerSpy.addRecord(ktu.makeRecord(1, "0", "v2"));
         consumerSpy.addRecord(ktu.makeRecord(1, "0", "v3"));
 
@@ -710,10 +720,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             setupData();
 
             parallelConsumer.poll((ignore) -> {
-                //ignore
+                log.debug("rec: {}", ignore);
             });
 
-            waitForSomeLoopCycles(2);
+            //
+            parallelConsumer.requestCommitAsap();
+            waitForCommitExact(1);
 
             parallelConsumer.closeDrainFirst();
 

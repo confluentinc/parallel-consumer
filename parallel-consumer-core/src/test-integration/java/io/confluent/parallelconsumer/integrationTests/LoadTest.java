@@ -4,12 +4,12 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
-import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -18,11 +18,12 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.assertj.core.util.Lists;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.*;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -31,7 +32,8 @@ import java.util.stream.IntStream;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
-import static java.time.Duration.*;
+import static java.time.Duration.ofMillis;
+import static java.time.Duration.ofSeconds;
 import static me.tongfei.progressbar.ProgressBar.wrap;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,25 +82,21 @@ public class LoadTest extends DbTest {
                 .commitMode(TRANSACTIONAL_PRODUCER)
                 .producer(kcu.createNewProducer(tx))
                 .consumer(newConsumer)
+                .maxConcurrency(3)
                 .build();
         newConsumer.subscribe(Pattern.compile(topic));
         ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);
         AtomicInteger msgCount = new AtomicInteger(0);
 
-        ProgressBar pb = new ProgressBarBuilder()
-                .setInitialMax(total).showSpeed().setTaskName("Read async").setUnit("msg", 1)
-                .build();
+        ProgressBar pb = ProgressBarUtils.getNewMessagesBar(log, total);
 
         try (pb) {
             async.poll(r -> {
                 // message processing function
-                int simulatedCPUMessageProcessingDelay = nextInt(0, 5); // random delay between 0,5
-                try {
-                    Thread.sleep(simulatedCPUMessageProcessingDelay); // simulate json parsing overhead and network calls
-                } catch (Exception ignore) {
-                }
+                sleepABit();
+                // db isn interesting but not a great performance test, as the db quickly becomes the bottleneck, need to test against a db cluster that can scale better
                 // save to db
-                savePayload(r.key(), r.value());
+//                savePayload(r.key(), r.value());
                 //
                 msgCount.getAndIncrement();
             });
@@ -113,33 +111,51 @@ public class LoadTest extends DbTest {
         async.close();
     }
 
+    private void sleepABit() {
+        int simulatedCPUMessageProcessingDelay = nextInt(0, 5); // random delay between 0,5
+        try {
+            Thread.sleep(simulatedCPUMessageProcessingDelay); // simulate json parsing overhead and network calls
+        } catch (Exception ignore) {
+        }
+    }
+
     private void readRecordsPlainConsumer(int total, String topic) {
         // read
         log.info("Starting to read back");
         final List<ConsumerRecord<String, String>> allRecords = Lists.newArrayList();
+        AtomicInteger count = new AtomicInteger();
         time(() -> {
-            ProgressBar pb = new ProgressBarBuilder()
-                    .setInitialMax(total).showSpeed().setTaskName("Read").setUnit("msg", 1)
-                    .build();
+            ProgressBar pb = ProgressBarUtils.getNewMessagesBar(log, total);
 
-            try (pb) {
-                await().atMost(ofSeconds(60)).untilAsserted(() -> {
-                    ConsumerRecords<String, String> poll = kcu.consumer.poll(ofMillis(5000));
+            Executors.newCachedThreadPool().submit(() -> {
+                while (allRecords.size() < total) {
+                    ConsumerRecords<String, String> poll = kcu.consumer.poll(ofMillis(500));
+                    log.info("Polled batch of {} messages", poll.count());
+
+                    //save
                     Iterable<ConsumerRecord<String, String>> records = poll.records(topic);
                     records.forEach(x -> {
                         // log.trace(x.toString());
-                        savePayload(x.key(), x.value());
+                        sleepABit();
+                        // db isn interesting but not a great performance test, as the db quickly becomes the bottleneck, need to test against a db cluster that can scale better
+//                        savePayload(x.key(), x.value());
+                        pb.step();
                         // log.debug(testDataEbean.toString());
                     });
 
+                    //
                     ArrayList<ConsumerRecord<String, String>> c = Lists.newArrayList(records);
-                    log.info("Got {} messages", c.size());
                     allRecords.addAll(c);
-                    pb.stepTo(allRecords.size());
+                    count.getAndAdd(c.size());
+                }
+            });
 
-                    assertThat(allRecords).hasSize(total); // awaitility#untilAsserted
+            try (pb) {
+                await().atMost(ofSeconds(60)).untilAsserted(() -> {
+                    assertThat(count).hasValue(total);
                 });
             }
+
         });
 
         assertThat(allRecords).hasSize(total);

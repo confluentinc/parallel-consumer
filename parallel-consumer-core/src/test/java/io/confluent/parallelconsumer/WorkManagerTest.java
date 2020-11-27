@@ -73,6 +73,9 @@ public class WorkManagerTest {
         });
     }
 
+    /**
+     * Adds 3 units of work
+     */
     private void registerSomeWork() {
         String key = "key-0";
         int partition = 0;
@@ -143,13 +146,13 @@ public class WorkManagerTest {
         assertOffsets(works, of(1));
         wm.success(works.get(0));
 
-        Assertions.assertThat(successfulWork)
+        assertThat(successfulWork)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(of(0, 2, 1));
     }
 
     private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>> assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
-        return Assertions.assertThat(works)
+        return assertThat(works)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(expected);
     }
@@ -281,10 +284,6 @@ public class WorkManagerTest {
 
         int max = 10;
 
-//        //
-//        var works = wm.getWork(max);
-//        assertWork(works, of(0));
-
         var works = wm.maybeGetWork(4);
         assertOffsets(works, of(0, 1, 2, 6));
 
@@ -318,22 +317,6 @@ public class WorkManagerTest {
     public void maxInFlight() {
         //
         var opts = ParallelConsumerOptions.builder();
-        opts.maxNumberMessagesBeyondBaseCommitOffset(1);
-        setupWorkManager(opts.build());
-
-        //
-        registerSomeWork();
-
-        //
-        assertThat(wm.maybeGetWork()).hasSize(1);
-        assertThat(wm.maybeGetWork()).isEmpty();
-    }
-
-    @Test
-    public void maxConcurrency() {
-        //
-        var opts = ParallelConsumerOptions.builder();
-        opts.maxMessagesToQueue(1);
         setupWorkManager(opts.build());
 
         //
@@ -364,84 +347,6 @@ public class WorkManagerTest {
         public int size() {
             return work.size();
         }
-    }
-
-    @Test
-    public void maxConcurrencyVsInFlightAndNoLeaks() {
-        //
-        var opts = ParallelConsumerOptions.builder();
-        opts.ordering(UNORDERED);
-
-        opts.maxNumberMessagesBeyondBaseCommitOffset(3);
-        opts.maxMessagesToQueue(2);
-
-        setupWorkManager(opts.build());
-
-        //
-        registerSomeWork();
-        registerSomeWork();
-        registerSomeWork();
-
-        //
-        assertThat(wm.getWorkRemainingCount()).isEqualTo(9);
-
-        //
-        var work = new FluentQueue<WorkContainer<String, String>>();
-        Assertions.assertThat(work.add(wm.maybeGetWork())).hasSize(2);
-
-        //
-        assertThat(wm.maybeGetWork()).isEmpty();
-
-        // succeed
-        wm.success(work.poll());
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork())).hasSize(1);
-
-        //
-        wm.failed(work.poll());
-        // bump the clock - we're not testing delayed failure
-        advanceClockByDelay();
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork())).hasSize(1);
-
-        //
-        wm.success(work.poll());
-        wm.success(work.poll());
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork(100))).hasSize(2);
-
-        //
-        for (var ignore : work) {
-            wm.success(work.poll());
-        }
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
-
-        //
-        assertThat(wm.getInFlightCount()).isEqualTo(2);
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
-        assertThat(wm.getMappedShardWorkRemainingCount()).isEqualTo(4);
-        Assertions.assertThat(successfulWork).hasSize(5);
-
-        //
-        wm.success(work.poll());
-        wm.success(work.poll());
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
-        wm.success(work.poll());
-        wm.success(work.poll());
-
-        //
-        assertThat(work.size()).isEqualTo(0);
-        Assertions.assertThat(successfulWork).hasSize(9);
-        assertThat(wm.getInFlightCount()).isEqualTo(0);
-        assertThat(wm.getMappedShardWorkRemainingCount()).isEqualTo(0);
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(9);
     }
 
     @Test
@@ -554,8 +459,6 @@ public class WorkManagerTest {
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
     public void highVolumeKeyOrder(int quantity) {
-//    public void highVolumeKeyOrder() {
-//        int quantity = 20000;
         int uniqueKeys = 100;
 
         ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(KEY).build();
@@ -580,7 +483,7 @@ public class WorkManagerTest {
         List<WorkContainer<String, String>> work = wm.maybeGetWork();
 
         //
-        Assertions.assertThat(work).hasSameSizeAs(records.keySet());
+        assertThat(work).hasSameSizeAs(records.keySet());
     }
 
     @Test
@@ -609,8 +512,6 @@ public class WorkManagerTest {
     public void workQueuesEmptyWhenAllWorkComplete() {
         ParallelConsumerOptions build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
-                .maxMessagesToQueue(10)
-                .maxNumberMessagesBeyondBaseCommitOffset(10)
                 .build();
         setupWorkManager(build);
         registerSomeWork();
@@ -626,12 +527,13 @@ public class WorkManagerTest {
         }
 
         //
-        assertThat(wm.getMappedShardWorkRemainingCount()).isZero();
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(3);
+        assertThat(wm.getWorkQueuedInShardsCount()).isZero();
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(3);
 
         // drain commit queue
         var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
         assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
-        assertThat(wm.getPartitionWorkRemainingCount()).isEqualTo(0);
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(0);
     }
+
 }
