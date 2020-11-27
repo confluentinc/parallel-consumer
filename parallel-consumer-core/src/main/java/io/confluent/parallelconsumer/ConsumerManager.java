@@ -35,7 +35,8 @@ public class ConsumerManager<K, V> {
             log.debug("Poll completed normally and returned {}...", records.count());
         } catch (WakeupException w) {
             correctPollWakeups++;
-            log.debug("Awoken from broker poll", w);
+            log.debug("Awoken from broker poll");
+            log.trace("Wakeup caller is:", w);
             records = new ConsumerRecords<>(UniMaps.of());
         } finally {
             pollingBroker.set(false);
