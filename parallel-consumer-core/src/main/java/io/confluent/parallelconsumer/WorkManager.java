@@ -61,15 +61,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final LinkedBlockingQueue<ConsumerRecords<K, V>> workInbox = new LinkedBlockingQueue<>();
 
     /**
-     * Used to make sure when we're garbage collecting empty shards for KEY ordering, that we don't cause issues for
-     * contentious keys.
-     *
-     * @see #registerWork
-     * @see #success
-     */
-//    private final ReentrantReadWriteLock shardsLock = new ReentrantReadWriteLock(true);
-
-    /**
      * Map of partitions to Map of offsets to WorkUnits
      * <p>
      * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
@@ -109,7 +100,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     // visible for testing
     /**
-     * Offsets, beyond the highest committable offset, which haven't been totally completed
+     * Offsets, which have been seen, beyond the highest committable offset, which haven't been totally completed
      */
     Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
 
@@ -257,40 +248,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 raisePartitionHighWaterMark(offset, tp);
 
                 processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
-
-                /**
-                 * This method gets called by {@link BrokerPollSystem}, so needs to be thread safe, and as
-                 * {@link #processingShards} can be edited on {@link #success}, need to synchronise write access to
-                 * computing shard keys
-                 * @see #success
-                 */
-//                ReentrantReadWriteLock.ReadLock readLock = shardsLock.readLock();
-//                readLock.lock();
-//                try {
-//                    processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
-//                if (!processingShards.containsKey(shardKey)) { // optimistic
-////                        readLock.unlock();
-//                    log.debug("Getting write lock");
-//                    ReentrantReadWriteLock.WriteLock writeLock = shardsLock.writeLock();
-//                    writeLock.lock();
-//                    try {
-//                        if (!processingShards.containsKey(shardKey)) {
-//                            processingShards.put(shardKey, new ConcurrentSkipListMap<>());
-//                        }
-//                    } finally {
-//                        writeLock.unlock();
-//                    }
-//                }
-////                    else {
-////                    log.warn("shard key already exists {}", shardKey);
-////                    }
-//                ReentrantReadWriteLock.ReadLock readLock = shardsLock.readLock();
-//                readLock.lock();
-//                try {
-//                    processingShards.get(shardKey).put(offset, wc);
-//                } finally {
-//                    readLock.unlock();
-//                }
 
                 partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
                         .put(offset, wc);
@@ -501,7 +458,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as
-     * work is submitted and returned.
+     *  work is submitted and returned.
+     * todo: refactor into smaller methods?
      */
     @SneakyThrows
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
@@ -523,8 +481,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
                 WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
-                boolean complete = container.isUserFunctionComplete();
                 long offset = container.getCr().offset();
+                boolean complete = container.isUserFunctionComplete();
                 if (complete) {
                     if (container.getUserFunctionSucceeded().get() && !iteratedBeyondLowWaterMarkBeingLowestCommittableOffset) {
                         log.trace("Found offset candidate ({}) to add to offset commit map", container);

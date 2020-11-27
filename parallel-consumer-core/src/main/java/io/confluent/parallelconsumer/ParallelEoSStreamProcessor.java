@@ -435,7 +435,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerPool.shutdownNow();
         if (!unfinished.isEmpty()) {
-            log.warn("Threads not done: {}", unfinished);
+            log.warn("Threads not done count: {}", unfinished.size());
         }
 
         log.trace("Awaiting worker pool termination...");
@@ -446,7 +446,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(DrainingCloseable.DEFAULT_TIMEOUT), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("workerPool await timeout!");
+                    log.warn("Thread execution pool termination await timeout! Were any processing jobs dead locked or otherwise stuck?");
                     boolean shutdown = workerPool.isShutdown();
                     boolean terminated = workerPool.isTerminated();
                 }
