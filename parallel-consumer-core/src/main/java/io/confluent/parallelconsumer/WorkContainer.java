@@ -39,9 +39,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private int numberOfAttempts;
     private Optional<Instant> failedAt = Optional.empty();
     private boolean inFlight = false;
+
     @Getter
     private Optional<Boolean> userFunctionSucceeded = Optional.empty();
 
+    /**
+     * Wait this long before trying again
+     */
     @Getter
     private static Duration retryDelay = Duration.ofSeconds(10);
 
@@ -133,6 +137,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     @Override
     public String toString() {
 //        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ":" + cr.value() + ")";
-        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() +")";
+        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ")";
     }
 }

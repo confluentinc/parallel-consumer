@@ -103,6 +103,15 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
 
+    public boolean isClosedOrFailed() {
+        boolean closed = state == State.closed;
+        boolean doneOrCancelled = false;
+        if (this.controlThreadFuture.isPresent()) {
+            doneOrCancelled = controlThreadFuture.get().isDone() || controlThreadFuture.get().isCancelled();
+        }
+        return closed || doneOrCancelled;
+    }
+
     /**
      * The run state of the controller.
      *
@@ -693,10 +702,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             commitOffsetsThatAreReady();
             lastCommit = Instant.now();
         } else {
-            if (wm.hasComittableOffsets()) {
-                log.debug("Have offsets to commit, but not enough time elapsed ({}), waiting for at least {}...", elapsedSinceLast, timeBetweenCommits);
-            } else {
-                log.trace("Could commit now, but no offsets commitable");
+            if (log.isDebugEnabled()) {
+                if (wm.hasCommittableOffsets()) {
+                    log.debug("Have offsets to commit, but not enough time elapsed ({}), waiting for at least {}...", elapsedSinceLast, timeBetweenCommits);
+                } else {
+                    log.trace("Could commit now, but no offsets commitable");
+                }
             }
         }
     }
