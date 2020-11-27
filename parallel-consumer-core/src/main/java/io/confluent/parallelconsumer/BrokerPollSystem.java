@@ -162,6 +162,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private ConsumerRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
+        log.debug("Subscriptions are paused: {}", paused);
 
         Duration thisLongPollTimeout = (state == ParallelEoSStreamProcessor.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 

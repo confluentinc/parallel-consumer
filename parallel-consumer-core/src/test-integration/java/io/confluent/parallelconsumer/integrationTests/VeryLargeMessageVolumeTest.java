@@ -28,17 +28,18 @@ import org.junit.jupiter.api.Test;
 
 import java.util.*;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofSeconds;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Just a very simple POC-test do demonstrate bitset-too-long exception while running with
- * very high options.
+ * Just a very simple POC-test do demonstrate bitset-too-long exception while running with very high options.
  * <p>
  * This fairly consistently occurs in output-log while running and then the consumer shuts down:
  * <pre>
@@ -59,8 +60,14 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
     public AtomicInteger producedCount = new AtomicInteger(0);
 
 
+    /**
+     * See #35, $37
+     * <p>
+     * https://github.com/confluentinc/parallel-consumer/issues/35
+     * <p>
+     * https://github.com/confluentinc/parallel-consumer/issues/35
+     */
     @Test
-    @Disabled("See #35, $37")
     public void shouldNotThrowBitsetTooLongException() {
         runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.UNORDERED);
     }
@@ -138,14 +145,17 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         var failureMessage = StringUtils.msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(200))
-                    .alias(failureMessage).untilAsserted(() -> {
-                log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
-                SoftAssertions all = new SoftAssertions();
-                all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
-                all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
-                all.assertAll();
-            });
+            waitAtMost(ofSeconds(120))
+                    // .failFast(()->pc.isClosedOrFailed()) requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                    .alias(failureMessage)
+                    .pollInterval(1, SECONDS)
+                    .untilAsserted(() -> {
+                        log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
+                        SoftAssertions all = new SoftAssertions();
+                        all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
+                        all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
+                        all.assertAll();
+                    });
         } catch (ConditionTimeoutException e) {
             fail(failureMessage + "\n" + e.getMessage());
         }

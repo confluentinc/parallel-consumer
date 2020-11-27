@@ -10,6 +10,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 
@@ -46,6 +47,11 @@ public class OffsetMapCodecManager<K, V> {
     private final WorkManager<K, V> wm;
 
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+
+    /**
+     * Forces the use of a specific codec, instead of choosing the most efficient one. Useful for testing.
+     */
+    static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
     public OffsetMapCodecManager(final WorkManager<K, V> wm, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.wm = wm;
@@ -111,9 +117,15 @@ public class OffsetMapCodecManager<K, V> {
     byte[] encodeOffsetsCompressed(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
         Long nextExpectedOffset = wm.partitionOffsetHighWaterMarks.get(tp) + 1;
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, nextExpectedOffset, incompleteOffsets).invoke();
-        byte[] result = simultaneousEncoder.packSmallest();
-
-        return result;
+        if (forcedCodec.isPresent()) {
+            OffsetEncoding forcedOffsetEncoding = forcedCodec.get();
+            log.warn("Forcing use of {}", forcedOffsetEncoding);
+            Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
+            byte[] bytes = encodingMap.get(forcedOffsetEncoding);
+            return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
+        } else {
+            return simultaneousEncoder.packSmallest();
+        }
     }
 
     /**

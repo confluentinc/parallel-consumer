@@ -25,12 +25,12 @@ class ByteBufferEncoder extends OffsetEncoder {
     }
 
     @Override
-    public void containsIndex(final int rangeIndex) {
+    public void encodeIncompleteOffset(final int rangeIndex) {
         this.bytesBuffer.put((byte) 0);
     }
 
     @Override
-    public void doesNotContainIndex(final int rangeIndex) {
+    public void encodeCompletedOffset(final int rangeIndex) {
         this.bytesBuffer.put((byte) 1);
     }
 

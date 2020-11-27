@@ -29,10 +29,11 @@ import static io.confluent.parallelconsumer.OffsetEncoding.*;
 import static io.confluent.csid.utils.Range.range;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  * TODO: use compressed avro instead for a more reliable long term schema system? or string encoding with a version
- *  prefix fine?
+ * prefix fine?
  */
 @Slf4j
 class WorkManagerOffsetMapCodecManagerTest {
@@ -367,34 +368,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void testAllInputsEachEncoding() {
         assertThat(true).isFalse();
-    }
-
-    @Test
-    void runLengthDeserialise() {
-        var sb = ByteBuffer.allocate(3);
-        sb.put((byte) 0); // magic byte place holder, can ignore
-        sb.putShort((short) 1);
-        byte[] array = new byte[2];
-        sb.rewind();
-        sb.get(array);
-        ByteBuffer wrap = ByteBuffer.wrap(array);
-        byte b = wrap.get(); // simulate reading magic byte
-        ByteBuffer slice = wrap.slice();
-        List<Integer> integers = OffsetRunLength.runLengthDeserialise(slice);
-        assertThat(integers).isEmpty();
-    }
-
-    @Test
-    void largeIncompleteOffsetValues() {
-        var incompletes = new HashSet<Long>();
-        long lowWaterMark = 123L;
-        incompletes.addAll(UniSets.of(lowWaterMark, 2345L, 8765L));
-        OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, 10_000L, incompletes);
-        encoder.invoke();
-        byte[] bytes = encoder.packSmallest();
-        EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(bytes);
-        ParallelConsumer.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
-        assertThat(decodedIncompletes.getRight()).containsExactlyInAnyOrderElementsOf(incompletes);
     }
 
 }

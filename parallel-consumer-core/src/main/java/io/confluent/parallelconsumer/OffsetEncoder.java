@@ -17,9 +17,9 @@ abstract class OffsetEncoder {
 
     protected abstract OffsetEncoding getEncodingTypeCompressed();
 
-    abstract void containsIndex(final int rangeIndex);
+    abstract void encodeIncompleteOffset(final int rangeIndex);
 
-    abstract void doesNotContainIndex(final int rangeIndex);
+    abstract void encodeCompletedOffset(final int rangeIndex);
 
     abstract byte[] serialise();
 

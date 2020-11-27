@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import lombok.Getter;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
@@ -17,6 +16,8 @@ import static io.confluent.csid.utils.Range.range;
  * Encode with multiple strategies at the same time.
  * <p>
  * Have results in an accessible structure, easily selecting the highest compression.
+ *
+ * @see #invoke()
  */
 @Slf4j
 class OffsetSimultaneousEncoder {
@@ -43,6 +44,11 @@ class OffsetSimultaneousEncoder {
     private final long nextExpectedOffset;
 
     /**
+     * The difference between the base offset (the offset to be committed) and the highest seen offset
+     */
+    private final int length;
+
+    /**
      * Map of different encoding types for the same offset data, used for retrieving the data for the encoding type
      */
     @Getter
@@ -56,10 +62,50 @@ class OffsetSimultaneousEncoder {
     @Getter
     TreeSet<EncodedOffsetPair> sortedEncodings = new TreeSet<>();
 
+    /**
+     * Force the encoder to also add the compressed versions. Useful for testing.
+     * <p>
+     * Visible for testing.
+     */
+    boolean compressionForced = false;
+
+    /**
+     * The encoders to run
+     */
+    private final Set<OffsetEncoder> encoders = new HashSet<>();
+
     public OffsetSimultaneousEncoder(long lowWaterMark, Long nextExpectedOffset, Set<Long> incompleteOffsets) {
         this.lowWaterMark = lowWaterMark;
         this.nextExpectedOffset = nextExpectedOffset;
         this.incompleteOffsets = incompleteOffsets;
+
+        length = (int) (this.nextExpectedOffset - this.lowWaterMark);
+
+        initEncoders();
+    }
+
+    private void initEncoders() {
+        if (length > LARGE_INPUT_MAP_SIZE_THRESHOLD) {
+            log.debug("~Large input map size: {} (start: {} end: {})", length, lowWaterMark, nextExpectedOffset);
+        }
+
+        try {
+            BitsetEncoder bitsetEncoder = new BitsetEncoder(length, this);
+            encoders.add(bitsetEncoder);
+        } catch (BitSetEncodingNotSupportedException a) {
+            log.warn("Cannot use {} encoder", BitsetEncoder.class.getSimpleName(), a);
+        }
+
+        encoders.add(new RunLengthEncoder(this));
+    }
+
+    /**
+     * Not enabled as byte buffer seems to always be beaten by BitSet, which makes sense
+     * <p>
+     * Visible for testing
+     */
+    void addByteBufferEncoder() {
+        encoders.add(new ByteBufferEncoder(length, this));
     }
 
     /**
@@ -84,38 +130,39 @@ class OffsetSimultaneousEncoder {
      * TODO: optimisation - could double the run-length range from Short.MAX_VALUE (~33,000) to Short.MAX_VALUE * 2
      *  (~66,000) by using unsigned shorts instead (higest representable relative offset is Short.MAX_VALUE because each
      *  runlength entry is a Short)
+     * <p>
+     *  TODO VERY large offests ranges are slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
      */
-    @SneakyThrows
     public OffsetSimultaneousEncoder invoke() {
-        log.trace("Starting encode of incompletes of {}, base offset is: {}", this.incompleteOffsets, lowWaterMark);
-
-        final int length = (int) (this.nextExpectedOffset - this.lowWaterMark);
-
-        if (length > LARGE_INPUT_MAP_SIZE_THRESHOLD) {
-            log.debug("~Large input map size: {}", length);
-        }
-
-        final Set<OffsetEncoder> encoders = new HashSet<>();
-        encoders.add(new BitsetEncoder(length, this));
-        encoders.add(new RunLengthEncoder(this));
-        // TODO: Remove? byte buffer seems to always be beaten by BitSet, which makes sense
-        // encoders.add(new ByteBufferEncoder(length));
+        log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, nextExpectedOffset);
+        log.trace("Incompletes are: {}", this.incompleteOffsets);
 
         //
         log.debug("Encode loop offset start,end: [{},{}] length: {}", this.lowWaterMark, this.nextExpectedOffset, length);
+        /*
+         * todo refactor this loop into the encoders (or sequential vs non sequential encoders) as RunLength doesn't need
+         *  to look at every offset in the range, only the ones that change from 0 to 1. BitSet however needs to iterate
+         *  the entire range. So when BitSet can't be used, the encoding would be potentially a lot faster as RunLength
+         *  didn't need the whole loop.
+         */
         range(length).forEach(rangeIndex -> {
             final long offset = this.lowWaterMark + rangeIndex;
+            List<OffsetEncoder> removeToBeRemoved = new ArrayList<>();
             if (this.incompleteOffsets.contains(offset)) {
                 log.trace("Found an incomplete offset {}", offset);
-                encoders.forEach(x -> x.containsIndex(rangeIndex));
+                encoders.forEach(x -> {
+                    x.encodeIncompleteOffset(rangeIndex);
+                });
             } else {
-                encoders.forEach(x -> x.doesNotContainIndex(rangeIndex));
+                encoders.forEach(x -> {
+                    x.encodeCompletedOffset(rangeIndex);
+                });
             }
+            encoders.removeAll(removeToBeRemoved);
         });
 
         registerEncodings(encoders);
 
-        // log.trace("Input: {}", inputString);
         log.debug("In order: {}", this.sortedEncodings);
 
         return this;
@@ -126,8 +173,8 @@ class OffsetSimultaneousEncoder {
 
         // compressed versions
         // sizes over LARGE_INPUT_MAP_SIZE_THRESHOLD bytes seem to benefit from compression
-        final boolean noEncodingsAreSmallEnough = encoders.stream().noneMatch(OffsetEncoder::quiteSmall);
-        if (noEncodingsAreSmallEnough) {
+        boolean noEncodingsAreSmallEnough = encoders.stream().noneMatch(OffsetEncoder::quiteSmall);
+        if (noEncodingsAreSmallEnough || compressionForced) {
             encoders.forEach(OffsetEncoder::registerCompressed);
         }
     }
