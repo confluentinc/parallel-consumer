@@ -60,8 +60,9 @@ public class ParallelEoSStreamProcessorTestBase {
      * @see ParallelEoSStreamProcessor#workMailBox
      * @see ParallelEoSStreamProcessor#processWorkCompleteMailBox
      */
-    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
+    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100; //TODO
 
+    protected ConsumerManager<String, String> consumerManager;
     protected LongPollingMockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
 
@@ -90,6 +91,7 @@ public class ParallelEoSStreamProcessorTestBase {
      * Time to wait to verify some assertion types
      */
     long verificationWaitDelay;
+    protected TopicPartition topicPartition = new TopicPartition(INPUT_TOPIC, 0);
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
@@ -126,8 +128,11 @@ public class ParallelEoSStreamProcessorTestBase {
         LongPollingMockConsumer<String, String> consumer = new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST);
         MockProducer<String, String> producer = new MockProducer<>(true, null, null); // TODO do async testing
 
+        this.consumerManager = new ConsumerManager<>(consumer);
+
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
+
         myRecordProcessingAction = mock(ParallelEoSStreamProcessorTest.MyAction.class);
 
         when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
@@ -254,8 +259,8 @@ public class ParallelEoSStreamProcessorTestBase {
     protected void waitForCommitExact(int partition, int offset) {
         log.debug("Waiting for commit offset {} on partition {}", offset, partition);
         var expectedOffset = new OffsetAndMetadata(offset, "");
-        TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
-        var expectedOffsetMap = UniMaps.of(partitionNumber, expectedOffset);
+        TopicPartition specificTP = new TopicPartition(INPUT_TOPIC, partition);
+        var expectedOffsetMap = UniMaps.of(specificTP, expectedOffset);
         verify(producerSpy, timeout(defaultTimeoutMs).times(1)).sendOffsetsToTransaction(argThat(
                 (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
                 any(ConsumerGroupMetadata.class));
@@ -296,7 +301,7 @@ public class ParallelEoSStreamProcessorTestBase {
     /**
      * Flattens the offsets of all partitions into a single sequential list
      */
-    private List<Integer> extractAllPartitionsOffsetsSequentially() {
+    protected List<Integer> extractAllPartitionsOffsetsSequentially() {
         var result = new ArrayList<Integer>();
         // copy the list for safe concurrent access
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
@@ -305,6 +310,19 @@ public class ParallelEoSStreamProcessorTestBase {
                         {
                             Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values());
                             return values.stream().map(meta -> (int) meta.offset());
+                        }
+                ).collect(Collectors.toList());
+    }
+
+    protected List<OffsetAndMetadata> extractAllPartitionsOffsetsAndMetadataSequentially() {
+        var result = new ArrayList<Integer>();
+        // copy the list for safe concurrent access
+        List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
+        return history.stream()
+                .flatMap(commits ->
+                        {
+                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values());
+                            return values.stream();
                         }
                 ).collect(Collectors.toList());
     }
@@ -350,8 +368,13 @@ public class ParallelEoSStreamProcessorTestBase {
 
     @SneakyThrows
     protected void awaitLatch(CountDownLatch latch) {
+        awaitLatch(latch, defaultTimeoutSeconds);
+    }
+
+    @SneakyThrows
+    protected void awaitLatch(final CountDownLatch latch, final int seconds) {
         log.trace("Waiting on latch with timeout {}", defaultTimeout);
-        boolean latchReachedZero = latch.await(defaultTimeoutSeconds, SECONDS);
+        boolean latchReachedZero = latch.await(seconds, SECONDS);
         if (latchReachedZero) {
             log.trace("Latch released");
         } else {

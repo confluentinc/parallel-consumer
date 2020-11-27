@@ -5,6 +5,8 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.ProgressBarUtils;
+import io.confluent.csid.utils.ProgressTracker;
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
@@ -102,11 +104,14 @@ public class LoadTest extends DbTest {
             });
 
             // keep checking how many message's we've processed
-            await().atMost(ofSeconds(60)).until(() -> {
-                // log.debug("msg count: {}", msgCount.get());
-                pb.stepTo(msgCount.get());
-                return msgCount.get() >= total;
-            });
+            ProgressTracker progress = new ProgressTracker(msgCount);
+            await().atMost(ofSeconds(60))
+                    .failFast(progress::hasProgressNotBeenMade, progress::constructError)
+                    .until(() -> {
+                        // log.debug("msg count: {}", msgCount.get());
+                        pb.stepTo(msgCount.get());
+                        return msgCount.get() >= total;
+                    });
         }
         async.close();
     }

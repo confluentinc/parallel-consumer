@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.StringUtils;
 import io.confluent.csid.utils.WallClock;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +26,14 @@ import static io.confluent.csid.utils.KafkaUtils.toTP;
 @EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
-    private final String DEFAULT_TYPE = "DEFAULT";
+    private static final String DEFAULT_TYPE = "DEFAULT";
+
+    /**
+     * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
+     * in the system of in flight.
+     */
+    @Getter
+    private final int epoch;
 
     /**
      * Simple way to differentiate treatment based on type
@@ -36,11 +44,15 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     @Getter
     private final ConsumerRecord<K, V> cr;
-    private int numberOfAttempts;
-    private Optional<Instant> failedAt = Optional.empty();
-    private boolean inFlight = false;
 
     @Getter
+    private int numberOfFailedAttempts;
+
+    private Optional<Instant> failedAt = Optional.empty();
+
+    private boolean inFlight = false;
+
+    //    @Getter
     private Optional<Boolean> userFunctionSucceeded = Optional.empty();
 
     /**
@@ -54,12 +66,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private Future<List<Object>> future;
     private long timeTakenAsWorkMs;
 
-    public WorkContainer(ConsumerRecord<K, V> cr) {
-        this.cr = cr;
-        workType = DEFAULT_TYPE;
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr) {
+        this(epoch, cr, DEFAULT_TYPE);
     }
 
-    public WorkContainer(ConsumerRecord<K, V> cr, String workType) {
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, String workType) {
+        this.epoch = epoch;
         this.cr = cr;
         Objects.requireNonNull(workType);
         this.workType = workType;
@@ -67,7 +79,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     public void fail(WallClock clock) {
         log.trace("Failing {}", this);
-        numberOfAttempts++;
+        numberOfFailedAttempts++;
         failedAt = Optional.of(clock.getNow());
         inFlight = false;
     }
@@ -97,12 +109,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
             return clock.getNow();
     }
 
+    /**
+     * @return compares by offset
+     */
     @Override
-    public int compareTo(WorkContainer o) {
+    public int compareTo(WorkContainer workToCompare) {
         long myOffset = this.cr.offset();
-        long theirOffset = o.cr.offset();
-        int compare = Long.compare(myOffset, theirOffset);
-        return compare;
+        long theirOffset = workToCompare.cr.offset();
+        return Long.compare(myOffset, theirOffset);
     }
 
     public boolean isNotInFlight() {
@@ -132,18 +146,21 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public boolean isUserFunctionComplete() {
-        return this.getUserFunctionSucceeded().isPresent();
+        return userFunctionSucceeded.isPresent();
     }
 
     public boolean isUserFunctionSucceeded() {
-        Optional<Boolean> userFunctionSucceeded = this.getUserFunctionSucceeded();
+        Optional<Boolean> userFunctionSucceeded = this.userFunctionSucceeded;
         return userFunctionSucceeded.orElse(false);
     }
 
     @Override
     public String toString() {
-//        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ":" + cr.value() + ")";
-        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ")";
+        return StringUtils.msg("WorkContainer({}:{}:{}:{})", getTopicPartition(), cr.offset(), cr.key(), isUserFunctionSucceeded());
+    }
+
+    public boolean hasPreviouslyFailed() {
+        return numberOfFailedAttempts > 0;
     }
 
     public Duration getTimeInFlight() {

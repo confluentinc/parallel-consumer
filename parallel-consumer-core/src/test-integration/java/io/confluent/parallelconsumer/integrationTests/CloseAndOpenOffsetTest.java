@@ -4,11 +4,11 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
+import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
-import io.confluent.csid.utils.Range;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;

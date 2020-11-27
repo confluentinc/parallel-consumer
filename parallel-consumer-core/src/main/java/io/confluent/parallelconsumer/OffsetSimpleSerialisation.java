@@ -84,7 +84,7 @@ public class OffsetSimpleSerialisation {
     static String base64(final byte[] src) {
         final byte[] encode = Base64.getEncoder().encode(src);
         final String out = new String(encode, OffsetMapCodecManager.CHARSET_TO_USE);
-        log.trace("Final b64 size: {}", out.length());
+        log.trace("Final base 64 wrapped encoded string length: {}", out.length());
         return out;
     }
 

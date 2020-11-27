@@ -12,7 +12,6 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
-import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.MockProducer;
@@ -78,7 +77,7 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
         //
         allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
 //        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
-        parallelConsumer.waitForProcessedNotCommitted(defaultTimeout.multipliedBy(10));
+        parallelConsumer.waitForProcessedNotCommitted(defaultTimeout);
         parallelConsumer.close();
 
         // assert quantity of produced messages

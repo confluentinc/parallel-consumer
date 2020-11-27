@@ -112,6 +112,7 @@ public class ParallelConsumerOptions<K, V> {
      * https://github.com/confluentinc/parallel-consumer/issues/21 Dynamic concurrency control with flow control or tcp
      * congestion control theory #21.
      */
+    // TODO maxConcurrency
     @Builder.Default
     private final int maxConcurrency = 16;
 

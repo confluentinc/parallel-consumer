@@ -42,13 +42,13 @@ public class OffsetMapCodecManager<K, V> {
      * @see <a href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
      * @see "kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize"
      */
-    public static final int DefaultMaxMetadataSize = 4096;
+    static int DefaultMaxMetadataSize = 4096;
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
     private final WorkManager<K, V> wm;
 
-    org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+    ConsumerManager<K, V> consumer;
 
     @Value
     static class NextOffsetAndIncompletes {
@@ -65,7 +65,7 @@ public class OffsetMapCodecManager<K, V> {
      */
     static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
-    public OffsetMapCodecManager(final WorkManager<K, V> wm, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+    public OffsetMapCodecManager(final WorkManager<K, V> wm, final ConsumerManager<K, V> consumer) {
         this.wm = wm;
         this.consumer = consumer;
     }
@@ -109,45 +109,59 @@ public class OffsetMapCodecManager<K, V> {
 
     void loadOffsetMetadataPayload(long startOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
         NextOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
-        wm.raisePartitionHighWaterMark(incompletes.getNextExpectedOffset(), tp);
+        wm.raisePartitionHighestSeen(incompletes.getNextExpectedOffset(), tp);
         Set<Long> incompleteOffsets = incompletes.getIncompleteOffsets();
-        wm.partitionIncompleteOffsets.put(tp, incompleteOffsets);
+        wm.partitionOffsetsIncompleteMetadataPayloads.put(tp, incompleteOffsets);
         log.warn("Loaded incomplete offsets from offset metadata {}", incompleteOffsets);
     }
 
-    String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
-        String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, tp, incompleteOffsets);
+//    String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
+//        String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, tp, incompleteOffsets);
+//        return offsetMap;
+//    }
+
+    String makeOffsetMetadataPayload(OffsetSimultaneousEncoder simultaneousEncoder) throws EncodingNotSupportedException {
+        byte[] smallest = packSmallest(simultaneousEncoder);
+        String offsetMap = OffsetSimpleSerialisation.base64(smallest);
         return offsetMap;
     }
 
-    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
-        byte[] compressedEncoding = encodeOffsetsCompressed(finalOffsetForPartition, tp, incompleteOffsets);
-        String b64 = OffsetSimpleSerialisation.base64(compressedEncoding);
-        return b64;
-    }
+//    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
+//        byte[] compressedEncoding = encodeOffsetsCompressed(finalOffsetForPartition, tp, incompleteOffsets);
+//        String b64 = OffsetSimpleSerialisation.base64(compressedEncoding);
+//        return b64;
+//    }
 
-    /**
-     * Print out all the offset status into a String, and use X to effectively do run length encoding compression on the
-     * string.
-     * <p>
-     * Include the magic byte in the returned array.
-     * <p>
-     * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
-     */
-    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
-        Long nextExpectedOffset = wm.partitionOffsetHighWaterMarks.get(tp) + 1;
-        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, nextExpectedOffset, incompleteOffsets).invoke();
+//    /**
+//     * Print out all the offset status into a String, and use X to effectively do run length encoding compression on the
+//     * string.
+//     * <p>
+//     * Include the magic byte in the returned array.
+//     * <p>
+//     * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
+//     */
+//    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
+//        Long currentHighestCompleted = wm.partitionOffsetHighestSeen.get(tp) + 1; // this is a problem - often the highest succeeded is very different from highest seet
+//        // todo use new encoder for accuracy
+//        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, currentHighestCompleted)
+//                .runOverIncompletes(incompleteOffsets, finalOffsetForPartition, currentHighestCompleted);
+//        return packSmallest(simultaneousEncoder);
+//    }
+
+    private byte[] packSmallest(final OffsetSimultaneousEncoder simultaneousEncoder) throws EncodingNotSupportedException {
+        byte[] result;
         if (forcedCodec.isPresent()) {
             OffsetEncoding forcedOffsetEncoding = forcedCodec.get();
-            log.warn("Forcing use of {}, for testing", forcedOffsetEncoding);
+            log.debug("Forcing use of {}, for testing", forcedOffsetEncoding);
             Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
             byte[] bytes = encodingMap.get(forcedOffsetEncoding);
             if (bytes == null)
                 throw new EncodingNotSupportedException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
-            return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
+            result = simultaneousEncoder.packEncoding(new EncodedOffsetData(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
         } else {
-            return simultaneousEncoder.packSmallest();
+            result = simultaneousEncoder.packSmallest();
         }
+        return result;
     }
 
     /**
@@ -162,21 +176,21 @@ public class OffsetMapCodecManager<K, V> {
             return NextOffsetAndIncompletes.of(finalOffsetForPartition, UniSets.of());
         }
 
-        EncodedOffsetPair result = EncodedOffsetPair.unwrap(decodedBytes);
+        EncodedOffsetData result = EncodedOffsetData.unwrap(decodedBytes);
 
         ParallelConsumer.Tuple<Long, Set<Long>> incompletesTuple = result.getDecodedIncompletes(finalOffsetForPartition);
 
         Set<Long> incompletes = incompletesTuple.getRight();
-        long highWater = incompletesTuple.getLeft();
+        long nextExpectedOffset = incompletesTuple.getLeft();
 
-        return NextOffsetAndIncompletes.of(highWater, incompletes);
+        return NextOffsetAndIncompletes.of(nextExpectedOffset, incompletes);
     }
 
     String incompletesToBitmapString(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
         StringBuilder runLengthString = new StringBuilder();
         Long lowWaterMark = finalOffsetForPartition;
-        Long highWaterMark = wm.partitionOffsetHighWaterMarks.get(tp);
-        long end = highWaterMark - lowWaterMark;
+        Long highestSeen = wm.partitionOffsetHighestSeen.get(tp);  // this is a problem - often the highest succeeded is very different from highest seet
+        long end = highestSeen - lowWaterMark;
         for (final var relativeOffset : range(end)) {
             long offset = lowWaterMark + relativeOffset;
             if (incompleteOffsets.contains(offset)) {

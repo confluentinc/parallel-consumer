@@ -25,7 +25,7 @@ import static io.confluent.parallelconsumer.OffsetSimpleSerialisation.deserialis
  * @see #unwrap
  */
 @Slf4j
-final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
+final class EncodedOffsetData implements Comparable<EncodedOffsetData> {
 
     @Getter
     OffsetEncoding encoding;
@@ -35,13 +35,13 @@ final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
     /**
      * @see #unwrap
      */
-    EncodedOffsetPair(OffsetEncoding encoding, ByteBuffer data) {
+    EncodedOffsetData(OffsetEncoding encoding, ByteBuffer data) {
         this.encoding = encoding;
         this.data = data;
     }
 
     @Override
-    public int compareTo(EncodedOffsetPair o) {
+    public int compareTo(EncodedOffsetData o) {
         return Integer.compare(data.capacity(), o.getData().capacity());
     }
 
@@ -67,13 +67,13 @@ final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
         return bytes;
     }
 
-    static EncodedOffsetPair unwrap(byte[] input) {
+    static EncodedOffsetData unwrap(byte[] input) {
         ByteBuffer wrap = ByteBuffer.wrap(input).asReadOnlyBuffer();
         byte magic = wrap.get();
         OffsetEncoding decode = decode(magic);
         ByteBuffer slice = wrap.slice();
 
-        return new EncodedOffsetPair(decode, slice);
+        return new EncodedOffsetData(decode, slice);
     }
 
     @SneakyThrows

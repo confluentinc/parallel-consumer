@@ -55,10 +55,10 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
     int HIGH_MAX_POLL_RECORDS_CONFIG = 10_000;
 
-    public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
-    public List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());
-    public AtomicInteger processedCount = new AtomicInteger(0);
-    public AtomicInteger producedCount = new AtomicInteger(0);
+    List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
+    List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());
+    AtomicInteger processedCount = new AtomicInteger(0);
+    AtomicInteger producedCount = new AtomicInteger(0);
 
 
     /**
@@ -70,6 +70,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
      */
     @Test
     public void shouldNotThrowBitsetTooLongException() {
+        // TODO compare key to partition to unordered
         runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
     }
 
@@ -80,8 +81,9 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
-//        int expectedMessageCount = 2_000_000;
-        int expectedMessageCount = 100_0000;
+        int expectedMessageCount = 1_000_000;
+//        int expectedMessageCount = 100_000;
+//        int expectedMessageCount = 1_000_0;
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
@@ -132,20 +134,19 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
         pc.pollAndProduce(record -> {
-//                    try {
+                    try {
+                        // 1/5 chance of taking a long time
+                        int chance = 10;
+                        int dice = RandomUtils.nextInt(0, chance);
+                        if (dice == 0) {
+                            Thread.sleep(100);
+                        } else {
+                            Thread.sleep(RandomUtils.nextInt(3, 20));
+                        }
 //                        Thread.sleep(5);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                    try {
-//                        // 1/5 chance of taking a long time
-//                        int chance = 10;
-//                        int dice = RandomUtils.nextInt(0, chance);
-//                        if (dice == 0) {
-//                            Thread.sleep(100);
-//                        } else {
-//                            Thread.sleep(RandomUtils.nextInt(3, 20));
-//                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     bar.stepBy(1);
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
@@ -163,7 +164,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(1200))
-//                    .failFast(() -> pc.isClosedOrFailed(), () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                    .failFast(() -> pc.isClosedOrFailed(), () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {

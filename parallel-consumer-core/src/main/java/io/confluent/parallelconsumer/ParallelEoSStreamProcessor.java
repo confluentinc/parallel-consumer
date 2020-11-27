@@ -8,7 +8,6 @@ import io.confluent.csid.utils.WallClock;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
-import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
@@ -16,7 +15,6 @@ import org.slf4j.MDC;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.io.Closeable;
-import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -44,6 +42,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private final ParallelConsumerOptions options;
 
+//    private final BackoffAnalyser backoffer;
+
     /**
      * Injectable clock for testing
      */
@@ -61,7 +61,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private final Optional<ProducerManager<K, V>> producerManager;
 
-    private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+    private final ConsumerManager<K, V> consumerMgr;
 
     /**
      * The pool which is used for running the users's supplied function
@@ -175,69 +175,72 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
 //        this.backoffer = new BackoffAnalyser();
 
-        this.consumer = options.getConsumer();
+        consumerMgr = new ConsumerManager<K, V>(options.getConsumer());
+        wm = new WorkManager<K, V>(newOptions, consumerMgr, dynamicExtraLoadFactor);
 
-        checkNotSubscribed(consumer);
-        checkAutoCommitIsDisabled(consumer);
+
+        consumerMgr.checkNotSubscribed();
+        consumerMgr.checkAutoCommitIsDisabled();
+
 
         LinkedBlockingQueue<Runnable> poolQueue = new LinkedBlockingQueue<>();
         workerPool = new ThreadPoolExecutor(newOptions.getMaxConcurrency(), newOptions.getMaxConcurrency(),
                 0L, MILLISECONDS,
-                poolQueue);
+                poolQueue)
+        ;
+//        {
+//            @Override
+//            protected void beforeExecute(final Thread t, final Runnable r) {
+//                super.beforeExecute(t, r);
+//                if (dynamicExtraLoadFactor.couldStep() && getQueue().isEmpty() && wm.isNotPartitionedOrDrained()) {
+//                    boolean increased = dynamicExtraLoadFactor.maybeIncrease();
+//                    if (increased) {
+//                        log.warn("No work to do! Increased dynamic load factor to {}", dynamicExtraLoadFactor.getCurrent());
+//                    }
+//                }
+////                if (getQueue().size() < 100 && wm.isNotPartitionedOrDrained()) {
+////                    log.warn("Less than 100 tasks left!");
+////                }
+//            }
+//        };
 
-        this.wm = new WorkManager<>(newOptions, consumer, dynamicExtraLoadFactor);
 
-        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
-
-        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this);
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
             if (options.isUsingTransactionalProducer())
-                this.committer = this.producerManager.get();
+                this.committer = producerManager.get();
             else
-                this.committer = this.brokerPollSubsystem;
+                this.committer = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
         } else {
             this.producerManager = Optional.empty();
-            this.committer = this.brokerPollSubsystem;
-        }
-    }
-
-    private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
-        if (consumerToCheck instanceof MockConsumer)
-            // disabled for unit tests which don't test rebalancing
-            return;
-        Set<String> subscription = consumerToCheck.subscription();
-        Set<TopicPartition> assignment = consumerToCheck.assignment();
-        if (!subscription.isEmpty() || !assignment.isEmpty()) {
-            throw new IllegalStateException("Consumer subscription must be managed by this class. Use " + this.getClass().getName() + "#subcribe methods instead.");
+            this.committer = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
         }
     }
 
     @Override
     public void subscribe(Collection<String> topics) {
-        log.debug("Subscribing to {}", topics);
-        consumer.subscribe(topics, this);
+        consumerMgr.subscribe(topics, this);
     }
 
     @Override
     public void subscribe(Pattern pattern) {
-        log.debug("Subscribing to {}", pattern);
-        consumer.subscribe(pattern, this);
+        consumerMgr.subscribe(pattern, this);
     }
 
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(topics, this);
+        subscribe(topics);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(pattern, this);
+        subscribe(pattern);
     }
 
     /**
@@ -285,32 +288,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         wm.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
-    }
-
-    /**
-     * Nasty reflection to check if auto commit is disabled.
-     * <p>
-     * Other way would be to politely request the user also include their consumer properties when construction, but
-     * this is more reliable in a correctness sense, but britle in terms of coupling to internal implementation.
-     * Consider requesting ability to inspect configuration at runtime.
-     */
-    @SneakyThrows
-    private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        if (consumer instanceof KafkaConsumer) {
-            // Commons lang FieldUtils#readField - avoid needing commons lang
-            Field coordinatorField = consumer.getClass().getDeclaredField("coordinator"); //NoSuchFieldException
-            coordinatorField.setAccessible(true);
-            ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
-
-            Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
-            autoCommitEnabledField.setAccessible(true);
-            Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
-
-            if (isAutoCommitEnabled)
-                throw new IllegalStateException("Consumer auto commit must be disabled, as commits are handled by the library.");
-        } else {
-            // noop - probably MockConsumer being used in testing - which doesn't do auto commits
-        }
     }
 
     @Override
@@ -457,7 +434,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
 
-        maybeCloseConsumer();
+        consumerMgr.close(timeout);
 
         producerManager.ifPresent(x -> x.close(timeout));
 
@@ -489,19 +466,19 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         this.state = closed;
     }
 
-    /**
-     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
-     * This way, if partitions are revoked, the commit can be made inline.
-     */
-    private void maybeCloseConsumer() {
-        if (isResponsibleForCommits()) {
-            consumer.close();
-        }
-    }
-
-    private boolean isResponsibleForCommits() {
-        return (committer instanceof ProducerManager);
-    }
+//    /**
+//     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
+//     * This way, if partitions are revoked, the commit can be made inline.
+//     */
+//    private void maybeCloseConsumer() {
+//        if (isResponsibleForCommits()) {
+//            consumerMgr.close();
+//        }
+//    }
+//
+//    private boolean isResponsibleForCommits() {
+//        return (committer instanceof ProducerManager);
+//    }
 
     /**
      * Block the calling thread until no more messages are being processed.
@@ -583,8 +560,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
-                    failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
-                    throw failureReason;
+                    RuntimeException runtimeException = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    this.failureReason = runtimeException;
+                    throw runtimeException;
                 }
             }
             log.info("Control loop ending clean (state:{})...", state);
@@ -617,6 +595,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             }
         }
 
+
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
@@ -644,10 +623,11 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         brokerPollSubsystem.supervise();
 
         Duration duration = Duration.ofMillis(1);
+//        log.debug("Thread yield {}", duration);
         try {
             Thread.sleep(duration.toMillis());
         } catch (InterruptedException e) {
-            log.trace("Woke up", e);
+            log.debug("Woke up", e);
         }
 
         // todo remove
@@ -776,7 +756,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
-        Set<WorkContainer<K, V>> results = new HashSet<>();
+        Set<WorkContainer<K, V>> results = new TreeSet<>(); // insure sorted by offset as we insert
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
 
 //        boolean nothingInFlight = !wm.hasWorkInFlight();
@@ -813,6 +793,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         } catch (InterruptedException e) {
             log.debug("Interrupted waiting on work results");
         }
+
+        //
         if (firstBlockingPoll == null) {
             log.debug("Mailbox results returned null, indicating timeout (which was set as {}) or interruption during a blocking wait for returned work results", timeout);
         } else {
@@ -825,12 +807,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.trace("Draining {} more, got {} already...", size, results.size());
         workMailBox.drainTo(results, size);
 
-        log.trace("Processing drained work {}...", results.size());
-        for (var work : results) {
-            MDC.put("offset", work.toString());
-            handleFutureResult(work);
-            MDC.clear();
-        }
+        log.debug("Processing drained work {}...", results.size());
+        wm.onResultBatch(results);
     }
 
     /**
@@ -915,29 +893,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private void commitOffsetsThatAreReady() {
         if (wm.isClean()) {
-            log.debug("Nothing changed since last commit, skipping");
+            log.debug("Nothing succeeded since last commit, skipping");
             return;
         }
         committer.retrieveOffsetsAndCommit();
-    }
-
-    protected void handleFutureResult(WorkContainer<K, V> wc) {
-        if (wc.getUserFunctionSucceeded().get()) {
-            onSuccess(wc);
-        } else {
-            onFailure(wc);
-        }
-    }
-
-    private void onFailure(WorkContainer<K, V> wc) {
-        // error occurred, put it back in the queue if it can be retried
-        // if not explicitly retriable, put it back in with an try counter so it can be later given up on
-        wm.failed(wc);
-    }
-
-    protected void onSuccess(WorkContainer<K, V> wc) {
-        log.trace("Processing success...");
-        wm.success(wc);
     }
 
     /**
@@ -995,7 +954,20 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             addToMailbox(wc); // always add on error
             throw e; // trow again to make the future failed
         }
+//        finally {
+//            onWorkFunctionFinish();
+//        }
     }
+
+//    private void onWorkFunctionFinish() {
+//        checkEnoughWorkIsQueued()
+//    }
+//
+//    private void checkEnoughWorkIsQueued() {
+//        if (isPoolQueueLow()) {
+//            notifyNewWorkRegistered();
+//        }
+//    }
 
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         addToMailbox(wc);

@@ -109,11 +109,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
      * @see io.confluent.parallelconsumer.ParallelEoSStreamProcessor#onPartitionsRevoked
      */
     private void revokeAssignment() throws NoSuchFieldException, IllegalAccessException {
-        // access listener
-        Field subscriptionsField = MockConsumer.class.getDeclaredField("subscriptions"); //NoSuchFieldException
-        subscriptionsField.setAccessible(true);
-        SubscriptionState subscriptionState = (SubscriptionState) subscriptionsField.get(this); //IllegalAccessException
-        ConsumerRebalanceListener consumerRebalanceListener = subscriptionState.rebalanceListener();
+        ConsumerRebalanceListener consumerRebalanceListener = getRebalanceListener();
 
         // execute
         if (consumerRebalanceListener == null) {
@@ -124,12 +120,22 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         }
     }
 
+    private ConsumerRebalanceListener getRebalanceListener() throws NoSuchFieldException, IllegalAccessException {
+        // access listener
+        Field subscriptionsField = MockConsumer.class.getDeclaredField("subscriptions"); //NoSuchFieldException
+        subscriptionsField.setAccessible(true);
+        SubscriptionState subscriptionState = (SubscriptionState) subscriptionsField.get(this); //IllegalAccessException
+        ConsumerRebalanceListener consumerRebalanceListener = subscriptionState.rebalanceListener();
+        return consumerRebalanceListener;
+    }
+
     public void subscribeWithRebalanceAndAssignment(final List<String> topics, int partitions) {
         List<TopicPartition> topicPartitions = topics.stream()
                 .flatMap(y -> Range.rangeStream(partitions).boxed()
                         .map(x -> new TopicPartition(y, x)))
                 .collect(Collectors.toList());
-        super.rebalance(topicPartitions);
+        rebalance(topicPartitions);
+
         //
         HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
         for (var tp : topicPartitions) {
@@ -138,4 +144,13 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         super.updateBeginningOffsets(beginningOffsets);
     }
 
+    @SneakyThrows
+    @Override
+    public synchronized void rebalance(final Collection<TopicPartition> newAssignment) {
+        super.rebalance(newAssignment);
+        ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
+        if (rebalanceListeners != null) {
+            rebalanceListeners.onPartitionsAssigned(newAssignment);
+        }
+    }
 }

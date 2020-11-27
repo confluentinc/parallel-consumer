@@ -32,7 +32,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter {
+public class BrokerPollSystem<K, V> {//implements OffsetCommitter {
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -45,7 +45,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final ParallelEoSStreamProcessor<K, V> pc;
 
-    private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
+//    private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
     /**
      * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
@@ -57,17 +57,24 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions options) {
+    public BrokerPollSystem(
+            ConsumerManager<K, V> consumerMgr,
+                            WorkManager<K, V> wm, ParallelEoSStreamProcessor<K, V> pc
+//            ,
+//                            final ParallelConsumerOptions options
+    ) {
         this.wm = wm;
         this.pc = pc;
 
         this.consumerManager = consumerMgr;
-        switch (options.getCommitMode()) {
-            case CONSUMER_SYNC, CONSUMER_ASYNCHRONOUS -> {
-                ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
-                committer = Optional.of(consumerCommitter);
-            }
-        }
+
+//        this.consumerManager = consumerMgr;
+//        switch (options.getCommitMode()) {
+//            case CONSUMER_SYNC, CONSUMER_ASYNCHRONOUS -> {
+//                ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
+//                committer = Optional.of(consumerCommitter);
+//            }
+//        }
     }
 
     public void start() {
@@ -94,7 +101,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private boolean controlLoop() {
         Thread.currentThread().setName("broker-poll");
         log.trace("Broker poll control loop start");
-        committer.ifPresent(x -> x.claim());
+
         try {
             while (state != closed) {
                 log.trace("Loop: Broker poller: ({})", state);
@@ -112,7 +119,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                     }
                 }
 
-                maybeDoCommit();
+//                maybeDoCommit();
 
                 switch (state) {
                     case draining -> {
@@ -134,33 +141,33 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private void transitionToCloseMaybe() {
         // make sure everything is committed
-        if (isResponsibleForCommits() && !wm.isRecordsAwaitingToBeCommitted()) {
-            // transition to closing
+//        if (isResponsibleForCommits() && !wm.isRecordsAwaitingToBeCommitted()) {
+//           //  transition to closing
             state = ParallelEoSStreamProcessor.State.closing;
-        }
+//        }
     }
 
     private void doClose() {
         doPause();
-        maybeCloseConsumer();
+//        maybeCloseConsumer();
         state = closed;
     }
 
-    /**
-     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
-     * This way, if partitions are revoked, the commit can be made inline.
-     */
-    private void maybeCloseConsumer() {
-        if (isResponsibleForCommits()) {
-            log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
-            this.consumerManager.close(DrainingCloseable.DEFAULT_TIMEOUT);
-            log.debug("Consumer closed.");
-        }
-    }
+//    /**
+//     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
+//     * This way, if partitions are revoked, the commit can be made inline.
+//     */
+//    private void maybeCloseConsumer() {
+////        if (isResponsibleForCommits()) {
+//            log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
+//            this.consumerManager.close(DrainingCloseable.DEFAULT_TIMEOUT);
+//            log.debug("Consumer closed.");
+//        }
+//    }
 
-    private boolean isResponsibleForCommits() {
-        return committer.isPresent();
-    }
+//    private boolean isResponsibleForCommits() {
+//        return committer.isPresent();
+//    }
 
     private ConsumerRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
@@ -170,7 +177,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
         log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if subs are paused, or no data available on broker.", toSeconds(thisLongPollTimeout)); // java 8
-        return consumerManager.poll(thisLongPollTimeout);
+        return this.consumerManager.poll(thisLongPollTimeout);
     }
 
     /**
@@ -275,28 +282,28 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         return wm.shouldThrottle();
     }
 
-    /**
-     * Optionally blocks. Threadsafe
-     *
-     * @see CommitMode
-     */
-    @SneakyThrows
-    @Override
-    public void retrieveOffsetsAndCommit() {
-        // {@link Optional#ifPresentOrElse} only @since 9
-        ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
-            // shouldn't be here
-            throw new IllegalStateException("No committer configured");
-        });
-        committer.commit();
-    }
-
-    /**
-     * Will silently skip if not configured with a committer
-     */
-    private void maybeDoCommit() {
-        committer.ifPresent(ConsumerOffsetCommitter::maybeDoCommit);
-    }
+//    /**
+//     * Optionally blocks. Threadsafe
+//     *
+//     * @see CommitMode
+//     */
+//    @SneakyThrows
+//    @Override
+//    public void retrieveOffsetsAndCommit() {
+//        // {@link Optional#ifPresentOrElse} only @since 9
+//        ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
+//            // shouldn't be here
+//            throw new IllegalStateException("No committer configured");
+//        });
+//        committer.commit();
+//    }
+//
+//    /**
+//     * Will silently skip if not configured with a committer
+//     */
+//    private void maybeDoCommit() {
+//        committer.ifPresent(ConsumerOffsetCommitter::maybeDoCommit);
+//    }
 
     /**
      * Wakeup if colling the broker

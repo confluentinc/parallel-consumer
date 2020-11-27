@@ -28,7 +28,7 @@ public class OffsetBitSet {
         wrap.rewind();
 
         int originalBitsetSize = switch (version) {
-            case v1 -> (int)wrap.getShort(); // up cast ok
+            case v1 -> (int) wrap.getShort(); // up cast ok
             case v2 -> wrap.getInt();
         };
 
@@ -53,24 +53,24 @@ public class OffsetBitSet {
 
     static Tuple<Long, Set<Long>> deserialiseBitSetWrapToIncompletes(OffsetEncoding encoding, long baseOffset, ByteBuffer wrap) {
         wrap.rewind();
-        int originalBitsetSize = switch(encoding) {
+        int originalBitsetSize = switch (encoding) {
             case BitSet -> wrap.getShort();
             case BitSetV2 -> wrap.getInt();
             default -> throw new InternalRuntimeError("Invalid state");
         };
         ByteBuffer slice = wrap.slice();
         Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
-        long highwaterMark = baseOffset + originalBitsetSize;
-        return Tuple.pairOf(highwaterMark, incompletes);
+        long highestSeenRecord = baseOffset + originalBitsetSize;
+        return Tuple.pairOf(highestSeenRecord, incompletes);
     }
 
     static Set<Long> deserialiseBitSetToIncompletes(long baseOffset, int originalBitsetSize, ByteBuffer inputBuffer) {
-        BitSet bitSet = BitSet.valueOf(inputBuffer);
+        BitSet bitSetOfSucceededRecords = BitSet.valueOf(inputBuffer);
         var incompletes = new HashSet<Long>(); // can't know how big this needs to be yet
         for (var relativeOffset : range(originalBitsetSize)) {
             long offset = baseOffset + relativeOffset;
-            if (bitSet.get(relativeOffset)) {
-                log.trace("Ignoring completed offset");
+            if (bitSetOfSucceededRecords.get(relativeOffset)) {
+                log.trace("Ignoring completed offset relative {} offset {}", relativeOffset, offset);
             } else {
                 incompletes.add(offset);
             }

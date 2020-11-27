@@ -133,8 +133,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
     private void signalCommitPerformed() {
         log.debug("Starting Signaling commit finished");
-        if (!commitLock.isHeldByCurrentThread())
-            throw new IllegalStateException("Lock already held");
+//        if (!commitLock.isHeldByCurrentThread())
+//            throw new IllegalStateException("Lock already held");
         commitLock.lock();
         try {
             commitCount.incrementAndGet();

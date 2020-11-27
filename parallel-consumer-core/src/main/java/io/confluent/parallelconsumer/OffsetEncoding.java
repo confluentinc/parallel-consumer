@@ -36,12 +36,17 @@ enum OffsetEncoding {
     RunLengthV2(v2, (byte) 'e'),
     RunLengthV2Compressed(v2, (byte) 'p');
 
+    public static int standardOverhead = Byte.BYTES;
+
     enum Version {
         v1, v2
     }
 
     public final Version version;
 
+    /**
+     * Single byte to show which encoding is being used
+     */
     @Getter
     public final byte magicByte;
 

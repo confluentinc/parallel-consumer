@@ -34,9 +34,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
+import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.waitAtMost;
@@ -206,6 +208,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
         ProgressTracker pt = new ProgressTracker(processedCount, roundsAllowed);
         var failureMessage = msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
+
         try {
             waitAtMost(ofSeconds(2000))
 //                    .failFast(() -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
