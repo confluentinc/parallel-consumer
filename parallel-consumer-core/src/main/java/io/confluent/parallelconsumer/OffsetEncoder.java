@@ -1,10 +1,15 @@
 package io.confluent.parallelconsumer;
 
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+/**
+ * Base OffsetEncoder
+ */
+@Slf4j
 abstract class OffsetEncoder {
 
     private final OffsetSimultaneousEncoder offsetSimultaneousEncoder;
@@ -40,6 +45,7 @@ abstract class OffsetEncoder {
     }
 
     private void register(final OffsetEncoding type, final byte[] bytes) {
+        log.debug("Registering {}, with site {}", type, bytes.length);
         offsetSimultaneousEncoder.sortedEncodings.add(new EncodedOffsetPair(type, ByteBuffer.wrap(bytes)));
         offsetSimultaneousEncoder.encodingMap.put(type, bytes);
     }

@@ -11,6 +11,8 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.parallelconsumer.OffsetEncoding.Version.v1;
+import static io.confluent.parallelconsumer.OffsetEncoding.Version.v2;
 
 /**
  * Encode with multiple strategies at the same time.
@@ -23,7 +25,8 @@ import static io.confluent.csid.utils.Range.range;
 class OffsetSimultaneousEncoder {
 
     /**
-     * Size threshold in bytes after which compressing the encodings will be compared
+     * Size threshold in bytes after which compressing the encodings will be compared, as it seems to be typically worth
+     * the extra compression step when beyond this size in the source array.
      */
     public static final int LARGE_INPUT_MAP_SIZE_THRESHOLD = 200;
 
@@ -60,7 +63,8 @@ class OffsetSimultaneousEncoder {
      * @see #packSmallest()
      */
     @Getter
-    TreeSet<EncodedOffsetPair> sortedEncodings = new TreeSet<>();
+    PriorityQueue<EncodedOffsetPair> sortedEncodings = new PriorityQueue();
+
 
     /**
      * Force the encoder to also add the compressed versions. Useful for testing.
@@ -79,7 +83,10 @@ class OffsetSimultaneousEncoder {
         this.nextExpectedOffset = nextExpectedOffset;
         this.incompleteOffsets = incompleteOffsets;
 
-        length = (int) (this.nextExpectedOffset - this.lowWaterMark);
+        long longLength = this.nextExpectedOffset - this.lowWaterMark;
+        length = (int) longLength;
+        // sanity
+        if (longLength != length) throw new IllegalArgumentException("Integer overflow");
 
         initEncoders();
     }
@@ -90,13 +97,19 @@ class OffsetSimultaneousEncoder {
         }
 
         try {
-            BitsetEncoder bitsetEncoder = new BitsetEncoder(length, this);
-            encoders.add(bitsetEncoder);
+            encoders.add(new BitsetEncoder(length, this, v1));
         } catch (BitSetEncodingNotSupportedException a) {
-            log.warn("Cannot use {} encoder", BitsetEncoder.class.getSimpleName(), a);
+            log.warn("Cannot use {} encoder ({})", BitsetEncoder.class.getSimpleName(), a.getMessage());
         }
 
-        encoders.add(new RunLengthEncoder(this));
+        try {
+            encoders.add(new BitsetEncoder(length, this, v2));
+        } catch (BitSetEncodingNotSupportedException a) {
+            log.warn("Cannot use {} encoder ({})", BitsetEncoder.class.getSimpleName(), a.getMessage());
+        }
+
+        encoders.add(new RunLengthEncoder(this, v1));
+        encoders.add(new RunLengthEncoder(this, v2));
     }
 
     /**
@@ -174,7 +187,7 @@ class OffsetSimultaneousEncoder {
             try {
                 encoder.register();
             } catch (EncodingNotSupportedException e) {
-                log.warn("Removing {} encoder, not supported", encoder.getEncodingType().name(), e);
+                log.warn("Removing {} encoder, not supported ({})", encoder.getEncodingType().description(), e.getMessage());
                 toRemove.add(encoder);
             }
         }
@@ -197,7 +210,7 @@ class OffsetSimultaneousEncoder {
         if (sortedEncodings.isEmpty()) {
             throw new EncodingNotSupportedException("No encodings could be used");
         }
-        final EncodedOffsetPair best = this.sortedEncodings.first();
+        final EncodedOffsetPair best = this.sortedEncodings.poll();
         log.debug("Compression chosen is: {}", best.encoding.name());
         return packEncoding(best);
     }

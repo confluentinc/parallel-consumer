@@ -1,5 +1,10 @@
 = Change Log
 
+== next
+
+* Fixes
+** https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs  2,147,483,647) for both BitSet and run-length encoding
+
 == v0.2.0.3
 
 * Fixes

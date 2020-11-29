@@ -10,17 +10,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.junitpioneer.jupiter.CartesianProductTest;
-import org.junitpioneer.jupiter.CartesianValueSource;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.FutureTask;
+import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.OffsetEncoding.*;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assume.assumeThat;
@@ -76,21 +76,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         Map<OffsetEncoding, byte[]> encodingMap = encoder.getEncodingMap();
 
         //
-        byte[] smallestBytes = null;
-        if (nextExpectedOffset > Short.MAX_VALUE) {
-            assertThatThrownBy(() -> encoder.packSmallest()).hasMessageContaining("No encodings");
-            return;
-        } else {
-            smallestBytes = encoder.packSmallest();
-        }
+        byte[] smallestBytes = encoder.packSmallest();
         EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(smallestBytes);
         ParallelConsumer.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
         assertThat(decodedIncompletes.getRight()).containsExactlyInAnyOrderElementsOf(incompletes);
-
-        if (nextExpectedOffset - lowWaterMark > BitsetEncoder.MAX_LENGTH_ENCODABLE)
-            assertThat(encodingMap.keySet()).as("Gracefully ignores that Bitset can't be supported").doesNotContain(OffsetEncoding.BitSet);
-        else
-            assertThat(encodingMap.keySet()).contains(OffsetEncoding.BitSet);
 
         //
         for (OffsetEncoding encodingToUse : OffsetEncoding.values()) {
@@ -114,6 +103,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
      *
      * @see #ensureEncodingGracefullyWorksWhenOffsetsArentSequentialTwo
      */
+    @SneakyThrows
     @ParameterizedTest
     @EnumSource(OffsetEncoding.class)
     void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) throws BrokenBarrierException, InterruptedException {
@@ -130,13 +120,20 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 5, "akey", "avalue"));
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 69, "akey", "avalue")); // will complete
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 100, "akey", "avalue"));
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 1_000, "akey", "avalue"));
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 20_000, "akey", "avalue")); // near upper limit of Short.MAX_VALUE
-        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 25_000, "akey", "avalue")); // near upper limit of Short.MAX_VALUE
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 25_000, "akey", "avalue")); // will complete, near upper limit of Short.MAX_VALUE
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 30_000, "akey", "avalue")); // near upper limit of Short.MAX_VALUE
 
-        // No encoders support this yet - until https://github.com/confluentinc/parallel-consumer/issues/37:
-        // records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000, "akey", "avalue")); // higher than Short.MAX_VALUE
-        // records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000 + Short.MAX_VALUE, "akey", "avalue")); // runlength higher than Short.MAX_VALUE
+        // Extremely large tests for v2 encoders
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000, "akey", "avalue")); // higher than Short.MAX_VALUE
+        int avoidOffByOne = 2;
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000 + Short.MAX_VALUE + avoidOffByOne, "akey", "avalue")); // runlength higher than Short.MAX_VALUE
+
+        var firstSucceededRecordRemoved = new ArrayList<>(records);
+        firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 0).findFirst().get());
+        firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 69).findFirst().get());
+        firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 25_000).findFirst().get());
 
         //
         ktu.send(consumerSpy, records);
@@ -148,7 +145,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         objectObjectHashMap.put(tp, records);
         ConsumerRecords<String, String> crs = new ConsumerRecords<>(objectObjectHashMap);
 
-        //
+        // write offsets
         Map<TopicPartition, OffsetAndMetadata> completedEligibleOffsetsAndRemove;
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
@@ -163,28 +160,36 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             completeWork(wmm, work, 25_000);
 
             completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
+
+            // check for graceful fall back to the smallest available encoder
+            OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(wmm, consumerSpy);
+            Set<Long> collect = firstSucceededRecordRemoved.stream().map(x -> x.offset()).collect(Collectors.toSet());
+            OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
+            String bestPayload = om.makeOffsetMetadataPayload(1, tp, collect);
+            assertThat(bestPayload).isNotEmpty();
         }
         consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
 
+        // read offsets
         {
             WorkManager<String, String> newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(crs);
             List<WorkContainer<String, String>> workContainers = newWm.maybeGetWork();
-            var firstSucceededRecordRemoved = new ArrayList<>(records);
-            firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 0).findFirst().get());
-            firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 69).findFirst().get());
-            firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 25_000).findFirst().get());
-            if (encoding.equals(BitSet)) {
-                // plain bitset is too large to be used, offsets are dropped
-                assertThatThrownBy(() ->
-                        assertThat(workContainers).extracting(WorkContainer::getCr)
-                                .containsExactlyElementsOf(firstSucceededRecordRemoved))
-                        .hasMessageContaining("but some elements were not expected")
-                        .hasMessageContaining("offset = 25000");
-
-            } else {
-                assertThat(workContainers).extracting(WorkContainer::getCr).containsExactlyElementsOf(firstSucceededRecordRemoved);
+            switch (encoding) {
+                case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
+                        BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
+                        RunLength, RunLengthCompressed // RunLength V1 max runlength is Short.MAX_VALUE
+                        -> {
+                    assertThatThrownBy(() ->
+                            assertThat(workContainers).extracting(WorkContainer::getCr)
+                                    .containsExactlyElementsOf(firstSucceededRecordRemoved))
+                            .hasMessageContaining("but some elements were not expected")
+                            .hasMessageContaining("offset = 25000");
+                }
+                default -> {
+                    assertThat(workContainers).extracting(WorkContainer::getCr).containsExactlyElementsOf(firstSucceededRecordRemoved);
+                }
             }
         }
     }

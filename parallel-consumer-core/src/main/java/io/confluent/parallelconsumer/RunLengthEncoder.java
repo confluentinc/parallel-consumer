@@ -8,33 +8,42 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.OffsetEncoding.RunLength;
-import static io.confluent.parallelconsumer.OffsetEncoding.RunLengthCompressed;
+import static io.confluent.parallelconsumer.OffsetEncoding.*;
 
 class RunLengthEncoder extends OffsetEncoder {
 
-    private final AtomicInteger currentRunLengthCount;
-    private final AtomicBoolean previousRunLengthState;
+    private int currentRunLengthCount = 0;
+    private boolean previousRunLengthState = false;
+
     private final List<Integer> runLengthEncodingIntegers;
 
     private Optional<byte[]> encodedBytes = Optional.empty();
 
-    public RunLengthEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
+    private final Version version; // default to new version
+
+    private static final Version DEFAULT_VERSION = Version.v2;
+
+    public RunLengthEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) {
         super(offsetSimultaneousEncoder);
         // run length setup
-        currentRunLengthCount = new AtomicInteger();
-        previousRunLengthState = new AtomicBoolean(false);
         runLengthEncodingIntegers = new ArrayList<>();
+        version = newVersion;
     }
 
     @Override
     protected OffsetEncoding getEncodingType() {
-        return RunLength;
+        return switch (version) {
+            case v1 -> RunLength;
+            case v2 -> RunLengthV2;
+        };
     }
 
     @Override
     protected OffsetEncoding getEncodingTypeCompressed() {
-        return RunLengthCompressed;
+        return switch (version) {
+            case v1 -> RunLengthCompressed;
+            case v2 -> RunLengthV2Compressed;
+        };
     }
 
     @Override
@@ -49,14 +58,26 @@ class RunLengthEncoder extends OffsetEncoder {
 
     @Override
     public byte[] serialise() throws EncodingNotSupportedException {
-        runLengthEncodingIntegers.add(currentRunLengthCount.get()); // add tail
+        runLengthEncodingIntegers.add(currentRunLengthCount); // add tail
 
-        ByteBuffer runLengthEncodedByteBuffer = ByteBuffer.allocate(runLengthEncodingIntegers.size() * Short.BYTES);
+        int entryWidth = switch (version) {
+            case v1 -> Short.BYTES;
+            case v2 -> Integer.BYTES;
+        };
+        ByteBuffer runLengthEncodedByteBuffer = ByteBuffer.allocate(runLengthEncodingIntegers.size() * entryWidth);
+
         for (final Integer runlength : runLengthEncodingIntegers) {
-            final short shortCastRunlength = runlength.shortValue();
-            if (runlength != shortCastRunlength)
-                throw new RunlengthV1EncodingNotSupported(msg("Runlength too long for Short ({} cast to {})", runlength, shortCastRunlength));
-            runLengthEncodedByteBuffer.putShort(shortCastRunlength);
+            switch (version) {
+                case v1 -> {
+                    final short shortCastRunlength = runlength.shortValue();
+                    if (runlength != shortCastRunlength)
+                        throw new RunlengthV1EncodingNotSupported(msg("Runlength too long for Short ({} cast to {})", runlength, shortCastRunlength));
+                    runLengthEncodedByteBuffer.putShort(shortCastRunlength);
+                }
+                case v2 -> {
+                    runLengthEncodedByteBuffer.putInt(runlength);
+                }
+            }
         }
 
         byte[] array = runLengthEncodedByteBuffer.array();
@@ -76,13 +97,13 @@ class RunLengthEncoder extends OffsetEncoder {
 
     private void encodeRunLength(final boolean currentIsComplete) {
         // run length
-        boolean currentOffsetMatchesOurRunLengthState = previousRunLengthState.get() == currentIsComplete;
+        boolean currentOffsetMatchesOurRunLengthState = previousRunLengthState == currentIsComplete;
         if (currentOffsetMatchesOurRunLengthState) {
-            currentRunLengthCount.getAndIncrement();
+            currentRunLengthCount++;
         } else {
-            previousRunLengthState.set(currentIsComplete);
-            runLengthEncodingIntegers.add(currentRunLengthCount.get());
-            currentRunLengthCount.set(1); // reset to 1
+            previousRunLengthState = currentIsComplete;
+            runLengthEncodingIntegers.add(currentRunLengthCount);
+            currentRunLengthCount = 1; // reset to 1
         }
     }
 }
