@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 import java.util.BitSet;
 import java.util.Optional;
 
-import static io.confluent.parallelconsumer.OffsetEncoding.BitSetCompressed;
+import static io.confluent.parallelconsumer.OffsetEncoding.*;
 
 /**
  * Encodes a range of offsets, from an incompletes collection into a BitSet.
@@ -30,34 +30,77 @@ import static io.confluent.parallelconsumer.OffsetEncoding.BitSetCompressed;
  */
 class BitsetEncoder extends OffsetEncoder {
 
-    public static final Short MAX_LENGTH_ENCODABLE = Short.MAX_VALUE;
+    private final Version version; // default to new version
 
-    private final ByteBuffer wrappedBitsetBytesBuffer;
+    private static final Version DEFAULT_VERSION = Version.v2;
+
+    public static final Integer MAX_LENGTH_ENCODABLE = Integer.MAX_VALUE;
+
+    private ByteBuffer wrappedBitsetBytesBuffer;
     private final BitSet bitSet;
 
     private Optional<byte[]> encodedBytes = Optional.empty();
 
     public BitsetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) throws BitSetEncodingNotSupportedException {
+        this(length, offsetSimultaneousEncoder, DEFAULT_VERSION);
+    }
+
+    public BitsetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) throws BitSetEncodingNotSupportedException {
         super(offsetSimultaneousEncoder);
+
+        this.version = newVersion;
+
+        switch (newVersion) {
+            case v1 -> initV1(length);
+            case v2 -> initV2(length);
+        }
+        bitSet = new BitSet(length);
+    }
+
+    /**
+     * Switch from encoding bitset length as a short to an integer (length of 32,000 was reasonable too short).
+     * <p>
+     * Integer.MAX_VALUE should always be good enough as system restricts large from being processed at once.
+     */
+    private void initV2(int length) throws BitSetEncodingNotSupportedException {
         if (length > MAX_LENGTH_ENCODABLE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
-            throw new BitSetEncodingNotSupportedException(StringUtils.msg("Bitset too long to encode, as length overflows Short.MAX_VALUE. Length: {}. (max: {})", length, Short.MAX_VALUE));
+            throw new BitSetEncodingNotSupportedException(StringUtils.msg("Bitset V2 too long to encode, as length overflows Integer.MAX_VALUE. Length: {}. (max: {})", length, MAX_LENGTH_ENCODABLE));
+        }
+        // prep bit set buffer
+        this.wrappedBitsetBytesBuffer = ByteBuffer.allocate(Integer.BYTES + ((length / 8) + 1));
+        // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
+        this.wrappedBitsetBytesBuffer.putInt(length);
+    }
+
+    /**
+     * This was a bit "short" sighted of me....
+     */
+    private void initV1(int length) throws BitSetEncodingNotSupportedException {
+        if (length > Short.MAX_VALUE) {
+            // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
+            throw new BitSetEncodingNotSupportedException("Bitset V1 too long to encode, bitset length overflows Short.MAX_VALUE: " + length + ". (max: " + Short.MAX_VALUE + ")");
         }
         // prep bit set buffer
         this.wrappedBitsetBytesBuffer = ByteBuffer.allocate(Short.BYTES + ((length / 8) + 1));
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
         this.wrappedBitsetBytesBuffer.putShort((short) length);
-        bitSet = new BitSet(length);
     }
 
     @Override
     protected OffsetEncoding getEncodingType() {
-        return OffsetEncoding.BitSet;
+        return switch (version) {
+            case v1 -> BitSet;
+            case v2 -> BitSetV2;
+        };
     }
 
     @Override
     protected OffsetEncoding getEncodingTypeCompressed() {
-        return BitSetCompressed;
+        return switch (version) {
+            case v1 -> BitSetCompressed;
+            case v2 -> BitSetV2Compressed;
+        };
     }
 
     @Override

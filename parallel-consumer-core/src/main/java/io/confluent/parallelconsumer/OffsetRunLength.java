@@ -8,14 +8,22 @@ import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+import static io.confluent.parallelconsumer.OffsetEncoding.BitSet;
+import static io.confluent.parallelconsumer.OffsetEncoding.BitSetV2;
 
 @Slf4j
 @UtilityClass
@@ -69,47 +77,70 @@ public class OffsetRunLength {
     /**
      * @see #runLengthEncode
      */
-    static Tuple<Long, Set<Long>> runLengthDecodeToIncompletes(final long baseOffset, final ByteBuffer in) {
+    static Tuple<Long, Set<Long>> runLengthDecodeToIncompletes(OffsetEncoding encoding, final long baseOffset, final ByteBuffer in) {
         in.rewind();
-        final ShortBuffer shortBuffer = in.asShortBuffer();
+        final ShortBuffer v1ShortBuffer = in.asShortBuffer();
+        final IntBuffer v2IntegerBuffer = in.asIntBuffer();
 
         final var incompletes = new HashSet<Long>(1); // we don't know the capacity yet
 
         long highestWatermarkSeen = 0L;
 
+        Supplier<Boolean> hasRemainingTest = () -> {
+            return switch (encoding.version) {
+                case v1 -> v1ShortBuffer.hasRemaining();
+                case v2 -> v2IntegerBuffer.hasRemaining();
+            };
+        };
         if (log.isTraceEnabled()) {
-            var shorts = new ArrayList<Short>();
-            while (shortBuffer.hasRemaining()) {
-                shorts.add(shortBuffer.get());
+            // print out all run lengths
+            var runlengths = new ArrayList<Number>();
+            try {
+                while (hasRemainingTest.get()) {
+                    Number runLength = switch (encoding.version) {
+                        case v1 -> v1ShortBuffer.get();
+                        case v2 -> v2IntegerBuffer.get();
+                    };
+                    runlengths.add(runLength);
+                }
+            } catch (BufferUnderflowException u) {
+                log.error("Error decoding offsets", u);
             }
-            log.debug("Unrolled shorts: {}", shorts);
-            shortBuffer.rewind();
+            log.debug("Unrolled runlengths: {}", runlengths);
+            v1ShortBuffer.rewind();
+            v2IntegerBuffer.rewind();
         }
 
-        //
+        // decodes incompletes
         boolean currentRunlengthIsComplete = false;
         long currentOffset = baseOffset;
-        while (shortBuffer.hasRemaining()) {
-            short runLength = shortBuffer.get();
-            highestWatermarkSeen = currentOffset + runLength;
-            if (currentRunlengthIsComplete) {
-                log.trace("Ignoring {} completed offset", runLength);
-                currentOffset += runLength;
-            } else {
-                log.trace("Adding {} incomplete offset", runLength);
-                for (int relativeOffset = 0; relativeOffset < runLength; relativeOffset++) {
-                    incompletes.add(currentOffset);
-                    currentOffset++;
+        while (hasRemainingTest.get()) {
+            try {
+                Number runLength = switch (encoding.version) {
+                    case v1 -> v1ShortBuffer.get();
+                    case v2 -> v2IntegerBuffer.get();
+                };
+                highestWatermarkSeen = currentOffset + runLength.longValue();
+
+                if (currentRunlengthIsComplete) {
+                    log.trace("Ignoring {} completed offset", runLength);
+                    currentOffset += runLength.longValue();
+                } else {
+                    log.trace("Adding {} incomplete offset", runLength);
+                    for (int relativeOffset = 0; relativeOffset < runLength.longValue(); relativeOffset++) {
+                        incompletes.add(currentOffset);
+                        currentOffset++;
+                    }
                 }
+            } catch (BufferUnderflowException u) {
+                log.error("Error decoding offsets", u);
+                throw u;
             }
             currentRunlengthIsComplete = !currentRunlengthIsComplete; // toggle
         }
         return Tuple.pairOf(highestWatermarkSeen, incompletes);
     }
 
-    /**
-     * TODO: Is there an advantage to keeping it as an list of Shorts instead of Integer?
-     */
     static List<Integer> runLengthDeserialise(final ByteBuffer in) {
         // view as short buffer
         in.rewind();

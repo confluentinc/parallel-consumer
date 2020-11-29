@@ -15,14 +15,23 @@ import java.util.Set;
 import static io.confluent.csid.utils.Range.range;
 
 /**
+ * Deserialisation tools for {@link BitsetEncoder}.
+ * <p>
+ * todo unify or refactor with {@link BitsetEncoder}. Why was it ever seperate?
+ *
  * @see BitsetEncoder
  */
 @Slf4j
 public class OffsetBitSet {
 
-    static String deserialiseBitSetWrap(ByteBuffer wrap) {
+    static String deserialiseBitSetWrap(ByteBuffer wrap, OffsetEncoding.Version version) {
         wrap.rewind();
-        short originalBitsetSize = wrap.getShort();
+
+        int originalBitsetSize = switch (version) {
+            case v1 -> (int)wrap.getShort(); // up cast ok
+            case v2 -> wrap.getInt();
+        };
+
         ByteBuffer slice = wrap.slice();
         return deserialiseBitSet(originalBitsetSize, slice);
     }
@@ -42,9 +51,13 @@ public class OffsetBitSet {
         return result.toString();
     }
 
-    static Tuple<Long, Set<Long>> deserialiseBitSetWrapToIncompletes(long baseOffset, ByteBuffer wrap) {
+    static Tuple<Long, Set<Long>> deserialiseBitSetWrapToIncompletes(OffsetEncoding encoding, long baseOffset, ByteBuffer wrap) {
         wrap.rewind();
-        short originalBitsetSize = wrap.getShort();
+        int originalBitsetSize = switch(encoding) {
+            case BitSet -> wrap.getShort();
+            case BitSetV2 -> wrap.getInt();
+            default -> throw new InternalRuntimeError("Invalid state");
+        };
         ByteBuffer slice = wrap.slice();
         Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
         long highwaterMark = baseOffset + originalBitsetSize;

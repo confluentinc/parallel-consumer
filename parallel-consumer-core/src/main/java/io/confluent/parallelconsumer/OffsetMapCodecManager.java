@@ -89,13 +89,13 @@ public class OffsetMapCodecManager<K, V> {
     }
 
     static ParallelConsumer.Tuple<Long, TreeSet<Long>> deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) throws OffsetDecodingError {
-        byte[] decode;
+        byte[] decodedBytes;
         try {
-            decode = OffsetSimpleSerialisation.decodeBase64(incompleteOffsetMap);
+            decodedBytes = OffsetSimpleSerialisation.decodeBase64(incompleteOffsetMap);
         } catch (IllegalArgumentException a) {
             throw new OffsetDecodingError(msg("Error decoding offset metadata, input was: {}", incompleteOffsetMap), a);
         }
-        ParallelConsumer.Tuple<Long, Set<Long>> incompleteOffsets = decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decode);
+        ParallelConsumer.Tuple<Long, Set<Long>> incompleteOffsets = decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decodedBytes);
         TreeSet<Long> longs = new TreeSet<>(incompleteOffsets.getRight());
         return ParallelConsumer.Tuple.pairOf(incompleteOffsets.getLeft(), longs);
     }
@@ -147,13 +147,13 @@ public class OffsetMapCodecManager<K, V> {
      *
      * @return Set of offsets which are not complete.
      */
-    static ParallelConsumer.Tuple<Long, Set<Long>> decodeCompressedOffsets(long finalOffsetForPartition, byte[] s) {
-        if (s.length == 0) {
+    static ParallelConsumer.Tuple<Long, Set<Long>> decodeCompressedOffsets(long finalOffsetForPartition, byte[] decodedBytes) {
+        if (decodedBytes.length == 0) {
             // no offset bitmap data
             return ParallelConsumer.Tuple.pairOf(finalOffsetForPartition, UniSets.of());
         }
 
-        EncodedOffsetPair result = EncodedOffsetPair.unwrap(s);
+        EncodedOffsetPair result = EncodedOffsetPair.unwrap(decodedBytes);
 
         ParallelConsumer.Tuple<Long, Set<Long>> incompletesTuple = result.getDecodedIncompletes(finalOffsetForPartition);
 
