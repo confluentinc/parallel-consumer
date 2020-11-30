@@ -21,7 +21,7 @@ abstract class OffsetEncoder {
 
     abstract void encodeCompletedOffset(final int rangeIndex);
 
-    abstract byte[] serialise();
+    abstract byte[] serialise() throws EncodingNotSupportedException;
 
     abstract int getEncodedSize();
 
@@ -33,7 +33,7 @@ abstract class OffsetEncoder {
         return OffsetSimpleSerialisation.compressZstd(this.getEncodedBytes());
     }
 
-    final void register() {
+    void register() throws EncodingNotSupportedException {
         final byte[] bytes = this.serialise();
         final OffsetEncoding encodingType = this.getEncodingType();
         this.register(encodingType, bytes);

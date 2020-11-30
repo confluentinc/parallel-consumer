@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.OffsetEncoding.RunLength;
 import static io.confluent.parallelconsumer.OffsetEncoding.RunLengthCompressed;
 
@@ -47,13 +48,15 @@ class RunLengthEncoder extends OffsetEncoder {
     }
 
     @Override
-    public byte[] serialise() {
+    public byte[] serialise() throws EncodingNotSupportedException {
         runLengthEncodingIntegers.add(currentRunLengthCount.get()); // add tail
 
         ByteBuffer runLengthEncodedByteBuffer = ByteBuffer.allocate(runLengthEncodingIntegers.size() * Short.BYTES);
-        for (final Integer i : runLengthEncodingIntegers) {
-            final short value = i.shortValue();
-            runLengthEncodedByteBuffer.putShort(value);
+        for (final Integer runlength : runLengthEncodingIntegers) {
+            final short shortCastRunlength = runlength.shortValue();
+            if (runlength != shortCastRunlength)
+                throw new RunlengthV1EncodingNotSupported(msg("Runlength too long for Short ({} cast to {})", runlength, shortCastRunlength));
+            runLengthEncodedByteBuffer.putShort(shortCastRunlength);
         }
 
         byte[] array = runLengthEncodedByteBuffer.array();

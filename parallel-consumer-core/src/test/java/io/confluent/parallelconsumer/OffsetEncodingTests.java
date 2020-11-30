@@ -1,14 +1,11 @@
 package io.confluent.parallelconsumer;
 
-import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
-import org.junit.Assume;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -20,18 +17,14 @@ import pl.tlinkowski.unij.api.UniSets;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.OffsetEncoding.*;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.*;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assume.assumeThat;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
@@ -63,8 +56,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
      * in 0.2.0.0 (Bitset too long to encode) #35
      * <p>
      */
-    @CartesianProductTest
-    @CartesianValueSource(longs = {
+    @SneakyThrows
+    @ParameterizedTest
+    @ValueSource(longs = {
             10_000L,
             100_000L,
             100_000_000L, // slow
@@ -82,7 +76,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         Map<OffsetEncoding, byte[]> encodingMap = encoder.getEncodingMap();
 
         //
-        byte[] smallestBytes = encoder.packSmallest();
+        byte[] smallestBytes = null;
+        if (nextExpectedOffset > Short.MAX_VALUE) {
+            assertThatThrownBy(() -> encoder.packSmallest()).hasMessageContaining("No encodings");
+            return;
+        } else {
+            smallestBytes = encoder.packSmallest();
+        }
         EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(smallestBytes);
         ParallelConsumer.Tuple<Long, Set<Long>> decodedIncompletes = unwrap.getDecodedIncompletes(lowWaterMark);
         assertThat(decodedIncompletes.getRight()).containsExactlyInAnyOrderElementsOf(incompletes);
@@ -116,11 +116,12 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
      */
     @ParameterizedTest
     @EnumSource(OffsetEncoding.class)
-    void ensureEncodingGracefullyWorksWhenOffsetsArentSequential(OffsetEncoding encoding) throws BrokenBarrierException, InterruptedException {
+    void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) throws BrokenBarrierException, InterruptedException {
         assumeThat("Codec skipped, not applicable", encoding,
-                not(in(new OffsetEncoding[]{ByteArray, ByteArrayCompressed, BitSetCompressed, RunLengthCompressed})));
+                not(in(of(ByteArray, ByteArrayCompressed)))); // byte array not currently used
 
         OffsetMapCodecManager.forcedCodec = Optional.of(encoding);
+        OffsetSimultaneousEncoder.compressionForced = true;
 
         var records = new ArrayList<ConsumerRecord<String, String>>();
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 0, "akey", "avalue")); // will complete
@@ -129,30 +130,37 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 5, "akey", "avalue"));
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 69, "akey", "avalue")); // will complete
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 100, "akey", "avalue"));
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 20_000, "akey", "avalue")); // near upper limit of Short.MAX_VALUE
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 25_000, "akey", "avalue")); // near upper limit of Short.MAX_VALUE
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 30_000, "akey", "avalue")); // near upper limit of Short.MAX_VALUE
+
+        // No encoders support this yet - until https://github.com/confluentinc/parallel-consumer/issues/37:
+        // records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000, "akey", "avalue")); // higher than Short.MAX_VALUE
+        // records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000 + Short.MAX_VALUE, "akey", "avalue")); // runlength higher than Short.MAX_VALUE
+
+        //
         ktu.send(consumerSpy, records);
 
+        //
         ParallelConsumerOptions options = parallelConsumer.getWm().getOptions();
         HashMap<TopicPartition, List<ConsumerRecord<String, String>>> objectObjectHashMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
         objectObjectHashMap.put(tp, records);
         ConsumerRecords<String, String> crs = new ConsumerRecords<>(objectObjectHashMap);
 
+        //
         Map<TopicPartition, OffsetAndMetadata> completedEligibleOffsetsAndRemove;
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.registerWork(crs);
 
             List<WorkContainer<String, String>> work = wmm.maybeGetWork();
-            WorkContainer<String, String> firstSuccessfull = work.stream().findFirst().get();
 
-            completeWork(wmm, firstSuccessfull);
+            completeWork(wmm, work, 0);
 
-            WorkContainer<String, String> secondSuccessfull = work.stream()
-                    .filter(x ->
-                            x.getCr().offset() == 69
-                    )
-                    .findFirst().get();
-            completeWork(wmm, secondSuccessfull);
+            completeWork(wmm, work, 69);
+
+            completeWork(wmm, work, 25_000);
 
             completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
         }
@@ -166,8 +174,28 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var firstSucceededRecordRemoved = new ArrayList<>(records);
             firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 0).findFirst().get());
             firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 69).findFirst().get());
-            assertThat(workContainers).extracting(WorkContainer::getCr).containsExactlyElementsOf(firstSucceededRecordRemoved);
+            firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 25_000).findFirst().get());
+            if (encoding.equals(BitSet)) {
+                // plain bitset is too large to be used, offsets are dropped
+                assertThatThrownBy(() ->
+                        assertThat(workContainers).extracting(WorkContainer::getCr)
+                                .containsExactlyElementsOf(firstSucceededRecordRemoved))
+                        .hasMessageContaining("but some elements were not expected")
+                        .hasMessageContaining("offset = 25000");
+
+            } else {
+                assertThat(workContainers).extracting(WorkContainer::getCr).containsExactlyElementsOf(firstSucceededRecordRemoved);
+            }
         }
+    }
+
+    private void completeWork(final WorkManager<String, String> wmm, List<WorkContainer<String, String>> work, long offset) {
+        WorkContainer<String, String> foundWork = work.stream()
+                .filter(x ->
+                        x.getCr().offset() == offset
+                )
+                .findFirst().get();
+        completeWork(wmm, foundWork);
     }
 
     private void completeWork(final WorkManager<String, String> wmm, final WorkContainer<String, String> wc) {
@@ -190,8 +218,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
      * See more info in the class javadoc of {@link BitsetEncoder}.
      *
      * @see BitsetEncoder
-     * @see #ensureEncodingGracefullyWorksWhenOffsetsArentSequential
+     * @see #ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
      */
+    @SneakyThrows
     @Test
     void ensureEncodingGracefullyWorksWhenOffsetsArentSequentialTwo() {
         long nextExpectedOffset = 101;

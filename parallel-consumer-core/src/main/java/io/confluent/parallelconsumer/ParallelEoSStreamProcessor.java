@@ -234,7 +234,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             wm.onPartitionsRevoked(partitions);
             usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
         } catch (Exception e) {
-            throw new InternalError("onPartitionsRevoked event error", e);
+            throw new InternalRuntimeError("onPartitionsRevoked event error", e);
         }
     }
 
