@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
@@ -58,15 +59,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
     private final LinkedBlockingQueue<ConsumerRecords<K, V>> workInbox = new LinkedBlockingQueue<>();
-
-    /**
-     * Used to make sure when we're garbage collecting empty shards for KEY ordering, that we don't cause issues for
-     * contentious keys.
-     *
-     * @see #registerWork
-     * @see #success
-     */
-//    private final ReentrantReadWriteLock shardsLock = new ReentrantReadWriteLock(true);
 
     /**
      * Map of partitions to Map of offsets to WorkUnits
@@ -108,7 +100,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     // visible for testing
     /**
-     * Offsets, beyond the highest committable offset, which haven't been totally completed
+     * Offsets, which have been seen, beyond the highest committable offset, which haven't been totally completed
      */
     Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
 
@@ -120,6 +112,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     // visible for testing
     long MISSING_HIGH_WATER_MARK = -1L;
+
+    /**
+     * Get's set to true whenever work is returned completed, so that we know when a commit needs to be made.
+     * <p>
+     * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
+     * chances no work has completed in the last second.
+     */
+    private AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
     public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.options = options;
@@ -249,40 +249,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
                 processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
 
-                /**
-                 * This method gets called by {@link BrokerPollSystem}, so needs to be thread safe, and as
-                 * {@link #processingShards} can be edited on {@link #success}, need to synchronise write access to
-                 * computing shard keys
-                 * @see #success
-                 */
-//                ReentrantReadWriteLock.ReadLock readLock = shardsLock.readLock();
-//                readLock.lock();
-//                try {
-//                    processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
-//                if (!processingShards.containsKey(shardKey)) { // optimistic
-////                        readLock.unlock();
-//                    log.debug("Getting write lock");
-//                    ReentrantReadWriteLock.WriteLock writeLock = shardsLock.writeLock();
-//                    writeLock.lock();
-//                    try {
-//                        if (!processingShards.containsKey(shardKey)) {
-//                            processingShards.put(shardKey, new ConcurrentSkipListMap<>());
-//                        }
-//                    } finally {
-//                        writeLock.unlock();
-//                    }
-//                }
-////                    else {
-////                    log.warn("shard key already exists {}", shardKey);
-////                    }
-//                ReentrantReadWriteLock.ReadLock readLock = shardsLock.readLock();
-//                readLock.lock();
-//                try {
-//                    processingShards.get(shardKey).put(offset, wc);
-//                } finally {
-//                    readLock.unlock();
-//                }
-
                 partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
                         .put(offset, wc);
             }
@@ -402,6 +368,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public void success(WorkContainer<K, V> wc) {
+        workStateIsDirtyNeedsCommitting.set(true);
         ConsumerRecord<K, V> cr = wc.getCr();
         log.trace("Work success ({}), removing from processing shard queue", wc);
         wc.succeed();
@@ -492,8 +459,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as
      * work is submitted and returned.
+     * <p>
+     * todo: refactor into smaller methods?
      */
-    @SneakyThrows
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
         Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
         int count = 0;
@@ -513,8 +481,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
                 // ordered iteration via offset keys thanks to the tree-map
                 WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
-                boolean complete = container.isUserFunctionComplete();
                 long offset = container.getCr().offset();
+                boolean complete = container.isUserFunctionComplete();
                 if (complete) {
                     if (container.getUserFunctionSucceeded().get() && !iteratedBeyondLowWaterMarkBeingLowestCommittableOffset) {
                         log.trace("Found offset candidate ({}) to add to offset commit map", container);
@@ -558,10 +526,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 }
 
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this, this.consumer);
-                String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
-                totalOffsetMetaCharacterLength += offsetMapPayload.length();
-                OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+                try {
+                    String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
+                    totalOffsetMetaCharacterLength += offsetMapPayload.length();
+                    OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+                } catch (EncodingNotSupportedException e) {
+                    log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
+                }
             }
 
             if (remove) {
@@ -603,9 +575,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             for (var entry : offsetsToSend.entrySet()) {
                 TopicPartition key = entry.getKey();
                 OffsetAndMetadata v = entry.getValue();
-                OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset(), v.toString());
+                OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
                 offsetsToSend.replace(key, stripped);
             }
+        } else {
+            log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
         }
     }
 
@@ -660,4 +634,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getInFlightCount() != 0;
     }
 
+    public boolean isClean() {
+        return !isDirty();
+    }
+
+    private boolean isDirty() {
+        return this.workStateIsDirtyNeedsCommitting.get();
+    }
 }

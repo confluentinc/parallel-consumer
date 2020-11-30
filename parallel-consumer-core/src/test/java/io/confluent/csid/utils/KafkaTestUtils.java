@@ -119,7 +119,9 @@ public class KafkaTestUtils {
         new ArrayList<>(history).stream().forEachOrdered(histories -> {
             // get all partition offsets and flatten
             var partitionCommits = histories.get(CONSUMER_GROUP_ID);
-            for (var singlePartitionCommit : partitionCommits.entrySet()) {
+            Set<Map.Entry<TopicPartition, OffsetAndMetadata>> entries = partitionCommits.entrySet();
+            ArrayList<Map.Entry<TopicPartition, OffsetAndMetadata>> wrapped = new ArrayList<>(entries);
+            for (var singlePartitionCommit : wrapped) {
                 TopicPartition key = singlePartitionCommit.getKey();
                 topicName.set(key.topic());
                 OffsetAndMetadata commit = singlePartitionCommit.getValue();

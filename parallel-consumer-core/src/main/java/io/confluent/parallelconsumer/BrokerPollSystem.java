@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.closed;
@@ -82,7 +81,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 try {
                     booleanFuture.get();
                 } catch (Exception e) {
-                    throw new InternalError("Error in " + BrokerPollSystem.class.getSimpleName() + " system.", e);
+                    throw new InternalRuntimeError("Error in " + BrokerPollSystem.class.getSimpleName() + " system.", e);
                 }
             }
         }
@@ -162,6 +161,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private ConsumerRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
+        log.debug("Subscriptions are paused: {}", paused);
 
         Duration thisLongPollTimeout = (state == ParallelEoSStreamProcessor.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 

@@ -10,10 +10,13 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
@@ -43,9 +46,15 @@ public class OffsetMapCodecManager<K, V> {
     public static final int DefaultMaxMetadataSize = 4096;
 
     public static final Charset CHARSET_TO_USE = UTF_8;
+
     private final WorkManager<K, V> wm;
 
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+
+    /**
+     * Forces the use of a specific codec, instead of choosing the most efficient one. Useful for testing.
+     */
+    static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
     public OffsetMapCodecManager(final WorkManager<K, V> wm, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.wm = wm;
@@ -69,31 +78,40 @@ public class OffsetMapCodecManager<K, V> {
             if (offsetAndMeta != null) {
                 long offset = offsetAndMeta.offset();
                 String metadata = offsetAndMeta.metadata();
-                loadOffsetMetadataPayload(offset, tp, metadata);
+                try {
+                    loadOffsetMetadataPayload(offset, tp, metadata);
+                } catch (OffsetDecodingError offsetDecodingError) {
+                    log.error("Error decoding offsets from assigned partition, dropping offset map (will replay previously completed messages - partition: {}, data: {})",
+                            tp, offsetAndMeta, offsetDecodingError);
+                }
             }
         });
     }
 
-    static ParallelConsumer.Tuple<Long, TreeSet<Long>> deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) {
-        byte[] decode = Base64.getDecoder().decode(incompleteOffsetMap);
+    static ParallelConsumer.Tuple<Long, TreeSet<Long>> deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) throws OffsetDecodingError {
+        byte[] decode;
+        try {
+            decode = OffsetSimpleSerialisation.decodeBase64(incompleteOffsetMap);
+        } catch (IllegalArgumentException a) {
+            throw new OffsetDecodingError(msg("Error decoding offset metadata, input was: {}", incompleteOffsetMap), a);
+        }
         ParallelConsumer.Tuple<Long, Set<Long>> incompleteOffsets = decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decode);
         TreeSet<Long> longs = new TreeSet<>(incompleteOffsets.getRight());
         return ParallelConsumer.Tuple.pairOf(incompleteOffsets.getLeft(), longs);
     }
 
-    void loadOffsetMetadataPayload(long startOffset, TopicPartition tp, String offsetMetadataPayload) {
+    void loadOffsetMetadataPayload(long startOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
         ParallelConsumer.Tuple<Long, TreeSet<Long>> incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
         wm.raisePartitionHighWaterMark(incompletes.getLeft(), tp);
         wm.partitionIncompleteOffsets.put(tp, incompletes.getRight());
     }
 
-    String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
+    String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
         String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, tp, incompleteOffsets);
         return offsetMap;
     }
 
-    @SneakyThrows
-    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
+    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
         byte[] compressedEncoding = encodeOffsetsCompressed(finalOffsetForPartition, tp, incompleteOffsets);
         String b64 = OffsetSimpleSerialisation.base64(compressedEncoding);
         return b64;
@@ -107,13 +125,20 @@ public class OffsetMapCodecManager<K, V> {
      * <p>
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
-    @SneakyThrows
-    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
+    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
         Long nextExpectedOffset = wm.partitionOffsetHighWaterMarks.get(tp) + 1;
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, nextExpectedOffset, incompleteOffsets).invoke();
-        byte[] result = simultaneousEncoder.packSmallest();
-
-        return result;
+        if (forcedCodec.isPresent()) {
+            OffsetEncoding forcedOffsetEncoding = forcedCodec.get();
+            log.warn("Forcing use of {}, for testing", forcedOffsetEncoding);
+            Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
+            byte[] bytes = encodingMap.get(forcedOffsetEncoding);
+            if (bytes == null)
+                throw new EncodingNotSupportedException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
+            return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
+        } else {
+            return simultaneousEncoder.packSmallest();
+        }
     }
 
     /**

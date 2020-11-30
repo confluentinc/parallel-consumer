@@ -234,7 +234,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             wm.onPartitionsRevoked(partitions);
             usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
         } catch (Exception e) {
-            throw new InternalError("onPartitionsRevoked event error", e);
+            throw new InternalRuntimeError("onPartitionsRevoked event error", e);
         }
     }
 
@@ -435,7 +435,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerPool.shutdownNow();
         if (!unfinished.isEmpty()) {
-            log.warn("Threads not done: {}", unfinished);
+            log.warn("Threads not done count: {}", unfinished.size());
         }
 
         log.trace("Awaiting worker pool termination...");
@@ -446,7 +446,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(DrainingCloseable.DEFAULT_TIMEOUT), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("workerPool await timeout!");
+                    log.warn("Thread execution pool termination await timeout! Were any processing jobs dead locked or otherwise stuck?");
                     boolean shutdown = workerPool.isShutdown();
                     boolean terminated = workerPool.isTerminated();
                 }
@@ -744,6 +744,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     private void commitOffsetsThatAreReady() {
+        if (wm.isClean()) {
+            log.debug("Nothing changed since last commit, skipping");
+            return;
+        }
         committer.retrieveOffsetsAndCommit();
     }
 

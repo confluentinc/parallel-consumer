@@ -1,5 +1,23 @@
 = Change Log
 
+== v0.2.0.3
+
+* Fixes
+** https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)] - gracefully drop BitSet or Runlength encoding as an option if offset difference too large (short overflow)
+*** A new serialisation format will be added in next version - see https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37]
+** Gracefully drops encoding attempts if they can't be run
+** Fixes a bug in the offset drop if it can't fit in the offset metadata payload
+
+== v0.2.0.2
+
+* Fixes
+** Turns back on the https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)]
+
+== v0.2.0.1 DO NOT USE - has critical bug
+
+* Fixes
+** Incorrectly turns off an over-flow check in https://github.com/confluentinc/parallel-consumer/issues/35[offset serialisation system (#35)]
+
 == v0.2.0.0
 
 * Features:

@@ -106,6 +106,9 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * At the moment this is a sort of sanity check, and was chosen rather arbitriarly. However, one should consider
      * that this is per client, and is a total across all assigned partitions.
+     * <p>
+     * It's important that this is small enough, that you're not at risk of the broker expiring log segments where the
+     * oldest offset resides.
      */
     @Builder.Default
     private final int maxNumberMessagesBeyondBaseCommitOffset = 1000;
