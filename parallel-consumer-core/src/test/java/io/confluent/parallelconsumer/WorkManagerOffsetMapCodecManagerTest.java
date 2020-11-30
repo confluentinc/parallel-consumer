@@ -103,6 +103,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         return randomInput;
     }
 
+    @SneakyThrows
     @Test
     void serialiseCycle() {
         String serialised = om.serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, tp, incomplete);
@@ -208,6 +209,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         assertThat(originalString).isEqualTo(decodedString);
     }
 
+    @SneakyThrows
     @Test
     void loadCompressedRunLengthEncoding() {
         byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
@@ -264,6 +266,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         assertThat(decompressedInput).isEqualTo(ByteBuffer.wrap(input));
     }
 
+    @SneakyThrows
     @Test
     void largeOffsetMap() {
         wm.raisePartitionHighWaterMark(200L, tp);
@@ -313,6 +316,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         assertThat(deserialisedBitSet).isEqualTo(input);
     }
 
+    @SneakyThrows
     @Test
     void compressionCycle() {
         byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);

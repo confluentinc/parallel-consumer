@@ -67,7 +67,7 @@ class OffsetSimultaneousEncoder {
      * <p>
      * Visible for testing.
      */
-    boolean compressionForced = false;
+    static boolean compressionForced = false;
 
     /**
      * The encoders to run
@@ -169,7 +169,16 @@ class OffsetSimultaneousEncoder {
     }
 
     private void registerEncodings(final Set<? extends OffsetEncoder> encoders) {
-        encoders.forEach(OffsetEncoder::register);
+        List<OffsetEncoder> toRemove = new ArrayList<>();
+        for (OffsetEncoder encoder : encoders) {
+            try {
+                encoder.register();
+            } catch (EncodingNotSupportedException e) {
+                log.warn("Removing {} encoder, not supported", encoder.getEncodingType().name(), e);
+                toRemove.add(encoder);
+            }
+        }
+        encoders.removeAll(toRemove);
 
         // compressed versions
         // sizes over LARGE_INPUT_MAP_SIZE_THRESHOLD bytes seem to benefit from compression
@@ -184,7 +193,10 @@ class OffsetSimultaneousEncoder {
      *
      * @see #packEncoding(EncodedOffsetPair)
      */
-    public byte[] packSmallest() {
+    public byte[] packSmallest() throws EncodingNotSupportedException {
+        if (sortedEncodings.isEmpty()) {
+            throw new EncodingNotSupportedException("No encodings could be used");
+        }
         final EncodedOffsetPair best = this.sortedEncodings.first();
         log.debug("Compression chosen is: {}", best.encoding.name());
         return packEncoding(best);

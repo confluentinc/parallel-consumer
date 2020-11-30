@@ -458,10 +458,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as
-     *  work is submitted and returned.
+     * work is submitted and returned.
+     * <p>
      * todo: refactor into smaller methods?
      */
-    @SneakyThrows
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
         Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
         int count = 0;
@@ -526,10 +526,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 }
 
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this, this.consumer);
-                String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
-                totalOffsetMetaCharacterLength += offsetMapPayload.length();
-                OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+                try {
+                    String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
+                    totalOffsetMetaCharacterLength += offsetMapPayload.length();
+                    OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+                } catch (EncodingNotSupportedException e) {
+                    log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
+                }
             }
 
             if (remove) {
@@ -571,9 +575,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             for (var entry : offsetsToSend.entrySet()) {
                 TopicPartition key = entry.getKey();
                 OffsetAndMetadata v = entry.getValue();
-                OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset(), v.toString());
+                OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
                 offsetsToSend.replace(key, stripped);
             }
+        } else {
+            log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
         }
     }
 

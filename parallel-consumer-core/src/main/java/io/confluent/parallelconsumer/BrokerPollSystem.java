@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.closed;
@@ -82,7 +81,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 try {
                     booleanFuture.get();
                 } catch (Exception e) {
-                    throw new InternalError("Error in " + BrokerPollSystem.class.getSimpleName() + " system.", e);
+                    throw new InternalRuntimeError("Error in " + BrokerPollSystem.class.getSimpleName() + " system.", e);
                 }
             }
         }
