@@ -69,7 +69,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see #findCompletedEligibleOffsetsAndRemove
      */
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
-//    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
+    //    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
+
+    private final BackoffAnalyser backoffer = new BackoffAnalyser();
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -241,7 +243,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
         //
         int inFlight = getNumberOfEntriesInPartitionQueues();
-        int max = options.getSoftMaxNumberMessagesBeyondBaseCommitOffset();
+        int max = getMaxToGoBeyondOffset();
         int gap = max - inFlight;
         int taken = 0;
 
@@ -265,6 +267,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        internalBatchMailQueue.removeAll(toRemove);
     }
 
+    private int getMaxToGoBeyondOffset() {
+        return backoffer.getCurrentTotalMaxCountBeyondOffset();
+    }
+
     /**
      * @return true if the records were accepted, false if they cannot be
      * @see #processInbox()
@@ -273,10 +279,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         int partitionWorkRemainingCount = getWorkQueuedInShardsCount();
         int recordsToAdd = records.count();
         // we don't break up individual record sets (although we could, but "overhead") so need to queue up records even if it goes over by some amount
-        boolean overMax = partitionWorkRemainingCount - recordsToAdd >= options.getSoftMaxNumberMessagesBeyondBaseCommitOffset();
+        boolean overMax = partitionWorkRemainingCount - recordsToAdd >= getMaxToGoBeyondOffset();
         if (overMax) {
             log.debug("Work remaining in partition queues has surpassed max, so won't bring further messages in from the pipeline queued: {} / max: {}",
-                    partitionWorkRemainingCount, options.getSoftMaxNumberMessagesBeyondBaseCommitOffset());
+                    partitionWorkRemainingCount, getMaxToGoBeyondOffset());
             return false;
         }
 
@@ -395,18 +401,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public <R> List<WorkContainer<K, V>> maybeGetWork() {
-        return maybeGetWork(options.getMaxMessagesToQueue());
+        return maybeGetWork(getMaxMessagesToQueue());
     }
 
     /**
      * Depth first work retrieval.
-     *
-     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#getMaxMessagesToQueue()}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
         processInbox();
 
-        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxMessagesToQueue()), options.getSoftMaxNumberMessagesBeyondBaseCommitOffset());
+        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, getMaxMessagesToQueue()), getMaxToGoBeyondOffset());
         int workToGetDelta = minWorkToGetSetting - getRecordsOutForProcessing();
 
         // optimise early
@@ -470,6 +474,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         recordsOutForProcessing += work.size();
 
         return work;
+    }
+
+    private int getMaxMessagesToQueue() {
+        //return options.getNumberOfThreads() * options.getLoadingFactor();
+        return options.getNumberOfThreads() * 10;
     }
 
     public void success(WorkContainer<K, V> wc) {
@@ -654,6 +663,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
                 } catch (EncodingNotSupportedException e) {
                     log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
+                    backoffer.onFailure();
                 }
             }
 
@@ -692,15 +702,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             log.warn("Offset map data too large (size: {}) to fit in metadata payload - stripping offset map out. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096",
                     totalOffsetMetaCharacterLength);
-            // strip payload
+            // strip all payloads
+            // todo iteratively strip the largest payloads until we're under the limit
             for (var entry : offsetsToSend.entrySet()) {
                 TopicPartition key = entry.getKey();
                 OffsetAndMetadata v = entry.getValue();
                 OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
                 offsetsToSend.replace(key, stripped);
             }
-        } else {
+            backoffer.onFailure();
+        } else if (totalOffsetMetaCharacterLength != 0) {
             log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
+            backoffer.onSuccess();
         }
     }
 
@@ -734,8 +747,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     boolean isSufficientlyLoaded() {
         int total = getTotalWorkWaitingProcessing();
         int inPartitions = getNumberOfEntriesInPartitionQueues();
-        boolean loadedEnoughInPipeline = total > options.getSoftMaxNumberMessagesBeyondBaseCommitOffset() * loadingFactor;
-        boolean overMaxUncommitted = inPartitions >= options.getSoftMaxNumberMessagesBeyondBaseCommitOffset();
+        boolean loadedEnoughInPipeline = total > getMaxToGoBeyondOffset() * loadingFactor;
+        boolean overMaxUncommitted = inPartitions >= getMaxToGoBeyondOffset();
         boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
         if (remainingIsSufficient) {
             log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);

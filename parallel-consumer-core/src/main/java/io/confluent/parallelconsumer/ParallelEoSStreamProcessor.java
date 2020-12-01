@@ -45,6 +45,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private final ParallelConsumerOptions options;
 
+    private final BackoffAnalyser backoffer;
+
     /**
      * Injectable clock for testing
      */
@@ -160,6 +162,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         options = newOptions;
         options.validate();
 
+        this.backoffer = new BackoffAnalyser();
+
         this.consumer = options.getConsumer();
 
         checkNotSubscribed(consumer);
@@ -250,7 +254,11 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
+        numberOfAssignedPartitions = partitions.size();
     }
+
+    @Getter
+    private int numberOfAssignedPartitions;
 
     /**
      * Delegate to {@link WorkManager}
@@ -730,6 +738,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 log.debug("Commit too frequent, but no benefit in lingering");
             }
             if (poolQueueLow)
+                // todo got to change this - commits are ever few ms
                 log.debug("Pool queue too low so committing offsets");
             commitOffsetsThatAreReady();
             lastCommit = Instant.now();

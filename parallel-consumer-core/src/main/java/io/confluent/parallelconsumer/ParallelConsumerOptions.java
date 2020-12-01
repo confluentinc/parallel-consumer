@@ -112,21 +112,21 @@ public class ParallelConsumerOptions<K, V> {
      * It's important that this is small enough, that you're not at risk of the broker expiring log segments where the
      * oldest offset resides.
      */
-    @Builder.Default
-    private final int softMaxNumberMessagesBeyondBaseCommitOffset = 1000;
+//    @Builder.Default
+//    private final int softMaxNumberMessagesBeyondBaseCommitOffset = 1000;
 
-    /**
-     * Max number of messages to queue up in our execution system and attempt to process concurrently.
-     * <p>
-     * In the core module, this will be constrained by the {@link #numberOfThreads} setting, as that is the max actual
-     * concurrency for processing the messages. To actually get this degree of concurrency, you would need to have a
-     * matching number of threads in the pool.
-     * <p>
-     * However with the VertX engine, this will control how many messages at a time are being submitted to the Vert.x
-     * engine to process. As Vert.x isn't constrained by a thread count, this will be the actual degree of concurrency.
-     */
-    @Builder.Default
-    private final int maxMessagesToQueue = 100;
+//    /**
+//     * Max number of messages to queue up in our execution system and attempt to process concurrently.
+//     * <p>
+//     * In the core module, this will be constrained by the {@link #numberOfThreads} setting, as that is the max actual
+//     * concurrency for processing the messages. To actually get this degree of concurrency, you would need to have a
+//     * matching number of threads in the pool.
+//     * <p>
+//     * However with the VertX engine, this will control how many messages at a time are being submitted to the Vert.x
+//     * engine to process. As Vert.x isn't constrained by a thread count, this will be the actual degree of concurrency.
+//     */
+////    @Builder.Default
+////    private final int maxMessagesToQueue = 100;
 
     /**
      * Number of threads to use in the core's thread pool.
@@ -145,17 +145,17 @@ public class ParallelConsumerOptions<K, V> {
                     commitMode));
         }
 
-        //
-        if (getNumberOfThreads() * loadingFactor * 2 > maxMessagesToQueue) {
-            throw new IllegalArgumentException(msg("maxMessagesToQueue ({}) needs to be at least {} (loading factor) * 2 times larges than the thread count ({})",
-                    maxMessagesToQueue, loadingFactor, getNumberOfThreads()));
-        }
-
-        //
-        if (maxMessagesToQueue > softMaxNumberMessagesBeyondBaseCommitOffset) {
-            throw new IllegalArgumentException(msg("softMaxNumberMessagesBeyondBaseCommitOffset ({}) must be more than maxMessagesToQueue ({})",
-                    softMaxNumberMessagesBeyondBaseCommitOffset, maxMessagesToQueue));
-        }
+//        //
+//        if (getNumberOfThreads() * loadingFactor * 2 > maxMessagesToQueue) {
+//            throw new IllegalArgumentException(msg("maxMessagesToQueue ({}) needs to be at least {} (loading factor) * 2 times larges than the thread count ({})",
+//                    maxMessagesToQueue, loadingFactor, getNumberOfThreads()));
+//        }
+//
+//        //
+//        if (maxMessagesToQueue > softMaxNumberMessagesBeyondBaseCommitOffset) {
+//            throw new IllegalArgumentException(msg("softMaxNumberMessagesBeyondBaseCommitOffset ({}) must be more than maxMessagesToQueue ({})",
+//                    softMaxNumberMessagesBeyondBaseCommitOffset, maxMessagesToQueue));
+//        }
     }
 
     protected boolean isUsingTransactionalProducer() {
