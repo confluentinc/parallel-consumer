@@ -9,7 +9,7 @@ import org.slf4j.helpers.MessageFormatter;
 public class StringUtils {
 
     public static String msg(String s, Object... args) {
-        return MessageFormatter.basicArrayFormat(s, args);
+        return MessageFormatter.arrayFormat(s, args).getMessage();
     }
 
     public static boolean isBlank(final String property) {

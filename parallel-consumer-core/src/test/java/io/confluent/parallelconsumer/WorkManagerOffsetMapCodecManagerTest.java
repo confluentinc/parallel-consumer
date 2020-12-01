@@ -10,7 +10,6 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -92,7 +91,6 @@ class WorkManagerOffsetMapCodecManagerTest {
         inputs.add(generateRandomData(30000).toString());
     }
 
-    @NotNull
     private static StringBuffer generateRandomData(int entries) {
         StringBuffer randomInput = new StringBuffer();
         range(entries).toStream()
