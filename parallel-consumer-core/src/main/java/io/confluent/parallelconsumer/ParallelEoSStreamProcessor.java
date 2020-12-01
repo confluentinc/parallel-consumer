@@ -586,14 +586,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         log.debug("Pool stats: {}", workerPool);
 
-        if (workerPool.getQueue().isEmpty()) {
-            log.warn("Executor pool queue is empty!");
+        if (isPoolQueueLow()) {
+            log.warn("Executor pool queue is not loaded with enough work! {} vs {}",
+                    workerPool.getQueue().size(), options.getNumberOfThreads() * 2);
         }
-
-        if (poolQueueIsLow()) {
-            log.warn("Executor pool queue is not loaded with enough work! {} vs {}", workerPool.getQueue().size(), options.getNumberOfThreads() * 3);
-        }
-
 
         if (state == running) {
             if (!wm.isSufficientlyLoaded()) {
@@ -628,21 +624,22 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
 
-//        Duration duration = Duration.ofMillis(1000);
-//        log.debug("Thread yield {}", duration);
-//        try {
-//            Thread.sleep(duration.toMillis());
-//        } catch (InterruptedException e) {
-//            log.debug("Woke up", e);
-//        }
+        Duration duration = Duration.ofMillis(1);
+        log.debug("Thread yield {}", duration);
+        try {
+            Thread.sleep(duration.toMillis());
+        } catch (InterruptedException e) {
+            log.debug("Woke up", e);
+        }
 
         // end of loop
         log.debug("End of control loop, waiting processing {}, remaining partition queues: {}, out for processing: {}. In state: {}",
                 wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getRecordsOutForProcessing(), state);
     }
 
-    private boolean poolQueueIsLow() {
-        return options.getNumberOfThreads() * 3 > workerPool.getQueue().size();
+    private boolean isPoolQueueLow() {
+        int loadingFactor = options.getLoadingFactor();
+        return options.getNumberOfThreads() * loadingFactor > workerPool.getQueue().size() && wm.getNumberOfEntriesInPartitionQueues() > 0;
     }
 
     private void drain() {
@@ -726,12 +723,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
         boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
-        boolean poolQueueLow = poolQueueIsLow();
+        boolean poolQueueLow = isPoolQueueLow();
         boolean shouldCommitNow = commitFrequencyOK || !lingeringOnCommitWouldBeBeneficial() || isCommandedToCommit() || poolQueueLow;
         if (shouldCommitNow) {
             if (!commitFrequencyOK) {
                 log.debug("Commit too frequent, but no benefit in lingering");
             }
+            if (poolQueueLow)
+                log.debug("Pool queue too low so committing offsets");
             commitOffsetsThatAreReady();
             lastCommit = Instant.now();
         } else {
@@ -858,7 +857,20 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             addToMailbox(wc); // always add on error
             throw e; // trow again to make the future failed
         }
+//        finally {
+//            onWorkFunctionFinish();
+//        }
     }
+
+//    private void onWorkFunctionFinish() {
+//        checkEnoughWorkIsQueued()
+//    }
+//
+//    private void checkEnoughWorkIsQueued() {
+//        if (isPoolQueueLow()) {
+//            notifyNewWorkRegistered();
+//        }
+//    }
 
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         addToMailbox(wc);
@@ -872,7 +884,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     protected void addToMailbox(WorkContainer<K, V> wc) {
         log.trace("Adding {} to mailbox...", wc);
         workMailBox.add(wc);
-        log.trace("Finished adding. {}", wc);
     }
 
     /**

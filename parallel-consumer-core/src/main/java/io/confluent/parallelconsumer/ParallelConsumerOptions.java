@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.StringUtils;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -98,24 +99,14 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Total max number of messages to process beyond the base committed offsets.
      * <p>
-     * Note this could be double, because we don't break up {@link org.apache.kafka.clients.consumer.ConsumerRecords}
-     * sets from the {@link org.apache.kafka.clients.consumer.KafkaConsumer} (although we could, but would need to
-     * spend
-     * cycles copying references).
-     * <p>
-     * Tbe actual max will float between this value, and {@link ConsumerConfig#MAX_POLL_RECORDS_CONFIG} is configured
-     * as.
-     * <p>
      * This acts as a sort sort of upper limit on the number of messages we should allow our system to handle, when
-     * working with large quantities of messages that haven't been included in the normal Broker offset commit
-     * protocol.
-     * I.e. if there is a single message that is failing to process, without this limit we will continue on forever
-     * with
+     * working with large quantities of messages that haven't been included in the normal Broker offset commit protocol.
+     * I.e. if there is a single message that is failing to process, without this limit we will continue on forever with
      * our system, with the actual (normal) committed offset never moving, and relying totally on our {@link
      * OffsetMapCodecManager} to encode the process status of our records and store in metadata next to the committed
-     * offset.
+     * offset. The capacity of which is not unlimited.
      * <p>
-     * At the moment this is a sort of sanity check, and was chosen rather arbitriarly. However, one should consider
+     * At the moment this is a sort of sanity check, and was chosen rather arbitrarily. However, one should consider
      * that this is per client, and is a total across all assigned partitions.
      * <p>
      * It's important that this is small enough, that you're not at risk of the broker expiring log segments where the
@@ -143,6 +134,9 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final int numberOfThreads = 16;
 
+    @Getter
+    private final int loadingFactor = 3;
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
@@ -151,11 +145,16 @@ public class ParallelConsumerOptions<K, V> {
                     commitMode));
         }
 
-        // Factor of 2 because the records come in batches, a second large batch can be added, even if there's only a single space available
-        int loadingMultiple = 2;
-        if (getSoftMaxNumberMessagesBeyondBaseCommitOffset() * loadingMultiple > BitsetEncoder.MAX_LENGTH_ENCODABLE) {
-            throw new IllegalArgumentException(msg("Can't currently support processing more than {} messages at a time due to limitations in BitSet encoding. See #37",
-                    BitsetEncoder.MAX_LENGTH_ENCODABLE));
+        //
+        if (getNumberOfThreads() * loadingFactor * 2 > maxMessagesToQueue) {
+            throw new IllegalArgumentException(msg("maxMessagesToQueue ({}) needs to be at least {} (loading factor) * 2 times larges than the thread count ({})",
+                    maxMessagesToQueue, loadingFactor, getNumberOfThreads()));
+        }
+
+        //
+        if (maxMessagesToQueue > softMaxNumberMessagesBeyondBaseCommitOffset) {
+            throw new IllegalArgumentException(msg("softMaxNumberMessagesBeyondBaseCommitOffset ({}) must be more than maxMessagesToQueue ({})",
+                    softMaxNumberMessagesBeyondBaseCommitOffset, maxMessagesToQueue));
         }
     }
 
