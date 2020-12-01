@@ -9,7 +9,6 @@ import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -63,10 +62,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
      * advancing offsets, as this isn't a guarantee of kafka's.
+     * <p>
+     * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
+     * ({@link #findCompletedEligibleOffsetsAndRemove})
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
+//    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -74,7 +77,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private Optional<Object> iterationResumePoint = Optional.empty();
 
-    private int inFlightCount = 0;
+    private int recordsOutForProcessing = 0;
 
     /**
      * The multiple of {@link ParallelConsumerOptions#getMaxMessagesToQueue()} that should be pre-loaded awaiting
@@ -218,20 +221,48 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         workInbox.add(records);
     }
 
-    private ArrayList<ConsumerRecords<K, V>> internalMailQueue = new ArrayList<>();
+    private final Queue<ConsumerRecords<K, V>> internalBatchMailQueue = new LinkedList<>();
+    private final Queue<ConsumerRecord<K, V>> internalFlattenedMailQueue = new LinkedList<>();
 
     /**
      * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
      */
     private void processInbox() {
-        workInbox.drainTo(internalMailQueue);
-        ArrayList<ConsumerRecords<K, V>> toRemove = new ArrayList<>();
-        for (final ConsumerRecords<K, V> records : internalMailQueue) {
-            boolean moreRecordsCanBeAccepted = processInbox(records);
-            if (moreRecordsCanBeAccepted)
-                toRemove.add(records);
+        workInbox.drainTo(internalBatchMailQueue);
+
+        // flatten
+        while (!internalBatchMailQueue.isEmpty()) {
+            ConsumerRecords<K, V> consumerRecords = internalBatchMailQueue.poll();
+            log.debug("Flattening {} records", consumerRecords.count());
+            for (final ConsumerRecord<K, V> consumerRecord : consumerRecords) {
+                internalFlattenedMailQueue.add(consumerRecord);
+            }
         }
-        internalMailQueue.removeAll(toRemove);
+
+        //
+        int inFlight = getNumberOfEntriesInPartitionQueues();
+        int max = options.getSoftMaxNumberMessagesBeyondBaseCommitOffset();
+        int gap = max - inFlight;
+        int taken = 0;
+
+        log.debug("Will register {} (max configured: {}) records of work ({} already registered)", gap, max, inFlight);
+
+        //
+        while (taken < gap && !internalFlattenedMailQueue.isEmpty()) {
+            ConsumerRecord<K, V> poll = internalFlattenedMailQueue.poll();
+            processInbox(poll);
+            taken++;
+        }
+
+//        ArrayList<ConsumerRecords<K, V>> toRemove = new ArrayList<>();
+//        for (final ConsumerRecords<K, V> records : internalBatchMailQueue) {
+//            records.
+//
+//        }
+//        boolean moreRecordsCanBeAccepted = processInbox(records);
+//        if (moreRecordsCanBeAccepted)
+//            toRemove.add(records);
+//        internalBatchMailQueue.removeAll(toRemove);
     }
 
     /**
@@ -249,6 +280,21 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             return false;
         }
 
+//        if (!inboundOffsetWidthWithinRange(records)) {
+//            return false;
+//        }
+
+        //
+        log.debug("Registering {} records of work ({} already registered)", recordsToAdd, partitionWorkRemainingCount);
+
+        for (ConsumerRecord<K, V> rec : records) {
+            processInbox(rec);
+        }
+
+        return true;
+    }
+
+    private boolean inboundOffsetWidthWithinRange(final ConsumerRecords<K, V> records) {
         // brute force - surely very slow. surely this info can be cached?
         Map<TopicPartition, List<ConsumerRecord<K, V>>> inbound = new HashMap<>();
         for (final ConsumerRecord<K, V> record : records) {
@@ -284,24 +330,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                                 // can't be more accurate unless we break up the inbound records and count them per queue
                                 log.debug("Incoming outstanding offset difference too large for BitSet encoder (incoming width: {}, old width: {}), will wait before adding these records until the width shrinks (below {})",
                                         width, oldWidth, BitsetEncoder.MAX_LENGTH_ENCODABLE);
-//                                return false;
-                                break;
+                                return false;
+//                                break;
                             } else {
-//                                log.debug("Width was ok {}", width);
+                                log.debug("Width was ok {}", width);
                             }
                         }
                     }
                 }
             }
         }
-
-        //
-        log.debug("Registering {} records of work ({} already registered)", recordsToAdd, partitionWorkRemainingCount);
-
-        for (ConsumerRecord<K, V> rec : records) {
-            processInbox(rec);
-        }
-
         return true;
     }
 
@@ -318,8 +356,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
             processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
 
-            partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>())
-                    .put(offset, wc);
+            partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
         }
     }
 
@@ -364,13 +401,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Depth first work retrieval.
      *
-     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#maxConcurrency}
+     * @param requestedMaxWorkToRetrieve ignored unless less than {@link ParallelConsumerOptions#getMaxMessagesToQueue()}
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
         processInbox();
 
         int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, options.getMaxMessagesToQueue()), options.getSoftMaxNumberMessagesBeyondBaseCommitOffset());
-        int workToGetDelta = minWorkToGetSetting - getInFlightCount();
+        int workToGetDelta = minWorkToGetSetting - getRecordsOutForProcessing();
 
         // optimise early
         if (workToGetDelta < 1) {
@@ -429,8 +466,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
 
 
-        log.debug("Got {} records of work", work.size());
-        inFlightCount += work.size();
+        log.debug("Got {} records of work. In-flight: {}, Awaiting: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        recordsOutForProcessing += work.size();
 
         return work;
     }
@@ -451,7 +488,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             processingShards.remove(key);
         }
         successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
-        inFlightCount--;
+        recordsOutForProcessing--;
     }
 
     public void failed(WorkContainer<K, V> wc) {
@@ -469,7 +506,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         var shard = processingShards.get(key);
         long offset = wc.getCr().offset();
         shard.put(offset, wc);
-        inFlightCount--;
+        recordsOutForProcessing--;
     }
 
     public int getNumberOfEntriesInPartitionQueues() {
@@ -491,7 +528,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return Work queued in the mail box, awaiting processing into shards
      */
     private Integer getWorkQueuedInMailboxCount() {
-        return internalMailQueue.stream().map(x -> x.count()).reduce(0, (a, b) -> a + b);
+        int batchCount = 0;
+        for (final ConsumerRecords<K, V> consumerRecords : internalBatchMailQueue) {
+            batchCount += consumerRecords.count();
+        }
+//        Integer batchCount = internalBatchMailQueue.stream()
+//                .map(ConsumerRecords::count)
+//                .reduce(0, Integer::sum);
+        return batchCount + internalFlattenedMailQueue.size();
     }
 
     /**
@@ -508,7 +552,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     boolean isRecordsAwaitingProcessing() {
         int partitionWorkRemainingCount = getWorkQueuedInShardsCount();
         //return partitionWorkRemainingCount > 0 || !workInbox.isEmpty() || !internalMailQueue.isEmpty();
-        return partitionWorkRemainingCount > 0 || !internalMailQueue.isEmpty();
+        return partitionWorkRemainingCount > 0 || !internalBatchMailQueue.isEmpty() || !internalFlattenedMailQueue.isEmpty();
     }
 
     boolean isRecordsAwaitingToBeCommitted() {
@@ -694,13 +738,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         boolean overMaxUncommitted = inPartitions >= options.getSoftMaxNumberMessagesBeyondBaseCommitOffset();
         boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
         if (remainingIsSufficient) {
-            log.debug("loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
+            log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
         }
         return remainingIsSufficient;
     }
 
-    public int getInFlightCount() {
-        return inFlightCount;
+    public int getRecordsOutForProcessing() {
+        return recordsOutForProcessing;
     }
 
     public boolean workIsWaitingToBeCompletedSuccessfully() {
@@ -713,7 +757,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean hasWorkInFlight() {
-        return getInFlightCount() != 0;
+        return getRecordsOutForProcessing() != 0;
     }
 
     public boolean isClean() {

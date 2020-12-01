@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer;
 
+import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -140,10 +141,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         //
         ParallelConsumerOptions options = parallelConsumer.getWm().getOptions();
-        HashMap<TopicPartition, List<ConsumerRecord<String, String>>> objectObjectHashMap = new HashMap<>();
+        HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
-        objectObjectHashMap.put(tp, records);
-        ConsumerRecords<String, String> crs = new ConsumerRecords<>(objectObjectHashMap);
+        recordsMap.put(tp, records);
+        ConsumerRecords<String, String> crs = new ConsumerRecords<>(recordsMap);
 
         // write offsets
         Map<TopicPartition, OffsetAndMetadata> completedEligibleOffsetsAndRemove;
@@ -153,11 +154,11 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             List<WorkContainer<String, String>> work = wmm.maybeGetWork();
 
-            completeWork(wmm, work, 0);
+            KafkaTestUtils.completeWork(wmm, work, 0);
 
-            completeWork(wmm, work, 69);
+            KafkaTestUtils.completeWork(wmm, work, 69);
 
-            completeWork(wmm, work, 25_000);
+            KafkaTestUtils.completeWork(wmm, work, 25_000);
 
             completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
 
@@ -192,27 +193,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 }
             }
         }
-    }
-
-    private void completeWork(final WorkManager<String, String> wmm, List<WorkContainer<String, String>> work, long offset) {
-        WorkContainer<String, String> foundWork = work.stream()
-                .filter(x ->
-                        x.getCr().offset() == offset
-                )
-                .findFirst().get();
-        completeWork(wmm, foundWork);
-    }
-
-    private void completeWork(final WorkManager<String, String> wmm, final WorkContainer<String, String> wc) {
-        FutureTask future = new FutureTask<>(() -> {
-            return true;
-        });
-        future.run();
-        assertThat(future).isDone();
-        wc.setFuture(future);
-        wc.onUserFunctionSuccess();
-        wmm.success(wc);
-        assertThat(wc.isUserFunctionComplete()).isTrue();
     }
 
     /**

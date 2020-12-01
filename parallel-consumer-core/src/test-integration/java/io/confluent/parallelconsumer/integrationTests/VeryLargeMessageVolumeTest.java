@@ -12,6 +12,8 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import me.tongfei.progressbar.ProgressBar;
+import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -116,7 +118,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 .producer(newProducer)
                 .commitMode(commitMode)
                 .numberOfThreads(100)
-                .softMaxNumberMessagesBeyondBaseCommitOffset(10_000)
+                .softMaxNumberMessagesBeyondBaseCommitOffset(30_000)
                 .maxMessagesToQueue(10_000)
                 .build());
         pc.subscribe(of(inputName));
@@ -129,8 +131,16 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         assertThat(beginOffsets.get(tp)).isEqualTo(0L);
 
 
+        ProgressBar bar = new ProgressBarBuilder()
+                .setInitialMax(expectedMessageCount)
+                .showSpeed()
+                .setUnit("msgs", 1)
+                .setUpdateIntervalMillis(1000)
+                .build()
+                .maxHint(expectedMessageCount);
+
         pc.pollAndProduce(record -> {
-                    log.trace("Still going {}", record);
+                    bar.stepTo(record.offset());
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
@@ -146,7 +156,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(120))
-                    // .failFast(()->pc.isClosedOrFailed()) requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                    .failFast(() -> pc.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {

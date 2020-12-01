@@ -423,7 +423,7 @@ public class WorkManagerTest {
         Assertions.assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
 
         //
-        assertThat(wm.getInFlightCount()).isEqualTo(2);
+        assertThat(wm.getRecordsOutForProcessing()).isEqualTo(2);
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(9);
         assertThat(wm.getWorkQueuedInShardsCount()).isEqualTo(4);
         Assertions.assertThat(successfulWork).hasSize(5);
@@ -440,7 +440,7 @@ public class WorkManagerTest {
         //
         assertThat(work.size()).isEqualTo(0);
         Assertions.assertThat(successfulWork).hasSize(9);
-        assertThat(wm.getInFlightCount()).isEqualTo(0);
+        assertThat(wm.getRecordsOutForProcessing()).isEqualTo(0);
         assertThat(wm.getWorkQueuedInShardsCount()).isEqualTo(0);
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(9);
     }

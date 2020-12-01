@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.WallClock;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +32,7 @@ import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
+import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -53,7 +53,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     @Setter
     @Getter
-    private Duration timeBetweenCommits = ofSeconds(1);
+    private Duration timeBetweenCommits = ofMillis(500);
 
     private Instant lastCommit = Instant.now();
 
@@ -64,7 +64,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     /**
      * The pool which is used for running the users's supplied function
      */
-    private final ExecutorService workerPool;
+    private final ThreadPoolExecutor workerPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -165,7 +165,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         checkNotSubscribed(consumer);
         checkAutoCommitIsDisabled(consumer);
 
-        this.workerPool = Executors.newFixedThreadPool(newOptions.getNumberOfThreads());
+        workerPool = new ThreadPoolExecutor(newOptions.getNumberOfThreads(), newOptions.getNumberOfThreads(),
+                0L, MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
 
         this.wm = new WorkManager<>(newOptions, consumer);
 
@@ -582,6 +584,17 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             submitWorkToPool(userFunction, callback, records);
         }
 
+        log.debug("Pool stats: {}", workerPool);
+
+        if (workerPool.getQueue().isEmpty()) {
+            log.warn("Executor pool queue is empty!");
+        }
+
+        if (poolQueueIsLow()) {
+            log.warn("Executor pool queue is not loaded with enough work! {} vs {}", workerPool.getQueue().size(), options.getNumberOfThreads() * 3);
+        }
+
+
         if (state == running) {
             if (!wm.isSufficientlyLoaded()) {
                 log.debug("Found not enough messages queued up, ensuring poller is awake");
@@ -615,16 +628,21 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
 
-        Duration duration = Duration.ofMillis(10);
-        log.debug("Thread yield {}", duration);
-        try {
-            Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-            log.debug("Woke up", e);
-        }
+//        Duration duration = Duration.ofMillis(1000);
+//        log.debug("Thread yield {}", duration);
+//        try {
+//            Thread.sleep(duration.toMillis());
+//        } catch (InterruptedException e) {
+//            log.debug("Woke up", e);
+//        }
 
         // end of loop
-        log.debug("End of control loop, waiting processing {}, remaining partition queues: {}, in flight: {}. In state: {}", wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getInFlightCount(), state);
+        log.debug("End of control loop, waiting processing {}, remaining partition queues: {}, out for processing: {}. In state: {}",
+                wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getRecordsOutForProcessing(), state);
+    }
+
+    private boolean poolQueueIsLow() {
+        return options.getNumberOfThreads() * 3 > workerPool.getQueue().size();
     }
 
     private void drain() {
@@ -651,7 +669,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * Can be interrupted if something else needs doing.
      */
     private void processWorkCompleteMailBox() {
-        log.trace("Processing mailbox (might block waiting or results)...");
+        log.trace("Processing mailbox (might block waiting for results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
 
@@ -665,7 +683,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
             } else {
-                // dont set the lock or log anything
+                // don't set the lock or log anything
                 firstBlockingPoll = workMailBox.poll();
             }
         } catch (InterruptedException e) {
@@ -708,7 +726,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
         boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
-        boolean shouldCommitNow = commitFrequencyOK || !lingeringOnCommitWouldBeBeneficial() || isCommandedToCommit();
+        boolean poolQueueLow = poolQueueIsLow();
+        boolean shouldCommitNow = commitFrequencyOK || !lingeringOnCommitWouldBeBeneficial() || isCommandedToCommit() || poolQueueLow;
         if (shouldCommitNow) {
             if (!commitFrequencyOK) {
                 log.debug("Commit too frequent, but no benefit in lingering");
