@@ -13,9 +13,7 @@ import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
-import org.assertj.core.api.Assertions;
 import org.assertj.core.api.ObjectAssert;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -87,7 +85,6 @@ public class WorkManagerTest {
         wm.registerWork(recs);
     }
 
-    @NotNull
     private ConsumerRecord<String, String> makeRec(String value, String key, int partition) {
         ConsumerRecord<String, String> stringStringConsumerRecord = new ConsumerRecord<>(INPUT_TOPIC, partition, offset, key, value);
         offset++;

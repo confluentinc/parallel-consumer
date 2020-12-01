@@ -15,8 +15,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.slf4j.event.Level;
-import org.slf4j.spi.LoggingEventBuilder;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
@@ -29,11 +27,9 @@ import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
-import static io.confluent.csid.utils.LogUtils.at;
 import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static java.lang.Math.min;
 import static lombok.AccessLevel.PACKAGE;
 
 /**
