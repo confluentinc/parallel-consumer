@@ -636,19 +636,4 @@ public class WorkManagerTest {
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(0);
     }
 
-    /**
-     * Checks that when max queued messages are reached, more aren't queued up
-     */
-    @Test
-    void largeWorkLoadsCauseBackPressure(){
-        fail("");
-    }
-
-    /**
-     * Tests that the backpressure system works correctly - that more records aren't added for processing than are
-     * desired via settings.
-     */
-    @Test
-    void backpressure() {
-    }
 }
