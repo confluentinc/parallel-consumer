@@ -588,6 +588,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         if (internalBatchMailQueue.size() > 10) {
             log.warn("Larger than expected {}", internalBatchMailQueue.size());
         }
+        // todo keep getting concurrency exceptions on this loop - need to fix
         for (final ConsumerRecords<K, V> consumerRecords : new ArrayList<>(internalBatchMailQueue)) { // copy for concurrent access - as it holds batches of polled records, it should be relatively small
             if (consumerRecords != null) {
                 batchCount += consumerRecords.count();
