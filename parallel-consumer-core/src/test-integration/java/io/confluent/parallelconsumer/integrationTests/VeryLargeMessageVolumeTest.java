@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -13,7 +14,6 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
-import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -25,18 +25,17 @@ import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -133,13 +132,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         assertThat(beginOffsets.get(tp)).isEqualTo(0L);
 
 
-        ProgressBar bar = new ProgressBarBuilder()
-                .setInitialMax(expectedMessageCount)
-                .showSpeed()
-                .setUnit("msgs", 1)
-                .setUpdateIntervalMillis(1000)
-                .build()
-                .maxHint(expectedMessageCount);
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log);
 
         pc.pollAndProduce(record -> {
                     bar.stepTo(record.offset());
@@ -173,6 +166,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         }
 
         pc.closeDrainFirst();
+        bar.close();
 
         assertThat(processedCount.get())
                 .as("messages processed and produced by parallel-consumer should be equal")

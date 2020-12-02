@@ -45,7 +45,7 @@
     <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumer" level="info" />-->
     <!--    <logger name="io.confluent.parallelconsumer.OffsetMapCodecManager" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
-    <logger name="io.confluent.parallelconsumer.OffsetRunLength" level="trace"/>
+<!--    <logger name="io.confluent.parallelconsumer.OffsetRunLength" level="trace"/>-->
 
     <!-- containers -->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug"/>-->
