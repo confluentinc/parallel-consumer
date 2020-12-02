@@ -381,7 +381,7 @@ Where `${project.version}` is the version to be used:
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
                 .maxMessagesToQueue(1000) // <3>
-                .maxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
+                .softMaxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();

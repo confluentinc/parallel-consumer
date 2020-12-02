@@ -132,10 +132,14 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         assertThat(beginOffsets.get(tp)).isEqualTo(0L);
 
 
-        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log);
-
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
         pc.pollAndProduce(record -> {
-                    bar.stepTo(record.offset());
+                    try {
+                        Thread.sleep(1);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    bar.stepBy(1);
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
@@ -144,6 +148,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                     producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
                 }
         );
+
 
         // wait for all pre-produced messages to be processed and produced
         Assertions.useRepresentation(new TrimListRepresentation());
@@ -155,7 +160,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
-                        log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
+                        log.trace("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
                         SoftAssertions all = new SoftAssertions();
                         all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
                         all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
@@ -165,8 +170,9 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
             fail(failureMessage + "\n" + e.getMessage());
         }
 
+//        bar.close();
+
         pc.closeDrainFirst();
-        bar.close();
 
         assertThat(processedCount.get())
                 .as("messages processed and produced by parallel-consumer should be equal")
@@ -175,6 +181,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
         assertThat(producedKeysAcknowledged).hasSameSizeAs(expectedKeys);
+
     }
 
 }

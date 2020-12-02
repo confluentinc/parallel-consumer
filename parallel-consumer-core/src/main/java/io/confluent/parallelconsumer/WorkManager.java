@@ -564,7 +564,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             batchCount += inboxEntry.count();
         }
         for (final ConsumerRecords<K, V> consumerRecords : internalBatchMailQueue) {
-            batchCount += consumerRecords.count();
+            if (consumerRecords != null) {
+                batchCount += consumerRecords.count();
+            }
         }
 //        Integer batchCount = internalBatchMailQueue.stream()
 //                .map(ConsumerRecords::count)
@@ -805,5 +807,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private boolean isDirty() {
         return this.workStateIsDirtyNeedsCommitting.get();
+    }
+
+    public boolean isNotPartitionedOrDrained() {
+        return getNumberOfEntriesInPartitionQueues() > 0 && getWorkQueuedInMailboxCount() > 0;
+
     }
 }

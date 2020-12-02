@@ -29,7 +29,6 @@ import java.util.regex.Pattern;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
 import static java.time.Duration.ofMillis;
@@ -257,7 +256,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        log.info("Assigned {} - that's {} bytes per partition", numberOfAssignedPartitions, OffsetMapCodecManager.DefaultMaxMetadataSize / numberOfAssignedPartitions);
+        log.info("Assigned {} partitions - that's {} bytes per partition for encoding offset overruns", numberOfAssignedPartitions, OffsetMapCodecManager.DefaultMaxMetadataSize / numberOfAssignedPartitions);
     }
 
     @Getter
@@ -588,30 +587,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                  Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
-        if (state == running || state == draining) {
-            int target = getPoolQueueTarget() * options.getLoadingFactor(); // loading factor
-            BlockingQueue<Runnable> queue = workerPool.getQueue();
-            int i = queue.remainingCapacity();
-            int current = queue.size();
-            int delta = target - current;
-
-            log.debug("Loop: Get work - target: {} current: {}, requesting: {}", target, current, delta);
-            var records = wm.<R>maybeGetWork(delta);
-
-            log.trace("Loop: Submit to pool");
-            submitWorkToPool(userFunction, callback, records);
-        }
-
-        log.debug("Pool stats: {}", workerPool);
-
-        if (isPoolQueueLow()) {
-            log.warn("Executor pool queue is not loaded with enough work! {} vs {}",
-                    workerPool.getQueue().size(), getPoolQueueTarget());
-        }
-//        else {
-//            log.warn("Executor pool queue is OK! {} vs {}",
-//                    workerPool.getQueue().size(), getPoolQueueTarget());
-//        }
+        handleWork(userFunction, callback);
 
         if (state == running) {
             if (!wm.isSufficientlyLoaded()) {
@@ -659,16 +635,45 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getRecordsOutForProcessing(), state);
     }
 
+    private <R> void handleWork(final Function<ConsumerRecord<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+        if (state == running || state == draining) {
+            int target = getPoolQueueTarget() * (options.getLoadingFactor()+2); // loading factor
+            BlockingQueue<Runnable> queue = workerPool.getQueue();
+            int remainingCapacity = queue.remainingCapacity();
+            int current = queue.size();
+            int delta = target - current;
+
+            log.debug("Loop: Get work - target: {} current: {}, requesting: {}", target, current, delta);
+            var records = wm.<R>maybeGetWork(delta);
+
+            log.trace("Loop: Submit to pool");
+            submitWorkToPool(userFunction, callback, records);
+        }
+
+        log.debug("Pool stats: {}", workerPool);
+
+        if (isPoolQueueLow()) {
+            log.warn("Executor pool queue is not loaded with enough work! {} vs {}",
+                    workerPool.getQueue().size(), getPoolQueueTarget());
+        }
+        else {
+            log.warn("Executor pool queue is OK! {} vs {}",
+                    workerPool.getQueue().size(), getPoolQueueTarget());
+        }
+    }
+
     /**
      * @return aim to never have the pool queue drop below this
      */
     private int getPoolQueueTarget() {
-        int loadingFactor = options.getLoadingFactor();
-        return options.getNumberOfThreads() * loadingFactor;
+//        int loadingFactor = options.getLoadingFactor();
+//        return options.getNumberOfThreads() * loadingFactor;
+        return options.getNumberOfThreads();
     }
 
     private boolean isPoolQueueLow() {
-        return getPoolQueueTarget() > workerPool.getQueue().size() && wm.getNumberOfEntriesInPartitionQueues() > 0 && wm.getWorkQueuedInMailboxCount() > 0;
+        return getPoolQueueTarget() > workerPool.getQueue().size()
+                && wm.isNotPartitionedOrDrained();
     }
 
     private void drain() {
@@ -725,18 +730,19 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // see how big the queue is now, and poll that many times
         int size = workMailBox.size();
         log.trace("Draining {} more, got {} already...", size, results.size());
-        for (var ignore : range(size)) {
-            // #drainTo is nondeterministic during concurrent access - poll is more deterministic and we limit our loops to ensure progress, at the cost of some performance
-            WorkContainer<K, V> secondPollNonBlocking = null; // if we poll too many, don't block
-            try {
-                secondPollNonBlocking = workMailBox.poll(0, SECONDS);
-            } catch (InterruptedException e) {
-                log.debug("Interrupted waiting on work results", e);
-            }
-            if (secondPollNonBlocking != null) {
-                results.add(secondPollNonBlocking);
-            }
-        }
+        workMailBox.drainTo(results, size);
+//        for (var ignore : range(size)) {
+//            // #drainTo is nondeterministic during concurrent access - poll is more deterministic and we limit our loops to ensure progress, at the cost of some performance
+//            WorkContainer<K, V> secondPollNonBlocking = null; // if we poll too many, don't block
+//            try {
+//                secondPollNonBlocking = workMailBox.poll(0, SECONDS);
+//            } catch (InterruptedException e) {
+//                log.debug("Interrupted waiting on work results", e);
+//            }
+//            if (secondPollNonBlocking != null) {
+//                results.add(secondPollNonBlocking);
+//            }
+//        }
 
         log.trace("Processing drained work {}...", results.size());
         for (var work : results) {

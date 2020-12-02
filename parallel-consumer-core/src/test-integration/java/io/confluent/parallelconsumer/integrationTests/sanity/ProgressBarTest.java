@@ -23,8 +23,6 @@ public class ProgressBarTest {
     @Test
     @Disabled("For reference sanity only")
     public void width() {
-        DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
-
         ProgressBar build = ProgressBarUtils.getNewMessagesBar(log, 100);
         try (build) {
             while (build.getCurrent() < build.getMax()) {
