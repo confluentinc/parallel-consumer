@@ -54,6 +54,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see K
      * @see #maybeGetWork()
      */
+    @Getter
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     @Getter
@@ -491,7 +492,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
 
 
-        log.debug("Got {} records of work. In-flight: {}, Awaiting: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        log.debug("Got {} records of work. In-flight: {}, In partition queues: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
         recordsOutForProcessing += work.size();
 
         return work;
@@ -515,7 +516,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        successRatePer5SecondsEMA.
         workStateIsDirtyNeedsCommitting.set(true);
         ConsumerRecord<K, V> cr = wc.getCr();
-        log.trace("Work success ({}), removing from processing shard queue", wc);
+        log.debug("Work success ({}), removing from processing shard queue", wc);
         wc.succeed();
         Object key = computeShardKey(cr);
         // remove from processing queues
@@ -530,11 +531,21 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
         successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
         recordsOutForProcessing--;
+
+        notifyShardsDirty();
+    }
+
+    private void notifyShardsDirty() {
+        //
+        synchronized (processingShards) {
+            processingShards.notifyAll(); //refactor
+        }
     }
 
     public void failed(WorkContainer<K, V> wc) {
         wc.fail(clock);
         putBack(wc);
+        notifyShardsDirty();
     }
 
     /**

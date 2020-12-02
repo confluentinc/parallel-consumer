@@ -632,8 +632,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             }
         }
 
-//        log.trace("Loop: Process mailbox");
-//        processWorkCompleteMailBox();
+        log.trace("Loop: Process mailbox");
+        processWorkCompleteMailBox();
 
         if (state == running) {
             // offsets will be committed when the consumer has its partitions revoked

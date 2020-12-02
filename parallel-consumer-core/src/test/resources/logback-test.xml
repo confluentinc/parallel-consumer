@@ -43,8 +43,8 @@
     <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumerTestBase" level="trace"/>-->
         <logger name="io.confluent.parallelconsumer.WorkManager" level="debug" />
     <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="trace"/>
-    <logger name="io.confluent.parallelconsumer.BrokerPollSystem" level="info"/>
-    <logger name="io.confluent.parallelconsumer.ConsumerManager" level="info"/>
+    <logger name="io.confluent.parallelconsumer.BrokerPollSystem" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.ConsumerManager" level="debug"/>
     <logger name="io.confluent.parallelconsumer.RingBufferManager" level="trace"/>
     <!--    <logger name="io.confluent.parallelconsumer.OffsetMapCodecManager" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->

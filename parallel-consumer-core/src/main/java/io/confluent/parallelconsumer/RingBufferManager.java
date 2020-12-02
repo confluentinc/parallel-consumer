@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -34,19 +36,38 @@ public class RingBufferManager<K, V> {
 
         Runnable runnable = () -> {
             Thread.currentThread().setName(RingBufferManager.class.getSimpleName());
+            boolean lastRunDirty = true;
             while (supervisorThread.isAlive()) {
                 try {
                     int toGet = options.getNumberOfThreads() * currentSize * 2; // ensure we always have more waiting to queue
                     // todo make sure work is gotten in large batches, and only when buffer is small enough - not every loop
                     List<WorkContainer<K, V>> workContainers = wm.maybeGetWork(toGet);
-                    log.debug("Got {}, req {}", workContainers.size(), toGet);
+                    boolean clean = wm.isClean();
+//                    if(lastRunDirty )
+                    int got = workContainers.size();
+                    log.debug("Got {}, req {}", got, toGet);
                     if (workContainers.isEmpty()) {
                         waitForRecordsAvailable();
+                    }
+                    int size = threadPoolExecutor.getQueue().size();
+//                    if (got == 0 && size > 0) {
+                    if (got == 0) {
+                        log.info("{}", threadPoolExecutor);
+                        log.info("got none");
+
+                        if (size > 0) {
+                            var processingShards = wm.getProcessingShards();
+                            log.debug("Nothing available to process, waiting on dirty state of shards");
+                            synchronized (processingShards) {
+                                processingShards.wait();//refactor
+                            }
+                        }
                     }
                     for (final WorkContainer<K, V> work : workContainers) {
                         Runnable run = () -> {
                             try {
                                 pc.userFunctionRunner(usersFunction, callback, work);
+                                pc.handleFutureResult(work);
                             } finally {
                                 log.debug("Releasing ticket");
                                 semaphore.release();
@@ -57,6 +78,9 @@ public class RingBufferManager<K, V> {
                         submit(run, work);
 
 //                        }
+
+//                        log.info("Loop, yield");
+                        Thread.sleep(1); // for testing - remove
                     }
                 } catch (Exception e) {
                     log.error("Unknown error", e);
@@ -68,7 +92,8 @@ public class RingBufferManager<K, V> {
     }
 
     private void waitForRecordsAvailable() throws InterruptedException {
-        if (!(wm.getWorkQueuedInMailboxCount() > 0)) { // pre-render this view in the fly in WM - shouldn't need to recount every loop - it's a very tight loop
+        Integer queued = wm.getWorkQueuedInMailboxCount();
+        if (!(queued > 0)) { // pre-render this view in the fly in WM - shouldn't need to recount every loop - it's a very tight loop
             log.debug("empty, no work to be gotten, wait to be notified");
             synchronized (wm.getWorkInbox()) {
                 wm.getWorkInbox().wait();

@@ -7,6 +7,8 @@ import me.tongfei.progressbar.ProgressBar;
 import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -84,7 +87,9 @@ class RingBufferManagerTest extends ParallelEoSStreamProcessorTestBase {
 //        var pc = new ParallelEoSStreamProcessor<String, String>(options);
 //        var wm = new WorkManager<>(options, consumerSpy);
 
-        int expected = 100;
+        BrokerPollSystem.setLongPollTimeout(Duration.ofSeconds(2));
+
+        int expected = 10000;
 
         List<ConsumerRecord<String, String>> consumerRecords = ktu.generateRecordsForKey(1, expected);
         ktu.send(consumerSpy, consumerRecords);
@@ -103,7 +108,9 @@ class RingBufferManagerTest extends ParallelEoSStreamProcessorTestBase {
         Consumer<ConsumerRecord<String, String>> usersFunction = (rec) -> {
             log.info("user func sleep {}", rec.offset());
             try {
-                Thread.sleep(RandomUtils.nextInt(20, 200));
+//                Thread.sleep(RandomUtils.nextInt(20, 200));
+//                Thread.sleep(0);
+                Thread.sleep(5);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -122,14 +129,15 @@ class RingBufferManagerTest extends ParallelEoSStreamProcessorTestBase {
         ProgressBar.wrap(parallelConsumer.getWorkMailBox(), options);
 
         Assertions.useRepresentation(new TrimListRepresentation());
-        await().atMost(ofSeconds(30))
+        await().atMost(ofSeconds(60))
                 .untilAsserted(() -> {
-                    assertThat(parallelConsumer.getWorkMailBox()).hasSize(expected);
+                    List<Map<TopicPartition, OffsetAndMetadata>> commitHistoryInt = consumerSpy.getCommitHistoryInt();
+                    assertThat(commitHistoryInt).isNotEmpty();
+                    assertThat(commitHistoryInt.get(commitHistoryInt.size() - 1).entrySet().stream().findFirst().get().getValue().offset()).isEqualTo(expected);
                 });
+
+
+        parallelConsumer.close();
     }
 
-    @Test
-    void poolSanity() {
-
-    }
 }
