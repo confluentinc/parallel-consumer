@@ -102,19 +102,6 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final int numberOfThreads = 16;
 
-    /**
-     * Don't change this unless you know what you're doing.
-     * <p>
-     * The default value is already quite aggressive for very fast processing functions.
-     * <p>
-     * This controls the loading factor of the buffers used to feed the executor engine. A higher value means more
-     * memory usage, but more importantly, more offsets may be beyond the highest committable offset for processing
-     * (which if the serialised information can't fit, will be dropped and could cause much larger replays than
-     * necessary).
-     */
-    @Getter
-    private final int loadingFactor = 3;
-
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 

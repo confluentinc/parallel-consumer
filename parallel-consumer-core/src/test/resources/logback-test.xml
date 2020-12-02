@@ -29,8 +29,8 @@
     <logger name="io.confluent.parallelconsumer" level="info"/>
 <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="trace"/>-->
-    <!--        <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="trace"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
+<!--            <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="debug"/>-->
+<!--        <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
     <!--    <logger name="io.confluent.csid" level="info"/>-->
     <!--    <logger name="io.confluent.csid.utils" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->

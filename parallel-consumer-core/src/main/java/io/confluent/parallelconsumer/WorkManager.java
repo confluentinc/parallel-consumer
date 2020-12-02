@@ -82,8 +82,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private int recordsOutForProcessing = 0;
 
     /**
-     * The multiple of {@link ParallelConsumerOptions#getMaxMessagesToQueue()} that should be pre-loaded awaiting
-     * processing. Consumer already pipelines, so we shouldn't need to pipeline ourselves too much.
+     * todo docs
+     * The multiple that should be pre-loaded awaiting processing. Consumer already pipelines, so we shouldn't need to
+     * pipeline ourselves too much.
      * <p>
      * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
      * factor is low, there may not be enough messages queued up to satisfy demand.
@@ -563,7 +564,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         for (final ConsumerRecords<K, V> inboxEntry : workInbox) {
             batchCount += inboxEntry.count();
         }
-        for (final ConsumerRecords<K, V> consumerRecords : internalBatchMailQueue) {
+//        for (final ConsumerRecords<K, V> consumerRecords : Collections.unmodifiableCollection(internalBatchMailQueue)) { // copy for concurrent access - as it holds batches of polled records, it should be relatively small
+        if (internalBatchMailQueue.size() > 10) {
+            log.warn("Larger than expected {}", internalBatchMailQueue.size());
+        }
+        for (final ConsumerRecords<K, V> consumerRecords : new ArrayList<>(internalBatchMailQueue)) { // copy for concurrent access - as it holds batches of polled records, it should be relatively small
             if (consumerRecords != null) {
                 batchCount += consumerRecords.count();
             }
