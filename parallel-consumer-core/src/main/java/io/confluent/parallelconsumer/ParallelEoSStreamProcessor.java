@@ -104,6 +104,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * Used to request a commit asap
      */
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
+    private final DynamicLoadFactor dynamicExtraLoadFactor = new DynamicLoadFactor();
 
     public boolean isClosedOrFailed() {
         boolean closed = state == State.closed;
@@ -171,7 +172,21 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         LinkedBlockingQueue<Runnable> poolQueue = new LinkedBlockingQueue<>();
         workerPool = new ThreadPoolExecutor(newOptions.getNumberOfThreads(), newOptions.getNumberOfThreads(),
                 0L, MILLISECONDS,
-                poolQueue);
+                poolQueue) {
+            @Override
+            protected void beforeExecute(final Thread t, final Runnable r) {
+                super.beforeExecute(t, r);
+                if (dynamicExtraLoadFactor.couldStep() && getQueue().isEmpty() && wm.isNotPartitionedOrDrained()) {
+                    boolean increased = dynamicExtraLoadFactor.maybeIncrease();
+                    if (increased) {
+                        log.warn("No work to do! Increased dynamic load factor to {}", dynamicExtraLoadFactor.getCurrent());
+                    }
+                }
+//                if (getQueue().size() < 100 && wm.isNotPartitionedOrDrained()) {
+//                    log.warn("Less than 100 tasks left!");
+//                }
+            }
+        };
 
         this.wm = new WorkManager<>(newOptions, consumer);
 
@@ -637,7 +652,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private <R> void handleWork(final Function<ConsumerRecord<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         if (state == running || state == draining) {
-            int target = getPoolQueueTarget() * (options.getLoadingFactor()+2); // loading factor
+            int dynamicExtraLoadFactorCurrent = dynamicExtraLoadFactor.getCurrent();
+            int target = getPoolQueueTarget() * (options.getLoadingFactor() + dynamicExtraLoadFactorCurrent); // loading factor
             BlockingQueue<Runnable> queue = workerPool.getQueue();
             int remainingCapacity = queue.remainingCapacity();
             int current = queue.size();
@@ -652,14 +668,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         log.debug("Pool stats: {}", workerPool);
 
-        if (isPoolQueueLow()) {
-            log.warn("Executor pool queue is not loaded with enough work! {} vs {}",
-                    workerPool.getQueue().size(), getPoolQueueTarget());
-        }
-        else {
-            log.warn("Executor pool queue is OK! {} vs {}",
-                    workerPool.getQueue().size(), getPoolQueueTarget());
-        }
+//        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver()) {
+//            log.warn("Executor pool queue is not loaded with enough work! {} vs {}",
+//                    workerPool.getQueue().size(), getPoolQueueTarget());
+//        }
+//        else {
+//            log.warn("Executor pool queue is OK! {} vs {}",
+//                    workerPool.getQueue().size(), getPoolQueueTarget());
+//        }
     }
 
     /**
