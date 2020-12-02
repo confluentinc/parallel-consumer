@@ -26,6 +26,7 @@ import java.util.function.Function;
 
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.of;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -81,18 +82,20 @@ class RingBufferManagerTest extends ParallelEoSStreamProcessorTestBase {
 
     @Test
     void testFullCycle() {
-//        var options = ParallelConsumerOptions.<String, String>builder()
-//                .consumer(consumerSpy)
-//                .build();
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .numberOfThreads(1000)
+                .build();
 //        var pc = new ParallelEoSStreamProcessor<String, String>(options);
 //        var wm = new WorkManager<>(options, consumerSpy);
+        setupParallelConsumerInstance(options);
 
         BrokerPollSystem.setLongPollTimeout(Duration.ofSeconds(2));
 
-        int expected = 10000;
+        int expected = 1_000_000;
 
         List<ConsumerRecord<String, String>> consumerRecords = ktu.generateRecordsForKey(1, expected);
         ktu.send(consumerSpy, consumerRecords);
+
 
 //        BrokerPollSystem<String, String> stringStringBrokerPollSystem = new BrokerPollSystem<>(new ConsumerManager<>(consumerSpy), wm, pc, options);
 //        stringStringBrokerPollSystem.start();
@@ -106,15 +109,15 @@ class RingBufferManagerTest extends ParallelEoSStreamProcessorTestBase {
 //
 
         Consumer<ConsumerRecord<String, String>> usersFunction = (rec) -> {
-            log.info("user func sleep {}", rec.offset());
+//            log.info("user func sleep {}", rec.offset());
             try {
 //                Thread.sleep(RandomUtils.nextInt(20, 200));
-//                Thread.sleep(0);
-                Thread.sleep(5);
+                Thread.sleep(0);
+//                Thread.sleep(2);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            log.info("user func end");
+//            log.info("user func end");
         };
         Consumer<String> callback = (astring) -> {
             log.info("user callback");
@@ -123,19 +126,22 @@ class RingBufferManagerTest extends ParallelEoSStreamProcessorTestBase {
 //        rb.startRingBuffer(buffer, usersFunction, callback);
 
 //        var rb = new RingBufferManager<String, String>(options, wm, pc, threadPoolExecutor);
+        log.info("Starting");
         parallelConsumer.poll(usersFunction);
 
-        ProgressBarBuilder options = ProgressBarUtils.getOptions(log, 0);
-        ProgressBar.wrap(parallelConsumer.getWorkMailBox(), options);
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expected);
 
         Assertions.useRepresentation(new TrimListRepresentation());
         await().atMost(ofSeconds(60))
                 .untilAsserted(() -> {
                     List<Map<TopicPartition, OffsetAndMetadata>> commitHistoryInt = consumerSpy.getCommitHistoryInt();
                     assertThat(commitHistoryInt).isNotEmpty();
-                    assertThat(commitHistoryInt.get(commitHistoryInt.size() - 1).entrySet().stream().findFirst().get().getValue().offset()).isEqualTo(expected);
+                    long offset = commitHistoryInt.get(commitHistoryInt.size() - 1).entrySet().stream().findFirst().get().getValue().offset();
+                    bar.stepTo(successfulWork.size());// is going to dance around
+                    assertThat(offset).isEqualTo(expected);
                 });
-
+        bar.stepTo(expected);
+        bar.close();
 
         parallelConsumer.close();
     }

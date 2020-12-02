@@ -232,11 +232,13 @@ public class KafkaTestUtils {
 
     public void send(MockConsumer<String, String> consumerSpy, List<ConsumerRecord<String, String>> records) {
         // send records in `correct` offset order as declared by the input data, regardless of the order of the input list
+        log.info("Sending {} records", records.size());
         List<ConsumerRecord<String, String>> sorted = new ArrayList(records);
         Collections.sort(sorted, Comparator.comparingLong(ConsumerRecord::offset));
         for (ConsumerRecord<String, String> record : sorted) {
             consumerSpy.addRecord(record);
         }
+        log.info("Finished sending records");
     }
 
 

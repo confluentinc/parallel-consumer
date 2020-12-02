@@ -628,12 +628,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 log.debug("Found not enough messages queued up, ensuring poller is awake");
                 brokerPollSubsystem.wakeup();
             } else {
-                log.info("");
+                log.info("loading is ok");
             }
         }
 
-        log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox();
+//        log.trace("Loop: Process mailbox");
+//        processWorkCompleteMailBox();
 
         if (state == running) {
             // offsets will be committed when the consumer has its partitions revoked
@@ -658,7 +658,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
 
-        Duration duration = Duration.ofMillis(1);
+        Duration duration = Duration.ofMillis(250);
 //        log.debug("Thread yield {}", duration);
         try {
             Thread.sleep(duration.toMillis());
