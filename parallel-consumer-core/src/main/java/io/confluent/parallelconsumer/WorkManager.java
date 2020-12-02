@@ -19,6 +19,7 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -82,9 +83,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private int recordsOutForProcessing = 0;
 
     /**
-     * todo docs
-     * The multiple that should be pre-loaded awaiting processing. Consumer already pipelines, so we shouldn't need to
-     * pipeline ourselves too much.
+     * todo docs The multiple that should be pre-loaded awaiting processing. Consumer already pipelines, so we shouldn't
+     * need to pipeline ourselves too much.
      * <p>
      * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
      * factor is low, there may not be enough messages queued up to satisfy demand.
@@ -818,4 +818,5 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberOfEntriesInPartitionQueues() > 0 && getWorkQueuedInMailboxCount() > 0;
 
     }
+
 }

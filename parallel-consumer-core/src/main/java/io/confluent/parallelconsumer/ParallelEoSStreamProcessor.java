@@ -148,6 +148,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
+    ArrayBlockingQueue<Runnable> ringbufferRunnables;
+
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
@@ -170,9 +172,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         checkAutoCommitIsDisabled(consumer);
 
         LinkedBlockingQueue<Runnable> poolQueue = new LinkedBlockingQueue<>();
+        ArrayBlockingQueue<WorkContainer<K, V>> ringbuffer = new ArrayBlockingQueue<>(options.getNumberOfThreads() * dynamicExtraLoadFactor.getCurrent());
+        ringbufferRunnables = new ArrayBlockingQueue<>(options.getNumberOfThreads() * dynamicExtraLoadFactor.getCurrent());
+
         workerPool = new ThreadPoolExecutor(newOptions.getNumberOfThreads(), newOptions.getNumberOfThreads(),
                 0L, MILLISECONDS,
-                poolQueue)
+                ringbufferRunnables)
         ;
 //        {
 //            @Override
@@ -206,6 +211,41 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+    }
+
+    //    ArrayBlockingQueue<WorkContainer<K, V>> ringbuffer;
+
+    private <R> void startRingBuffer(final ArrayBlockingQueue<Runnable> ringbuffer,
+                                     final Function<ConsumerRecord<K, V>, List<R>> usersFunction,
+                                     final Consumer<R> callback) {
+        DynamicLoadFactor dynamicLoadFactor = new DynamicLoadFactor();
+        int currentSize = dynamicLoadFactor.getCurrent();
+        Thread supervisorThread = Thread.currentThread();
+
+        Runnable runnable = () -> {
+            while (supervisorThread.isAlive()) {
+                try {
+                    int toGet = options.getNumberOfThreads() * currentSize * 2; // ensure we always have more waiting to queue
+                    List<WorkContainer<K, V>> workContainers = wm.maybeGetWork(toGet);
+                    for (final WorkContainer<K, V> work : workContainers) {
+                        Runnable run = () -> {
+                            userFunctionRunner(usersFunction, callback, work);
+                        };
+                        while (!ringbuffer.contains(run)) {
+                            try {
+                                ringbuffer.put(run);
+                            } catch (InterruptedException e) {
+                                log.debug("Interrupted waiting to put", e);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Unknown error", e);
+                }
+            }
+        };
+
+        runnable.run();
     }
 
     private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
@@ -592,6 +632,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return true;
         };
 
+        startRingBuffer(ringbufferRunnables, userFunction, callback);
+
         brokerPollSubsystem.start();
 
         ExecutorService executorService = Executors.newSingleThreadExecutor();
@@ -604,7 +646,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                  Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
-        handleWork(userFunction, callback);
+//        handleWork(userFunction, callback);
+
 
         if (state == running) {
             if (!wm.isSufficientlyLoaded()) {
