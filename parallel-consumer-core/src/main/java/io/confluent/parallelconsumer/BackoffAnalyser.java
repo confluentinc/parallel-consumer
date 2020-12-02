@@ -24,6 +24,7 @@ public class BackoffAnalyser {
         this.currentTotalMaxCountBeyondOffset = initialMax;
     }
 
+    // TODO needs to know what offset width was a success
     void onSuccess() {
         if (!failureAt.isEmpty()) {
             int recentFail = failureAt.get(failureAt.size() - 1);

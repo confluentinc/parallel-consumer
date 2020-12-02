@@ -7,19 +7,20 @@ import me.tongfei.progressbar.ProgressBarBuilder;
 import org.slf4j.Logger;
 
 @UtilityClass
-public class ProgressBarUtils
-{
+public class ProgressBarUtils {
     public static ProgressBar getNewMessagesBar(Logger log, int initialMax) {
-        DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
+        ProgressBar build = getOptions(log, initialMax).build();
+        return build;
+    }
 
-        int max = 100;
-        ProgressBar build = new ProgressBarBuilder()
+    public static ProgressBarBuilder getOptions(Logger log, int initialMax) {
+        DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
+        ProgressBarBuilder build = new ProgressBarBuilder()
                 .setConsumer(delegatingProgressBarConsumer)
                 .setInitialMax(initialMax)
                 .showSpeed()
                 .setTaskName("progress")
-                .setUnit("msg", 1)
-                .build();
+                .setUnit("msg", 1);
         return build;
     }
 }

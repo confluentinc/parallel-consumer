@@ -19,7 +19,6 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -56,6 +55,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see #maybeGetWork()
      */
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+
+    @Getter
     private final LinkedBlockingQueue<ConsumerRecords<K, V>> workInbox = new LinkedBlockingQueue<>();
 
     /**
@@ -72,7 +73,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
     //    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
 
-    private final BackoffAnalyser backoffer;
+    private final BackoffAnalyser offsetEncoderFailureBackerOffer;
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -129,7 +130,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.options = options;
         this.consumer = consumer;
 
-        backoffer = new BackoffAnalyser(options.getNumberOfThreads() * 10);
+        offsetEncoderFailureBackerOffer = new BackoffAnalyser(options.getNumberOfThreads() * 10);
     }
 
     /**
@@ -224,6 +225,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     public void registerWork(ConsumerRecords<K, V> records) {
         workInbox.add(records);
+        synchronized (workInbox) {
+            workInbox.notifyAll();
+        }
     }
 
     private final Queue<ConsumerRecords<K, V>> internalBatchMailQueue = new LinkedList<>();
@@ -236,6 +240,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private void processInbox(final int requestedMaxWorkToRetrieve) {
         workInbox.drainTo(internalBatchMailQueue);
+
+        if (requestedMaxWorkToRetrieve == 0) {
+            // nothing more to do
+            return;
+        }
 
         // flatten
         while (!internalBatchMailQueue.isEmpty()) {
@@ -254,7 +263,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         int taken = 0;
 
 //        log.debug("Will register {} (max configured: {}) records of work ({} already registered)", gap, max, inFlight);
-        log.debug("Will attempt to register {} - {} available", requestedMaxWorkToRetrieve, internalFlattenedMailQueue.size());
+        log.debug("Will attempt to register {} - {} available in mailbox", requestedMaxWorkToRetrieve, internalFlattenedMailQueue.size());
 
         //
         while (taken < gap && !internalFlattenedMailQueue.isEmpty()) {
@@ -277,7 +286,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     private int getMaxToGoBeyondOffset() {
-        return backoffer.getCurrentTotalMaxCountBeyondOffset();
+        return offsetEncoderFailureBackerOffer.getCurrentTotalMaxCountBeyondOffset();
     }
 
     /**
@@ -695,7 +704,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
                 } catch (EncodingNotSupportedException e) {
                     log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
-                    backoffer.onFailure();
+                    offsetEncoderFailureBackerOffer.onFailure();
                 }
             }
 
@@ -742,10 +751,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
                 offsetsToSend.replace(key, stripped);
             }
-            backoffer.onFailure();
+            offsetEncoderFailureBackerOffer.onFailure();
         } else if (totalOffsetMetaCharacterLength != 0) {
             log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
-            backoffer.onSuccess();
+            offsetEncoderFailureBackerOffer.onSuccess();
         }
     }
 

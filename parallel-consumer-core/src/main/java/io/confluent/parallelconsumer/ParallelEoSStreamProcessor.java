@@ -75,6 +75,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     /**
      * Collection of work waiting to be
      */
+    @Getter
     private final BlockingQueue<WorkContainer<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
@@ -148,7 +149,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
-    ArrayBlockingQueue<Runnable> ringbufferRunnables;
+    BlockingQueue<Runnable> ringbufferRunnables;
+    RingBufferManager<K, V> rb;
 
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
@@ -174,6 +176,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         LinkedBlockingQueue<Runnable> poolQueue = new LinkedBlockingQueue<>();
         ArrayBlockingQueue<WorkContainer<K, V>> ringbuffer = new ArrayBlockingQueue<>(options.getNumberOfThreads() * dynamicExtraLoadFactor.getCurrent());
         ringbufferRunnables = new ArrayBlockingQueue<>(options.getNumberOfThreads() * dynamicExtraLoadFactor.getCurrent());
+        ringbufferRunnables = new LinkedBlockingQueue<>();
 
         workerPool = new ThreadPoolExecutor(newOptions.getNumberOfThreads(), newOptions.getNumberOfThreads(),
                 0L, MILLISECONDS,
@@ -201,6 +204,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
+        rb = new RingBufferManager<>(options, wm, this, workerPool);
+
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
             if (options.isUsingTransactionalProducer())
@@ -211,41 +216,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
-    }
-
-    //    ArrayBlockingQueue<WorkContainer<K, V>> ringbuffer;
-
-    private <R> void startRingBuffer(final ArrayBlockingQueue<Runnable> ringbuffer,
-                                     final Function<ConsumerRecord<K, V>, List<R>> usersFunction,
-                                     final Consumer<R> callback) {
-        DynamicLoadFactor dynamicLoadFactor = new DynamicLoadFactor();
-        int currentSize = dynamicLoadFactor.getCurrent();
-        Thread supervisorThread = Thread.currentThread();
-
-        Runnable runnable = () -> {
-            while (supervisorThread.isAlive()) {
-                try {
-                    int toGet = options.getNumberOfThreads() * currentSize * 2; // ensure we always have more waiting to queue
-                    List<WorkContainer<K, V>> workContainers = wm.maybeGetWork(toGet);
-                    for (final WorkContainer<K, V> work : workContainers) {
-                        Runnable run = () -> {
-                            userFunctionRunner(usersFunction, callback, work);
-                        };
-                        while (!ringbuffer.contains(run)) {
-                            try {
-                                ringbuffer.put(run);
-                            } catch (InterruptedException e) {
-                                log.debug("Interrupted waiting to put", e);
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("Unknown error", e);
-                }
-            }
-        };
-
-        runnable.run();
     }
 
     private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
@@ -632,9 +602,13 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return true;
         };
 
-        startRingBuffer(ringbufferRunnables, userFunction, callback);
+
+//        startRingBuffer(ringbufferRunnables, userFunction, callback);
 
         brokerPollSubsystem.start();
+
+
+        rb.startRingBuffer(userFunction, callback);
 
         ExecutorService executorService = Executors.newSingleThreadExecutor();
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
@@ -658,8 +632,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             }
         }
 
-        log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox();
+//        log.trace("Loop: Process mailbox");
+//        processWorkCompleteMailBox();
 
         if (state == running) {
             // offsets will be committed when the consumer has its partitions revoked
@@ -781,6 +755,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.trace("Processing mailbox (might block waiting for results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
+
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
