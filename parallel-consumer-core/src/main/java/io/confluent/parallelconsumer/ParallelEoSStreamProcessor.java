@@ -45,7 +45,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private final ParallelConsumerOptions options;
 
-    private final BackoffAnalyser backoffer;
+//    private final BackoffAnalyser backoffer;
 
     /**
      * Injectable clock for testing
@@ -162,16 +162,17 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         options = newOptions;
         options.validate();
 
-        this.backoffer = new BackoffAnalyser();
+//        this.backoffer = new BackoffAnalyser();
 
         this.consumer = options.getConsumer();
 
         checkNotSubscribed(consumer);
         checkAutoCommitIsDisabled(consumer);
 
+        LinkedBlockingQueue<Runnable> poolQueue = new LinkedBlockingQueue<>();
         workerPool = new ThreadPoolExecutor(newOptions.getNumberOfThreads(), newOptions.getNumberOfThreads(),
                 0L, MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>());
+                poolQueue);
 
         this.wm = new WorkManager<>(newOptions, consumer);
 
@@ -235,6 +236,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+        numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
             log.debug("Partitions revoked (onPartitionsRevoked), state: {}", state);
             commitOffsetsThatAreReady();
@@ -252,9 +254,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        numberOfAssignedPartitions = partitions.size();
+        log.info("Assigned {} - that's {} bytes per partition", numberOfAssignedPartitions, OffsetMapCodecManager.DefaultMaxMetadataSize / numberOfAssignedPartitions);
     }
 
     @Getter
@@ -267,6 +270,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @Override
     public void onPartitionsLost(Collection<TopicPartition> partitions) {
+        numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         wm.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }
@@ -585,8 +589,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                  Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
         if (state == running || state == draining) {
-            log.trace("Loop: Get work");
-            var records = wm.<R>maybeGetWork();
+            int target = getPoolQueueTarget() * options.getLoadingFactor(); // loading factor
+            BlockingQueue<Runnable> queue = workerPool.getQueue();
+            int i = queue.remainingCapacity();
+            int current = queue.size();
+            int delta = target - current;
+
+            log.debug("Loop: Get work - target: {} current: {}, requesting: {}", target, current, delta);
+            var records = wm.<R>maybeGetWork(delta);
 
             log.trace("Loop: Submit to pool");
             submitWorkToPool(userFunction, callback, records);
@@ -596,8 +606,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         if (isPoolQueueLow()) {
             log.warn("Executor pool queue is not loaded with enough work! {} vs {}",
-                    workerPool.getQueue().size(), options.getNumberOfThreads() * 2);
+                    workerPool.getQueue().size(), getPoolQueueTarget());
         }
+//        else {
+//            log.warn("Executor pool queue is OK! {} vs {}",
+//                    workerPool.getQueue().size(), getPoolQueueTarget());
+//        }
 
         if (state == running) {
             if (!wm.isSufficientlyLoaded()) {
@@ -645,9 +659,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getRecordsOutForProcessing(), state);
     }
 
-    private boolean isPoolQueueLow() {
+    /**
+     * @return aim to never have the pool queue drop below this
+     */
+    private int getPoolQueueTarget() {
         int loadingFactor = options.getLoadingFactor();
-        return options.getNumberOfThreads() * loadingFactor > workerPool.getQueue().size() && wm.getNumberOfEntriesInPartitionQueues() > 0;
+        return options.getNumberOfThreads() * loadingFactor;
+    }
+
+    private boolean isPoolQueueLow() {
+        return getPoolQueueTarget() > workerPool.getQueue().size() && wm.getNumberOfEntriesInPartitionQueues() > 0 && wm.getWorkQueuedInMailboxCount() > 0;
     }
 
     private void drain() {

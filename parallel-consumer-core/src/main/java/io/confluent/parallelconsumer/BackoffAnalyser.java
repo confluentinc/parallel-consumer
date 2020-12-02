@@ -20,6 +20,10 @@ public class BackoffAnalyser {
 
     private List<Integer> failureAt = new ArrayList<>();
 
+    public BackoffAnalyser(final int initialMax) {
+        this.currentTotalMaxCountBeyondOffset = initialMax;
+    }
+
     void onSuccess() {
         if (!failureAt.isEmpty()) {
             int recentFail = failureAt.get(failureAt.size() - 1);

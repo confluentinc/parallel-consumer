@@ -157,7 +157,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         var failureMessage = StringUtils.msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(120))
+            waitAtMost(ofSeconds(1200))
                     .failFast(() -> pc.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)

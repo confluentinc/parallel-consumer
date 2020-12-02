@@ -71,7 +71,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
     //    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
 
-    private final BackoffAnalyser backoffer = new BackoffAnalyser();
+    private final BackoffAnalyser backoffer;
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -127,6 +127,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.options = options;
         this.consumer = consumer;
+
+        backoffer = new BackoffAnalyser(options.getNumberOfThreads() * 10);
     }
 
     /**
@@ -228,8 +230,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
+     *
+     * @param requestedMaxWorkToRetrieve
      */
-    private void processInbox() {
+    private void processInbox(final int requestedMaxWorkToRetrieve) {
         workInbox.drainTo(internalBatchMailQueue);
 
         // flatten
@@ -242,12 +246,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
 
         //
-        int inFlight = getNumberOfEntriesInPartitionQueues();
-        int max = getMaxToGoBeyondOffset();
-        int gap = max - inFlight;
+//        int inFlight = getNumberOfEntriesInPartitionQueues();
+//        int max = getMaxToGoBeyondOffset();
+//        int gap = max - inFlight;
+        int gap = requestedMaxWorkToRetrieve;
         int taken = 0;
 
-        log.debug("Will register {} (max configured: {}) records of work ({} already registered)", gap, max, inFlight);
+//        log.debug("Will register {} (max configured: {}) records of work ({} already registered)", gap, max, inFlight);
+        log.debug("Will attempt to register {} - {} available", requestedMaxWorkToRetrieve, internalFlattenedMailQueue.size());
 
         //
         while (taken < gap && !internalFlattenedMailQueue.isEmpty()) {
@@ -255,6 +261,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             processInbox(poll);
             taken++;
         }
+
+        log.debug("{} new records were registered.", taken);
 
 //        ArrayList<ConsumerRecords<K, V>> toRemove = new ArrayList<>();
 //        for (final ConsumerRecords<K, V> records : internalBatchMailQueue) {
@@ -408,15 +416,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * Depth first work retrieval.
      */
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
-        processInbox();
-
-        int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, getMaxMessagesToQueue()), getMaxToGoBeyondOffset());
-        int workToGetDelta = minWorkToGetSetting - getRecordsOutForProcessing();
+        //int minWorkToGetSetting = min(min(requestedMaxWorkToRetrieve, getMaxMessagesToQueue()), getMaxToGoBeyondOffset());
+//        int minWorkToGetSetting = min(requestedMaxWorkToRetrieve, getMaxToGoBeyondOffset());
+//        int workToGetDelta = requestedMaxWorkToRetrieve - getRecordsOutForProcessing();
+        int workToGetDelta = requestedMaxWorkToRetrieve;
 
         // optimise early
         if (workToGetDelta < 1) {
             return UniLists.of();
         }
+
+        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - getWorkQueuedInShardsCount();
+        processInbox(extraNeededFromInboxToSatisfy);
 
         //
         List<WorkContainer<K, V>> work = new ArrayList<>();
@@ -499,7 +510,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         Object key = computeShardKey(cr);
         // remove from processing queues
         NavigableMap<Long, WorkContainer<K, V>> shard = processingShards.get(key);
-        shard.remove(cr.offset());
+        long offset = cr.offset();
+        shard.remove(offset);
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
         boolean keyOrdering = options.getOrdering().equals(KEY);
         if (keyOrdering && shard.isEmpty()) {
@@ -546,8 +558,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @return Work queued in the mail box, awaiting processing into shards
      */
-    private Integer getWorkQueuedInMailboxCount() {
+    Integer getWorkQueuedInMailboxCount() {
         int batchCount = 0;
+        for (final ConsumerRecords<K, V> inboxEntry : workInbox) {
+            batchCount += inboxEntry.count();
+        }
         for (final ConsumerRecords<K, V> consumerRecords : internalBatchMailQueue) {
             batchCount += consumerRecords.count();
         }
@@ -757,12 +772,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     boolean isSufficientlyLoaded() {
         int total = getTotalWorkWaitingProcessing();
         int inPartitions = getNumberOfEntriesInPartitionQueues();
-        boolean loadedEnoughInPipeline = total > getMaxToGoBeyondOffset() * loadingFactor;
-        boolean overMaxUncommitted = inPartitions >= getMaxToGoBeyondOffset();
+        int maxBeyondOffset = getMaxToGoBeyondOffset();
+        boolean loadedEnoughInPipeline = total > maxBeyondOffset * loadingFactor;
+        boolean overMaxUncommitted = inPartitions >= maxBeyondOffset;
         boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
-        if (remainingIsSufficient) {
-            log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
-        }
+//        if (remainingIsSufficient) {
+        log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
+//        }
         return remainingIsSufficient;
     }
 
