@@ -71,7 +71,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
      */
     @Test
     public void shouldNotThrowBitsetTooLongException() {
-        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.UNORDERED);
+        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
     }
 
     @SneakyThrows

@@ -478,10 +478,20 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private int getMaxMessagesToQueue() {
         //return options.getNumberOfThreads() * options.getLoadingFactor();
-        return options.getNumberOfThreads() * 10;
+        double rate = successRatePer5Seconds.getRate();
+        int newRatae = (int) rate * 2;
+        int max = Math.max(newRatae, options.getNumberOfThreads() * 10);
+        log.debug("max to queue: {}", max);
+        return max;
+//        return options.getNumberOfThreads() * 10;
     }
 
+    private final WindowedEventRate successRatePer5Seconds = new WindowedEventRate(5);
+    private final ExponentialMovingAverage successRatePer5SecondsEMA = new ExponentialMovingAverage(0.5);
+
     public void success(WorkContainer<K, V> wc) {
+        successRatePer5Seconds.newEvent();
+//        successRatePer5SecondsEMA.
         workStateIsDirtyNeedsCommitting.set(true);
         ConsumerRecord<K, V> cr = wc.getCr();
         log.trace("Work success ({}), removing from processing shard queue", wc);
@@ -493,7 +503,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
         boolean keyOrdering = options.getOrdering().equals(KEY);
         if (keyOrdering && shard.isEmpty()) {
-            log.debug("Removing empty shard (key: {})", key);
+            log.trace("Removing empty shard (key: {})", key);
             processingShards.remove(key);
         }
         successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
