@@ -81,7 +81,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
 //        int expectedMessageCount = 3_000_000;
-        int expectedMessageCount = 100_000;
+        int expectedMessageCount = 1_000_000;
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
@@ -172,7 +172,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
             fail(failureMessage + "\n" + e.getMessage());
         }
 
-//        bar.close();
+        bar.close();
 
         pc.closeDrainFirst();
 
