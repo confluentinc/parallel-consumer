@@ -31,7 +31,6 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static io.confluent.parallelconsumer.WorkContainer.getRetryDelay;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -282,10 +281,6 @@ public class WorkManagerTest {
 
         int max = 10;
 
-//        //
-//        var works = wm.getWork(max);
-//        assertWork(works, of(0));
-
         var works = wm.maybeGetWork(4);
         assertOffsets(works, of(0, 1, 2, 6));
 
@@ -319,7 +314,6 @@ public class WorkManagerTest {
     public void maxInFlight() {
         //
         var opts = ParallelConsumerOptions.builder();
-//        opts.softMaxNumberMessagesBeyondBaseCommitOffset(1);
         setupWorkManager(opts.build());
 
         //
@@ -334,7 +328,6 @@ public class WorkManagerTest {
     public void maxConcurrency() {
         //
         var opts = ParallelConsumerOptions.builder();
-//        opts.maxMessagesToQueue(1);
         setupWorkManager(opts.build());
 
         //
@@ -372,9 +365,6 @@ public class WorkManagerTest {
         //
         var opts = ParallelConsumerOptions.builder();
         opts.ordering(UNORDERED);
-
-//        opts.softMaxNumberMessagesBeyondBaseCommitOffset(3);
-//        opts.maxMessagesToQueue(2);
 
         setupWorkManager(opts.build());
 
@@ -555,8 +545,6 @@ public class WorkManagerTest {
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
     public void highVolumeKeyOrder(int quantity) {
-//    public void highVolumeKeyOrder() {
-//        int quantity = 20000;
         int uniqueKeys = 100;
 
         ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(KEY).build();
@@ -610,8 +598,6 @@ public class WorkManagerTest {
     public void workQueuesEmptyWhenAllWorkComplete() {
         ParallelConsumerOptions build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
-//                .maxMessagesToQueue(10)
-//                .softMaxNumberMessagesBeyondBaseCommitOffset(10)
                 .build();
         setupWorkManager(build);
         registerSomeWork();

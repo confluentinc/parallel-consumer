@@ -119,10 +119,6 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 .commitMode(commitMode)
 //                .numberOfThreads(1)
                 .numberOfThreads(1000)
-//                .softMaxNumberMessagesBeyondBaseCommitOffset(100_000)
-//                .softMaxNumberMessagesBeyondBaseCommitOffset(10_000)
-//                .maxMessagesToQueue(10_000)
-//                .maxMessagesToQueue(6_000)
                 .build());
         pc.subscribe(of(inputName));
 
@@ -150,10 +146,6 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 //                        } else {
 //                            Thread.sleep(RandomUtils.nextInt(3, 20));
 //                        }
-////                        Thread.sleep(5);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
                     bar.stepBy(1);
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
