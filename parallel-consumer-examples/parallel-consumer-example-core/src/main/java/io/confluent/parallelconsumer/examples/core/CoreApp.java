@@ -66,8 +66,6 @@ public class CoreApp {
 
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
-//                .maxMessagesToQueue(1000) // <3>
-//                .softMaxNumberMessagesBeyondBaseCommitOffset(1000) // <4>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();

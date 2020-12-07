@@ -71,7 +71,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
     //    private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new HashMap<>();
 
-    private final BackoffAnalyser backoffer;
+//    private final BackoffAnalyser backoffer;
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -129,7 +129,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.options = options;
         this.consumer = consumer;
 
-        backoffer = new BackoffAnalyser(options.getNumberOfThreads() * 10);
+//        backoffer = new BackoffAnalyser(options.getNumberOfThreads() * 10);
     }
 
     /**
@@ -275,39 +275,39 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //            toRemove.add(records);
 //        internalBatchMailQueue.removeAll(toRemove);
     }
-
-    private int getMaxToGoBeyondOffset() {
-        return backoffer.getCurrentTotalMaxCountBeyondOffset();
-    }
-
-    /**
-     * @return true if the records were accepted, false if they cannot be
-     * @see #processInbox()
-     */
-    private boolean processInbox(ConsumerRecords<K, V> records) {
-        int partitionWorkRemainingCount = getWorkQueuedInShardsCount();
-        int recordsToAdd = records.count();
-        // we don't break up individual record sets (although we could, but "overhead") so need to queue up records even if it goes over by some amount
-        boolean overMax = partitionWorkRemainingCount - recordsToAdd >= getMaxToGoBeyondOffset();
-        if (overMax) {
-            log.debug("Work remaining in partition queues has surpassed max, so won't bring further messages in from the pipeline queued: {} / max: {}",
-                    partitionWorkRemainingCount, getMaxToGoBeyondOffset());
-            return false;
-        }
-
-//        if (!inboundOffsetWidthWithinRange(records)) {
+//
+//    private int getMaxToGoBeyondOffset() {
+//        return backoffer.getCurrentTotalMaxCountBeyondOffset();
+//    }
+//
+//    /**
+//     * @return true if the records were accepted, false if they cannot be
+//     * @see #processInbox()
+//     */
+//    private boolean processInbox(ConsumerRecords<K, V> records) {
+//        int partitionWorkRemainingCount = getWorkQueuedInShardsCount();
+//        int recordsToAdd = records.count();
+//        // we don't break up individual record sets (although we could, but "overhead") so need to queue up records even if it goes over by some amount
+//        boolean overMax = partitionWorkRemainingCount - recordsToAdd >= getMaxToGoBeyondOffset();
+//        if (overMax) {
+//            log.debug("Work remaining in partition queues has surpassed max, so won't bring further messages in from the pipeline queued: {} / max: {}",
+//                    partitionWorkRemainingCount, getMaxToGoBeyondOffset());
 //            return false;
 //        }
-
-        //
-        log.debug("Registering {} records of work ({} already registered)", recordsToAdd, partitionWorkRemainingCount);
-
-        for (ConsumerRecord<K, V> rec : records) {
-            processInbox(rec);
-        }
-
-        return true;
-    }
+//
+////        if (!inboundOffsetWidthWithinRange(records)) {
+////            return false;
+////        }
+//
+//        //
+//        log.debug("Registering {} records of work ({} already registered)", recordsToAdd, partitionWorkRemainingCount);
+//
+//        for (ConsumerRecord<K, V> rec : records) {
+//            processInbox(rec);
+//        }
+//
+//        return true;
+//    }
 
     private boolean inboundOffsetWidthWithinRange(final ConsumerRecords<K, V> records) {
         // brute force - surely very slow. surely this info can be cached?
@@ -410,7 +410,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public <R> List<WorkContainer<K, V>> maybeGetWork() {
-        return maybeGetWork(getMaxMessagesToQueue());
+        return maybeGetWork(Integer.MAX_VALUE);
     }
 
     /**
@@ -487,23 +487,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
         return work;
     }
-
-    private int getMaxMessagesToQueue() {
-        //return options.getNumberOfThreads() * options.getLoadingFactor();
-        double rate = successRatePer5Seconds.getRate();
-        int newRatae = (int) rate * 2;
-        int max = Math.max(newRatae, options.getNumberOfThreads() * 10);
-        log.debug("max to queue: {}", max);
-        return max;
-//        return options.getNumberOfThreads() * 10;
-    }
-
-    private final WindowedEventRate successRatePer5Seconds = new WindowedEventRate(5);
-    private final ExponentialMovingAverage successRatePer5SecondsEMA = new ExponentialMovingAverage(0.5);
+//
+//    private int getMaxMessagesToQueue() {
+//        //return options.getNumberOfThreads() * options.getLoadingFactor();
+//        double rate = successRatePer5Seconds.getRate();
+//        int newRatae = (int) rate * 2;
+//        int max = Math.max(newRatae, options.getNumberOfThreads() * 10);
+//        log.debug("max to queue: {}", max);
+//        return max;
+////        return options.getNumberOfThreads() * 10;
+//    }
 
     public void success(WorkContainer<K, V> wc) {
-        successRatePer5Seconds.newEvent();
-//        successRatePer5SecondsEMA.
         workStateIsDirtyNeedsCommitting.set(true);
         ConsumerRecord<K, V> cr = wc.getCr();
         log.trace("Work success ({}), removing from processing shard queue", wc);
@@ -695,7 +690,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
                 } catch (EncodingNotSupportedException e) {
                     log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
-                    backoffer.onFailure();
+//                    backoffer.onFailure();
                 }
             }
 
@@ -742,10 +737,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
                 offsetsToSend.replace(key, stripped);
             }
-            backoffer.onFailure();
+//            backoffer.onFailure();
         } else if (totalOffsetMetaCharacterLength != 0) {
             log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
-            backoffer.onSuccess();
+//            backoffer.onSuccess();
         }
     }
 
@@ -777,16 +772,17 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *         should be downloaded (or pipelined in the Consumer)
      */
     boolean isSufficientlyLoaded() {
-        int total = getTotalWorkWaitingProcessing();
-        int inPartitions = getNumberOfEntriesInPartitionQueues();
-        int maxBeyondOffset = getMaxToGoBeyondOffset();
-        boolean loadedEnoughInPipeline = total > maxBeyondOffset * loadingFactor;
-        boolean overMaxUncommitted = inPartitions >= maxBeyondOffset;
-        boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
-//        if (remainingIsSufficient) {
-        log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
-//        }
-        return remainingIsSufficient;
+//        int total = getTotalWorkWaitingProcessing();
+//        int inPartitions = getNumberOfEntriesInPartitionQueues();
+//        int maxBeyondOffset = getMaxToGoBeyondOffset();
+//        boolean loadedEnoughInPipeline = total > maxBeyondOffset * loadingFactor;
+//        boolean overMaxUncommitted = inPartitions >= maxBeyondOffset;
+//        boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
+////        if (remainingIsSufficient) {
+//        log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
+////        }
+//        return remainingIsSufficient;
+        return !workInbox.isEmpty();
     }
 
     public int getRecordsOutForProcessing() {

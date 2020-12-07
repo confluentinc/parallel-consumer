@@ -141,19 +141,19 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 //                    } catch (InterruptedException e) {
 //                        e.printStackTrace();
 //                    }
-                    try {
-                        // 1/5 chance of taking a long time
-                        int chance = 10;
-                        int dice = RandomUtils.nextInt(0, chance);
-                        if (dice == 0) {
-                            Thread.sleep(100);
-                        } else {
-                            Thread.sleep(RandomUtils.nextInt(3, 20));
-                        }
-//                        Thread.sleep(5);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+//                    try {
+//                        // 1/5 chance of taking a long time
+//                        int chance = 10;
+//                        int dice = RandomUtils.nextInt(0, chance);
+//                        if (dice == 0) {
+//                            Thread.sleep(100);
+//                        } else {
+//                            Thread.sleep(RandomUtils.nextInt(3, 20));
+//                        }
+////                        Thread.sleep(5);
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
                     bar.stepBy(1);
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
@@ -171,7 +171,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(1200))
-                    .failFast(() -> pc.isClosedOrFailed(), () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+//                    .failFast(() -> pc.isClosedOrFailed(), () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {

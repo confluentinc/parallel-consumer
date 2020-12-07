@@ -103,9 +103,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                     if (!polledRecords.isEmpty()) {
                         log.trace("Loop: Register work");
                         wm.registerWork(polledRecords);
-
-                        // notify control work has been registered
-//                        pc.notifyNewWorkRegistered();
                     }
                 }
 
