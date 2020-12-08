@@ -26,6 +26,7 @@ import static io.confluent.csid.utils.KafkaTestUtils.trimAllGeneisOffset;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -92,7 +93,11 @@ public class ParallelEoSStreamProcessorTestBase {
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
-        setupParallelConsumerInstance(ParallelConsumerOptions.builder().commitMode(CONSUMER_SYNC).build());
+        ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
+                .commitMode(CONSUMER_SYNC)
+                .ordering(UNORDERED)
+                .build();
+        setupParallelConsumerInstance(options);
     }
 
     protected List<WorkContainer<String, String>> successfulWork = Collections.synchronizedList(new ArrayList<>());

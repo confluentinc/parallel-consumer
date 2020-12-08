@@ -62,7 +62,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @ValueSource(longs = {
             10_000L,
             100_000L,
-            100_000_000L, // slow
+            100_000_0L,
+//            100_000_000L, // very~ slow
     })
     void largeIncompleteOffsetValues(long nextExpectedOffset) {
         var incompletes = new HashSet<Long>();
@@ -153,6 +154,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             wmm.registerWork(crs);
 
             List<WorkContainer<String, String>> work = wmm.maybeGetWork();
+            assertThat(work).hasSameSizeAs(records);
 
             KafkaTestUtils.completeWork(wmm, work, 0);
 

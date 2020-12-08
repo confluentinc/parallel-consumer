@@ -91,7 +91,7 @@ public class ParallelConsumerOptions<K, V> {
      * The order type to use
      */
     @Builder.Default
-    private final ProcessingOrder ordering = ProcessingOrder.UNORDERED;
+    private final ProcessingOrder ordering = ProcessingOrder.KEY;
 
     @Builder.Default
     private final CommitMode commitMode = CommitMode.CONSUMER_ASYNCHRONOUS;

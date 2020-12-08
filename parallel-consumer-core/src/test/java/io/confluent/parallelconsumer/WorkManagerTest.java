@@ -73,6 +73,9 @@ public class WorkManagerTest {
         });
     }
 
+    /**
+     * Adds 3 units of work
+     */
     private void registerSomeWork() {
         String key = "key-0";
         int partition = 0;
@@ -143,13 +146,13 @@ public class WorkManagerTest {
         assertOffsets(works, of(1));
         wm.success(works.get(0));
 
-        Assertions.assertThat(successfulWork)
+        assertThat(successfulWork)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(of(0, 2, 1));
     }
 
     private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>> assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
-        return Assertions.assertThat(works)
+        return assertThat(works)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(expected);
     }
@@ -324,20 +327,6 @@ public class WorkManagerTest {
         assertThat(wm.maybeGetWork()).isEmpty();
     }
 
-    @Test
-    public void maxConcurrency() {
-        //
-        var opts = ParallelConsumerOptions.builder();
-        setupWorkManager(opts.build());
-
-        //
-        registerSomeWork();
-
-        //
-        assertThat(wm.maybeGetWork()).hasSize(1);
-        assertThat(wm.maybeGetWork()).isEmpty();
-    }
-
     static class FluentQueue<T> implements Iterable<T> {
         ArrayDeque<T> work = new ArrayDeque<>();
 
@@ -358,81 +347,6 @@ public class WorkManagerTest {
         public int size() {
             return work.size();
         }
-    }
-
-    @Test
-    public void maxConcurrencyVsInFlightAndNoLeaks() {
-        //
-        var opts = ParallelConsumerOptions.builder();
-        opts.ordering(UNORDERED);
-
-        setupWorkManager(opts.build());
-
-        //
-        registerSomeWork();
-        registerSomeWork();
-        registerSomeWork();
-
-        //
-        assertThat(wm.getTotalWorkWaitingProcessing()).isEqualTo(9);
-
-        //
-        var work = new FluentQueue<WorkContainer<String, String>>();
-        Assertions.assertThat(work.add(wm.maybeGetWork())).hasSize(2);
-
-        //
-        assertThat(wm.maybeGetWork()).isEmpty();
-
-        // succeed
-        wm.success(work.poll());
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork())).hasSize(1);
-
-        //
-        wm.failed(work.poll());
-        // bump the clock - we're not testing delayed failure
-        advanceClockByDelay();
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork())).hasSize(1);
-
-        //
-        wm.success(work.poll());
-        wm.success(work.poll());
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork(100))).hasSize(2);
-
-        //
-        for (var ignore : work) {
-            wm.success(work.poll());
-        }
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
-
-        //
-        assertThat(wm.getRecordsOutForProcessing()).isEqualTo(2);
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(9);
-        assertThat(wm.getWorkQueuedInShardsCount()).isEqualTo(4);
-        Assertions.assertThat(successfulWork).hasSize(5);
-
-        //
-        wm.success(work.poll());
-        wm.success(work.poll());
-
-        //
-        Assertions.assertThat(work.add(wm.maybeGetWork(10))).hasSize(2);
-        wm.success(work.poll());
-        wm.success(work.poll());
-
-        //
-        assertThat(work.size()).isEqualTo(0);
-        Assertions.assertThat(successfulWork).hasSize(9);
-        assertThat(wm.getRecordsOutForProcessing()).isEqualTo(0);
-        assertThat(wm.getWorkQueuedInShardsCount()).isEqualTo(0);
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(9);
     }
 
     @Test
@@ -569,7 +483,7 @@ public class WorkManagerTest {
         List<WorkContainer<String, String>> work = wm.maybeGetWork();
 
         //
-        Assertions.assertThat(work).hasSameSizeAs(records.keySet());
+        assertThat(work).hasSameSizeAs(records.keySet());
     }
 
     @Test
