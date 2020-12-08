@@ -97,10 +97,23 @@ public class ParallelConsumerOptions<K, V> {
     private final CommitMode commitMode = CommitMode.CONSUMER_ASYNCHRONOUS;
 
     /**
-     * Number of threads to use in the core's thread pool.
+     * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
+     * maximum to prevent overloading them or to a degree, using up quotas.
+     * <p>
+     * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
+     * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
+     * this to be properly addressed: https://github.com/confluentinc/parallel-consumer/issues/24 Add distributed rate
+     * limiting support #24.
+     * <p>
+     * In the core module, this sets the number of threads to use in the core's thread pool.
+     * <p>
+     * It's recommended to set this quite high, much higher than core count, as it's expected that these threads will
+     * spend most of their time blocked waiting for IO. For automatic setting of this variable, look out for issue
+     * https://github.com/confluentinc/parallel-consumer/issues/21 Dynamic concurrency control with flow control or tcp
+     * congestion control theory #21.
      */
     @Builder.Default
-    private final int numberOfThreads = 16;
+    private final int maxConcurrency = 16;
 
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");

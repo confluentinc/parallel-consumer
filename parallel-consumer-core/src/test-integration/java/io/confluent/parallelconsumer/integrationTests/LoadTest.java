@@ -23,7 +23,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.*;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,7 +82,7 @@ public class LoadTest extends DbTest {
                 .commitMode(TRANSACTIONAL_PRODUCER)
                 .producer(kcu.createNewProducer(tx))
                 .consumer(newConsumer)
-                .numberOfThreads(3)
+                .maxConcurrency(3)
                 .build();
         newConsumer.subscribe(Pattern.compile(topic));
         ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);

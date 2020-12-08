@@ -4,9 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.LoopingResumingIterator;
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.Getter;
@@ -673,7 +671,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //
 //        return !workInbox.isEmpty();
 
-        return getWorkQueuedInMailboxCount() > options.getNumberOfThreads() * getLoadingFactor();
+        return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {

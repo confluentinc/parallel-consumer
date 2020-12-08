@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.EnumCartesianProductTestSets;
 import io.confluent.csid.utils.ProgressTracker;
-import io.confluent.csid.utils.StringUtils;
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
@@ -168,7 +167,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 //                .numberOfThreads(1000)
 //                .numberOfThreads(100)
 //                .numberOfThreads(2)
-                .numberOfThreads(numThreads)
+                .maxConcurrency(numThreads)
                 .build());
         pc.subscribe(of(inputName));
 

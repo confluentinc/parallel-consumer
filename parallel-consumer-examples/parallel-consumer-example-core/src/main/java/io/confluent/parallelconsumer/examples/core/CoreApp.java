@@ -66,6 +66,7 @@ public class CoreApp {
 
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
+                .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
                 .build();
@@ -73,7 +74,7 @@ public class CoreApp {
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
-        eosStreamProcessor.subscribe(of(inputTopic)); // <5>
+        eosStreamProcessor.subscribe(of(inputTopic)); // <4>
 
         return eosStreamProcessor;
         // end::exampleSetup[]

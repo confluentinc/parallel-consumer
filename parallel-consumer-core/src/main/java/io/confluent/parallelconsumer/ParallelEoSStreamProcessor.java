@@ -181,7 +181,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         checkAutoCommitIsDisabled(consumer);
 
         LinkedBlockingQueue<Runnable> poolQueue = new LinkedBlockingQueue<>();
-        workerPool = new ThreadPoolExecutor(newOptions.getNumberOfThreads(), newOptions.getNumberOfThreads(),
+        workerPool = new ThreadPoolExecutor(newOptions.getMaxConcurrency(), newOptions.getMaxConcurrency(),
                 0L, MILLISECONDS,
                 poolQueue);
 
@@ -612,7 +612,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 // can occur
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs concurrency: {})",
                         wm.getWorkQueuedInMailboxCount(),
-                        options.getNumberOfThreads());
+                        options.getMaxConcurrency());
                 brokerPollSubsystem.wakeupIfPaused();
             }
         }
@@ -708,7 +708,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     private void checkPressure() {
-        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getNumberOfThreads();
+        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getMaxConcurrency();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) if (isPoolQueueLow() {} && dynamicExtraLoadFactor.isWarmUpPeriodOver() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {}) {",
                     getWorkerQueueSize(),
@@ -732,7 +732,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * @return aim to never have the pool queue drop below this
      */
     private int getPoolQueueTarget() {
-        return options.getNumberOfThreads();
+        return options.getMaxConcurrency();
     }
 
     private boolean isPoolQueueLow() {

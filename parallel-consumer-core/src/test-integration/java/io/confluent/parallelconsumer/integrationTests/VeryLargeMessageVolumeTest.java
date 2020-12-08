@@ -118,7 +118,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 .producer(newProducer)
                 .commitMode(commitMode)
 //                .numberOfThreads(1)
-                .numberOfThreads(1000)
+                .maxConcurrency(1000)
                 .build());
         pc.subscribe(of(inputName));
 
