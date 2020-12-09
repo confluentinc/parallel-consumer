@@ -29,6 +29,11 @@ public class DynamicLoadFactor {
     @Getter
     int current = DEFAULT_INITIAL_LOADING_FACTOR;
 
+    /**
+     * Try to increase the loading factor
+     *
+     * @return true if could step up
+     */
     public boolean maybeStepUp() {
         long now = System.currentTimeMillis();
         if (couldStep()) {

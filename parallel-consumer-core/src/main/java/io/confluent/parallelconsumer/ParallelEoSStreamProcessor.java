@@ -658,7 +658,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             submitWorkToPool(userFunction, callback, records);
         }
 
-        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver()) {
+        boolean moreWorkInQueuesAvailableThatHasntBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getNumberOfThreads();
+//        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver()) {
+        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver() && moreWorkInQueuesAvailableThatHasntBeenPulled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
                 log.warn("Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",

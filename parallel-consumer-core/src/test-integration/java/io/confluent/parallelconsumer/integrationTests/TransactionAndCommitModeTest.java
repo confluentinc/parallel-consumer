@@ -34,8 +34,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.waitAtMost;
@@ -69,6 +71,11 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
     @CartesianProductTest(factory = "enumSets")
     void testDefaultMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, commitMode, order);
+    }
+
+    @Test
+    void testDefaultMaxPollSlow() {
+        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, CONSUMER_SYNC, UNORDERED);
     }
 
     static CartesianProductTest.Sets enumSets() {

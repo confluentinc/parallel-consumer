@@ -200,7 +200,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                         boolean ready = (lastErrorSavedForRethrow != null) ? !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION") : true;
                         if (ready) {
                             // try again
-                            log.error("Was already ready - tx completed between interrupt and retry");
+                            log.error("Transaction was already in READY state - tx completed between interrupt and retry");
                         }
                     } else {
                         // happy path
