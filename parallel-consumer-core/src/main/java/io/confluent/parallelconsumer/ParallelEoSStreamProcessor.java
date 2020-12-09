@@ -50,9 +50,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     @Setter(AccessLevel.PACKAGE)
     private WallClock clock = new WallClock();
 
+    static private final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY = 5000;
+
     @Setter
     @Getter
-    private Duration timeBetweenCommits = ofMillis(500);
+//    private Duration timeBetweenCommits = ofMillis(500);
+    private Duration timeBetweenCommits = ofMillis(1000);
 
     private Instant lastCommit = Instant.now();
 
@@ -102,7 +105,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * Used to request a commit asap
      */
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
+
     private final DynamicLoadFactor dynamicExtraLoadFactor = new DynamicLoadFactor();
+
+    /**
+     * If the system failed with an exception, it is referenced here.
+     */
     private Exception failureReason;
 
     public boolean isClosedOrFailed() {
@@ -177,7 +185,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 0L, MILLISECONDS,
                 poolQueue);
 
-        this.wm = new WorkManager<>(newOptions, consumer);
+        this.wm = new WorkManager<>(newOptions, consumer, dynamicExtraLoadFactor);
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
@@ -260,6 +268,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
+        notifyNewWorkRegistered();
         log.info("Assigned {} partitions - that's {} bytes per partition for encoding offset overruns", numberOfAssignedPartitions, OffsetMapCodecManager.DefaultMaxMetadataSize / numberOfAssignedPartitions);
     }
 
@@ -338,7 +347,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", consumedRecord, recordListToProduce);
 
             List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
+            log.trace("Producing {} messages in result...", recordListToProduce.size());
             for (ProducerRecord<K, V> toProduce : recordListToProduce) {
+                log.trace("Producing {}", toProduce);
                 RecordMetadata produceResultMeta = producerManager.get().produceMessage(toProduce);
                 var result = new ConsumeProduceResult<>(consumedRecord, toProduce, produceResultMeta);
                 results.add(result);
@@ -592,14 +603,17 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private <R> void controlLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                  Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
-        handleWork(userFunction, callback);
+
+        //
+        int newWork = handleWork(userFunction, callback);
 
         if (state == running) {
-            if (!wm.isSufficientlyLoaded()) {
-                log.debug("Found not enough messages queued up, ensuring poller is awake");
-                brokerPollSubsystem.wakeup();
-            } else {
-                log.info("");
+            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
+                // can occur
+                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs concurrency: {})",
+                        wm.getWorkQueuedInMailboxCount(),
+                        options.getNumberOfThreads());
+                brokerPollSubsystem.wakeupIfPaused();
             }
         }
 
@@ -636,6 +650,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             log.trace("Woke up", e);
         }
 
+        if (getWorkerQueueSize() == 0 && wm.getTotalWorkWaitingProcessing() > 0 && newWork == 0) {
+            log.error("No work to do, yet messages waiting in shard queue");
+        }
+
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
                 wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getRecordsOutForProcessing(), state);
@@ -643,38 +661,61 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     RateLimiter rateLimiter = new RateLimiter();
 
-    private <R> void handleWork(final Function<ConsumerRecord<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    private <R> int handleWork(final Function<ConsumerRecord<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+        // check queue pressure first before addressing it
+        checkPressure();
+
+        int gotWorkCount = 0;
+
+        //
         if (state == running || state == draining) {
-            int dynamicExtraLoadFactorCurrent = dynamicExtraLoadFactor.getCurrent();
-            int target = getPoolQueueTarget() * dynamicExtraLoadFactorCurrent;
+            int target = getQueueTargetLoaded();
             BlockingQueue<Runnable> queue = workerPool.getQueue();
             int current = queue.size();
             int delta = target - current;
 
-            log.debug("Loop: Get work - target: {} current queue size: {}, requesting: {}, loading factor: {}", target, current, delta, dynamicExtraLoadFactorCurrent);
+            log.debug("Loop: Get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}", target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
             var records = wm.<R>maybeGetWork(delta);
+            gotWorkCount = records.size();
 
             log.trace("Loop: Submit to pool");
             submitWorkToPool(userFunction, callback, records);
         }
 
-        boolean moreWorkInQueuesAvailableThatHasntBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getNumberOfThreads();
+        //
+        rateLimiter.performIfNotLimited(() -> {
+            int queueSize = getWorkerQueueSize();
+            log.info("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
+                    workerPool.getActiveCount(), queueSize, queueSize, getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+        });
+
+        return gotWorkCount;
+    }
+
+    private int getQueueTargetLoaded() {
+        return getPoolQueueTarget() * dynamicExtraLoadFactor.getCurrentFactor();
+    }
+
+    private void checkPressure() {
+        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getNumberOfThreads();
 //        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver()) {
-        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver() && moreWorkInQueuesAvailableThatHasntBeenPulled) {
+        if (log.isTraceEnabled())
+            log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) if (isPoolQueueLow() {} && dynamicExtraLoadFactor.isWarmUpPeriodOver() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {}) {",
+                    getWorkerQueueSize(),
+                    getQueueTargetLoaded(),
+                    dynamicExtraLoadFactor.getCurrentFactor(),
+                    isPoolQueueLow(),
+                    dynamicExtraLoadFactor.isWarmUpPeriodOver(),
+                    moreWorkInQueuesAvailableThatHaveNotBeenPulled);
+        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver() && moreWorkInQueuesAvailableThatHaveNotBeenPulled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
-                log.warn("Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
-                        workerPool.getQueue().size(), getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrent());
+                log.warn("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
+                        getWorkerQueueSize(), getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
-                log.warn("Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrent(), dynamicExtraLoadFactor.getMax());
+                log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
             }
         }
-
-        rateLimiter.limit(() -> {
-            int queueSize = workerPool.getQueue().size();
-            log.info("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
-                    workerPool.getActiveCount(), queueSize, queueSize, getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrent());
-        });
     }
 
     /**
@@ -685,11 +726,19 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     private boolean isPoolQueueLow() {
-        double ninteyPercent = 0.9; // at least 90% of threads are utilised
-        boolean threadsUnderUtilised = workerPool.getActiveCount() < (options.getNumberOfThreads() * ninteyPercent);
-        return getPoolQueueTarget() > workerPool.getQueue().size()
-                && wm.isNotPartitionedOrDrained()
-                && threadsUnderUtilised;
+//        double ninteyPercent = 0.9; // at least 90% of threads are utilised
+//        boolean threadsUnderUtilised = workerPool.getActiveCount() < (options.getNumberOfThreads() * ninteyPercent);
+//        boolean threadsUnderUtilised = true;
+        int queueSize = getWorkerQueueSize();
+        boolean workAmountBelowTarget = queueSize <= getPoolQueueTarget();
+        log.debug("workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
+                workAmountBelowTarget, queueSize, getPoolQueueTarget(), wm.hasWorkInMailboxes()
+                //, threadsUnderUtilised
+        );
+        return workAmountBelowTarget
+                && wm.hasWorkInMailboxes()
+                ;
+//                && threadsUnderUtilised;
     }
 
     private void drain() {
@@ -720,14 +769,32 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         Set<WorkContainer<K, V>> results = new HashSet<>();
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
 
+        boolean nothingInFlight = !wm.hasWorkInFlight();
+//        if (nothingInFlight && wm.hasWorkInMailboxes()) {
+//        boolean willNeverReceiveWork = getWorkerQueueSize() < 1 && workerPool.getActiveCount() == 0;
+//        if (willNeverReceiveWork && workMailBox.isEmpty() && numberOfAssignedPartitions > 0) {
+//            log.debug("No work in flight and mail box empty, need to load up more work");
+//            try {
+//                Thread.sleep(1);
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//            return;
+//        }
+
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
             if (workMailBox.isEmpty()) {
-                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}", timeout);
+                if (log.isDebugEnabled()) {
+                    log.warn("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
+                            timeout, workerPool.getActiveCount(), getWorkerQueueSize());
+                }
                 currentlyPollingWorkCompleteMailBox.getAndSet(true);
                 // wait for work, with a timeout for sanity
+                log.warn("Blocking poll {}", timeout);
                 firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
+                log.warn("Blocking poll finish");
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
             } else {
                 // don't set the lock or log anything
@@ -762,15 +829,31 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
         boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
-        boolean poolQueueLow = isPoolQueueLow();
-        boolean shouldCommitNow = commitFrequencyOK || !lingeringOnCommitWouldBeBeneficial() || isCommandedToCommit() || poolQueueLow;
+//        boolean poolQueueLow = isPoolQueueLow();
+        boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
+        boolean commitCommand = isCommandedToCommit();
+//        boolean shouldCommitNow = commitFrequencyOK || !lingerBeneficial || commitCommand || poolQueueLow;
+        boolean shouldCommitNow = commitFrequencyOK || !lingerBeneficial || commitCommand;
         if (shouldCommitNow) {
-            if (!commitFrequencyOK) {
-                log.debug("Commit too frequent, but no benefit in lingering");
-            }
-            if (poolQueueLow)
-                // todo got to change this - commits are ever few ms
-                log.debug("Pool queue too low so committing offsets");
+//            log.debug("commitFrequencyOK {} || !lingerBeneficial {} || commitCommand {} || poolQueueLow {}",
+//                    commitFrequencyOK,
+//                    !lingerBeneficial,
+//                    commitCommand,
+//                    poolQueueLow
+//            );
+            log.debug("commitFrequencyOK {} || !lingerBeneficial {} || commitCommand {}",
+                    commitFrequencyOK,
+                    !lingerBeneficial,
+                    commitCommand
+            );
+//            if (poolQueueLow) {
+//                /*
+//                Shouldn't be needed if pressure system is working, unless commit frequency target too high or too much
+//                information to encode into offset payload.
+//                // TODO should be able to change this so that it checks with the work manager if a commit would help
+//                */
+//                log.warn("Pool queue too low ({}), may be because of back pressure from encoding offsets, so committing", getWorkerQueueSize());
+//            }
             commitOffsetsThatAreReady();
             lastCommit = Instant.now();
         } else {
@@ -784,6 +867,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         }
     }
 
+    private int getWorkerQueueSize() {
+        return workerPool.getQueue().size();
+    }
+
     /**
      * Under some conditions, waiting longer before committing can be faster
      *
@@ -793,11 +880,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // work is waiting to be done
         boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeCompletedSuccessfully();
         // no work is currently being done
-        boolean noWorkInFlight = !wm.hasWorkInFlight();
+        boolean workInFlight = wm.hasWorkInFlight();
         // work mailbox is empty
         boolean workWaitingInMailbox = !workMailBox.isEmpty();
-        log.trace("workIsWaitingToBeCompletedSuccessfully {} || noWorkInFlight {} || workWaitingInMailbox {};", workIsWaitingToBeCompletedSuccessfully, noWorkInFlight, workWaitingInMailbox);
-        return workIsWaitingToBeCompletedSuccessfully || noWorkInFlight || workWaitingInMailbox;
+        boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
+        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};", workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
+        return workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
     }
 
     private Duration getTimeToNextCommit() {
@@ -883,7 +971,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             // capture each result, against the input record
             var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
             for (R result : resultsFromUserFunction) {
-                log.trace("Running users's call back...");
+                log.trace("Running users call back...");
                 callback.accept(result);
             }
             log.trace("User function future registered");

@@ -1,14 +1,15 @@
 package io.confluent.parallelconsumer;
 
+import lombok.Getter;
 import lombok.SneakyThrows;
 
 import java.time.Duration;
-import java.util.concurrent.Callable;
 
 public class RateLimiter {
 
+    @Getter
     private Duration rate = Duration.ofSeconds(1);
-    private long lastFire = 0;
+    private long lastFireMs = 0;
 
     public RateLimiter() {
     }
@@ -18,17 +19,30 @@ public class RateLimiter {
     }
 
     @SneakyThrows
-    public void limit(final Runnable action) {
+    public void performIfNotLimited(final Runnable action) {
         if (isOkToCallAction()) {
-            lastFire = System.currentTimeMillis();
+            lastFireMs = System.currentTimeMillis();
             action.run();
         }
     }
 
+    public boolean couldPerform() {
+        return isOkToCallAction();
+    }
+
     private boolean isOkToCallAction() {
+        long elapsed = getElapsedMs();
+        return lastFireMs == 0 || elapsed > rate.toMillis();
+    }
+
+    private long getElapsedMs() {
         long now = System.currentTimeMillis();
-        long elapsed = now - lastFire;
-        return lastFire == 0 || elapsed > rate.toMillis();
+        long elapsed = now - lastFireMs;
+        return elapsed;
+    }
+
+    public Duration getElapsedDuration() {
+        return Duration.ofMillis(getElapsedMs());
     }
 
 }

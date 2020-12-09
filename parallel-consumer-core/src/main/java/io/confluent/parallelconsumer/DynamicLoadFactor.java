@@ -1,9 +1,11 @@
 package io.confluent.parallelconsumer;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 
+@Slf4j
 public class DynamicLoadFactor {
 
     /**
@@ -18,16 +20,24 @@ public class DynamicLoadFactor {
      */
     private static final int DEFAULT_INITIAL_LOADING_FACTOR = 2;
 
-    private final long start = System.currentTimeMillis();
-    private final Duration coolDown = Duration.ofSeconds(2);
-    private final Duration warmUp = Duration.ofSeconds(5); // CG usually takes 5 seconds to start running
-    private long lastStep = 0;
-    private final int step = 1;
+    private final long startTimeMs = System.currentTimeMillis();
+    private final Duration coolDown = Duration.ofSeconds(1);
+    private final Duration warmUp = Duration.ofSeconds(0); // CG usually takes 5 seconds to start running
+    private final int stepUpFactorBy = 2;
+
+    /**
+     * Upper safety cap on multiples of target queue size to reach (e.g. with 20 threads, this would be 20 * 100 =
+     * 20,000 messages _queued_.
+     * <p>
+     * Expectation is some relatively small multiple of the degree of concurrency, enough that each time a thread
+     * finishes, theres at least one more entry for it in the queue.
+     */
     @Getter
-    private final int max = 5;
+    private final int maxFactor = 100;
 
     @Getter
-    int current = DEFAULT_INITIAL_LOADING_FACTOR;
+    private int currentFactor = DEFAULT_INITIAL_LOADING_FACTOR;
+    private long lastSteppedFactor = currentFactor;
 
     /**
      * Try to increase the loading factor
@@ -35,19 +45,21 @@ public class DynamicLoadFactor {
      * @return true if could step up
      */
     public boolean maybeStepUp() {
-        long now = System.currentTimeMillis();
+        long nowMs = System.currentTimeMillis();
         if (couldStep()) {
-            return doStep(now, lastStep);
+            return doStep(nowMs, lastSteppedFactor);
         }
         return false;
     }
 
-    private synchronized boolean doStep(final long now, final long myLastStep) {
-        if (current < max) {
+    private synchronized boolean doStep(final long nowMs, final long myLastStep) {
+        if (currentFactor < maxFactor) {
             // compare and set
-            if (myLastStep == lastStep) {
-                current = current + step;
-                lastStep = now;
+            if (myLastStep == lastSteppedFactor) {
+                currentFactor = currentFactor + stepUpFactorBy;
+                long delta = currentFactor - myLastStep;
+                log.debug("Stepped up load factor from {} to {}", myLastStep, currentFactor);
+                lastSteppedFactor = currentFactor;
                 return true;
             } else {
                 // already done
@@ -63,19 +75,19 @@ public class DynamicLoadFactor {
     }
 
     private boolean isNoCoolDown() {
-        if (lastStep == 0) return true;
+        if (lastSteppedFactor == 0) return true;
         long now = System.currentTimeMillis();
-        long elapsed = now - lastStep;
+        long elapsed = now - lastSteppedFactor;
         return elapsed > coolDown.toMillis();
     }
 
     boolean isWarmUpPeriodOver() {
         long now = System.currentTimeMillis();
-        long elapsed = now - start;
+        long elapsed = now - startTimeMs;
         return elapsed > warmUp.toMillis();
     }
 
     public boolean isMaxReached() {
-        return current >= max;
+        return currentFactor >= maxFactor;
     }
 }

@@ -52,6 +52,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     @Getter
     @Setter(AccessLevel.PUBLIC)
     private Future<List<Object>> future;
+    private long timeTakenAsWorkMs;
 
     public WorkContainer(ConsumerRecord<K, V> cr) {
         this.cr = cr;
@@ -111,6 +112,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     public void takingAsWork() {
         log.trace("Being taken as work: {}", this);
         inFlight = true;
+        timeTakenAsWorkMs = System.currentTimeMillis();
     }
 
     public TopicPartition getTopicPartition() {
@@ -138,5 +140,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     public String toString() {
 //        return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ":" + cr.value() + ")";
         return "WorkContainer(" + toTP(cr) + ":" + cr.offset() + ":" + cr.key() + ")";
+    }
+
+    public Duration getTimeInFlight() {
+        return Duration.ofMillis(System.currentTimeMillis()-timeTakenAsWorkMs);
     }
 }

@@ -35,8 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_SYNC;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
@@ -75,7 +74,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
     }
 
     @Test
-    void testDefaultMaxPollSlow() {
+    void testDefaultMaxPollConsumerSyncSlow() {
         runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, CONSUMER_SYNC, UNORDERED);
     }
 
@@ -109,7 +108,9 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
-        int expectedMessageCount = 1000;
+        int expectedMessageCount = 50_000;
+//        int expectedMessageCount = 10_000;
+//        int expectedMessageCount = 1_000;
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
@@ -145,6 +146,9 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
                 .consumer(newConsumer)
                 .producer(newProducer)
                 .commitMode(commitMode)
+//                .numberOfThreads(1000)
+//                .numberOfThreads(100)
+//                .numberOfThreads(2)
                 .build());
         pc.subscribe(of(inputName));
 
@@ -157,7 +161,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
 
         pc.pollAndProduce(record -> {
-                    log.trace("Still going {}", record);
+                    log.trace("Still going {}", record.offset());
                     consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
@@ -169,13 +173,23 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
         // wait for all pre-produced messages to be processed and produced
         Assertions.useRepresentation(new TrimListRepresentation());
-        ProgressTracker pt = new ProgressTracker(processedCount);
+
+        // todo rounds should be 1? progress should always be made
+        int roundsAllowed = 1;
+        if (commitMode.equals(CONSUMER_SYNC)) {
+            roundsAllowed = 2; // sync consumer commits can take time // fails
+//            roundsAllowed = 5; // sync consumer commits can take time // fails
+//            roundsAllowed = 10; // sync consumer commits can take time // fails
+//            roundsAllowed = 12; // sync consumer commits can take time // // works with no logging
+        }
+
+        ProgressTracker pt = new ProgressTracker(processedCount, roundsAllowed);
         var failureMessage = StringUtils.msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(20)).alias(failureMessage).untilAsserted(() -> {
                 log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
-                pt.checkForProgress();
+                pt.checkForProgressExceptionally();
                 SoftAssertions all = new SoftAssertions();
                 all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
                 all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);

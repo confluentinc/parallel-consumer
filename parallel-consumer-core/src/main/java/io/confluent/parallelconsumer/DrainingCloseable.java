@@ -9,7 +9,7 @@ import java.time.Duration;
 
 public interface DrainingCloseable extends Closeable {
 
-    Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10); // can increase if debugging
+    Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30); // can increase if debugging
 
     enum DrainingMode {
         /**

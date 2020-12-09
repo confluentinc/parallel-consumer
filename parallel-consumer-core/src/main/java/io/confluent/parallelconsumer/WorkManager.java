@@ -70,6 +70,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, NavigableMap<Long, WorkContainer<K, V>>> partitionCommitQueues = new ConcurrentHashMap<>();
 
+    private final DynamicLoadFactor dynamicLoadFactor;
+
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
      * shard.
@@ -77,16 +79,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private Optional<Object> iterationResumePoint = Optional.empty();
 
     private int recordsOutForProcessing = 0;
-
-    /**
-     * todo docs
-     * The multiple that should be pre-loaded awaiting processing. Consumer already pipelines, so we shouldn't need to
-     * pipeline ourselves too much.
-     * <p>
-     * Note how this relates to {@link BrokerPollSystem#getLongPollTimeout()} - if longPollTimeout is high and loading
-     * factor is low, there may not be enough messages queued up to satisfy demand.
-     */
-    private final int loadingFactor = 3;
 
     /**
      * Useful for testing
@@ -122,9 +114,15 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
+    // TODO remove
     public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this.options = options;
+        this(options, consumer, new DynamicLoadFactor());
+    }
+
+    public WorkManager(final ParallelConsumerOptions newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor) {
+        this.options = newOptions;
         this.consumer = consumer;
+        this.dynamicLoadFactor = dynamicExtraLoadFactor;
     }
 
     /**
@@ -244,7 +242,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         int gap = requestedMaxWorkToRetrieve;
         int taken = 0;
 
-        log.debug("Will attempt to register {} - {} available", requestedMaxWorkToRetrieve, internalFlattenedMailQueue.size());
+        log.debug("Will attempt to register the requested {} - {} available", requestedMaxWorkToRetrieve, internalFlattenedMailQueue.size());
 
         //
         while (taken < gap && !internalFlattenedMailQueue.isEmpty()) {
@@ -323,7 +321,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             return UniLists.of();
         }
 
-        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - getWorkQueuedInShardsCount();
+        // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
+        int available = getWorkQueuedInShardsCount();
+        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
+        log.debug("Requested: {}, available: {}, will try retrieve from mailbox the delta of: {}", requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
         processInbox(extraNeededFromInboxToSatisfy);
 
         //
@@ -360,7 +361,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     wc.takingAsWork();
                     shardWork.add(wc);
                 } else {
-                    log.trace("Work ({}) still delayed or is in flight, can't take...", wc);
+                    log.trace("Work ({}) still delayed ({}) or is in flight ({}, time in flight: {}), alreadySucceeded? {} can't take...",
+                            wc, !wc.hasDelayPassed(clock), !wc.isNotInFlight(), wc.getTimeInFlight(), alreadySucceeded);
                 }
 
                 ProcessingOrder ordering = options.getOrdering();
@@ -377,8 +379,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             work.addAll(shardWork);
         }
 
-
-        log.debug("Got {} records of work. In-flight: {}, Awaiting: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit queues: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
         recordsOutForProcessing += work.size();
 
         return work;
@@ -438,7 +439,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     /**
-     * @return Work queued in the mail box, awaiting processing into shards
+     * TODO use a cache of this information, readable from a seperate thread
+     *
+     * @return amount of work queued in the mail box, awaiting processing into shards
      */
     Integer getWorkQueuedInMailboxCount() {
         int batchCount = 0;
@@ -448,7 +451,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         if (internalBatchMailQueue.size() > 10) {
             log.warn("Larger than expected {}", internalBatchMailQueue.size());
         }
-        for (final ConsumerRecords<K, V> consumerRecords : new ArrayList<>(internalBatchMailQueue)) { // copy for concurrent access - as it holds batches of polled records, it should be relatively small
+        for (final ConsumerRecords<K, V> consumerRecords : new ArrayList<>(internalBatchMailQueue)) { // TODO copy for concurrent access - as it holds batches of polled records, it should be relatively small
             if (consumerRecords != null) {
                 batchCount += consumerRecords.count();
             }
@@ -531,7 +534,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                         OffsetAndMetadata offsetData = new OffsetAndMetadata(offsetOfNextExpectedMessageToBeCommitted);
                         offsetsToSend.put(topicPartitionKey, offsetData);
                     } else if (container.getUserFunctionSucceeded().get() && iteratedBeyondLowWaterMarkBeingLowestCommittableOffset) {
-                        log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset. Will mark as complete in the offset map.", container.getCr().offset());
+                        // todo lookup the low water mark and include here
+                        log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset. Will mark as complete in the offset map.",
+                                container.getCr().offset());
                         // no-op - offset map is only for not succeeded or completed offsets
 //                        // mark as complete complete so remove from work
 //                        workToRemove.add(container);
@@ -650,13 +655,31 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *         should be downloaded (or pipelined in the Consumer)
      */
     boolean isSufficientlyLoaded() {
-        return !workInbox.isEmpty();
+//        int total = getTotalWorkWaitingProcessing();
+//        int inPartitions = getNumberOfEntriesInPartitionQueues();
+//        int maxBeyondOffset = getMaxToGoBeyondOffset();
+//        boolean loadedEnoughInPipeline = total > maxBeyondOffset * loadingFactor;
+//        boolean overMaxUncommitted = inPartitions >= maxBeyondOffset;
+//        boolean remainingIsSufficient = loadedEnoughInPipeline || overMaxUncommitted;
+////        if (remainingIsSufficient) {
+//        log.debug("isSufficientlyLoaded? loadedEnoughInPipeline {} || overMaxUncommitted {}", loadedEnoughInPipeline, overMaxUncommitted);
+////        }
+//        return remainingIsSufficient;
+//
+//        return !workInbox.isEmpty();
+
+        return getWorkQueuedInMailboxCount() > options.getNumberOfThreads() * getLoadingFactor();
+    }
+
+    private int getLoadingFactor() {
+        return dynamicLoadFactor.getCurrentFactor();
     }
 
     public int getRecordsOutForProcessing() {
         return recordsOutForProcessing;
     }
 
+    // TODO effeciency issues
     public boolean workIsWaitingToBeCompletedSuccessfully() {
         Collection<NavigableMap<Long, WorkContainer<K, V>>> values = processingShards.values();
         for (NavigableMap<Long, WorkContainer<K, V>> value : values) {
@@ -678,8 +701,20 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return this.workStateIsDirtyNeedsCommitting.get();
     }
 
-    public boolean isNotPartitionedOrDrained() {
-        return getNumberOfEntriesInPartitionQueues() > 0 && getWorkQueuedInMailboxCount() > 0;
+    public boolean hasWorkInMailboxes() {
+        return getWorkQueuedInMailboxCount() > 0;
+    }
 
+    /**
+     * fastish
+     *
+     * @return
+     */
+    public boolean hasWorkInCommitQueues() {
+        for (var e : this.partitionCommitQueues.entrySet()) {
+            if (!e.getValue().isEmpty())
+                return true;
+        }
+        return false;
     }
 }

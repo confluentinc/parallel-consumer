@@ -36,10 +36,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final ConsumerManager<K, V> consumerManager;
 
-    private ParallelEoSStreamProcessor.State state = ParallelEoSStreamProcessor.State.running;
+    private ParallelEoSStreamProcessor.State state = running;
 
     private Optional<Future<Boolean>> pollControlThreadFuture;
 
+    @Getter
     private volatile boolean paused = false;
 
     private final ParallelEoSStreamProcessor<K, V> pc;
@@ -103,6 +104,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                     if (!polledRecords.isEmpty()) {
                         log.trace("Loop: Register work");
                         wm.registerWork(polledRecords);
+
+                        // notify control work has been registered, in case it's sleeping waiting for work that will never come
+                        if (!wm.hasWorkInMailboxes()) {
+                            pc.notifyNewWorkRegistered();
+                        }
                     }
                 }
 
@@ -160,7 +166,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
 
-        Duration thisLongPollTimeout = (state == ParallelEoSStreamProcessor.State.running) ? BrokerPollSystem.longPollTimeout : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
+        Duration thisLongPollTimeout = state == running ? BrokerPollSystem.longPollTimeout
+                : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
         log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if subs are paused, or no data available on broker.", toSeconds(thisLongPollTimeout)); // java 8
         return consumerManager.poll(thisLongPollTimeout);
@@ -178,15 +185,29 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    //    private final Duration maxPauseFlapRate = Duration.ofSeconds(1);
+    private final RateLimiter pauseLimiter = new RateLimiter(1);
+
     private void doPause() {
         // idempotent
         if (paused) {
             log.trace("Already paused");
         } else {
-            paused = true;
-            log.debug("Pausing subs");
-            Set<TopicPartition> assignment = consumerManager.assignment();
-            consumerManager.pause(assignment);
+            if (pauseLimiter.couldPerform()) {
+                pauseLimiter.performIfNotLimited(() -> {
+                    paused = true;
+                    log.debug("Pausing subs");
+                    Set<TopicPartition> assignment = consumerManager.assignment();
+                    consumerManager.pause(assignment);
+                });
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("Should pause but pause rate limit exceeded {} vs {}. Queued: {}",
+                            pauseLimiter.getElapsedDuration(),
+                            pauseLimiter.getRate(),
+                            wm.getWorkQueuedInMailboxCount());
+                }
+            }
         }
     }
 
@@ -226,7 +247,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * make sure we maintain the keep alive with the broker so as not to cause a rebalance.
      */
     private void managePauseOfSubscription() {
-        if (shouldThrottle()) {
+        boolean throttle = shouldThrottle();
+        log.trace("Need to throttle: {}", throttle);
+        if (throttle) {
             doPause();
         } else {
             resumeIfPaused();
@@ -278,7 +301,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Wakeup if colling the broker
      */
-    public void wakeup() {
-        consumerManager.wakeup();
+    public void wakeupIfPaused() {
+        if (paused)
+            consumerManager.wakeup();
     }
 }
