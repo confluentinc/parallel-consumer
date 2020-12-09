@@ -145,4 +145,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     public Duration getTimeInFlight() {
         return Duration.ofMillis(System.currentTimeMillis()-timeTakenAsWorkMs);
     }
+
+    public long offset() {
+        return getCr().offset();
+    }
 }

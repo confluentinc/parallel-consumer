@@ -58,7 +58,7 @@ public class DynamicLoadFactor {
             if (myLastStep == lastSteppedFactor) {
                 currentFactor = currentFactor + stepUpFactorBy;
                 long delta = currentFactor - myLastStep;
-                log.debug("Stepped up load factor from {} to {}", myLastStep, currentFactor);
+                log.info("Stepped up load factor from {} to {}", myLastStep, currentFactor);
                 lastSteppedFactor = currentFactor;
                 return true;
             } else {

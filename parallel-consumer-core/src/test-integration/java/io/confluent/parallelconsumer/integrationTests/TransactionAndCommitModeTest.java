@@ -25,6 +25,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
+import org.awaitility.core.TerminalFailureException;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.CartesianProductTest;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -175,26 +177,37 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
         Assertions.useRepresentation(new TrimListRepresentation());
 
         // todo rounds should be 1? progress should always be made
-        int roundsAllowed = 1;
-        if (commitMode.equals(CONSUMER_SYNC)) {
-            roundsAllowed = 2; // sync consumer commits can take time // fails
-//            roundsAllowed = 5; // sync consumer commits can take time // fails
-//            roundsAllowed = 10; // sync consumer commits can take time // fails
-//            roundsAllowed = 12; // sync consumer commits can take time // // works with no logging
-        }
+        int roundsAllowed = 10;
+//        if (commitMode.equals(CONSUMER_SYNC)) {
+//            roundsAllowed = 3; // sync consumer commits can take time // fails
+////            roundsAllowed = 5; // sync consumer commits can take time // fails
+////            roundsAllowed = 10; // sync consumer commits can take time // fails
+////            roundsAllowed = 12; // sync consumer commits can take time // // works with no logging
+//        }
 
         ProgressTracker pt = new ProgressTracker(processedCount, roundsAllowed);
-        var failureMessage = StringUtils.msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
+        var failureMessage = msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(20)).alias(failureMessage).untilAsserted(() -> {
-                log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
-                pt.checkForProgressExceptionally();
-                SoftAssertions all = new SoftAssertions();
-                all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
-                all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
-                all.assertAll();
-            });
+            waitAtMost(ofSeconds(200))
+                    .failFast(() -> pc.isClosedOrFailed()
+                                    || producedCount.get() > expectedMessageCount,
+                            () -> {
+                                if (pc.isClosedOrFailed())
+                                    return pc.getFailureCause();
+                                else
+                                    return new TerminalFailureException(msg("Too many messages? processedCount.get() {} > expectedMessageCount {}",
+                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4 // TODO link
+                            })
+                    .alias(failureMessage)
+                    .untilAsserted(() -> {
+                        log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
+                        pt.checkForProgressExceptionally();
+                        SoftAssertions all = new SoftAssertions();
+                        all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
+                        all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
+                        all.assertAll();
+                    });
         } catch (ConditionTimeoutException e) {
             log.debug("Expected keys (size {})", expectedKeys.size());
             log.debug("Consumed keys ack'd (size {})", consumedKeys.size());

@@ -792,9 +792,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 }
                 currentlyPollingWorkCompleteMailBox.getAndSet(true);
                 // wait for work, with a timeout for sanity
-                log.warn("Blocking poll {}", timeout);
+                log.trace("Blocking poll {}", timeout);
                 firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
-                log.warn("Blocking poll finish");
+                log.trace("Blocking poll finish");
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
             } else {
                 // don't set the lock or log anything
