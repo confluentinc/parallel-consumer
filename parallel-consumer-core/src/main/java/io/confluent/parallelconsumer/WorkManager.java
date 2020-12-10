@@ -75,7 +75,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private final DynamicLoadFactor dynamicLoadFactor;
 
-    private final WorkMailBoxManager<K ,V> wmbm;
+    private final WorkMailBoxManager<K, V> wmbm;
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -369,10 +369,27 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             work.addAll(shardWork);
         }
 
+        checkShardsForProgress();
+
         log.debug("Got {} records of work. In-flight: {}, Awaiting in commit queues: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
         recordsOutForProcessing += work.size();
 
         return work;
+    }
+
+    // todo slooooow
+    // todo refactor to partition state
+    private void checkShardsForProgress() {
+        for (var shard : processingShards.entrySet()) {
+            for (final Map.Entry<Long, WorkContainer<K, V>> entry : shard.getValue().entrySet()) {
+                WorkContainer<K, V> work = entry.getValue();
+                long seconds = work.getTimeInFlight().toSeconds();
+                if (work.isInFlight() && seconds > 1) {
+                    log.warn("Work taking too long {} s : {}", seconds, entry);
+                }
+            }
+        }
+
     }
 
     public void success(WorkContainer<K, V> wc) {

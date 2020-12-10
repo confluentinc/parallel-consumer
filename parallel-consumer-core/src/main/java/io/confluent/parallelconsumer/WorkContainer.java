@@ -109,6 +109,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return !inFlight;
     }
 
+    public boolean isInFlight() {
+        return inFlight;
+    }
+
     public void takingAsWork() {
         log.trace("Being taken as work: {}", this);
         inFlight = true;

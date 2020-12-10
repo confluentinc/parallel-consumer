@@ -650,8 +650,11 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             log.trace("Woke up", e);
         }
 
-        if (getWorkerQueueSize() == 0 && wm.getTotalWorkWaitingProcessing() > 0 && newWork == 0) {
-            log.error("No work to do, yet messages waiting in shard queue");
+        // todo remove
+        if (log.isDebugEnabled()) {
+            if (getWorkerQueueSize() == 0 && wm.getTotalWorkWaitingProcessing() > 0 && newWork == 0) {
+                log.error("No work to do, yet messages waiting in shard queue. active count: {}", workerPool.getActiveCount());
+            }
         }
 
         // end of loop
@@ -769,7 +772,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         Set<WorkContainer<K, V>> results = new HashSet<>();
         final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
 
-        boolean nothingInFlight = !wm.hasWorkInFlight();
+//        boolean nothingInFlight = !wm.hasWorkInFlight();
 //        if (nothingInFlight && wm.hasWorkInMailboxes()) {
 //        boolean willNeverReceiveWork = getWorkerQueueSize() < 1 && workerPool.getActiveCount() == 0;
 //        if (willNeverReceiveWork && workMailBox.isEmpty() && numberOfAssignedPartitions > 0) {
@@ -980,7 +983,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.debug("Error processing record", e);
+            log.error("Error processing record", e);
             wc.onUserFunctionFailure();
             addToMailbox(wc); // always add on error
             throw e; // trow again to make the future failed

@@ -38,8 +38,7 @@ import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.waitAtMost;
@@ -72,7 +71,10 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
     // default
     @CartesianProductTest(factory = "enumSets")
     void testDefaultMaxPoll(CommitMode commitMode, ProcessingOrder order) {
-        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, commitMode, order);
+        int numMessages = 5000;
+        if (order.equals(PARTITION))
+            numMessages = 1000; // much slower
+        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
     }
 
     @Test
@@ -94,25 +96,39 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
     // low
     @CartesianProductTest(factory = "enumSets")
     public void testLowMaxPoll(CommitMode commitMode, ProcessingOrder order) {
-        runTest(LOW_MAX_POLL_RECORDS_CONFIG, commitMode, order);
+        int numMessages = 5000;
+        if (order.equals(PARTITION))
+            numMessages = 1000; // much slower
+        runTest(LOW_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
     }
 
     // high counts
     @CartesianProductTest(factory = "enumSets")
     public void testHighMaxPollEnum(CommitMode commitMode, ProcessingOrder order) {
-        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, commitMode, order);
+        int numMessages = 10000;
+        if (order.equals(PARTITION))
+            numMessages = 1000; // much slower
+
+        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
+    }
+
+    private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order) {
+        //        int expectedMessageCount = 50_000;
+        int expectedMessageCount = 10_000;
+//        int expectedMessageCount = 10_000;
+//        int expectedMessageCount = 1_000;
+        runTest(maxPoll, commitMode, order, expectedMessageCount);
     }
 
     @SneakyThrows
-    private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order) {
+    private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order, int expectedCount) {
         String inputName = setupTopic(this.getClass().getSimpleName() + "-input-" + RandomUtils.nextInt());
         String outputName = setupTopic(this.getClass().getSimpleName() + "-output-" + RandomUtils.nextInt());
 
+        int expectedMessageCount = expectedCount;
+
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
-        int expectedMessageCount = 50_000;
-//        int expectedMessageCount = 10_000;
-//        int expectedMessageCount = 1_000;
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
@@ -143,6 +159,8 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(true, consumerProps);
 
+        int numThreads = 16;
+//        int numThreads = 1000;
         var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .consumer(newConsumer)
@@ -151,6 +169,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 //                .numberOfThreads(1000)
 //                .numberOfThreads(100)
 //                .numberOfThreads(2)
+                .numberOfThreads(numThreads)
                 .build());
         pc.subscribe(of(inputName));
 
@@ -178,6 +197,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
         // todo rounds should be 1? progress should always be made
         int roundsAllowed = 10;
+//        roundsAllowed = 200;
 //        if (commitMode.equals(CONSUMER_SYNC)) {
 //            roundsAllowed = 3; // sync consumer commits can take time // fails
 ////            roundsAllowed = 5; // sync consumer commits can take time // fails
@@ -189,7 +209,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
         var failureMessage = msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(200))
+            waitAtMost(ofSeconds(2000))
                     .failFast(() -> pc.isClosedOrFailed()
                                     || producedCount.get() > expectedMessageCount,
                             () -> {
@@ -202,6 +222,10 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
                     .alias(failureMessage)
                     .untilAsserted(() -> {
                         log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
+                        int delta = producedCount.get() - processedCount.get();
+                        if (delta == numThreads && pt.getRounds().get() > 1) {
+                            log.error("Here we go fishy...");
+                        }
                         pt.checkForProgressExceptionally();
                         SoftAssertions all = new SoftAssertions();
                         all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
@@ -226,6 +250,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
         assertThat(producedKeysAcknowledged).hasSameSizeAs(expectedKeys);
+        assertThat(pt.getHighestRoundCountSeen()).isLessThan(10);
     }
 
     @Test
