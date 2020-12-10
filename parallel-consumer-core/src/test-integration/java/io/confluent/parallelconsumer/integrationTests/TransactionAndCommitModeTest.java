@@ -25,7 +25,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
-import org.awaitility.core.TerminalFailureException;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.CartesianProductTest;
@@ -210,15 +209,15 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(2000))
-                    .failFast(() -> pc.isClosedOrFailed()
-                                    || producedCount.get() > expectedMessageCount,
-                            () -> {
-                                if (pc.isClosedOrFailed())
-                                    return pc.getFailureCause();
-                                else
-                                    return new TerminalFailureException(msg("Too many messages? processedCount.get() {} > expectedMessageCount {}",
-                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4 // TODO link
-                            })
+//                    .failFast(() -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
+//                                    || producedCount.get() > expectedMessageCount,
+//                            () -> {
+//                                if (pc.isClosedOrFailed())
+//                                    return pc.getFailureCause();
+//                                else
+//                                    return new TerminalFailureException(msg("Too many messages? processedCount.get() {} > expectedMessageCount {}",
+//                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4 // TODO link
+//                            })
                     .alias(failureMessage)
                     .untilAsserted(() -> {
                         log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
