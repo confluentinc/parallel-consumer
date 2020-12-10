@@ -4,7 +4,9 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.LoopingResumingIterator;
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.Getter;
@@ -26,6 +28,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.LogUtils.at;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -355,7 +358,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 } else {
                     Duration timeInFlight = wc.getTimeInFlight();
                     Level level = Level.TRACE;
-                    if (timeInFlight.toSeconds() > 1) {
+                    if (toSeconds(timeInFlight) > 1) {
                         level = Level.WARN;
                     }
                     at(log, level).log("Work ({}) still delayed ({}) or is in flight ({}, time in flight: {}), alreadySucceeded? {} can't take...",
@@ -390,7 +393,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         for (var shard : processingShards.entrySet()) {
             for (final Map.Entry<Long, WorkContainer<K, V>> entry : shard.getValue().entrySet()) {
                 WorkContainer<K, V> work = entry.getValue();
-                long seconds = work.getTimeInFlight().toSeconds();
+                long seconds = toSeconds(work.getTimeInFlight());
                 if (work.isInFlight() && seconds > 1) {
                     log.warn("Work taking too long {} s : {}", seconds, entry);
                 }

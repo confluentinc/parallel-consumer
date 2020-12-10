@@ -33,7 +33,7 @@ public class ConsumerManager<K, V> {
         ConsumerRecords<K, V> records;
         try {
             if (commitRequested) {
-                log.warn("Commit requested, so will not long poll as need to perform the commit");
+                log.debug("Commit requested, so will not long poll as need to perform the commit");
                 timeoutToUse = Duration.ofMillis(1);// disable long poll, as commit needs performing
                 commitRequested = false;
             }

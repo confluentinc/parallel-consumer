@@ -662,7 +662,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    RateLimiter rateLimiter = new RateLimiter();
+    private RateLimiter rateLimiter = new RateLimiter();
+
+    /**
+     * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
+     * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
+     * help).
+     */
+    private boolean lastWorkRequestWasFulfilled = false;
 
     private <R> int handleWork(final Function<ConsumerRecord<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
@@ -680,6 +687,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             log.debug("Loop: Get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}", target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
             var records = wm.<R>maybeGetWork(delta);
             gotWorkCount = records.size();
+            lastWorkRequestWasFulfilled = gotWorkCount >= delta;
 
             log.trace("Loop: Submit to pool");
             submitWorkToPool(userFunction, callback, records);
@@ -701,7 +709,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private void checkPressure() {
         boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getNumberOfThreads();
-//        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver()) {
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) if (isPoolQueueLow() {} && dynamicExtraLoadFactor.isWarmUpPeriodOver() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {}) {",
                     getWorkerQueueSize(),
@@ -710,10 +717,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                     isPoolQueueLow(),
                     dynamicExtraLoadFactor.isWarmUpPeriodOver(),
                     moreWorkInQueuesAvailableThatHaveNotBeenPulled);
-        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver() && moreWorkInQueuesAvailableThatHaveNotBeenPulled) {
+        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver() && moreWorkInQueuesAvailableThatHaveNotBeenPulled && lastWorkRequestWasFulfilled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
-                log.warn("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
+                log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
                         getWorkerQueueSize(), getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
                 log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
