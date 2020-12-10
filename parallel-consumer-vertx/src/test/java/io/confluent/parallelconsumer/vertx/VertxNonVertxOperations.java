@@ -12,7 +12,7 @@ import io.vertx.core.VertxOptions;
 import io.vertx.ext.web.client.WebClient;
 
 /**
- * Ensure all plain operations still work with the extended vertx consumer
+ * Ensure all plain operations from {@link ParallelEoSStreamProcessorTest} still work with the extended vertx consumer
  */
 public class VertxNonVertxOperations extends ParallelEoSStreamProcessorTest {
 

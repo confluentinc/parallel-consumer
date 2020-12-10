@@ -233,7 +233,6 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     @Override
     public void close(Duration timeout, DrainingMode drainMode) {
         log.info("Vert.x async consumer closing...");
-        waitForProcessedNotCommitted(timeout);
         super.close(timeout, drainMode);
         webClient.close();
         Future<Void> close = vertx.close();
