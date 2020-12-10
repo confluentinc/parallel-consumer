@@ -114,7 +114,9 @@ public class KafkaTestUtils {
      *
      * @see OffsetMapCodecManager
      */
-    public static void assertCommitLists(List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
+    public static void assertCommitLists(List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history,
+                                         List<List<Integer>> expectedPartitionOffsets,
+                                         Optional<String> description) {
         log.info("Asserting commits of {}", expectedPartitionOffsets);
 
         AtomicReference<String> topicName = new AtomicReference<>("");

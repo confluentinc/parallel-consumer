@@ -21,9 +21,18 @@ public class CountingCRLinkedList<K, V> extends LinkedList<ConsumerRecords<K, V>
     }
 
     @Override
+    public boolean add(final ConsumerRecords<K, V> element) {
+        nestedCount = nestedCount + element.count();
+        return super.add(element);
+    }
+
+    @Override
     public ConsumerRecords<K, V> poll() {
         ConsumerRecords<K, V> poll = super.poll();
-        nestedCount = nestedCount - poll.count();
+        if (poll != null) {
+            int numberOfNestedMessages = poll.count();
+            nestedCount = nestedCount - numberOfNestedMessages;
+        }
         return poll;
     }
 }

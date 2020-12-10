@@ -81,7 +81,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private Optional<Object> iterationResumePoint = Optional.empty();
 
-    private int recordsOutForProcessing = 0;
+    @Getter
+    private int numberRecordsOutForProcessing = 0;
 
     /**
      * Useful for testing
@@ -377,8 +378,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
         checkShardsForProgress();
 
-        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit queues: {}", work.size(), getRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
-        recordsOutForProcessing += work.size();
+        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit queues: {}", work.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        numberRecordsOutForProcessing += work.size();
 
         return work;
     }
@@ -415,7 +416,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             processingShards.remove(key);
         }
         successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
-        recordsOutForProcessing--;
+        numberRecordsOutForProcessing--;
     }
 
     public void failed(WorkContainer<K, V> wc) {
@@ -433,7 +434,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         var shard = processingShards.get(key);
         long offset = wc.getCr().offset();
         shard.put(offset, wc);
-        recordsOutForProcessing--;
+        numberRecordsOutForProcessing--;
     }
 
     public int getNumberOfEntriesInPartitionQueues() {
@@ -448,7 +449,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return Work count in mailbox plus work added to the processing shards
      */
     public int getTotalWorkWaitingProcessing() {
-        return getWorkQueuedInShardsCount() + getWorkQueuedInMailboxCount();
+        int workQueuedInShardsCount = getWorkQueuedInShardsCount();
+        Integer workQueuedInMailboxCount = getWorkQueuedInMailboxCount();
+        return workQueuedInShardsCount + workQueuedInMailboxCount;
     }
 
     Integer getWorkQueuedInMailboxCount() {
@@ -674,10 +677,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return dynamicLoadFactor.getCurrentFactor();
     }
 
-    public int getRecordsOutForProcessing() {
-        return recordsOutForProcessing;
-    }
-
     // TODO effeciency issues
     public boolean workIsWaitingToBeCompletedSuccessfully() {
         Collection<NavigableMap<Long, WorkContainer<K, V>>> values = processingShards.values();
@@ -689,7 +688,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean hasWorkInFlight() {
-        return getRecordsOutForProcessing() != 0;
+        return getNumberRecordsOutForProcessing() != 0;
     }
 
     public boolean isClean() {
