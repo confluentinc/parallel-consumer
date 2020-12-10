@@ -37,6 +37,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
+ * Series of tests that check when we close a PC with incompletes encoded, when we open a new one, the correct messages
+ * are skipped.
+ *
  * @see OffsetMapCodecManager
  */
 @Timeout(value = 60)
@@ -176,8 +179,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         log.debug("Sending {} messages to {}", quantity, topic);
         var futures = new ArrayList<Future<RecordMetadata>>();
         // async
-        for (Integer i : Range.range(quantity)) {
-            Future<RecordMetadata> send = kcu.producer.send(new ProducerRecord<>(topic, partition, i.toString(), i.toString()));
+        for (Integer index : Range.range(quantity)) {
+            Future<RecordMetadata> send = kcu.producer.send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
             futures.add(send);
         }
         // block until finished
@@ -273,67 +276,79 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 .isLessThanOrEqualTo(KafkaClientUtils.MAX_POLL_RECORDS);
         send(quantity, topic, 0);
 
-        KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
-        var options = ParallelConsumerOptions.<String, String>builder()
+        var baseOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .consumer(consumer)
-                .producer(producerOne)
                 .commitMode(TRANSACTIONAL_PRODUCER)
                 .build();
-        var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
-
-        asyncOne.subscribe(UniLists.of(topic));
 
         Set<String> failingMessages = UniSets.of("123", "2345", "8765");
-        var readByOne = new ConcurrentSkipListSet<String>();
-        asyncOne.poll(x -> {
-            String value = x.value();
-            if (failingMessages.contains(value)) {
-                log.info("Throwing fake error for message {}", value);
-                throw new RuntimeException("Message " + value);
-            }
-            readByOne.add(value);
-        });
-
-        // the single message is not processed
         int numberOfFailingMessages = failingMessages.size();
-        await().atMost(ofSeconds(10)).untilAsserted(() -> assertThat(readByOne.size())
-                .isEqualTo(quantity - numberOfFailingMessages));
 
-        //
-        // TODO: fatal vs retriable exceptions. Retry limits particularly for draining state?
-        asyncOne.closeDontDrainFirst();
+        // step 1
+        {
+            KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
+            KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+            var options = baseOptions.toBuilder()
+                    .consumer(consumer)
+                    .producer(producerOne)
+                    .build();
+            var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
 
-        //
-        kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
-        KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        var optionsThree = options.toBuilder()
-                .consumer(newConsumerThree)
-                .producer(producerThree)
-                .build();
-        try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
-            asyncThree.subscribe(UniLists.of(topic));
+            asyncOne.subscribe(UniLists.of(topic));
 
-            // read what we're given
-            var readByThree = new ConcurrentSkipListSet<String>();
-            asyncThree.poll(x -> {
-                log.trace("Three read: {}", x.value());
-                readByThree.add(x.value());
+            var readByOne = new ConcurrentSkipListSet<String>();
+            asyncOne.poll(x -> {
+                String value = x.value();
+                if (failingMessages.contains(value)) {
+                    throw new RuntimeException("Fake error for message " + value);
+                }
+                readByOne.add(value);
             });
 
-            await().alias("Only the one remaining failing message should be submitted for processing")
-                    .pollDelay(ofSeconds(1))
-                    .atLeast(ofSeconds(1))
-                    .untilAsserted(() -> {
-                                assertThat(readByThree.size()).as("Contains only previously failed messages")
-                                        .isEqualTo(numberOfFailingMessages);
-                            }
-                    );
+            // the single message is not processed
+            await().atMost(ofSeconds(10)).untilAsserted(() -> assertThat(readByOne.size())
+                    .isEqualTo(quantity - numberOfFailingMessages));
 
             //
-            assertThat(readByThree).hasSize(numberOfFailingMessages); // double check after closing
+            // TODO: fatal vs retriable exceptions. Retry limits particularly for draining state?
+            asyncOne.closeDontDrainFirst();
+
+            // sanity - post close
+            assertThat(readByOne.size()).isEqualTo(quantity - numberOfFailingMessages);
+        }
+
+        // step 2
+        {
+            //
+            kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
+            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
+            KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+            var optionsThree = baseOptions.toBuilder()
+                    .consumer(newConsumerThree)
+                    .producer(producerThree)
+                    .build();
+            try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
+                asyncThree.subscribe(UniLists.of(topic));
+
+                // read what we're given
+                var readByThree = new ConcurrentSkipListSet<String>();
+                asyncThree.poll(x -> {
+                    log.info("Three read: {}", x.value());
+                    readByThree.add(x.value());
+                });
+
+                await().alias("Only the one remaining failing message should be submitted for processing")
+                        .pollDelay(ofSeconds(1))
+                        .atLeast(ofSeconds(1))
+                        .untilAsserted(() -> {
+                                    assertThat(readByThree.size()).as("Contains only previously failed messages")
+                                            .isEqualTo(numberOfFailingMessages);
+                                }
+                        );
+
+                //
+                assertThat(readByThree).hasSize(numberOfFailingMessages); // double check after closing
+            }
         }
     }
 

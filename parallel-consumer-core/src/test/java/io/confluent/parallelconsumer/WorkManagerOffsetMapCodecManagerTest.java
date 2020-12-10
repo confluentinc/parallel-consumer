@@ -110,7 +110,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         log.info("Size: {}", serialised.length());
 
         //
-        Set<Long> longs = om.deserialiseIncompleteOffsetMapFromBase64(finalOffsetForPartition, serialised).getRight();
+        Set<Long> longs = om.deserialiseIncompleteOffsetMapFromBase64(finalOffsetForPartition, serialised).getIncompleteOffsets();
 
         //
         assertThat(longs.toArray()).containsExactly(incomplete.toArray());
@@ -213,8 +213,8 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void loadCompressedRunLengthEncoding() {
         byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
-        ParallelConsumer.Tuple<Long, Set<Long>> longs = om.decodeCompressedOffsets(finalOffsetForPartition, bytes);
-        assertThat(longs.getRight().toArray()).containsExactly(incomplete.toArray());
+        OffsetMapCodecManager.NextOffsetAndIncompletes longs = om.decodeCompressedOffsets(finalOffsetForPartition, bytes);
+        assertThat(longs.getIncompleteOffsets().toArray()).containsExactly(incomplete.toArray());
     }
 
     @Test
@@ -321,9 +321,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     void compressionCycle() {
         byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
 
-        ParallelConsumer.Tuple<Long, Set<Long>> deserialised = om.decodeCompressedOffsets(finalOffsetForPartition, serialised);
+        OffsetMapCodecManager.NextOffsetAndIncompletes deserialised = om.decodeCompressedOffsets(finalOffsetForPartition, serialised);
 
-        assertThat(deserialised.getRight()).isEqualTo(incomplete);
+        assertThat(deserialised.getIncompleteOffsets()).isEqualTo(incomplete);
     }
 
     @Test
@@ -355,8 +355,8 @@ class WorkManagerOffsetMapCodecManagerTest {
                 byte[] result = encoder.packEncoding(pair);
 
                 //
-                ParallelConsumer.Tuple<Long, Set<Long>> recoveredIncompleteOffsetTuple = om.decodeCompressedOffsets(finalOffsetForPartition, result);
-                Set<Long> recoveredIncompletes = recoveredIncompleteOffsetTuple.getRight();
+                OffsetMapCodecManager.NextOffsetAndIncompletes recoveredIncompleteOffsetTuple = om.decodeCompressedOffsets(finalOffsetForPartition, result);
+                Set<Long> recoveredIncompletes = recoveredIncompleteOffsetTuple.getIncompleteOffsets();
 
                 //
                 assertThat(recoveredIncompletes).containsExactlyInAnyOrderElementsOf(longs);

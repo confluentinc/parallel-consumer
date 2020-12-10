@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import lombok.SneakyThrows;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -12,7 +12,6 @@ import pl.tlinkowski.unij.api.UniSets;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
@@ -51,6 +50,16 @@ public class OffsetMapCodecManager<K, V> {
 
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
+    @Value
+    static class NextOffsetAndIncompletes {
+        long nextExpectedOffset;
+        Set<Long> incompleteOffsets;
+
+        public static NextOffsetAndIncompletes of(long nextExpectedOffset, Set<Long> incompleteOffsets){
+            return new NextOffsetAndIncompletes(nextExpectedOffset, incompleteOffsets);
+        }
+    }
+
     /**
      * Forces the use of a specific codec, instead of choosing the most efficient one. Useful for testing.
      */
@@ -88,22 +97,22 @@ public class OffsetMapCodecManager<K, V> {
         });
     }
 
-    static ParallelConsumer.Tuple<Long, TreeSet<Long>> deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) throws OffsetDecodingError {
+    static NextOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) throws OffsetDecodingError {
         byte[] decodedBytes;
         try {
             decodedBytes = OffsetSimpleSerialisation.decodeBase64(incompleteOffsetMap);
         } catch (IllegalArgumentException a) {
             throw new OffsetDecodingError(msg("Error decoding offset metadata, input was: {}", incompleteOffsetMap), a);
         }
-        ParallelConsumer.Tuple<Long, Set<Long>> incompleteOffsets = decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decodedBytes);
-        TreeSet<Long> longs = new TreeSet<>(incompleteOffsets.getRight());
-        return ParallelConsumer.Tuple.pairOf(incompleteOffsets.getLeft(), longs);
+        return decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decodedBytes);
     }
 
     void loadOffsetMetadataPayload(long startOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
-        ParallelConsumer.Tuple<Long, TreeSet<Long>> incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
-        wm.raisePartitionHighWaterMark(incompletes.getLeft(), tp);
-        wm.partitionIncompleteOffsets.put(tp, incompletes.getRight());
+        NextOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
+        wm.raisePartitionHighWaterMark(incompletes.getNextExpectedOffset(), tp);
+        Set<Long> incompleteOffsets = incompletes.getIncompleteOffsets();
+        wm.partitionIncompleteOffsets.put(tp, incompleteOffsets);
+        log.warn("Loaded incomplete offsets from offset metadata {}", incompleteOffsets);
     }
 
     String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
@@ -147,10 +156,10 @@ public class OffsetMapCodecManager<K, V> {
      *
      * @return Set of offsets which are not complete.
      */
-    static ParallelConsumer.Tuple<Long, Set<Long>> decodeCompressedOffsets(long finalOffsetForPartition, byte[] decodedBytes) {
+    static NextOffsetAndIncompletes decodeCompressedOffsets(long finalOffsetForPartition, byte[] decodedBytes) {
         if (decodedBytes.length == 0) {
             // no offset bitmap data
-            return ParallelConsumer.Tuple.pairOf(finalOffsetForPartition, UniSets.of());
+            return NextOffsetAndIncompletes.of(finalOffsetForPartition, UniSets.of());
         }
 
         EncodedOffsetPair result = EncodedOffsetPair.unwrap(decodedBytes);
@@ -160,8 +169,7 @@ public class OffsetMapCodecManager<K, V> {
         Set<Long> incompletes = incompletesTuple.getRight();
         long highWater = incompletesTuple.getLeft();
 
-        ParallelConsumer.Tuple<Long, Set<Long>> tuple = ParallelConsumer.Tuple.pairOf(highWater, incompletes);
-        return tuple;
+        return NextOffsetAndIncompletes.of(highWater, incompletes);
     }
 
     String incompletesToBitmapString(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {

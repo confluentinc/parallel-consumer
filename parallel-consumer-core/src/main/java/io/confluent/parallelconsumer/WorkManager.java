@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.LogUtils;
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
@@ -24,7 +23,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -100,7 +98,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Offsets, which have been seen, beyond the highest committable offset, which haven't been totally completed
      */
-    Map<TopicPartition, TreeSet<Long>> partitionIncompleteOffsets = new HashMap<>();
+    Map<TopicPartition, Set<Long>> partitionIncompleteOffsets = new HashMap<>();
 
     // visible for testing
     /**
@@ -231,17 +229,23 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         //
         while (taken < gap && !internalFlattenedMailQueue.isEmpty()) {
             ConsumerRecord<K, V> poll = internalFlattenedMailQueue.poll();
-            processInbox(poll);
-            taken++;
+            boolean takenAsWork = processInbox(poll);
+            if (takenAsWork) {
+                taken++;
+            }
         }
 
         log.debug("{} new records were registered.", taken);
 
     }
 
-    private void processInbox(final ConsumerRecord<K, V> rec) {
+    /**
+     * @return true if the record was taken, false if it was skipped (previously successful)
+     */
+    private boolean processInbox(final ConsumerRecord<K, V> rec) {
         if (isRecordPreviouslyProcessed(rec)) {
             log.trace("Record previously processed, skipping. offset: {}", rec.offset());
+            return false;
         } else {
             Object shardKey = computeShardKey(rec);
             long offset = rec.offset();
@@ -253,6 +257,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
 
             partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
+
+            return true;
         }
     }
 
@@ -267,7 +273,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private boolean isRecordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
         long offset = rec.offset();
         TopicPartition tp = new TopicPartition(rec.topic(), rec.partition());
-        TreeSet<Long> incompleteOffsets = this.partitionIncompleteOffsets.getOrDefault(tp, new TreeSet<>());
+        Set<Long> incompleteOffsets = this.partitionIncompleteOffsets.getOrDefault(tp, new TreeSet<>());
         if (incompleteOffsets.contains(offset)) {
             // record previously saved as having not been processed
             return false;
