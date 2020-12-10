@@ -250,7 +250,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
         assertThat(producedKeysAcknowledged).hasSameSizeAs(expectedKeys);
-        assertThat(pt.getHighestRoundCountSeen()).isLessThan(10);
+        assertThat(pt.getHighestRoundCountSeen()).isLessThan(30); // 3 seconds
     }
 
     @Test
