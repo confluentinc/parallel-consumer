@@ -11,8 +11,10 @@ import org.mockito.internal.util.StringUtil;
 import java.lang.reflect.Method;
 
 /**
- * Nicer test names
- *
+ * Nicer test names.
+ * <p>
+ * This seems to break some aspects of Ideas test tracking system (i.e. replay failures).
+ * <p>
  * https://leeturner.me/posts/building-a-camel-case-junit5-displaynamegenerator/
  */
 public class ReplaceCamelCase extends DisplayNameGenerator.Standard {
