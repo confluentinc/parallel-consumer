@@ -8,16 +8,13 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_SYNC;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
-import static java.util.concurrent.TimeUnit.SECONDS;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 
 /**
  * Committer that uses the Kafka Consumer to commit either synchronously or asynchronously
@@ -59,7 +56,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, final ParallelConsumerOptions options) {
         super(newConsumer, newWorkManager);
         commitMode = options.getCommitMode();
-        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
+        if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
         }
     }
@@ -68,7 +65,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     private boolean direct = false;
 
     /**
-     * Might block if using {@link CommitMode#CONSUMER_SYNC}
+     * Might block if using {@link CommitMode#PERIODIC_CONSUMER_SYNC}
      *
      * @see CommitMode
      */
@@ -97,11 +94,11 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             return;
         }
         switch (commitMode) {
-            case CONSUMER_SYNC -> {
+            case PERIODIC_CONSUMER_SYNC -> {
                 log.debug("Committing offsets Sync");
                 consumerMgr.commitSync(offsetsToSend);
             }
-            case CONSUMER_ASYNCHRONOUS -> {
+            case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //
                 log.debug("Committing offsets Async");
                 consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
@@ -123,7 +120,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     @Override
     protected void postCommit() {
         // only signal if we are in sync mode, and current thread isn't the owner (if we are owner, then we are committing directly)
-        if (!direct && commitMode.equals(CONSUMER_SYNC))
+        if (!direct && commitMode.equals(PERIODIC_CONSUMER_SYNC))
             signalCommitPerformed();
     }
 
@@ -198,7 +195,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     public boolean isSync() {
-        return commitMode.equals(CONSUMER_SYNC);
+        return commitMode.equals(PERIODIC_CONSUMER_SYNC);
     }
 
     public void claim() {

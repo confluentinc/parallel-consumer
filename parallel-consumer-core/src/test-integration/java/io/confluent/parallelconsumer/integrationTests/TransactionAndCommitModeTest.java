@@ -77,7 +77,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
     @Test
     void testDefaultMaxPollConsumerSyncSlow() {
-        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, CONSUMER_SYNC, UNORDERED);
+        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, PERIODIC_CONSUMER_SYNC, UNORDERED);
     }
 
     static CartesianProductTest.Sets enumSets() {
@@ -88,7 +88,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
     @RepeatedTest(5)
     public void testTransactionalDefaultMaxPoll() {
-        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, TRANSACTIONAL_PRODUCER, KEY);
+        runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, PERIODIC_TRANSACTIONAL_PRODUCER, KEY);
     }
 
     // low
@@ -151,7 +151,7 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(TRANSACTIONAL_PRODUCER));
+        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);

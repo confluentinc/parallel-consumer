@@ -41,7 +41,7 @@ import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -84,7 +84,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
         var build = parallelConsumerOptions.toBuilder()
-                .commitMode(TRANSACTIONAL_PRODUCER) // force tx
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER) // force tx
                 .build();
         vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(vertx, wc, build);
 
