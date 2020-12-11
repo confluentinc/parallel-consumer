@@ -30,7 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,7 +83,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .commitMode(TRANSACTIONAL_PRODUCER)
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .consumer(newConsumerOne)
                 .producer(producerOne)
                 .build();
@@ -208,7 +208,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 .ordering(UNORDERED)
                 .consumer(consumer)
                 .producer(producerOne)
-                .commitMode(TRANSACTIONAL_PRODUCER)
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
 
         try (var asyncOne = new ParallelEoSStreamProcessor<String, String>(options)) {
@@ -278,7 +278,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
         var baseOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .commitMode(TRANSACTIONAL_PRODUCER)
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
 
         Set<String> failingMessages = UniSets.of("123", "2345", "8765");

@@ -4,18 +4,16 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.StringUtils;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.util.Objects;
 
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 
 /**
  * The options for the {@link ParallelEoSStreamProcessor} system.
@@ -44,16 +42,19 @@ public class ParallelConsumerOptions<K, V> {
      * The ordering guarantee to use.
      */
     public enum ProcessingOrder {
+
         /**
          * No ordering is guaranteed, not even partition order. Fastest. Concurrency is at most the max number of
          * concurrency or max number of uncommitted messages, limited by the max concurrency or uncommitted settings.
          */
         UNORDERED,
+
         /**
          * Process messages within a partition in order, but process multiple partitions in parallel. Similar to running
          * more consumer for a topic. Concurrency is at most the number of partitions.
          */
         PARTITION,
+
         /**
          * Process messages in key order. Concurrency is at most the number of unique keys in a topic, limited by the
          * max concurrency or uncommitted settings.
@@ -67,34 +68,42 @@ public class ParallelConsumerOptions<K, V> {
      * offset system either synchronously or asynchronously
      */
     public enum CommitMode {
+
         /**
-         * Commits through the Producer using transactions. Slowest fot he options, but no duplicates in Kafka
-         * guaranteed (message replay may cause duplicates in external systems which is unavoidable with Kafka).
+         * Periodically commits through the Producer using transactions. Slowest of the options, but no duplicates in
+         * Kafka guaranteed (message replay may cause duplicates in external systems which is unavoidable with Kafka).
          * <p>
          * This is separate from using an IDEMPOTENT Producer, which can be used, along with {@link
-         * CommitMode#CONSUMER_SYNC} or {@link CommitMode#CONSUMER_ASYNCHRONOUS}.
+         * CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
          */
-        TRANSACTIONAL_PRODUCER,
+        PERIODIC_TRANSACTIONAL_PRODUCER,
+
         /**
-         * Synchronous commits with the Consumer. Much faster than {@link #TRANSACTIONAL_PRODUCER}. Slower but
-         * potentially less duplicates than {@link #CONSUMER_ASYNCHRONOUS} upon replay.
+         * Periodically synchronous commits with the Consumer. Much faster than {@link
+         * #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than {@link
+         * #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
          */
-        CONSUMER_SYNC,
+        PERIODIC_CONSUMER_SYNC,
+
         /**
-         * Fastest option, under normal conditions will have few of no duplicates. Under failure revocery may have more
-         * duplicates than {@link #CONSUMER_SYNC}.
+         * Periodically commits offsets asynchronously. The fastest option, under normal conditions will have few or no
+         * duplicates. Under failure recovery may have more duplicates than {@link #PERIODIC_CONSUMER_SYNC}.
          */
-        CONSUMER_ASYNCHRONOUS
+        PERIODIC_CONSUMER_ASYNCHRONOUS
+
     }
 
     /**
-     * The order type to use
+     * The {@link ProcessingOrder} type to use
      */
     @Builder.Default
     private final ProcessingOrder ordering = ProcessingOrder.KEY;
 
+    /**
+     * The {@link CommitMode} to be used
+     */
     @Builder.Default
-    private final CommitMode commitMode = CommitMode.CONSUMER_ASYNCHRONOUS;
+    private final CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 
     /**
      * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
@@ -125,7 +134,7 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     protected boolean isUsingTransactionalProducer() {
-        return commitMode.equals(TRANSACTIONAL_PRODUCER);
+        return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }
 
     public boolean isProducerSupplied() {

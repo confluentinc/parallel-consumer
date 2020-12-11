@@ -31,7 +31,7 @@ import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,7 +70,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
      */
     @Test
     public void shouldNotThrowBitsetTooLongException() {
-        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
+        runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
     }
 
     @SneakyThrows
@@ -106,7 +106,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(TRANSACTIONAL_PRODUCER));
+        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);

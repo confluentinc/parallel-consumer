@@ -12,7 +12,6 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
-import me.tongfei.progressbar.ProgressBarBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.MockProducer;
@@ -30,8 +29,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_SYNC;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
@@ -85,7 +84,7 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
         List<ProducerRecord<String, String>> history = producerSpy.history();
         assertThat(history).hasSize(quantityOfMessagesToProduce);
 
-        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
+        if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             // assert order of commits
             assertCommitsAlwaysIncrease();
 
@@ -183,7 +182,7 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
         assertThat(unorderedDuration).as("UNORDERED should be faster than PARTITION order")
                 .isLessThan(partitionOrderDuration);
 
-        if (commitMode.equals(CONSUMER_SYNC)) {
+        if (commitMode.equals(PERIODIC_CONSUMER_SYNC)) {
             assertThat(unorderedDuration).as("Committing synchronously from the controller causes a large overhead, making UNORDERED very close in speed to KEY order, keySize of: " + numOfKeysToCompare)
                     .isCloseTo(keyOrderHalfDefaultKeySize, keyOrderHalfDefaultKeySize.plus(keyOrderHalfDefaultKeySize.dividedBy(5))); // within 20%
         } else {

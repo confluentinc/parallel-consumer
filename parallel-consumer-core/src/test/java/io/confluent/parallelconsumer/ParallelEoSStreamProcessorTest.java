@@ -12,7 +12,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -30,8 +29,8 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.CONSUMER_ASYNCHRONOUS;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofMillis;
@@ -375,7 +374,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // assert internal methods - shouldn't really need this as we already check the commit history above through the
         // spy, so can leave in for the old producer style
-        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
+        if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             verify(producerSpy, atLeastOnce()).commitTransaction();
             verify(producerSpy, atLeastOnce()).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
         }
@@ -708,7 +707,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .commitMode(commitMode)
                 .build();
 
-        if (commitMode.equals(TRANSACTIONAL_PRODUCER)) {
+        if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Producer", "Transaction");
@@ -740,7 +739,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumerSpy)
-                .commitMode(TRANSACTIONAL_PRODUCER)
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
 
         assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
@@ -755,7 +754,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // forget to supply producer
         var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumerSpy)
-                .commitMode(CONSUMER_ASYNCHRONOUS)
+                .commitMode(PERIODIC_CONSUMER_ASYNCHRONOUS)
                 .build();
 
         setupParallelConsumerInstance(optionsWithClients);

@@ -95,7 +95,7 @@ public class ParallelEoSStreamProcessorTestBase {
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
         ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
-                .commitMode(CONSUMER_SYNC)
+                .commitMode(PERIODIC_CONSUMER_SYNC)
                 .ordering(UNORDERED)
                 .build();
         setupParallelConsumerInstance(options);
@@ -342,12 +342,12 @@ public class ParallelEoSStreamProcessorTestBase {
 
     protected boolean isUsingTransactionalProducer() {
         ParallelConsumerOptions.CommitMode commitMode = parallelConsumer.getWm().getOptions().getCommitMode();
-        return commitMode.equals(TRANSACTIONAL_PRODUCER);
+        return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }
 
     protected boolean isUsingAsyncCommits() {
         ParallelConsumerOptions.CommitMode commitMode = parallelConsumer.getWm().getOptions().getCommitMode();
-        return commitMode.equals(CONSUMER_ASYNCHRONOUS);
+        return commitMode.equals(PERIODIC_CONSUMER_ASYNCHRONOUS);
     }
 
     protected void awaitLatch(List<CountDownLatch> latches, int latchIndex) {

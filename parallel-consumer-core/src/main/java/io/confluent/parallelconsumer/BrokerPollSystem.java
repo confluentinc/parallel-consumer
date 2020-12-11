@@ -11,7 +11,6 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.utils.ThreadUtils;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -64,7 +63,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
         this.consumerManager = consumerMgr;
         switch (options.getCommitMode()) {
-            case CONSUMER_SYNC, CONSUMER_ASYNCHRONOUS -> {
+            case PERIODIC_CONSUMER_SYNC, PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
                 committer = Optional.of(consumerCommitter);
             }

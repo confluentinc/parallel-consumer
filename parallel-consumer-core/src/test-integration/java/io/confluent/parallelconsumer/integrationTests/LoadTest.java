@@ -31,7 +31,7 @@ import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static me.tongfei.progressbar.ProgressBar.wrap;
@@ -79,7 +79,7 @@ public class LoadTest extends DbTest {
         boolean tx = true;
         ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
-                .commitMode(TRANSACTIONAL_PRODUCER)
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .producer(kcu.createNewProducer(tx))
                 .consumer(newConsumer)
                 .maxConcurrency(3)
