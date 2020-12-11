@@ -19,6 +19,9 @@ public class Range implements Iterable<Integer> {
         this.limit = limit;
     }
 
+    /**
+     * Exclusive of max
+     */
     public static Range range(long max) {
         return new Range(max);
     }

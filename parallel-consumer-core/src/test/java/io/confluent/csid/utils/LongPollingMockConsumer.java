@@ -76,7 +76,8 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
      */
     private List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> injectConsumerGroupId(final List<Map<TopicPartition, OffsetAndMetadata>> commitHistory) {
         String groupId = this.groupMetadata().groupId();
-        return commitHistory.stream()
+        ArrayList<Map<TopicPartition, OffsetAndMetadata>> copy = new ArrayList<>(commitHistory);
+        return copy.stream()
                 .map(x -> {
                     HashMap<String, Map<TopicPartition, OffsetAndMetadata>> stringMapHashMap = new HashMap<>();
                     stringMapHashMap.put(groupId, x);

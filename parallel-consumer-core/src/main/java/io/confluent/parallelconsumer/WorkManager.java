@@ -29,6 +29,7 @@ import java.util.function.Consumer;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.LogUtils.at;
+import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.lang.Math.min;
@@ -42,6 +43,14 @@ import static lombok.AccessLevel.PACKAGE;
  */
 @Slf4j
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
+
+    /**
+     * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
+     * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
+     * have to drop the offset payload entirely.
+     */
+    @Setter
+    public static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
 
     @Getter
     private final ParallelConsumerOptions options;
@@ -124,6 +133,19 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
     /**
+     * If true, more messages are allowed to process for this partition.
+     * <p>
+     * If false, we have calculated that we can't record any more offsets for this partition, as our best performing
+     * encoder requires nearly as much space is available for this partitions allocation of the maximum offset metadata
+     * size.
+     * <p>
+     * Default (missing elements) is true - more messages can be processed.
+     *
+     * @see OffsetMapCodecManager#DefaultMaxMetadataSize
+     */
+    Map<TopicPartition, Boolean> partitionMoreRecordsAllowedToProcess = new HashMap<>();
+
+    /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
     public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
@@ -142,6 +164,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        // init messages allowed state
+        for (final TopicPartition partition : partitions) {
+            partitionMoreRecordsAllowedToProcess.putIfAbsent(partition, true);
+        }
+
         try {
             log.debug("onPartitionsAssigned: {}", partitions);
             Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
@@ -356,20 +383,36 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     break;
                 }
 
-                var wc = queueEntry.getValue();
-                boolean alreadySucceeded = !wc.isUserFunctionSucceeded();
-                if (wc.hasDelayPassed(clock) && wc.isNotInFlight() && alreadySucceeded) {
-                    log.trace("Taking {} as work", wc);
-                    wc.takingAsWork();
-                    shardWork.add(wc);
+                var workContainer = queueEntry.getValue();
+
+                // TODO refactor this and the rest of the partition state monitoring code out
+                // check we have capacity in offset storage to process more messages
+                TopicPartition topicPartition = workContainer.getTopicPartition();
+                boolean notAllowedMoreRecords = !partitionMoreRecordsAllowedToProcess.getOrDefault(topicPartition, true);
+                // If the record has been previously attempted, it is already represented in the current offset encoding,
+                // and may in fact be the message holding up the partition so must be retried, in which case we don't want to skip it
+                boolean recordNeverAttempted = !workContainer.hasPreviouslyFailed();
+                if (notAllowedMoreRecords && recordNeverAttempted && workContainer.isNotInFlight()) {
+                    log.debug("Not allowed more records ({}) for the partition ({}) as set from previous encode run, that this " +
+                                    "record ({}) belongs to due to offset encoding back pressure, has never been attemtped before ({}), " +
+                                    "not in flight ({}), continuing on to next container in shard.",
+                            notAllowedMoreRecords, topicPartition, workContainer.offset(), recordNeverAttempted, workContainer.isNotInFlight());
+                    continue;
+                }
+
+                boolean alreadySucceeded = !workContainer.isUserFunctionSucceeded();
+                if (workContainer.hasDelayPassed(clock) && workContainer.isNotInFlight() && alreadySucceeded) {
+                    log.trace("Taking {} as work", workContainer);
+                    workContainer.takingAsWork();
+                    shardWork.add(workContainer);
                 } else {
-                    Duration timeInFlight = wc.getTimeInFlight();
+                    Duration timeInFlight = workContainer.getTimeInFlight();
                     Level level = Level.TRACE;
                     if (toSeconds(timeInFlight) > 1) {
                         level = Level.WARN;
                     }
                     at(log, level).log("Work ({}) still delayed ({}) or is in flight ({}, time in flight: {}), alreadySucceeded? {} can't take...",
-                            wc, !wc.hasDelayPassed(clock), !wc.isNotInFlight(), timeInFlight, alreadySucceeded);
+                            workContainer, !workContainer.hasDelayPassed(clock), !workContainer.isNotInFlight(), timeInFlight, alreadySucceeded);
                 }
 
                 ProcessingOrder ordering = options.getOrdering();
@@ -577,7 +620,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                                    TopicPartition topicPartitionKey,
                                    LinkedHashSet<Long> incompleteOffsets) {
         // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
-        if (!incompleteOffsets.isEmpty()) {
+        boolean offsetEncodingNeeded = !incompleteOffsets.isEmpty();
+        if (offsetEncodingNeeded) {
             long offsetOfNextExpectedMessage;
             OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
             if (finalOffsetOnly == null) {
@@ -591,17 +635,40 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             try {
                 String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
                 int metaPayloadLength = offsetMapPayload.length();
-                if (metaPayloadLength < OffsetMapCodecManager.DefaultMaxMetadataSize) {
-                    OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                    offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
-                } else {
-                    log.warn("Offset map data too large (size: {}) to fit in metadata payload - cannot include in commit. " +
+                boolean moreMessagesAllowed;
+                OffsetAndMetadata offsetWithExtraMap;
+                // todo move
+                double pressureThresholdValue = DefaultMaxMetadataSize * USED_PAYLOAD_THRESHOLD_MULTIPLIER;
+
+                if (metaPayloadLength > DefaultMaxMetadataSize) {
+                    // exceeded maximum API allowed, strip the payload
+                    moreMessagesAllowed = false;
+                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage); // strip payload
+                    log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
                             "Warning: messages might be replayed on rebalance. " +
-                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096", metaPayloadLength);
+                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
+                            metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+                } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
+                    // try to turn on back pressure before max size is reached
+                    moreMessagesAllowed = false;
+                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
+                                    "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
+                            metaPayloadLength, pressureThresholdValue, DefaultMaxMetadataSize);
+                } else { // and thus (metaPayloadLength <= pressureThresholdValue)
+                    moreMessagesAllowed = true;
+                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    log.debug("Payload size {} within threshold {}", metaPayloadLength, pressureThresholdValue);
                 }
+
+                partitionMoreRecordsAllowedToProcess.put(topicPartitionKey, moreMessagesAllowed);
+                offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
             } catch (EncodingNotSupportedException e) {
+                partitionMoreRecordsAllowedToProcess.put(topicPartitionKey, false);
                 log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
             }
+        } else {
+            partitionMoreRecordsAllowedToProcess.put(topicPartitionKey, true);
         }
     }
 

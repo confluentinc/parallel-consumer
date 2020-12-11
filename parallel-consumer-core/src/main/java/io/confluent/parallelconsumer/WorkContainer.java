@@ -36,8 +36,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     @Getter
     private final ConsumerRecord<K, V> cr;
-    private int numberOfAttempts;
+
+    @Getter
+    private int numberOfFailedAttempts;
+
     private Optional<Instant> failedAt = Optional.empty();
+
     private boolean inFlight = false;
 
     @Getter
@@ -46,12 +50,15 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     /**
      * Wait this long before trying again
      */
-    @Getter
-    private static Duration retryDelay = Duration.ofSeconds(10);
+    private Duration retryDelay;
+
+    @Setter
+    static Duration defaultRetryDelay = Duration.ofSeconds(1);
 
     @Getter
     @Setter(AccessLevel.PUBLIC)
     private Future<List<Object>> future;
+
     private long timeTakenAsWorkMs;
 
     public WorkContainer(ConsumerRecord<K, V> cr) {
@@ -67,7 +74,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     public void fail(WallClock clock) {
         log.trace("Failing {}", this);
-        numberOfAttempts++;
+        numberOfFailedAttempts++;
         failedAt = Optional.of(clock.getNow());
         inFlight = false;
     }
@@ -78,23 +85,32 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public boolean hasDelayPassed(WallClock clock) {
-        long delay = getDelay(TimeUnit.SECONDS, clock);
+        long delay = getDelay(TimeUnit.MILLISECONDS, clock);
         boolean delayHasPassed = delay <= 0;
         return delayHasPassed;
     }
 
     public long getDelay(TimeUnit unit, WallClock clock) {
         Instant now = clock.getNow();
-        Duration between = Duration.between(now, tryAgainAt(clock));
+        Temporal nextAttemptAt = tryAgainAt(clock);
+        Duration between = Duration.between(now, nextAttemptAt);
         long convert = unit.convert(between.toMillis(), TimeUnit.MILLISECONDS); // java 8, @see Duration#convert
         return convert;
     }
 
     private Temporal tryAgainAt(WallClock clock) {
-        if (failedAt.isPresent())
+        if (failedAt.isPresent()) {
+            Duration retryDelay = getRetryDelay();
             return failedAt.get().plus(retryDelay);
-        else
+        } else
             return clock.getNow();
+    }
+
+    public Duration getRetryDelay() {
+        if (retryDelay == null)
+            return defaultRetryDelay;
+        else
+            return retryDelay;
     }
 
     @Override
@@ -147,10 +163,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public Duration getTimeInFlight() {
-        return Duration.ofMillis(System.currentTimeMillis()-timeTakenAsWorkMs);
+        return Duration.ofMillis(System.currentTimeMillis() - timeTakenAsWorkMs);
     }
 
     public long offset() {
         return getCr().offset();
+    }
+
+    public boolean hasPreviouslyFailed() {
+        return getNumberOfFailedAttempts() > 0;
     }
 }

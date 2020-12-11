@@ -44,7 +44,7 @@ public class OffsetMapCodecManager<K, V> {
      * @see <a href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
      * @see "kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize"
      */
-    public static final int DefaultMaxMetadataSize = 4096;
+    public static int DefaultMaxMetadataSize = 4096;
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
@@ -110,12 +110,12 @@ public class OffsetMapCodecManager<K, V> {
         });
     }
 
-    static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String incompleteOffsetMap) throws OffsetDecodingError {
+    static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
         byte[] decodedBytes;
         try {
-            decodedBytes = OffsetSimpleSerialisation.decodeBase64(incompleteOffsetMap);
+            decodedBytes = OffsetSimpleSerialisation.decodeBase64(base64EncodedOffsetPayload);
         } catch (IllegalArgumentException a) {
-            throw new OffsetDecodingError(msg("Error decoding offset metadata, input was: {}", incompleteOffsetMap), a);
+            throw new OffsetDecodingError(msg("Error decoding offset metadata, input was: {}", base64EncodedOffsetPayload), a);
         }
         return decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decodedBytes);
     }
