@@ -78,6 +78,7 @@ class OffsetSimultaneousEncoder {
      */
     private final Set<OffsetEncoder> encoders = new HashSet<>();
 
+    // TODO remove one - next expected is low water mark + 1
     public OffsetSimultaneousEncoder(long lowWaterMark, Long nextExpectedOffset, Set<Long> incompleteOffsets) {
         this.lowWaterMark = lowWaterMark;
         this.nextExpectedOffset = nextExpectedOffset;
