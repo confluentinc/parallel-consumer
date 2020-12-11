@@ -132,6 +132,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
         pc.pollAndProduce(record -> {
+            // by not having any sleep here, this test really test the overhead of the system
 //                    try {
 //                        Thread.sleep(5);
 //                    } catch (InterruptedException e) {

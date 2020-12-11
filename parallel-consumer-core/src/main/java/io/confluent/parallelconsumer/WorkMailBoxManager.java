@@ -5,9 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 
+import java.util.Collection;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Handles the incoming mail for {@link WorkManager}.
@@ -21,7 +23,7 @@ public class WorkMailBoxManager<K, V> {
     private int sharedBoxNestedRecordCount;
 
     /**
-     * The shared thread safe mail box.
+     * The shared mail box. Doesn't need to be thread safe as we already need synchronize on it.
      */
     private final LinkedBlockingQueue<ConsumerRecords<K, V>> workInbox = new LinkedBlockingQueue<>();
 
@@ -33,7 +35,10 @@ public class WorkMailBoxManager<K, V> {
     /**
      * Queue of records flattened from the {@link #internalBatchMailQueue}.
      * <p>
-     * TODO remove this and instead extend {@link CountingCRLinkedList} to do the flatten as records are added.
+     * This is needed because {@link java.util.concurrent.BlockingQueue#drainTo(Collection)} must drain to a collection
+     * of the same type. We could have {@link BrokerPollSystem} do the flattening, but that would require many calls to
+     * the Concurrent queue, where this only needs one. Also as we don't expect there to be that many elements in these
+     * collections (as they contain large batches of records), the overhead will be small.
      */
     // TODO when partition state is also refactored, remove Getter
     @Getter
@@ -63,6 +68,15 @@ public class WorkMailBoxManager<K, V> {
         }
     }
 
+
+    /**
+     * Must synchronise to keep sharedBoxNestedRecordCount in lock step with the inbox. Register is easy, but drain you
+     * need to run through an intermediary collection and then count the nested elements, to know how many to subtract
+     * from the Atomic nested count.
+     * <p>
+     * Plus registering work is relatively infrequent, so shouldn't worry about a little synchronized here - makes it
+     * much simpler.
+     */
     private void drainSharedMailbox() {
         synchronized (workInbox) {
             workInbox.drainTo(internalBatchMailQueue);
@@ -72,10 +86,8 @@ public class WorkMailBoxManager<K, V> {
 
     /**
      * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
-     *
-     * @param requestedMaxWorkToRetrieve
      */
-    public void processInbox(final int requestedMaxWorkToRetrieve) {
+    public void processInbox() {
         drainSharedMailbox();
 
         // flatten
