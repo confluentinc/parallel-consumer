@@ -28,7 +28,6 @@ import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
-import static io.confluent.parallelconsumer.WorkContainer.getRetryDelay;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -208,12 +207,12 @@ public class WorkManagerTest {
         wc = works.get(0);
         wm.failed(wc);
 
-        advanceClock(getRetryDelay().minus(ofSeconds(1)));
+        advanceClock(wc.getRetryDelay().minus(ofSeconds(1)));
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of());
 
-        advanceClock(getRetryDelay());
+        advanceClock(wc.getRetryDelay());
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(0));
@@ -234,9 +233,9 @@ public class WorkManagerTest {
     }
 
     @Test
-    public void containerDelay() {
+    void containerDelay() {
         var wc = new WorkContainer<String, String>(null);
-        assertThat(wc.hasDelayPassed(clock)).isTrue(); // when new no delay
+        assertThat(wc.hasDelayPassed(clock)).isTrue(); // when new, there's no delay
         wc.fail(clock);
         assertThat(wc.hasDelayPassed(clock)).isFalse();
         advanceClockBySlightlyLessThanDelay();
@@ -246,13 +245,13 @@ public class WorkManagerTest {
     }
 
     private void advanceClockBySlightlyLessThanDelay() {
-        Duration retryDelay = getRetryDelay();
+        Duration retryDelay = WorkContainer.defaultRetryDelay;
         Duration duration = retryDelay.dividedBy(2);
         time = time.plus(duration);
     }
 
     private void advanceClockByDelay() {
-        time = time.plus(getRetryDelay());
+        time = time.plus(WorkContainer.defaultRetryDelay);
     }
 
     private void advanceClock(Duration by) {

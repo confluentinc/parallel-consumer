@@ -10,6 +10,7 @@ import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
+import java.time.Duration;
 import java.util.Objects;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -124,6 +125,12 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final int maxConcurrency = 16;
 
+    /**
+     * When a message fails, how long the system should wait before trying that message again.
+     */
+    @Builder.Default
+    private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
@@ -131,6 +138,9 @@ public class ParallelConsumerOptions<K, V> {
             throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
                     commitMode));
         }
+
+        //
+        WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
     }
 
     protected boolean isUsingTransactionalProducer() {

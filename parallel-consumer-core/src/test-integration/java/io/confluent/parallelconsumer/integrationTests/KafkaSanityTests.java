@@ -71,13 +71,15 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
         numPartitions = 5;
         setupTopic();
 
-        int expected = OffsetMapCodecManager.DefaultMaxMetadataSize;
+        int maxCapacity = OffsetMapCodecManager.DefaultMaxMetadataSize;
+        assertThat(maxCapacity).isGreaterThan(3000); // approximate sanity
+
         KafkaConsumer<String, String> consumer = kcu.consumer;
         TopicPartition tpOne = new TopicPartition(topic, 0);
         TopicPartition tpTwo = new TopicPartition(topic, 1);
         HashMap<TopicPartition, OffsetAndMetadata> map = new HashMap<>();
 
-        String payload = RandomStringUtils.randomAlphanumeric(expected);
+        String payload = RandomStringUtils.randomAlphanumeric(maxCapacity);
 
         // fit the max
         {

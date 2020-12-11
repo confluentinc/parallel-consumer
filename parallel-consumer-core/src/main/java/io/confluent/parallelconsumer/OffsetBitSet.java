@@ -28,7 +28,7 @@ public class OffsetBitSet {
         wrap.rewind();
 
         int originalBitsetSize = switch (version) {
-            case v1 -> (int)wrap.getShort(); // up cast ok
+            case v1 -> (int) wrap.getShort(); // up cast ok
             case v2 -> wrap.getInt();
         };
 
@@ -53,24 +53,25 @@ public class OffsetBitSet {
 
     static HighestOffsetAndIncompletes deserialiseBitSetWrapToIncompletes(OffsetEncoding encoding, long baseOffset, ByteBuffer wrap) {
         wrap.rewind();
-        int originalBitsetSize = switch(encoding) {
+        int originalBitsetSize = switch (encoding) {
             case BitSet -> wrap.getShort();
             case BitSetV2 -> wrap.getInt();
             default -> throw new InternalRuntimeError("Invalid state");
         };
         ByteBuffer slice = wrap.slice();
         Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
-        long highestSeenOffset = baseOffset + originalBitsetSize;
+        long highestSeenOffset = baseOffset + originalBitsetSize - 1;
         return HighestOffsetAndIncompletes.of(highestSeenOffset, incompletes);
     }
 
     static Set<Long> deserialiseBitSetToIncompletes(long baseOffset, int originalBitsetSize, ByteBuffer inputBuffer) {
         BitSet bitSet = BitSet.valueOf(inputBuffer);
-        var incompletes = new HashSet<Long>(); // can't know how big this needs to be yet
+        int numberOfIncompletes = originalBitsetSize - bitSet.cardinality();
+        var incompletes = new HashSet<Long>(numberOfIncompletes);
         for (var relativeOffset : range(originalBitsetSize)) {
             long offset = baseOffset + relativeOffset;
             if (bitSet.get(relativeOffset)) {
-                log.trace("Ignoring completed offset");
+                log.trace("Ignoring completed offset {}", relativeOffset);
             } else {
                 incompletes.add(offset);
             }
