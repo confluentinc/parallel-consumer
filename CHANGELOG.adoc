@@ -23,6 +23,7 @@ It maintains the partition ordering characteristic that all keys are processed i
 
 === Fixes
 * Maximum offset payload space increased to correctly not be inversely proportional to assigned partition quantity.
+* Run-length encoding now supports compacted topics, plus other bug fixes.
 
 == v0.2.0.3
 

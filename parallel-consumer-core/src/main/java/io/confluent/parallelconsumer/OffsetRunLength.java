@@ -76,7 +76,7 @@ public class OffsetRunLength {
         final ShortBuffer v1ShortBuffer = in.asShortBuffer();
         final IntBuffer v2IntegerBuffer = in.asIntBuffer();
 
-        final var incompletes = new HashSet<Long>(1); // we don't know the capacity yet
+        final var incompletes = new HashSet<Long>(); // we don't know the capacity yet
 
         long highestSeenOffset = 0L;
 
@@ -106,7 +106,7 @@ public class OffsetRunLength {
         }
 
         // decodes incompletes
-        boolean currentRunlengthIsComplete = false;
+        boolean currentRunLengthIsComplete = false;
         long currentOffset = baseOffset;
         while (hasRemainingTest.get()) {
             try {
@@ -114,23 +114,25 @@ public class OffsetRunLength {
                     case v1 -> v1ShortBuffer.get();
                     case v2 -> v2IntegerBuffer.get();
                 };
-                highestSeenOffset = currentOffset + runLength.longValue();
 
-                if (currentRunlengthIsComplete) {
-                    log.trace("Ignoring {} completed offset", runLength);
+                if (currentRunLengthIsComplete) {
+                    log.trace("Ignoring {} completed offset(s) (offset:{})", runLength, currentOffset);
                     currentOffset += runLength.longValue();
+                    highestSeenOffset = currentOffset - 1;
                 } else {
-                    log.trace("Adding {} incomplete offset", runLength);
+                    log.trace("Adding {} incomplete offset(s) (starting with offset:{})", runLength, currentOffset);
                     for (int relativeOffset = 0; relativeOffset < runLength.longValue(); relativeOffset++) {
                         incompletes.add(currentOffset);
+                        highestSeenOffset = currentOffset;
                         currentOffset++;
                     }
                 }
+                log.trace("Highest seen: {}", highestSeenOffset);
             } catch (BufferUnderflowException u) {
                 log.error("Error decoding offsets", u);
                 throw u;
             }
-            currentRunlengthIsComplete = !currentRunlengthIsComplete; // toggle
+            currentRunLengthIsComplete = !currentRunLengthIsComplete; // toggle
         }
         return HighestOffsetAndIncompletes.of(highestSeenOffset, incompletes);
     }
