@@ -501,7 +501,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         int count = 0;
         int removed = 0;
         log.trace("Scanning for in order in-flight work that has completed...");
-        int totalOffsetMetaCharacterLength = 0;
         for (final var partitionQueueEntry : partitionCommitQueues.entrySet()) {
             TopicPartition topicPartitionKey = partitionQueueEntry.getKey();
             log.trace("Starting scan of partition: {}", topicPartitionKey);
@@ -550,29 +549,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 }
             }
 
-            // offset map building
-            // Get final offset data, build the the offset map, and replace it in our map of offset data to send
-            // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
-            if (!incompleteOffsets.isEmpty()) {
-                long offsetOfNextExpectedMessage;
-                OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
-                if (finalOffsetOnly == null) {
-                    // no new low water mark to commit, so use the last one again
-                    offsetOfNextExpectedMessage = incompleteOffsets.iterator().next(); // first element
-                } else {
-                    offsetOfNextExpectedMessage = finalOffsetOnly.offset();
-                }
-
-                OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this, this.consumer);
-                try {
-                    String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
-                    totalOffsetMetaCharacterLength += offsetMapPayload.length();
-                    OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                    offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
-                } catch (EncodingNotSupportedException e) {
-                    log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance", e);
-                }
-            }
+            addEncodedOffsets(offsetsToSend, topicPartitionKey, incompleteOffsets);
 
             if (remove) {
                 removed += workToRemove.size();
@@ -583,42 +560,48 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             }
         }
 
-        maybeStripOffsetPayload(offsetsToSend, totalOffsetMetaCharacterLength);
-
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
                 count, removed, offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;
     }
 
     /**
-     * Once all the offset maps have been calculated, check if they're too big, and if so, remove all of them.
-     * <p>
-     * Implication of this is that if the system has to recover from this offset, then it will have to replay all the
-     * messages that were otherwise complete.
-     * <p>
-     * Must be thread safe.
+     * Get final offset data, build the the offset map, and replace it in our map of offset data to send
      *
-     * @see OffsetMapCodecManager#DefaultMaxMetadataSize
+     * @param offsetsToSend
+     * @param topicPartitionKey
+     * @param incompleteOffsets
+     * @return
      */
-    private void maybeStripOffsetPayload(Map<TopicPartition, OffsetAndMetadata> offsetsToSend, int totalOffsetMetaCharacterLength) {
-        // TODO: Potential optimisation: if max metadata size is shared across partitions, the limit used could be relative to the number of
-        //  partitions assigned to this consumer. In which case, we could derive the limit for the number of downloaded but not committed
-        //  offsets, from this max over some estimate. This way we limit the possibility of hitting the hard limit imposed in the protocol, thus
-        //  retaining the offset map feature, at the cost of potential performance by hitting a soft maximum in our uncommitted concurrent processing.
-        if (totalOffsetMetaCharacterLength > OffsetMapCodecManager.DefaultMaxMetadataSize) {
-            log.warn("Offset map data too large (size: {}) to fit in metadata payload - stripping offset map out. " +
-                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096",
-                    totalOffsetMetaCharacterLength);
-            // strip all payloads
-            // todo iteratively strip the largest payloads until we're under the limit
-            for (var entry : offsetsToSend.entrySet()) {
-                TopicPartition key = entry.getKey();
-                OffsetAndMetadata v = entry.getValue();
-                OffsetAndMetadata stripped = new OffsetAndMetadata(v.offset()); // meta data gone
-                offsetsToSend.replace(key, stripped);
+    private void addEncodedOffsets(Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
+                                   TopicPartition topicPartitionKey,
+                                   LinkedHashSet<Long> incompleteOffsets) {
+        // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
+        if (!incompleteOffsets.isEmpty()) {
+            long offsetOfNextExpectedMessage;
+            OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
+            if (finalOffsetOnly == null) {
+                // no new low water mark to commit, so use the last one again
+                offsetOfNextExpectedMessage = incompleteOffsets.iterator().next(); // first element
+            } else {
+                offsetOfNextExpectedMessage = finalOffsetOnly.offset();
             }
-        } else if (totalOffsetMetaCharacterLength != 0) {
-            log.debug("Offset map small enough to fit in payload: {} (max: {})", totalOffsetMetaCharacterLength, OffsetMapCodecManager.DefaultMaxMetadataSize);
+
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this, this.consumer);
+            try {
+                String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
+                int metaPayloadLength = offsetMapPayload.length();
+                if (metaPayloadLength < OffsetMapCodecManager.DefaultMaxMetadataSize) {
+                    OffsetAndMetadata offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+                } else {
+                    log.warn("Offset map data too large (size: {}) to fit in metadata payload - cannot include in commit. " +
+                            "Warning: messages might be replayed on rebalance. " +
+                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096", metaPayloadLength);
+                }
+            } catch (EncodingNotSupportedException e) {
+                log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
+            }
         }
     }
 
