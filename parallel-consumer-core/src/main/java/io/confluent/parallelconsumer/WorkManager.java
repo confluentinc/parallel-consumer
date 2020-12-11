@@ -512,7 +512,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     private void checkHighestSucceededSoFar(final WorkContainer<K, V> wc) {
-        // preivous record must be completed if we've never seen this before
+        // previous record must be completed if we've never seen this before
         partitionOffsetHighestSucceeded.putIfAbsent(wc.getTopicPartition(), wc.offset() - 1);
     }
 
@@ -626,7 +626,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 // TODO refactor this and the rest of the partition state monitoring code out
                 // check we have capacity in offset storage to process more messages
                 Boolean allowedMoreRecords = partitionMoreRecordsAllowedToProcess.get(topicPartitionKey);
-                // If the record has been previosly attempted, it is already represented in the current offset encoding,
+                // If the record has been previously attempted, it is already represented in the current offset encoding,
                 // and may in fact be the message holding up the partition so must be retried
                 if (!allowedMoreRecords && workContainer.hasPreviouslyFailed()) {
                     OffsetSimultaneousEncoder offsetSimultaneousEncoder = partitionContinuousOffsetEncoders.get(topicPartitionKey);
