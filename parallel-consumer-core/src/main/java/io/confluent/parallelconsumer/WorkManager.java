@@ -57,7 +57,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @see K
      * @see #maybeGetWork()
      */
-    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new HashMap<>();
 
     /**
      * Map of partitions to Map of offsets to WorkUnits
@@ -224,7 +224,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     private void processInbox(final int requestedMaxWorkToRetrieve) {
-        wmbm.processInbox(requestedMaxWorkToRetrieve);
+        wmbm.processInbox();
 
         int gap = requestedMaxWorkToRetrieve;
         int taken = 0;
@@ -262,7 +262,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             TopicPartition tp = toTP(rec);
             raisePartitionHighWaterMark(offset, tp);
 
-            processingShards.computeIfAbsent(shardKey, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
+            processingShards.computeIfAbsent(shardKey, (ignore) -> new TreeMap<>()).put(offset, wc);
 
             partitionCommitQueues.computeIfAbsent(tp, (ignore) -> new ConcurrentSkipListMap<>()).put(offset, wc);
 
