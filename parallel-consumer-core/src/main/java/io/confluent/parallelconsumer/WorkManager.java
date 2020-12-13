@@ -16,6 +16,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.event.Level;
+import org.slf4j.spi.LoggingEventBuilder;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
@@ -309,19 +310,22 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         long offset = rec.offset();
         TopicPartition tp = new TopicPartition(rec.topic(), rec.partition());
         Set<Long> incompleteOffsets = this.partitionIncompleteOffsets.getOrDefault(tp, new TreeSet<>());
+        boolean previouslyProcessed;
         if (incompleteOffsets.contains(offset)) {
             // record previously saved as having not been processed
-            return false;
+            previouslyProcessed = false;
         } else {
             Long offsetHighWaterMark = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
             if (offset <= offsetHighWaterMark) {
                 // within the range of tracked offsets, so must have been previously completed
-                return true;
+                previouslyProcessed = true;
             } else {
                 // we haven't recorded this far up, so must not have been processed yet
-                return false;
+                previouslyProcessed = false;
             }
         }
+        log.debug("Record {} previously seen? {}", rec.offset(), previouslyProcessed);
+        return previouslyProcessed;
     }
 
     private Object computeShardKey(ConsumerRecord<K, V> rec) {
@@ -400,19 +404,20 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     continue;
                 }
 
-                boolean alreadySucceeded = !workContainer.isUserFunctionSucceeded();
-                if (workContainer.hasDelayPassed(clock) && workContainer.isNotInFlight() && alreadySucceeded) {
+                boolean hasNotAlreadyPreviouslySucceeded = !workContainer.isUserFunctionSucceeded();
+                boolean delayHasPassed = workContainer.hasDelayPassed(clock);
+                if (delayHasPassed && workContainer.isNotInFlight() && hasNotAlreadyPreviouslySucceeded) {
                     log.trace("Taking {} as work", workContainer);
                     workContainer.takingAsWork();
                     shardWork.add(workContainer);
                 } else {
                     Duration timeInFlight = workContainer.getTimeInFlight();
-                    Level level = Level.TRACE;
+                    String msg = "Work ({}) has delay passed? ({}) or is NOT in flight? ({}, time in flight: {}), hasNotAlreadyPreviouslySucceeded? {} can't take...";
                     if (toSeconds(timeInFlight) > 1) {
-                        level = Level.WARN;
+                        log.warn(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), timeInFlight, hasNotAlreadyPreviouslySucceeded);
+                    } else {
+                        log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), timeInFlight, hasNotAlreadyPreviouslySucceeded);
                     }
-                    at(log, level).log("Work ({}) still delayed ({}) or is in flight ({}, time in flight: {}), alreadySucceeded? {} can't take...",
-                            workContainer, !workContainer.hasDelayPassed(clock), !workContainer.isNotInFlight(), timeInFlight, alreadySucceeded);
                 }
 
                 ProcessingOrder ordering = options.getOrdering();
