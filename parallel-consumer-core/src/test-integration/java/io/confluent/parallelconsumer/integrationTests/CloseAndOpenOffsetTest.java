@@ -50,8 +50,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     Duration debugTimeout = Duration.ofMinutes(1);
 
     // use debug timeout while debugging
-//    Duration timeoutToUse = debugTimeout;
-    Duration timeoutToUse = normalTimeout;
+    Duration timeoutToUse = debugTimeout;
+//    Duration timeoutToUse = normalTimeout;
 
     String rebalanceTopic;
 
@@ -61,9 +61,9 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     }
 
     /**
-     * publish some messages some fail shutdown startup again consume again - check we only consume the failed messages
+     * Publish some messages some fail shutdown startup again consume again - check we only consume the failed messages
      * <p>
-     * Sometimes fails as 5 is not comitted in the first run and comes out in the 2nd
+     * Sometimes fails as 5 is not committed in the first run and comes out in the 2nd
      * <p>
      * NB: messages 4 and 2 are made to fail
      */
@@ -78,7 +78,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             log.warn(e.getMessage(), e);
         }
 
-        // 1 client
+        //
         KafkaConsumer<String, String> newConsumerOne = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
         var options = ParallelConsumerOptions.<String, String>builder()
@@ -89,85 +89,96 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 .build();
         kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "ONE-my-client");
 
-        //
-        var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
+        // first client
+        {
+            //
+            var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
 
-        //
-        asyncOne.subscribe(UniLists.of(rebalanceTopic));
+            //
+            asyncOne.subscribe(UniLists.of(rebalanceTopic));
 
-        // read some messages
-        var readByOne = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
-        asyncOne.poll(x -> {
-            log.info("Read by consumer ONE: {}", x);
-            if (x.value().equals("4")) {
-                log.info("Throwing fake error for message 4");
-                throw new RuntimeException("Message 4");
-            }
-            if (x.value().equals("2")) {
-                log.info("Throwing fake error for message 2");
-                throw new RuntimeException("Message 2");
-            }
-            readByOne.add(x);
-        });
-
-        // wait for initial 0 commit
-        Thread.sleep(500);
-
-        //
-        send(rebalanceTopic, 0, 0);
-        send(rebalanceTopic, 0, 1);
-        send(rebalanceTopic, 0, 2);
-        send(rebalanceTopic, 0, 3);
-        send(rebalanceTopic, 0, 4);
-        send(rebalanceTopic, 0, 5);
-
-        // all are processed except msg 2 and 4, which holds up the queue
-        await().alias("check all except 2 and 4 are processed").atMost(normalTimeout).untilAsserted(() -> {
-                    ArrayList<ConsumerRecord<String, String>> copy = new ArrayList<>(readByOne);
-                    assertThat(copy.stream()
-                            .map(x -> x.value()).collect(Collectors.toList()))
-                            .containsOnly("0", "1", "3", "5");
+            // read some messages
+            var successfullInOne = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
+            asyncOne.poll(x -> {
+                log.info("Read by consumer ONE: {}", x);
+                if (x.value().equals("4")) {
+                    log.info("Throwing fake error for message 4");
+                    throw new RuntimeException("Message 4");
                 }
-        );
-
-        // wait until all expected records have been processed and committed
-        // need to wait for final message processing's offset data to be committed
-        // TODO test for event/trigger instead - could consume offsets topic but have to decode the binary
-        // could listen to a produce topic, but currently it doesn't use the produce flow
-        // could add a commit listener to the api, but that's heavy just for this?
-        // could use Consumer#committed to check and decode, but it's not thread safe
-        // sleep is lazy but much much simpler
-        Thread.sleep(500);
-
-        // commit what we've done so far, don't wait for failing messages to be retried (message 4)
-        log.info("Closing consumer, committing offset map");
-        asyncOne.closeDontDrainFirst();
-
-        await().alias("check all except 2 and 4 are processed").atMost(normalTimeout).untilAsserted(() ->
-                assertThat(readByOne.stream()
-                        .map(x -> x.value()).collect(Collectors.toList()))
-                        .containsOnly("0", "1", "3", "5"));
-
-
-        //
-        kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
-        KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
-        var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
-        try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
-            asyncThree.subscribe(UniLists.of(rebalanceTopic));
-
-            // read what we're given
-            var readByThree = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
-            asyncThree.poll(x -> {
-                log.info("Read by consumer THREE: {}", x.value());
-                readByThree.add(x);
+                if (x.value().equals("2")) {
+                    log.info("Throwing fake error for message 2");
+                    throw new RuntimeException("Message 2");
+                }
+                successfullInOne.add(x);
             });
 
-            // only 2 and 4 should be delivered again, as everything else was processed successfully
-            await().atMost(timeoutToUse).untilAsserted(() ->
-                    assertThat(readByThree).extracting(ConsumerRecord::value)
-                            .containsExactlyInAnyOrder("2", "4"));
+            // wait for initial 0 commit
+            Thread.sleep(500);
+
+            //
+            send(rebalanceTopic, 0, 0);
+            send(rebalanceTopic, 0, 1);
+            send(rebalanceTopic, 0, 2);
+            send(rebalanceTopic, 0, 3);
+            send(rebalanceTopic, 0, 4);
+            send(rebalanceTopic, 0, 5);
+
+            // all are processed except msg 2 and 4, which holds up the queue
+            await().alias("check all except 2 and 4 are processed").atMost(normalTimeout).untilAsserted(() -> {
+                        ArrayList<ConsumerRecord<String, String>> copy = new ArrayList<>(successfullInOne);
+                        assertThat(copy.stream()
+                                .map(x -> x.value()).collect(Collectors.toList()))
+                                .containsOnly("0", "1", "3", "5");
+                    }
+            );
+
+            // wait until all expected records have been processed and committed
+            // need to wait for final message processing's offset data to be committed
+            // TODO test for event/trigger instead - could consume offsets topic but have to decode the binary
+            // could listen to a produce topic, but currently it doesn't use the produce flow
+            // could add a commit listener to the api, but that's heavy just for this?
+            // could use Consumer#committed to check and decode, but it's not thread safe
+            // sleep is lazy but much much simpler
+            Thread.sleep(500);
+
+            // commit what we've done so far, don't wait for failing messages to be retried (message 4)
+            log.info("Closing consumer, committing offset map");
+            asyncOne.closeDontDrainFirst();
+
+            await().alias("check all except 2 and 4 are processed")
+                    .atMost(normalTimeout)
+                    .untilAsserted(() ->
+                    assertThat(successfullInOne.stream()
+                            .map(x -> x.value()).collect(Collectors.toList()))
+                            .containsOnly("0", "1", "3", "5"));
+
+            assertThat(asyncOne.getFailureCause()).isNull();
+        }
+
+        // second client
+        {
+            //
+            kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
+            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
+            KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+            var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
+            try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
+                asyncThree.subscribe(UniLists.of(rebalanceTopic));
+
+                // read what we're given
+                var processedByThree = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
+                asyncThree.poll(x -> {
+                    log.info("Read by consumer THREE: {}", x.value());
+                    processedByThree.add(x);
+                });
+
+                //
+                await().alias("only 2 and 4 should be delivered again, as everything else was processed successfully")
+                        .atMost(timeoutToUse)
+                        .untilAsserted(() ->
+                                assertThat(processedByThree).extracting(ConsumerRecord::value)
+                                        .containsExactlyInAnyOrder("2", "4"));
+            }
         }
     }
 

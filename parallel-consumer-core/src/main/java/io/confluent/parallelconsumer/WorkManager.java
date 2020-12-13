@@ -313,8 +313,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             // record previously saved as having not been processed
             return false;
         } else {
-            Long offsetHighWaterMarks = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
-            if (offset < offsetHighWaterMarks) {
+            Long offsetHighWaterMark = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
+            if (offset <= offsetHighWaterMark) {
                 // within the range of tracked offsets, so must have been previously completed
                 return true;
             } else {
