@@ -18,7 +18,7 @@ import static io.confluent.parallelconsumer.OffsetEncoding.Version.v2;
 
 @ToString
 @RequiredArgsConstructor
-enum OffsetEncoding {
+public enum OffsetEncoding {
     ByteArray(v1, (byte) 'L'),
     ByteArrayCompressed(v1, (byte) 'î'),
     BitSet(v1, (byte) 'l'),

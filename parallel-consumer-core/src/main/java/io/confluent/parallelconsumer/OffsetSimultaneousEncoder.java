@@ -22,7 +22,7 @@ import static io.confluent.parallelconsumer.OffsetEncoding.Version.v2;
  * @see #invoke()
  */
 @Slf4j
-class OffsetSimultaneousEncoder {
+public class OffsetSimultaneousEncoder {
 
     /**
      * Size threshold in bytes after which compressing the encodings will be compared, as it seems to be typically worth
@@ -71,7 +71,7 @@ class OffsetSimultaneousEncoder {
      * <p>
      * Visible for testing.
      */
-    static boolean compressionForced = false;
+    public static boolean compressionForced = false;
 
     /**
      * The encoders to run

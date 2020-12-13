@@ -645,8 +645,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     moreMessagesAllowed = false;
                     offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage); // strip payload
                     log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                            "Warning: messages might be replayed on rebalance. " +
-                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
+                                    "Warning: messages might be replayed on rebalance. " +
+                                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
                             metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
                 } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
                     // try to turn on back pressure before max size is reached
@@ -683,7 +683,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         offsetsToSend.forEach((tp, meta) -> {
             Set<Long> offsets = partitionIncompleteOffsets.get(tp);
-            boolean trackedOffsetsForThisPartitionExist = offsets != null;
+            boolean trackedOffsetsForThisPartitionExist = offsets != null && !offsets.isEmpty();
             if (trackedOffsetsForThisPartitionExist) {
                 long newLowWaterMark = meta.offset();
                 offsets.removeIf(offset -> offset < newLowWaterMark);
