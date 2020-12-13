@@ -125,7 +125,7 @@ public class OffsetMapCodecManager<K, V> {
         wm.raisePartitionHighWaterMark(incompletes.getHighestSeenOffset(), tp);
         Set<Long> incompleteOffsets = incompletes.getIncompleteOffsets();
         wm.partitionIncompleteOffsets.put(tp, incompleteOffsets);
-        log.warn("Loaded incomplete offsets from offset metadata {}", incompleteOffsets);
+        log.warn("Loaded incomplete offsets from offset payload {}", incompletes);
     }
 
     String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
