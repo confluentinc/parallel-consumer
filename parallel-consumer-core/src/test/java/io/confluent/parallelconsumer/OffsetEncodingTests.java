@@ -1,6 +1,8 @@
 package io.confluent.parallelconsumer;
 
+import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.csid.utils.ThreadUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -178,20 +180,22 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             WorkManager<String, String> newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(crs);
-            List<WorkContainer<String, String>> workContainers = newWm.maybeGetWork();
+//            ThreadUtils.sleepQuietly(1);
+            List<WorkContainer<String, String>> workRetrieved = newWm.maybeGetWork();
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
                         BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
                         RunLength, RunLengthCompressed // RunLength V1 max runlength is Short.MAX_VALUE
                         -> {
                     assertThatThrownBy(() ->
-                            assertThat(workContainers).extracting(WorkContainer::getCr)
+                            assertThat(workRetrieved).extracting(WorkContainer::getCr)
                                     .containsExactlyElementsOf(firstSucceededRecordRemoved))
-                            .hasMessageContaining("but some elements were not expected")
+                            .hasMessageContaining("but some elements were not")
                             .hasMessageContaining("offset = 25000");
                 }
                 default -> {
-                    assertThat(workContainers).extracting(WorkContainer::getCr).containsExactlyElementsOf(firstSucceededRecordRemoved);
+                    assertThat(workRetrieved).extracting(WorkContainer::getCr)
+                            .containsExactlyElementsOf(firstSucceededRecordRemoved);
                 }
             }
         }

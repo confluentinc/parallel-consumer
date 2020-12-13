@@ -86,7 +86,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     public boolean hasDelayPassed(WallClock clock) {
         long delay = getDelay(TimeUnit.MILLISECONDS, clock);
-        boolean delayHasPassed = delay <= 0;
+        boolean delayHasPassed = delay < 2; // fractional ms round up to 1
         return delayHasPassed;
     }
 
@@ -163,7 +163,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public Duration getTimeInFlight() {
-        return Duration.ofMillis(System.currentTimeMillis() - timeTakenAsWorkMs);
+        long millis = System.currentTimeMillis() - timeTakenAsWorkMs;
+        return Duration.ofMillis(millis);
     }
 
     public long offset() {
