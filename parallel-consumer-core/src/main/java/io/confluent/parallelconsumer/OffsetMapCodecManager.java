@@ -76,7 +76,7 @@ public class OffsetMapCodecManager<K, V> {
     /**
      * Forces the use of a specific codec, instead of choosing the most efficient one. Useful for testing.
      */
-    static Optional<OffsetEncoding> forcedCodec = Optional.empty();
+    public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
     public OffsetMapCodecManager(final WorkManager<K, V> wm, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.wm = wm;

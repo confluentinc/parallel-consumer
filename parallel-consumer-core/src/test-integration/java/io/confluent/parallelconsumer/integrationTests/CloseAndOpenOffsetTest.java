@@ -4,9 +4,7 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.csid.utils.Range;
 import lombok.SneakyThrows;
@@ -15,9 +13,12 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.shaded.org.apache.commons.lang.math.RandomUtils;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
@@ -35,6 +36,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Series of tests that check when we close a PC with incompletes encoded, when we open a new one, the correct messages
@@ -50,8 +52,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     Duration debugTimeout = Duration.ofMinutes(1);
 
     // use debug timeout while debugging
-    Duration timeoutToUse = debugTimeout;
-//    Duration timeoutToUse = normalTimeout;
+//     Duration timeoutToUse = debugTimeout;
+    Duration timeoutToUse = normalTimeout;
 
     String rebalanceTopic;
 
@@ -69,8 +71,15 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
      */
     @Timeout(value = 60)
     @SneakyThrows
-    @Test
-    void offsetsOpenClose() {
+    @ParameterizedTest
+    @EnumSource()
+    void offsetsOpenClose(OffsetEncoding encoding) {
+        var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
+        assumeFalse(skip.contains(encoding));
+
+        OffsetMapCodecManager.forcedCodec = Optional.of(encoding);
+        OffsetSimultaneousEncoder.compressionForced = true;
+
         // 2 partition topic
         try {
             ensureTopic(rebalanceTopic, 1);
@@ -148,9 +157,9 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             await().alias("check all except 2 and 4 are processed")
                     .atMost(normalTimeout)
                     .untilAsserted(() ->
-                    assertThat(successfullInOne.stream()
-                            .map(x -> x.value()).collect(Collectors.toList()))
-                            .containsOnly("0", "1", "3", "5"));
+                            assertThat(successfullInOne.stream()
+                                    .map(x -> x.value()).collect(Collectors.toList()))
+                                    .containsOnly("0", "1", "3", "5"));
 
             assertThat(asyncOne.getFailureCause()).isNull();
         }
