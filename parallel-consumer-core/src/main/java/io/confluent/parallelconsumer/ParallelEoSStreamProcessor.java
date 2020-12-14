@@ -42,6 +42,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 @Slf4j
 public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
 
+    public static final String MDC_INSTANCE_ID = "pcId";
     private final ParallelConsumerOptions options;
 
     /**
@@ -289,7 +290,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifyNewWorkRegistered();
-        log.info("Assigned {} partitions - that's {} bytes per partition for encoding offset overruns", numberOfAssignedPartitions, OffsetMapCodecManager.DefaultMaxMetadataSize / numberOfAssignedPartitions);
+        log.info("Assigned {} partition(s)", numberOfAssignedPartitions);
     }
 
     /**
@@ -577,6 +578,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      *
      * @see #supervisorLoop(Function, Consumer)
      */
+    /**
+     * Optioanl ID of this instance. Useful for testing.
+     */
+    @Setter
+    Optional<String> myId = Optional.empty();
+
     protected <R> void supervisorLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                       Consumer<R> callback) {
         log.info("Control loop starting up...");
@@ -591,6 +598,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
             Thread controlThread = Thread.currentThread();
+            this.myId.ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
             controlThread.setName("control");
             log.trace("Control task scheduled");
             this.blockableControlThread = controlThread;
