@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
 
-    int numPartitions = 2; // as default consumer settings are max request 50 max per partition 1 - 50/1=50
+    int numPartitions = 1;
 
     String topic;
 
@@ -78,7 +78,7 @@ public abstract class BrokerIntegrationTest<K, V> {
 
         ensureTopic(topic, numPartitions);
 
-        return name;
+        return topic;
     }
 
     protected void ensureTopic(String topic, int numPartitions) {
