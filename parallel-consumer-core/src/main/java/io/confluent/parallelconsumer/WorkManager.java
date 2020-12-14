@@ -320,7 +320,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 previouslyProcessed = false;
             }
         }
-        log.debug("Record {} previously seen? {}", rec.offset(), previouslyProcessed);
+        log.trace("Record {} previously seen? {}", rec.offset(), previouslyProcessed);
         return previouslyProcessed;
     }
 
@@ -352,7 +352,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
         int available = getWorkQueuedInShardsCount();
         int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
-        log.debug("Requested: {}, available in shards: {}, will try retrieve from mailbox the delta of: {}",
+        log.debug("Requested: {}, available in shards: {}, will try to process from mailbox the delta of: {}",
                 requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
         processInbox(extraNeededFromInboxToSatisfy);
 

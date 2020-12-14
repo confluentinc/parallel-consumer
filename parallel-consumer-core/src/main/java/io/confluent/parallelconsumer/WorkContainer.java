@@ -85,8 +85,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public boolean hasDelayPassed(WallClock clock) {
+        if (!hasPreviouslyFailed()) {
+            // if never failed, there is no artificial delay, so "delay" has always passed
+            return true;
+        }
         Duration delay = getDelay(clock);
-        boolean negative = delay.isNegative();
+        boolean negative = delay.isNegative() || delay.isZero();
         return negative;
     }
 
@@ -98,10 +102,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private Temporal tryAgainAt(WallClock clock) {
         if (failedAt.isPresent()) {
+            // previously failed, so add the delay to the last failed time
             Duration retryDelay = getRetryDelay();
             return failedAt.get().plus(retryDelay);
-        } else
-            return clock.getNow();
+        } else {
+            // never failed, no try again delay
+            return Instant.MIN;
+        }
     }
 
     public Duration getRetryDelay() {
@@ -161,7 +168,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public Duration getTimeInFlight() {
-        if (timeTakenAsWorkMs.isEmpty()) return Duration.ZERO;
+        if (!timeTakenAsWorkMs.isPresent()) {
+            return Duration.ZERO;
+        }
         long millis = System.currentTimeMillis() - timeTakenAsWorkMs.get();
         return Duration.ofMillis(millis);
     }
