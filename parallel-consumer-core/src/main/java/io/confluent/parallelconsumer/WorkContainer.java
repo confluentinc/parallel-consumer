@@ -59,7 +59,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     @Setter(AccessLevel.PUBLIC)
     private Future<List<Object>> future;
 
-    private long timeTakenAsWorkMs;
+    private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
     public WorkContainer(ConsumerRecord<K, V> cr) {
         this.cr = cr;
@@ -85,17 +85,15 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public boolean hasDelayPassed(WallClock clock) {
-        long delay = getDelay(TimeUnit.MILLISECONDS, clock);
-        boolean delayHasPassed = delay < 2; // fractional ms round up to 1
-        return delayHasPassed;
+        Duration delay = getDelay(clock);
+        boolean negative = delay.isNegative();
+        return negative;
     }
 
-    public long getDelay(TimeUnit unit, WallClock clock) {
+    public Duration getDelay(WallClock clock) {
         Instant now = clock.getNow();
         Temporal nextAttemptAt = tryAgainAt(clock);
-        Duration between = Duration.between(now, nextAttemptAt);
-        long convert = unit.convert(between.toMillis(), TimeUnit.MILLISECONDS); // java 8, @see Duration#convert
-        return convert;
+        return Duration.between(now, nextAttemptAt);
     }
 
     private Temporal tryAgainAt(WallClock clock) {
@@ -129,10 +127,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return inFlight;
     }
 
-    public void takingAsWork() {
-        log.trace("Being taken as work: {}", this);
+    public void queueingForExecution() {
+        log.trace("Queueing for execution: {}", this);
         inFlight = true;
-        timeTakenAsWorkMs = System.currentTimeMillis();
+        timeTakenAsWorkMs = Optional.of(System.currentTimeMillis());
     }
 
     public TopicPartition getTopicPartition() {
@@ -163,7 +161,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public Duration getTimeInFlight() {
-        long millis = System.currentTimeMillis() - timeTakenAsWorkMs;
+        if (timeTakenAsWorkMs.isEmpty()) return Duration.ZERO;
+        long millis = System.currentTimeMillis() - timeTakenAsWorkMs.get();
         return Duration.ofMillis(millis);
     }
 
