@@ -8,8 +8,8 @@ import java.time.Instant;
 
 public class WallClock {
 
-  public Instant getNow(){
-    return Instant.now();
-  }
+    public Instant getNow() {
+        return Instant.now();
+    }
 
 }
