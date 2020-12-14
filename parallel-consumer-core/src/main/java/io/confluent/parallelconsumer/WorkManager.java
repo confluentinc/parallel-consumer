@@ -404,12 +404,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 boolean delayHasPassed = workContainer.hasDelayPassed(clock);
                 if (delayHasPassed && workContainer.isNotInFlight() && hasNotAlreadyPreviouslySucceeded) {
                     log.trace("Taking {} as work", workContainer);
-                    workContainer.takingAsWork();
+                    workContainer.queueingForExecution();
                     shardWork.add(workContainer);
                 } else {
                     Duration timeInFlight = workContainer.getTimeInFlight();
-                    String msg = "Work ({}) has delay passed? ({}) or is NOT in flight? ({}, time in flight: {}), hasNotAlreadyPreviouslySucceeded? {} can't take...";
-                    if (toSeconds(timeInFlight) > 1) {
+                    String msg = "Work ({}) has delay passed? ({}) or is NOT in flight? ({}, time spent in execution queue: {}), hasNotAlreadyPreviouslySucceeded? {} can't take...";
+                    if (toSeconds(timeInFlight) > 10) {
                         log.warn(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), timeInFlight, hasNotAlreadyPreviouslySucceeded);
                     } else {
                         log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), timeInFlight, hasNotAlreadyPreviouslySucceeded);
