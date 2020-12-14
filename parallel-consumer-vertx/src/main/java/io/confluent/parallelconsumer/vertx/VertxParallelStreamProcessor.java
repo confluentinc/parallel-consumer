@@ -29,7 +29,7 @@ import java.util.function.Function;
  * @see ParallelEoSStreamProcessor
  * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
  */
-public interface VertxParallelStreamProcessor<K, V> extends DrainingCloseable {
+public interface VertxParallelStreamProcessor<K, V> extends ParallelStreamProcessor<K, V> {
 
     static <KK, VV> VertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(
             org.apache.kafka.clients.consumer.Consumer<KK, VV> consumer,

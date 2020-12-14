@@ -71,9 +71,6 @@ public class LoadTest extends DbTest {
     void asyncConsumeAndProcess() {
         setupTestData();
 
-        // subscribe in advance, it can be a few seconds
-        kcu.consumer.subscribe(UniLists.of(topic));
-
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
         //
         boolean tx = true;
@@ -84,8 +81,10 @@ public class LoadTest extends DbTest {
                 .consumer(newConsumer)
                 .maxConcurrency(3)
                 .build();
-        newConsumer.subscribe(Pattern.compile(topic));
+
         ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);
+        async.subscribe(Pattern.compile(topic));
+
         AtomicInteger msgCount = new AtomicInteger(0);
 
         ProgressBar pb = ProgressBarUtils.getNewMessagesBar(log, total);

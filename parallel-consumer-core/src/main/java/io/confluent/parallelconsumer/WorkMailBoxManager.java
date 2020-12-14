@@ -4,12 +4,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Handles the incoming mail for {@link WorkManager}.
@@ -40,8 +40,6 @@ public class WorkMailBoxManager<K, V> {
      * the Concurrent queue, where this only needs one. Also as we don't expect there to be that many elements in these
      * collections (as they contain large batches of records), the overhead will be small.
      */
-    // TODO when partition state is also refactored, remove Getter
-    @Getter
     private final Queue<ConsumerRecord<K, V>> internalFlattenedMailQueue = new LinkedList<>();
 
     /**
@@ -58,7 +56,7 @@ public class WorkMailBoxManager<K, V> {
      * <p>
      * Thread safe for use by control and broker poller thread.
      *
-     * @see WorkManager#success
+     * @see WorkManager#onSuccess
      * @see WorkManager#raisePartitionHighWaterMark
      */
     public void registerWork(final ConsumerRecords<K, V> records) {
@@ -87,7 +85,7 @@ public class WorkMailBoxManager<K, V> {
     /**
      * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
      */
-    public void processInbox() {
+    public synchronized void processInbox() {
         drainSharedMailbox();
 
         // flatten
@@ -100,5 +98,28 @@ public class WorkMailBoxManager<K, V> {
         }
     }
 
+    /**
+     * Remove revoked work from the mailbox
+     */
+    public synchronized void onPartitionsRemoved(final Collection<TopicPartition> removedPartitions) {
+        log.debug("Removing stale work from inbox queues");
+        processInbox();
+        internalFlattenedMailQueue.removeIf(x -> {
+            TopicPartition topicPartition = new TopicPartition(x.topic(), x.partition());
+            boolean recordShouldBeRemoved = removedPartitions.contains(topicPartition);
+            return recordShouldBeRemoved;
+        });
+    }
 
+    public synchronized boolean internalFlattenedMailQueueIsEmpty() {
+        return internalFlattenedMailQueue.isEmpty();
+    }
+
+    public synchronized ConsumerRecord<K, V> internalFlattenedMailQueuePoll() {
+        return internalFlattenedMailQueue.poll();
+    }
+
+    public int internalFlattenedMailQueueSize() {
+        return internalFlattenedMailQueue.size();
+    }
 }

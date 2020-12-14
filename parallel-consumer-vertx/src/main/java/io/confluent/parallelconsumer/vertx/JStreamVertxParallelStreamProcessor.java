@@ -22,7 +22,7 @@ import java.util.stream.Stream;
 /**
  * Result streaming version of {@link VertxParallelEoSStreamProcessor}.
  */
-public interface JStreamVertxParallelStreamProcessor<K, V> extends DrainingCloseable {
+public interface JStreamVertxParallelStreamProcessor<K, V> extends ParallelStreamProcessor<K, V> {
 
     static <KK, VV> JStreamVertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
         return new JStreamVertxParallelEoSStreamProcessor<>(options);

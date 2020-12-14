@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -68,6 +69,12 @@ public class WorkManagerTest {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
         });
+        int partition = 0;
+        assignPartition(partition);
+    }
+
+    private void assignPartition(final int partition) {
+        wm.onPartitionsAssigned(UniLists.of(new TopicPartition(INPUT_TOPIC, partition)));
     }
 
     /**
@@ -101,7 +108,7 @@ public class WorkManagerTest {
         assertThat(works).hasSize(1);
         assertOffsets(works, of(0));
 
-        wm.success(works.get(0));
+        wm.onSuccess(works.get(0));
 
         works = wm.maybeGetWork(max);
         assertThat(works).hasSize(1);
@@ -120,13 +127,13 @@ public class WorkManagerTest {
         assertThat(works).hasSize(2);
         assertOffsets(works, of(0, 1));
 
-        wm.success(works.get(0));
-        wm.failed(works.get(1));
+        wm.onSuccess(works.get(0));
+        wm.onFailure(works.get(1));
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(2));
 
-        wm.success(works.get(0));
+        wm.onSuccess(works.get(0));
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of());
@@ -140,7 +147,7 @@ public class WorkManagerTest {
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(1));
-        wm.success(works.get(0));
+        wm.onSuccess(works.get(0));
 
         assertThat(successfulWork)
                 .extracting(x -> (int) x.getCr().offset())
@@ -171,7 +178,7 @@ public class WorkManagerTest {
         works = wm.maybeGetWork(max);
         assertOffsets(works, of()); // should be blocked by in flight
 
-        wm.success(w);
+        wm.onSuccess(w);
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(1));
@@ -191,7 +198,7 @@ public class WorkManagerTest {
         var works = wm.maybeGetWork(max);
         assertOffsets(works, of(0));
         var wc = works.get(0);
-        wm.failed(wc);
+        wm.onFailure(wc);
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of());
@@ -202,7 +209,7 @@ public class WorkManagerTest {
         assertOffsets(works, of(0));
 
         wc = works.get(0);
-        wm.failed(wc);
+        wm.onFailure(wc);
 
         advanceClock(wc.getRetryDelay().minus(ofSeconds(1)));
 
@@ -213,17 +220,17 @@ public class WorkManagerTest {
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(0));
-        wm.success(works.get(0));
+        wm.onSuccess(works.get(0));
 
         assertOffsets(successfulWork, of(0));
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(1));
-        wm.success(works.get(0));
+        wm.onSuccess(works.get(0));
 
         works = wm.maybeGetWork(max);
         assertOffsets(works, of(2));
-        wm.success(works.get(0));
+        wm.onSuccess(works.get(0));
 
         // check all published in the end
         assertOffsets(successfulWork, of(0, 1, 2));
@@ -231,7 +238,7 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(null);
+        var wc = new WorkContainer<String, String>(0,null);
         assertThat(wc.hasDelayPassed(clock)).isTrue(); // when new, there's no delay
         wc.fail(clock);
         assertThat(wc.hasDelayPassed(clock)).isFalse();
@@ -284,8 +291,8 @@ public class WorkManagerTest {
         assertOffsets(works, of(0, 1, 2, 6));
 
         // fail some
-        wm.failed(works.get(1));
-        wm.failed(works.get(3));
+        wm.onFailure(works.get(1));
+        wm.onFailure(works.get(3));
 
         //
         works = wm.maybeGetWork(max);
@@ -369,6 +376,7 @@ public class WorkManagerTest {
         registerSomeWork();
 
         var partition = 2;
+        assignPartition(2);
         var rec = new ConsumerRecord<>(INPUT_TOPIC, partition, 10, "66", "value");
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "66", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "66", "value");
@@ -397,7 +405,7 @@ public class WorkManagerTest {
 
     private void successAll(List<WorkContainer<String, String>> works) {
         for (WorkContainer<String, String> work : works) {
-            wm.success(work);
+            wm.onSuccess(work);
         }
     }
 
@@ -411,6 +419,7 @@ public class WorkManagerTest {
         registerSomeWork();
 
         var partition = 2;
+        assignPartition(2);
         var rec = new ConsumerRecord<>(INPUT_TOPIC, partition, 10, "key-a", "value");
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "key-a", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "key-b", "value");
@@ -491,7 +500,7 @@ public class WorkManagerTest {
 
         var treeMap = new TreeMap<Long, WorkContainer<String, String>>();
         for (ConsumerRecord<String, String> record : records) {
-            treeMap.put(record.offset(), new WorkContainer<>(record));
+            treeMap.put(record.offset(), new WorkContainer<>(0, record));
         }
 
         // read back, assert correct order
@@ -519,7 +528,7 @@ public class WorkManagerTest {
         //
         for (var w : work) {
             w.onUserFunctionSuccess();
-            wm.success(w);
+            wm.onSuccess(w);
         }
 
         //
