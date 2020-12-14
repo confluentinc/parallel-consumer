@@ -268,9 +268,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+        log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
-            log.debug("Partitions revoked (onPartitionsRevoked), state: {}", state);
             commitOffsetsThatAreReady();
             wm.onPartitionsRevoked(partitions);
             usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
@@ -286,11 +286,11 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        log.info("Assigned {} partition(s)", numberOfAssignedPartitions);
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifyNewWorkRegistered();
-        log.info("Assigned {} partition(s)", numberOfAssignedPartitions);
     }
 
     /**
@@ -723,7 +723,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void checkPressure() {
         boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getMaxConcurrency();
         if (log.isTraceEnabled())
-            log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) if (isPoolQueueLow() {} && dynamicExtraLoadFactor.isWarmUpPeriodOver() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {}) {",
+            log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) if (isPoolQueueLow() {} && dynamicExtraLoadFactor.isWarmUpPeriodOver() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {})",
                     getWorkerQueueSize(),
                     getQueueTargetLoaded(),
                     dynamicExtraLoadFactor.getCurrentFactor(),
@@ -791,7 +791,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         try {
             if (workMailBox.isEmpty()) {
                 if (log.isDebugEnabled()) {
-                    log.warn("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
+                    log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
                             timeout, workerPool.getActiveCount(), getWorkerQueueSize());
                 }
                 currentlyPollingWorkCompleteMailBox.getAndSet(true);
@@ -822,7 +822,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         log.trace("Processing drained work {}...", results.size());
         for (var work : results) {
             MDC.put("offset", work.toString());
-            handleFutureResult(work);
+            wm.handleFutureResult(work);
             MDC.clear();
         }
     }
@@ -908,25 +908,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         lastCommit = Instant.now();
     }
 
-    protected void handleFutureResult(WorkContainer<K, V> wc) {
-        if (wc.getUserFunctionSucceeded().get()) {
-            onSuccess(wc);
-        } else {
-            onFailure(wc);
-        }
-    }
-
-    private void onFailure(WorkContainer<K, V> wc) {
-        // error occurred, put it back in the queue if it can be retried
-        // if not explicitly retriable, put it back in with an try counter so it can be later given up on
-        wm.failed(wc);
-    }
-
-    protected void onSuccess(WorkContainer<K, V> wc) {
-        log.trace("Processing success...");
-        wm.success(wc);
-    }
-
     /**
      * Submit a piece of work to the processing pool.
      *
@@ -954,6 +935,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     protected <R> List<Tuple<ConsumerRecord<K, V>, R>> userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
                                                                           Consumer<R> callback,
                                                                           WorkContainer<K, V> wc) {
+        //
+        boolean epochIsStale = wm.checkEpochIsStale(wc);
+        if (epochIsStale) {
+            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+            log.warn("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", wc);
+            return null;
+        }
+
         // call the user's function
         List<R> resultsFromUserFunction;
         try {

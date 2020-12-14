@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.util.HashMap;
 
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class VertxAppTest {
@@ -77,8 +78,8 @@ public class VertxAppTest {
         }
 
         @Override
-        void setupSubscription(Consumer<String, String> kafkaConsumer) {
-            mockConsumer.assign(UniLists.of(tp));
+        public void postSetup() {
+            mockConsumer.subscribeWithRebalanceAndAssignment(of(inputTopic), 1);
         }
 
         @Override

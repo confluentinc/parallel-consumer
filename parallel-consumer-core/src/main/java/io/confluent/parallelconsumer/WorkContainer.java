@@ -28,6 +28,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private final String DEFAULT_TYPE = "DEFAULT";
 
     /**
+     * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
+     * in the system of in flight.
+     */
+    @Getter
+    private final int epoch;
+
+    /**
      * Simple way to differentiate treatment based on type
      */
     @Getter
@@ -61,12 +68,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
-    public WorkContainer(ConsumerRecord<K, V> cr) {
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr) {
+        this.epoch = epoch;
         this.cr = cr;
         workType = DEFAULT_TYPE;
     }
 
-    public WorkContainer(ConsumerRecord<K, V> cr, String workType) {
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, String workType) {
+        this.epoch = epoch;
         this.cr = cr;
         Objects.requireNonNull(workType);
         this.workType = workType;

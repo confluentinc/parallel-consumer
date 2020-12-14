@@ -13,12 +13,13 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
-import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
+
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class VertxApp {
@@ -45,9 +46,10 @@ public class VertxApp {
                 .producer(kafkaProducer)
                 .build();
 
-        setupSubscription(kafkaConsumer);
-
         this.parallelConsumer = JStreamVertxParallelStreamProcessor.createEosStreamProcessor(options);
+        parallelConsumer.subscribe(of(inputTopic));
+
+        postSetup();
 
         int port = getPort();
 
@@ -69,12 +71,12 @@ public class VertxApp {
         return 8080;
     }
 
-    void setupSubscription(Consumer<String, String> kafkaConsumer) {
-        kafkaConsumer.subscribe(UniLists.of(inputTopic));
-    }
-
     void close() {
         this.parallelConsumer.closeDrainFirst(Duration.ofSeconds(2));
+    }
+
+    protected void postSetup() {
+        // no-op, for testing
     }
 
 }

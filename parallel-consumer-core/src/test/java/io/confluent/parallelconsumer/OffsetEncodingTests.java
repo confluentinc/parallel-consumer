@@ -153,6 +153,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         Map<TopicPartition, OffsetAndMetadata> completedEligibleOffsetsAndRemove;
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
+            wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(crs);
 
             List<WorkContainer<String, String>> work = wmm.maybeGetWork();
