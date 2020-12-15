@@ -56,13 +56,13 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
 
     @ParameterizedTest
     @EnumSource(ProcessingOrder.class)
-    public void consumeWithMultipleInstancesPeriodicConsumerSync(ProcessingOrder order) {
+    void consumeWithMultipleInstancesPeriodicConsumerSync(ProcessingOrder order) {
         runTest(DEFAULT_MAX_POLL, CommitMode.PERIODIC_CONSUMER_SYNC, order);
     }
 
     @ParameterizedTest
     @EnumSource(ProcessingOrder.class)
-    public void consumeWithMultipleInstancesPeriodicConsumerAsync(ProcessingOrder order) {
+    void consumeWithMultipleInstancesPeriodicConsumerAsync(ProcessingOrder order) {
         runTest(DEFAULT_MAX_POLL, CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, order);
     }
 

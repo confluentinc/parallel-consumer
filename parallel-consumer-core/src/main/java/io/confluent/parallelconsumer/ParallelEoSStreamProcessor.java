@@ -286,8 +286,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        log.info("Assigned {} partition(s)", numberOfAssignedPartitions);
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
+        log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifyNewWorkRegistered();
@@ -701,7 +701,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             int current = queue.size();
             int delta = target - current;
 
-            log.debug("Loop: Get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}", target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
+            log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
+                    target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
             var records = wm.<R>maybeGetWork(delta);
             gotWorkCount = records.size();
             lastWorkRequestWasFulfilled = gotWorkCount >= delta;
@@ -796,7 +797,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
-            if (workMailBox.isEmpty()) {
+            if (workMailBox.isEmpty() && state.equals(running)) {
                 if (log.isDebugEnabled()) {
                     log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
                             timeout, workerPool.getActiveCount(), getWorkerQueueSize());
@@ -952,7 +953,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             boolean epochIsStale = wm.checkEpochIsStale(wc);
             if (epochIsStale) {
                 // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-                log.warn("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", wc);
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", wc);
                 return null;
             }
 
