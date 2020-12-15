@@ -29,8 +29,7 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.Range.range;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofMillis;
@@ -277,9 +276,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         parallelConsumer.requestCommitAsap();
 
-        waitForSomeLoopCycles(2);
+        waitForSomeLoopCycles(5); // async commit can be slow - todo change this to event based
 
-        // make sure only base offsets are committed
+        // make sure only base offsets are committed for partition (next expected = 0 and 2 respectively)
 //        assertCommits(of(2));
         assertCommitLists(of(of(), of(2)));
 
@@ -298,6 +297,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.requestCommitAsap();
 
         waitForOneLoopCycle();
+        if(isUsingAsyncCommits())
+            waitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
 
         // make sure offset 0 and 1 is committed
         assertCommitLists(of(of(2), of(2, 3)));
@@ -307,7 +308,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // async consumer is slower to execute the commit. We could just wait, or we could add an event to the async consumer commit cycle
         if (isUsingAsyncCommits())
-            waitForOneLoopCycle();
+            waitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
 
         //
         assertCommitLists(of(of(2), of(2, 3, 4)));
@@ -567,7 +568,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @SneakyThrows
     @Test
     public void processInKeyOrderWorkNotReturnedDoesntBreakCommits() {
-        ParallelConsumerOptions options = ParallelConsumerOptions.builder().ordering(KEY).build();
+        ParallelConsumerOptions options = ParallelConsumerOptions.builder()
+                .commitMode(PERIODIC_CONSUMER_SYNC)
+                .ordering(KEY)
+                .build();
         setupParallelConsumerInstance(options);
         primeFirstRecord();
 
@@ -621,7 +625,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         waitForOneLoopCycle();
 
         //
-        try {  // simpler way of making the bootstrap commit optional in the results, than adding the required barrier
+        try {
+            // simpler way of making the bootstrap commit optional in the results, than adding the required barrier
             // locks to ensure it's existence, which has been tested else where
             assertCommits(of(0, 1), "Only 0 should be committed, as even though 2 is also finished, 1 should be " +
                     "blocking the partition");
