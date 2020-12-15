@@ -598,7 +598,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
             Thread controlThread = Thread.currentThread();
-            this.myId.ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
+            addInstanceMDC();
             controlThread.setName("control");
             log.trace("Control task scheduled");
             this.blockableControlThread = controlThread;
@@ -621,6 +621,13 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         ExecutorService executorService = Executors.newSingleThreadExecutor();
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+    }
+
+    /**
+     * Useful when testing with more than one instance
+     */
+    private void addInstanceMDC() {
+        this.myId.ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
     }
 
     /**
@@ -922,6 +929,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 // for each record, construct dispatch to the executor and capture a Future
                 log.trace("Sending work ({}) to pool", work);
                 Future outputRecordFuture = workerPool.submit(() -> {
+                    addInstanceMDC();
                     return userFunctionRunner(usersFunction, callback, work);
                 });
                 work.setFuture(outputRecordFuture);
@@ -935,18 +943,19 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     protected <R> List<Tuple<ConsumerRecord<K, V>, R>> userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
                                                                           Consumer<R> callback,
                                                                           WorkContainer<K, V> wc) {
-        //
-        boolean epochIsStale = wm.checkEpochIsStale(wc);
-        if (epochIsStale) {
-            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-            log.warn("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", wc);
-            return null;
-        }
-
         // call the user's function
         List<R> resultsFromUserFunction;
         try {
             MDC.put("offset", wc.toString());
+
+            //
+            boolean epochIsStale = wm.checkEpochIsStale(wc);
+            if (epochIsStale) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.warn("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", wc);
+                return null;
+            }
+
             log.trace("Pool received: {}", wc);
 
             ConsumerRecord<K, V> rec = wc.getCr();

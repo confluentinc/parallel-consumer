@@ -815,7 +815,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         if (checkEpochIsStale(wc)) {
             // no op, partition has been revoked
             log.warn("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
-            // todo make sure work isn't in queues - should be already removed in on revoke or lost #removeShardsFoundIn
+            // todo mark work as to be skipped, instead of just returning null - related to retry system https://github.com/confluentinc/parallel-consumer/issues/48
             return;
         }
 
