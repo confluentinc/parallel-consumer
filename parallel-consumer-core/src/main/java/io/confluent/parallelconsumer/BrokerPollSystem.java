@@ -11,6 +11,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
+import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -21,6 +22,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.closed;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.running;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -93,6 +95,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     private boolean controlLoop() {
         Thread.currentThread().setName("broker-poll");
+        pc.myId.ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
         committer.ifPresent(x -> x.claim());
         try {

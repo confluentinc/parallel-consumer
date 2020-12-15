@@ -4,10 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.EnumCartesianProductTestSets;
-import io.confluent.csid.utils.ProgressBarUtils;
-import io.confluent.csid.utils.StringUtils;
-import io.confluent.csid.utils.TrimListRepresentation;
+import io.confluent.csid.utils.*;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
@@ -23,22 +20,23 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
+import org.assertj.core.internal.StandardComparisonStrategy;
+import org.assertj.core.util.IterableUtil;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junitpioneer.jupiter.CartesianProductTest;
 
+import java.lang.reflect.Array;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,14 +45,14 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Test running with multiple instances of parallel-consumer consuming from
- * topic with two partitions.
+ * Test running with multiple instances of parallel-consumer consuming from topic with two partitions.
  */
 @Slf4j
 public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
-    public static final int DEFAULT_MAX_POLL = 500;
-    public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
+    static final int DEFAULT_MAX_POLL = 500;
+    List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
+    AtomicInteger count = new AtomicInteger();
 
     @ParameterizedTest
     @EnumSource(ProcessingOrder.class)
@@ -70,6 +68,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
 
     @SneakyThrows
     private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order) {
+        numPartitions = 2;
         String inputName = setupTopic(this.getClass().getSimpleName() + "-input-" + RandomUtils.nextInt());
 
         // pre-produce messages to input-topic
@@ -120,20 +119,24 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
 
         // wait for all pre-produced messages to be processed and produced
         Assertions.useRepresentation(new TrimListRepresentation());
-        var failureMessage = StringUtils.msg("All keys sent to input-topic should be processed, within time (expected: {} commit: {} order: {} max poll: {})",
+        var failureMessage = msg("All keys sent to input-topic should be processed, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
+        ProgressTracker progressTracker = new ProgressTracker(count);
         try {
-            waitAtMost(ofSeconds(120))
+            waitAtMost(ofSeconds(30))
 //                    .failFast(() -> pc1.isClosedOrFailed(), () -> pc1.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
                         log.trace("Processed-count: {}", consumedKeys.size());
+                        if (progressTracker.hasProgressNotBeenMade()) {
+                            expectedKeys.removeAll(consumedKeys);
+                            throw progressTracker.constructError(msg("No progress, missing keys: {}.", expectedKeys));
+                        }
                         SoftAssertions all = new SoftAssertions();
                         all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").containsAll(expectedKeys);
-
                         // NB: Re-balance causes re-processing, and this is probably expected. Leaving test like this anyway
-                        all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed only once").hasSameSizeAs(expectedKeys);
+                        all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed only once").hasSizeGreaterThanOrEqualTo(expectedKeys.size());
 
                         all.assertAll();
                     });
@@ -147,7 +150,12 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
         pc2.getParallelConsumer().closeDrainFirst();
 
         pcExecutor.shutdown();
+
+        Collection<?> duplicates = IterableUtil.toCollection(StandardComparisonStrategy.instance().duplicatesFrom(consumedKeys));
+        log.info("Duplicate consumed keys (at least one is expected due to the rebalance): {}", duplicates);
     }
+
+    int instanceId = 0;
 
     @Getter
     @RequiredArgsConstructor
@@ -174,6 +182,8 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
                     .commitMode(commitMode)
                     .maxConcurrency(1)
                     .build());
+            parallelConsumer.setMyId(Optional.of("id: " + instanceId));
+            instanceId++;
 
             parallelConsumer.subscribe(of(inputTopic));
 
@@ -184,7 +194,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
                         } catch (InterruptedException e) {
                             // ignore
                         }
-
+                        count.incrementAndGet();
                         bar.stepBy(1);
                         consumedKeys.add(record.key());
                     }

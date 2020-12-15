@@ -78,6 +78,11 @@ public class ProgressTracker {
     }
 
     public Exception constructError() {
-        return new InternalRuntimeError(msg("No progress beyond {} records after {} rounds", processedCount, rounds));
+        return constructError("");
+    }
+
+    public Exception constructError(String messageToAppend) {
+        return new InternalRuntimeError(msg("No progress beyond {} records after {} rounds. {}",
+                processedCount, rounds, messageToAppend));
     }
 }
