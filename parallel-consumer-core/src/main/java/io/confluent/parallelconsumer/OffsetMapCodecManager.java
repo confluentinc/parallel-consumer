@@ -10,6 +10,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.WakeupException;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.nio.ByteBuffer;
@@ -57,7 +58,7 @@ public class OffsetMapCodecManager<K, V> {
      */
     @Value
     static class HighestOffsetAndIncompletes {
-        
+
         /**
          * The highest represented offset in this result.
          */
@@ -95,7 +96,22 @@ public class OffsetMapCodecManager<K, V> {
      * Load all the previously completed offsets that were not committed
      */
     void loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
-        Map<TopicPartition, OffsetAndMetadata> committed = consumer.committed(assignment);
+        // todo this should be controlled for - improve consumer management so that this can't happen
+        Map<TopicPartition, OffsetAndMetadata> committed = null;
+        int attempts = 0;
+        while (committed == null) {
+            WakeupException lastWakeupException = null;
+            try {
+                committed = consumer.committed(assignment);
+            } catch (WakeupException exception) {
+                log.warn("Woken up trying to get assignment", exception);
+                lastWakeupException = exception;
+            }
+            attempts++;
+            if (attempts > 10) // shouldn't need more than 1 ever
+                throw new InternalRuntimeError("Failed to get partition assignment - continuously woken up.", lastWakeupException);
+        }
+
         committed.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
                 long offset = offsetAndMeta.offset();
