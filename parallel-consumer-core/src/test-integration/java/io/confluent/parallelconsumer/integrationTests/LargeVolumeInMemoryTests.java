@@ -5,6 +5,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.ProgressBarUtils;
+import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
@@ -210,10 +211,8 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
 
         parallelConsumer.pollAndProduceMany((rec) -> {
             processingCheck.add(rec);
-            int rangeOfTimeSimulatedProcessingTakesMs = 5;
-            long sleepTime = (long) (Math.random() * rangeOfTimeSimulatedProcessingTakesMs);
-            sleep(sleepTime);
-            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "Processing took: " + sleepTime + ". SourceV:" + rec.value());
+            ThreadUtils.sleepQuietly(3);
+            ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "SourceV: " + rec.value());
             bar.stepTo(producerSpy.history().size());
             return UniLists.of(stub);
         }, (x) -> {
@@ -283,12 +282,6 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
 
         // clear messages
         super.successfulWork.clear();
-    }
-
-    @SneakyThrows
-    private void sleep(long ms) {
-        log.trace("Sleeping for {}", ms);
-        Thread.sleep(ms);
     }
 
 }
