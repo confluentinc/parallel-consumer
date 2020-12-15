@@ -620,6 +620,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 var topicPartitionKey = workContainer.getTopicPartition();
 
                 {
+                    // todo can't just skip, must remove
                     if (checkEpoch(workContainer)) continue;
                 }
 
