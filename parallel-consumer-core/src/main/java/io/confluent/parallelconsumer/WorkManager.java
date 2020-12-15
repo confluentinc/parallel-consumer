@@ -167,7 +167,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        log.info("Partitions assigned: {}", partitions);
+        log.debug("Partitions assigned: {}", partitions);
         incrementPartitionAssignmentEpoch(partitions);
 
         // init messages allowed state
@@ -194,7 +194,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        log.info("WM Partitions revoked: {}", partitions);
+        log.info("Partitions revoked: {}", partitions);
 
         try {
             onPartitionsRemoved(partitions);
@@ -814,7 +814,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         // https://github.com/confluentinc/parallel-consumer/pull/46 (partition epochs)
         if (checkEpochIsStale(wc)) {
             // no op, partition has been revoked
-            log.warn("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
+            log.debug("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
             // todo mark work as to be skipped, instead of just returning null - related to retry system https://github.com/confluentinc/parallel-consumer/issues/48
             return;
         }
