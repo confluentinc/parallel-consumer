@@ -7,8 +7,6 @@ toc::[]
 
 == v0.3.0.0
 
-== next
-
 === Features
 
 * Queueing and pressure system now self tuning, performance over default old tuning values (`softMaxNumberMessagesBeyondBaseCommitOffset` and `maxMessagesToQueue`) has doubled.
