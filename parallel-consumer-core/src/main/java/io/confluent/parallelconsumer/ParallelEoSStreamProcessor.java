@@ -714,7 +714,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         //
         queueStatsLimiter.performIfNotLimited(() -> {
             int queueSize = getWorkerQueueSize();
-            log.info("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
+            log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
                     workerPool.getActiveCount(), queueSize, queueSize, getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrentFactor());
         });
 
