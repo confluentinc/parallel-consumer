@@ -414,6 +414,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                         // this state should never happen
                         log.debug("Work is in queue with stale epoch. Will remove now. Was it not removed properly on revoke? Or are we in a race state? {}", workContainer);
                         staleWorkToRemove.add(workContainer);
+                        continue; // skip
                     }
                 }
 
