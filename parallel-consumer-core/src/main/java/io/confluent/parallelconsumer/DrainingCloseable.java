@@ -30,7 +30,7 @@ public interface DrainingCloseable extends Closeable {
      * @see #close(Duration, DrainingMode)
      */
     default void close() {
-        closeDontDrainFirst();
+        closeDrainFirst();
     }
 
     /**
