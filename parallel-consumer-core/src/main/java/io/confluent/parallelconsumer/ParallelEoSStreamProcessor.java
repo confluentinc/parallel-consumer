@@ -186,11 +186,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private boolean lastWorkRequestWasFulfilled = false;
 
     /**
-     * The number of messages to attempt pass into the {@link #pollBatch} user function
-     */
-    private int batchLevel = 5;
-
-    /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
      *
@@ -846,8 +841,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     @Override
-    public void pollBatch(int specifiedBatchLevel, Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction) {
-        batchLevel = specifiedBatchLevel;
+    public void pollBatch(Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction) {
         Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
             log.trace("asyncPoll - Consumed set of records ({}), executing void function...", recordList.size());
             usersVoidConsumptionFunction.accept(recordList);
@@ -949,9 +943,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerPool);
-            var batchs = makeBatchs(batchLevel, workToProcess);
+            var batches = makeBatches(options.getBatchSize(), workToProcess);
 
-            for (var batch : batchs) {
+            for (var batch : batches) {
                 // for each record, construct dispatch to the executor and capture a Future
                 log.trace("Sending work ({}) to pool", batch);
                 Future outputRecordFuture = workerPool.submit(() -> {
@@ -966,27 +960,31 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         }
     }
 
-    private List<List<WorkContainer<K, V>>> makeBatchs(int batchLevel, List<WorkContainer<K, V>> workToProcess) {
+    private List<List<WorkContainer<K, V>>> makeBatches(int batchLevel, List<WorkContainer<K, V>> workToProcess) {
         return partition(workToProcess, batchLevel);
     }
 
-    private static <T> List<List<T>> partition(Collection<T> members, int maxSize) {
-        List<List<T>> res = new ArrayList<>();
+    private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
+        List<List<T>> listOfBatches = new ArrayList<>();
+        List<T> batchInConstruction = new ArrayList<>();
 
-        List<T> internal = new ArrayList<>();
+        //
+        for (T item : sourceCollection) {
+            batchInConstruction.add(item);
 
-        for (T member : members) {
-            internal.add(member);
-
-            if (internal.size() == maxSize) {
-                res.add(internal);
-                internal = new ArrayList<>();
+            //
+            if (batchInConstruction.size() == maxBatchSize) {
+                listOfBatches.add(batchInConstruction);
+                batchInConstruction = new ArrayList<>();
             }
         }
-        if (internal.isEmpty() == false) {
-            res.add(internal);
+
+        // add partial tail
+        if (!batchInConstruction.isEmpty()) {
+            listOfBatches.add(batchInConstruction);
         }
-        return res;
+
+        return listOfBatches;
     }
 
     /**
@@ -1001,7 +999,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             MDC.put("offset", workContainerBatch.toString());
             log.trace("Pool received: {}", workContainerBatch);
 
-            List<ConsumerRecord<K, V>> records = workContainerBatch.stream().map(WorkContainer::getCr).collect(Collectors.toList());
+            //
+            List<ConsumerRecord<K, V>> records = workContainerBatch.stream()
+                    .map(WorkContainer::getCr)
+                    .collect(Collectors.toList());
 
             //
             boolean epochIsStale = wm.checkEpochIsStale(workContainerBatch);

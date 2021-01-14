@@ -131,6 +131,12 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
 
+    /**
+     * The number of messages to attempt pass into the {@link ParallelConsumer#pollBatch} user function
+     */
+    @Builder.Default
+    private final int batchSize = 5;
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
