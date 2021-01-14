@@ -12,6 +12,7 @@ import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -132,10 +133,14 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
 
     /**
-     * The number of messages to attempt pass into the {@link ParallelConsumer#pollBatch} user function
+     * The maximum number of messages to attempt pass into the {@link ParallelConsumer#pollBatch} user function. Batch
+     * sizes may be less than this size, but will never be more.
      */
-    @Builder.Default
-    private final int batchSize = 5;
+    private final Integer batchSize;
+
+    public Optional<Integer> getBatchSize() {
+        return Optional.ofNullable(batchSize);
+    }
 
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");

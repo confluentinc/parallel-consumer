@@ -334,6 +334,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     @Override
     public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
+        validateNonBatch();
+
         Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
             if (recordList.size() != 1) {
                 throw new IllegalArgumentException("Bug: Function only takes a single element");
@@ -354,6 +356,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     @SneakyThrows
     public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        validateNonBatch();
+
         // todo refactor out the producer system to a sub class
         if (!options.isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
@@ -842,6 +846,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     @Override
     public void pollBatch(Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction) {
+        validateBatch();
+
         Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
             log.trace("asyncPoll - Consumed set of records ({}), executing void function...", recordList.size());
             usersVoidConsumptionFunction.accept(recordList);
@@ -849,6 +855,18 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         };
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
         supervisorLoop(wrappedUserFunc, voidCallBack);
+    }
+
+    private void validateBatch() {
+        if (!options.getBatchSize().isPresent()) {
+            throw new IllegalArgumentException("Using batching function, but no batch size specified in options");
+        }
+    }
+
+    private void validateNonBatch() {
+        if (options.getBatchSize().isPresent()) {
+            throw new IllegalArgumentException("Batch size specified, but not using batch function");
+        }
     }
 
     /**
@@ -943,25 +961,36 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerPool);
-            var batches = makeBatches(options.getBatchSize(), workToProcess);
 
-            for (var batch : batches) {
-                // for each record, construct dispatch to the executor and capture a Future
-                log.trace("Sending work ({}) to pool", batch);
-                Future outputRecordFuture = workerPool.submit(() -> {
-                    addInstanceMDC();
-                    return runUserFunction(usersFunction, callback, batch);
-                });
-                // for a batch, each message in the batch shares the same result
-                for (final WorkContainer<K, V> workContainer : batch) {
-                    workContainer.setFuture(outputRecordFuture);
+            if (options.getBatchSize().isPresent()) {
+                // perf: could inline makeBatches
+                var batches = makeBatches(workToProcess);
+                for (var batch : batches) {
+                    submitWorkToPoolInner(usersFunction, callback, batch);
+                }
+            } else {
+                for (var batch : workToProcess) {
+                    submitWorkToPoolInner(usersFunction, callback, UniLists.of(batch));
                 }
             }
         }
     }
 
-    private List<List<WorkContainer<K, V>>> makeBatches(int batchLevel, List<WorkContainer<K, V>> workToProcess) {
-        return partition(workToProcess, batchLevel);
+    private <R> void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction, final Consumer<R> callback, final List<WorkContainer<K, V>> batch) {
+        // for each record, construct dispatch to the executor and capture a Future
+        log.trace("Sending work ({}) to pool", batch);
+        Future outputRecordFuture = workerPool.submit(() -> {
+            addInstanceMDC();
+            return runUserFunction(usersFunction, callback, batch);
+        });
+        // for a batch, each message in the batch shares the same result
+        for (final WorkContainer<K, V> workContainer : batch) {
+            workContainer.setFuture(outputRecordFuture);
+        }
+    }
+
+    private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
+        return partition(workToProcess, (int) options.getBatchSize().get());
     }
 
     private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
@@ -996,7 +1025,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // call the user's function
         List<R> resultsFromUserFunction;
         try {
-            MDC.put("offset", workContainerBatch.toString());
+            if (log.isDebugEnabled()) {
+                // toString can be heavy, especially for large batch sizes
+                MDC.put("offset", workContainerBatch.toString());
+            }
             log.trace("Pool received: {}", workContainerBatch);
 
             //
