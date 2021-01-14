@@ -584,17 +584,16 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     /**
-     * Supervisor loop for the main loop.
-     *
-     * @see #supervisorLoop(Function, Consumer)
-     */
-    /**
-     * Optioanl ID of this instance. Useful for testing.
+     * Optional ID of this instance. Useful for testing.
      */
     @Setter
     Optional<String> myId = Optional.empty();
 
-    protected <R> void supervisorLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
+    /**
+     * Supervisor loop for the main loop.
+     *
+     * @see #supervisorLoop(Function, Consumer)
+     */
     protected <R> void supervisorLoop(Function<List<ConsumerRecord<K, V>>, List<R>> userFunction,
                                       Consumer<R> callback) {
         log.info("Control loop starting up...");
@@ -699,7 +698,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    private <R> int handleWork(final Function<ConsumerRecord<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    private <R> int handleWork(final Function<List<ConsumerRecord<K, V>>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPressure();
 
@@ -957,7 +956,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 log.trace("Sending work ({}) to pool", batch);
                 Future outputRecordFuture = workerPool.submit(() -> {
                     addInstanceMDC();
-                    return userFunctionRunner(usersFunction, callback, work);
                     return runUserFunction(usersFunction, callback, batch);
                 });
                 // for a batch, each message in the batch shares the same result
@@ -1000,27 +998,23 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // call the user's function
         List<R> resultsFromUserFunction;
         try {
-            todo
             MDC.put("offset", workContainerBatch.toString());
             log.trace("Pool received: {}", workContainerBatch);
 
             List<ConsumerRecord<K, V>> records = workContainerBatch.stream().map(WorkContainer::getCr).collect(Collectors.toList());
-            MDC.put("offset", wc.toString());
 
             //
-            boolean epochIsStale = wm.checkEpochIsStale(wc);
+            boolean epochIsStale = wm.checkEpochIsStale(workContainerBatch);
             if (epochIsStale) {
                 // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", wc);
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
                 return null;
             }
 
-            log.trace("Pool received: {}", wc);
-
-//            List<ConsumerRecord<K, V>> records = wc.getCr();
-
+            // execute
             resultsFromUserFunction = usersFunction.apply(records);
 
+            // results
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
             }
@@ -1031,11 +1025,14 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 log.trace("Running users call back...");
                 callback.accept(result);
             }
-            log.trace("User function future registered");
+
             // fail or succeed, either way we're done
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
             }
+            log.trace("User function future registered");
+
+            //
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
