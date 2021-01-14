@@ -55,6 +55,9 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
      */
     void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
 
+    /**
+     * Register a function to be applied to a batch of messages
+     */
     void pollBatch(int batchLevel, Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction);
 
     /**

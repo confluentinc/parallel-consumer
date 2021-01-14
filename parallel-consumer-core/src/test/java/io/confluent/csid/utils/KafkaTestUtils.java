@@ -261,4 +261,10 @@ public class KafkaTestUtils {
         wmm.onSuccess(wc);
         assertThat(wc.isUserFunctionComplete()).isTrue();
     }
+
+    public List<ConsumerRecord<String, String>> sendRecords(final int i) {
+        List<ConsumerRecord<String, String>> consumerRecords = generateRecords(i);
+        send(consumerSpy, consumerRecords);
+        return consumerRecords;
+    }
 }
