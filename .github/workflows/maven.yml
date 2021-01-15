@@ -18,6 +18,7 @@ jobs:
         # Why not? because we can.
         # 2.0.1, 2.1.1, 2.2.2, 2.3.1, 2.4.1 don't work - needs zstd and some kafka client libs.
         # Doesn't mean it couldn't be modified slightly to work...
+        mvnPhase: [test, 'verify install site']
         ak: [2.5.1, 2.6.1]
         jdk: ['-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64', '']
         experimental: [false]
@@ -93,7 +94,7 @@ jobs:
 
     - name: Test with Maven
       #run: mvn -B package -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64 -Dkafka.version=${{ matrix.ak }}
-      run: mvn -B package ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }}
+      run: mvn -B ${{ matrix.mvnPhase }} ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }}
 # - name: Test with Maven on Java 9
 #      run: mvn -B package -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
 #    - name: Test with Maven on Java
