@@ -185,7 +185,7 @@ public class WorkManagerTest {
     }
 
     @Test
-    public void testOrderedAndDelayed() {
+    void testOrderedAndDelayed() {
         ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
 
