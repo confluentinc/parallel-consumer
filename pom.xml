@@ -385,7 +385,7 @@
                             <inlineHeader>Copyright (C) ${license.git.copyrightYears} ${project.organization.name}
                             </inlineHeader>
                             <includes>
-                                <include>pom.xml</include>
+<!--                                <include>pom.xml</include>-->
                                 <include>src/**</include>
                             </includes>
                             <excludes>
