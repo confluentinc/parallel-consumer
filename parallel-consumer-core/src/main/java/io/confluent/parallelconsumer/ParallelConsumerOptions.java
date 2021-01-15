@@ -135,9 +135,20 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * The maximum number of messages to attempt pass into the {@link ParallelConsumer#pollBatch} user function. Batch
      * sizes may be less than this size, but will never be more.
+     * <p>
+     * Note that there is no relationship between the Consumer setting of {@code max.poll.records} and this configured
+     * batch size, as this library introduces a large layer of indirection between the managed consumer, and the managed
+     * queues we use. This indirection effectively disconnects the processing of messages from "polling" them from the
+     * managed client, as we do not wait to process them before calling poll again. We simply call poll as much as we
+     * need to in order to keep our queues full with enough work to satisfy demand - and if we have enough then we
+     * actively mange pausing our subscription so that we can continue calling {@code poll} without pulling in even more
+     * messages.
      */
     private final Integer batchSize;
 
+    /**
+     * @see #batchSize
+     */
     public Optional<Integer> getBatchSize() {
         return Optional.ofNullable(batchSize);
     }
