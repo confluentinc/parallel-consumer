@@ -522,6 +522,19 @@ image::https://lucid.app/publicSegments/view/f7a05e99-24e6-4ea3-b3d0-978e306aa56
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
+When a user function throws an error, this is currently taken as a retriable error.
+The message will be placed back into the queue, and after a certain delay, a retry will be triggered.
+
+To configure the retry delay, see `Options#defaultRetryDelay`.
+
+At the moment there is no terminal error support, so messages will continue to be tried forever, but will not hold up the queues. Offsets will also continue to be committed (see <<_commit_mode>> and <<Offset Map>>).
+
+Improvements to this system are planned.
+See the following issues:
+
+* https://github.com/confluentinc/parallel-consumer/issues/65[Enhanced retry epic #65]
+* https://github.com/confluentinc/parallel-consumer/issues/48[Support scheduled message processing (scheduled retry)]
+* https://github.com/confluentinc/parallel-consumer/issues/34[Monitor for progress and optionally shutdown (leave consumer group), skip message or send to DLQ #34]
 
 == Result Models
 
