@@ -72,9 +72,9 @@ jobs:
     - name: Test with Maven on Java 9
 #       run: mvn -B package --file pom.xml -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.275/x64
 #      run: mvn -B package --file pom.xml -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
-      run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site
-#       run: mvn -DskipITs=true -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site --file pom.xml -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
-#       run: mvn -DskipITs=true -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site --file pom.xml -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.275/x64
+#      run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site
+      run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
+#       run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.275/x64
 
 #     - name: Archive test results
 #       if: ${{ always() }}
