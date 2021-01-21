@@ -20,6 +20,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.*;
@@ -37,6 +38,7 @@ import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
+import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
@@ -297,7 +299,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.requestCommitAsap();
 
         waitForOneLoopCycle();
-        if(isUsingAsyncCommits())
+        if (isUsingAsyncCommits())
             waitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
 
         // make sure offset 0 and 1 is committed
@@ -801,5 +803,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.requestCommitAsap();
         waitForSomeLoopCycles(2);
     }
+
 }
 
