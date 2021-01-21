@@ -114,10 +114,10 @@ public class OffsetMapCodecManager<K, V> {
 
         committed.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
-                long offset = offsetAndMeta.offset();
+                long nextExpectedOffset = offsetAndMeta.offset();
                 String metadata = offsetAndMeta.metadata();
                 try {
-                    loadOffsetMetadataPayload(offset, tp, metadata);
+                    loadOffsetMetadataPayload(nextExpectedOffset, tp, metadata);
                 } catch (OffsetDecodingError offsetDecodingError) {
                     log.error("Error decoding offsets from assigned partition, dropping offset map (will replay previously completed messages - partition: {}, data: {})",
                             tp, offsetAndMeta, offsetDecodingError);
@@ -126,18 +126,18 @@ public class OffsetMapCodecManager<K, V> {
         });
     }
 
-    static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long finalBaseComittedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
+    static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long committedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
         byte[] decodedBytes;
         try {
             decodedBytes = OffsetSimpleSerialisation.decodeBase64(base64EncodedOffsetPayload);
         } catch (IllegalArgumentException a) {
             throw new OffsetDecodingError(msg("Error decoding offset metadata, input was: {}", base64EncodedOffsetPayload), a);
         }
-        return decodeCompressedOffsets(finalBaseComittedOffsetForPartition, decodedBytes);
+        return decodeCompressedOffsets(committedOffsetForPartition, decodedBytes);
     }
 
-    void loadOffsetMetadataPayload(long startOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
-        HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(startOffset, offsetMetadataPayload);
+    void loadOffsetMetadataPayload(long nextExpectedOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
+        HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(nextExpectedOffset, offsetMetadataPayload);
         wm.raisePartitionHighWaterMark(incompletes.getHighestSeenOffset(), tp);
         Set<Long> incompleteOffsets = incompletes.getIncompleteOffsets();
         wm.partitionIncompleteOffsets.put(tp, incompleteOffsets);
@@ -185,20 +185,24 @@ public class OffsetMapCodecManager<K, V> {
      *
      * @return Set of offsets which are not complete, and the highest offset encoded.
      */
-    static HighestOffsetAndIncompletes decodeCompressedOffsets(long finalOffsetForPartition, byte[] decodedBytes) {
+    static HighestOffsetAndIncompletes decodeCompressedOffsets(long nextExpectedOffset, byte[] decodedBytes) {
+
+        // if no offset bitmap data
         if (decodedBytes.length == 0) {
-            // no offset bitmap data
-            return HighestOffsetAndIncompletes.of(finalOffsetForPartition, UniSets.of());
+            // in this case, as there is no encoded offset data in the matadata, the highest we previously saw must be
+            // the offset before the committed offset
+            long highestSeenOffsetIsThen = nextExpectedOffset - 1;
+            return HighestOffsetAndIncompletes.of(highestSeenOffsetIsThen, UniSets.of());
+        } else {
+            EncodedOffsetPair result = EncodedOffsetPair.unwrap(decodedBytes);
+
+            HighestOffsetAndIncompletes incompletesTuple = result.getDecodedIncompletes(nextExpectedOffset);
+
+            Set<Long> incompletes = incompletesTuple.getIncompleteOffsets();
+            long highWater = incompletesTuple.getHighestSeenOffset();
+
+            return HighestOffsetAndIncompletes.of(highWater, incompletes);
         }
-
-        EncodedOffsetPair result = EncodedOffsetPair.unwrap(decodedBytes);
-
-        HighestOffsetAndIncompletes incompletesTuple = result.getDecodedIncompletes(finalOffsetForPartition);
-
-        Set<Long> incompletes = incompletesTuple.getIncompleteOffsets();
-        long highWater = incompletesTuple.getHighestSeenOffset();
-
-        return HighestOffsetAndIncompletes.of(highWater, incompletes);
     }
 
     String incompletesToBitmapString(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
