@@ -72,9 +72,11 @@ jobs:
     - name: Test with Maven on Java 9
 #       run: mvn -B package --file pom.xml -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.275/x64
 #      run: mvn -B package --file pom.xml -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
-      run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site
+#       run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site
 #       run: mvn -DskipITs=true -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site --file pom.xml -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
 #       run: mvn -DskipITs=true -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site --file pom.xml -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.275/x64
+      # java 8 has issue with UniLists java8 feature : https://github.com/tlinkowski/UniJ/issues/55 module-info.class being compiled to class version 53 (it's supposed to be the only file in version 53 in the library). I assumed JDK 8 would just ignore this file, but maybe it doesn't?
+      run: mvn -Dsurefire.useFile=false -Dfailsafe.useFile=false --fail-at-end -B validate install site -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.275/x64
 
 #     - name: Archive test results
 #       if: ${{ always() }}
