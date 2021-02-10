@@ -360,7 +360,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, consumedRecord);
 
             if (recordListToProduce.isEmpty()) {
-                log.warn("No result returned from function to send.");
+                log.debug("No result returned from function to send.");
             }
             log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", consumedRecord, recordListToProduce);
 
