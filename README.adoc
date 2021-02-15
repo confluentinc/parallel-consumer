@@ -16,6 +16,8 @@
 :toc: macro
 :toclevels: 3
 :numbered: 1
+:sectlinks: true
+:sectanchors: true
 
 :github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
@@ -40,7 +42,8 @@ endif::[]
 
 image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
-image:https://github.com/confluentinc/parallel-consumer/workflows/Java%20CI%20with%20Maven/badge.svg[Java CI with Maven]
+image:https://github.com/confluentinc/parallel-consumer/workflows/CI%20compile%20ONLY%20(tests%20disabled%20atm)/badge.svg[Java CI with Maven] +
+^full^ ^test^ ^suite^ ^currently^ ^running^ ^only^ ^on^ ^Confluent^ ^internal^ ^CI^ ^server^^)^^.^
 
 // travis badges temporarily disabled as travis isn't running CI currently
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"] image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
@@ -196,7 +199,7 @@ We can break out as described below into the tool for processing that step, then
 +
 without operational burden or harming the clusters performance
 * Client side queueing system on top of Apache Kafka consumer
-** Efficient individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
+** Efficient individual message acknowledgement system (without local or third party external system state storage) to massively reduce (and usually completely eliminate) message replay upon failure - see <<offset_map>> section for more details
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
 * Vert.x non-blocking library integration (HTTP currently)
@@ -844,27 +847,62 @@ image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b
 
 image::https://lucid.app/publicSegments/view/7480d948-ed7d-4370-a308-8ec12e6b453b/image.png[]
 
+[[offset_map]]
 === Offset Map
 
-==== Storage
+Unlike a traditional queue, messages are not deleted on an acknowledgement.
+However, offsets *are* tracked *per message*, per consumer group - there is no message replay for successful messages, even over clean restarts.
+
+Across a system failure, only completed messages not stored as such in the last offset payload commit will be replayed.
+This is not an _exactly once guarantee_, as message replay cannot be prevented across failure.
+
+CAUTION: Note that Kafka's Exactly Once Semantics (EoS) (transactional processing) also does not prevent _duplicate message replay_ - it *presents* an _effectively once_ result messages in Kafka topics.
+Messages may _still_ be replayed when using `EoS`. This is an important consideration when using it, especially when integrating with thrid party systems, which is a very common pattern for utilising this project.
+
+As mentioned previously, offsets are always committed in the correct order and only once all previous messages have been successfully processed; regardless of <<ordering-guarantees,ordering mode>> selected.
+We call this the "highest committable offset".
+
+However, because messages can be processed out of order, messages beyond the highest committable offset must also be tracked for success and not replayed upon restart of failure.
+To achieve this the system goes a step further than normal Kafka offset commits.
+
+When messages beyond the highest committable offset are successfully processed;
+
+. they are stored as such in an internal memory map.
+. when the system then next commits offsets
+. if there are any messages beyond the highest offset which have been marked as succeeded
+.. the offset map is serialised and encoded into a base 64 string, and added to the commit message metadata.
+. upon restore, if needed, the system then deserializes this offset map and loads it back into memory
+. when each messages is polled into the system
+.. it checks if it's already been previously completed
+.. at which point it is then skipped.
+
+This ensures that no message is reprocessed if it's been previously completed.
+
+IMPORTANT: Successful messages beyond the _highest committable offset_ are still recorded as such in a specially constructed metadata payload stored alongside the Kafka committed offset.
+These messages are not replayed upon restore/restart.
+
+The offset map is compressed in parallel using two different compression techniques - run length encoding and bitmap encoding.
+The sizes of the compressed maps are then compared, and the smallest chosen for serialization.
+If both serialised formats are significantly large, they are then both compressed using `zstd` compression, and if that results in a smaller serialization then the compressed form is used instead.
+
+
+==== Storage Notes
 
 * Runtime data model creates list of incomplete offsets
-* Then builds a full complete / not complete bit map from the base offset to be committed
+* Continuously builds a full complete / not complete bit map from the base offset to be committed
 * Dynamically switching storage
-** encodes into a `BitSet`, and a `ByteBuffer`, then compresses both using zstd, then uses the smallest and tags as such in the encoded String
+** encodes into a `BitSet`, and a `RunLength`, then compresses both using zstd, then uses the smallest and tags as such in the encoded String
 ** Which is smallest can depend on the size and information density of the offset map
-*** Smaller maps fit better into uncompressed `BitSets` ~(30 entry map bitset: compressed: 13 Bytes, uncompressed: 4 Bytes, compressed ByteBuffer: )
-*** Larger maps are usually better in compressed `ByteBuffer` ~(13750 entry map bitset: compressed: 63 Bytes, uncompressed: 1719 Bytes, compressed ByteBuffer: 41 Bytes)
+*** Smaller maps fit better into uncompressed `BitSets` ~(30 entry map bitset: compressed: 13 Bytes, uncompressed: 4 Bytes)
+*** Larger maps with continuous sections usually better in compressed `RunLength`
 *** Completely random offset maps, compressed and uncompressed `BitSet` is roughly the same (2000 entries, uncompressed bitset: 250, compressed: 259, compressed bytes array: 477)
-*** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again.
-*** A large map with a single outstanding message (2000 entries, 1 outstanding at a random position) compressed `BitSet` and `ByteArray` come out the same (23 vs 22 bytes, vs 250 for uncompressed `BitSet`)
-* Stores along with base offset for each partition, in the offset commitsync metadata string
-* The offset commit metadata has a hardcoded limit of 4096 bytes
-** Because of this, if our map doesn't fit into this, we have to drop it and not use it, loosing the shorter replay benefits
-** Upon recovery or restart or partition reassignment, the bitmap will be loaded as empty, and all messages from the offset committed will be replayed
-** Not being able to fit the map into the metadata, depends on how many partitions we're assigned (it's 4096 bytes total for all assigned partitions, not each unfortunately), and the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit hundreds of partitions))
-*** To improve this situation, we could introduce the option of a dynamic backpressure system, where the size of the serialised offset map is monitored, and if it is growing too large, we pause work until it can fit again
-** @see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`
+*** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again if random.
+* Gets stored along with base offset for each partition, in the offset `commitsync` `metadata` string
+* The offset commit metadata has a hardcoded limit of 4096 bytes per partition (@see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`)
+** Because of this, if our map doesn't fit into this, we have to drop it and not use it, losing the shorter replay benefits. However with runlength encoding and typical offset patterns this should be quite rare.
+*** Work is being done on continuous and predictive space requirements, which will optionally prevent the system from continuing past a point by introducing local backpressure which it can't proceed without dropping the encoded map information - see https://github.com/confluentinc/parallel-consumer/issues/53[Exact continuous offset encoding for precise offset payload size back pressure].
+** Not being able to fit the map into the metadata, depends on message acknowledgement patterns in the use case and the numbers of messages involved.
+Also the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
 
 
 == Attribution
