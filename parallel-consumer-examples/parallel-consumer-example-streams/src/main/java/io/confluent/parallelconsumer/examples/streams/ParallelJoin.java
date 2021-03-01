@@ -1,5 +1,10 @@
 package io.confluent.parallelconsumer.examples.streams;
 
+/*-
+ * Copyright (C) 2020 Confluent, Inc.
+ */
+
+
 import io.confluent.parallelconsumer.ParallelConsumer;
 import org.apache.kafka.streams.state.KeyValueStore;
 
