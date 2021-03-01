@@ -447,6 +447,22 @@ Use your Streams app to process your data first, then send anything needed to be
 .Example usage with Kafka Streams
 image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage, align="center"]
 
+==== Parallel Joins
+
+PC can also be used to implement a parallel join against a data source, namely a Kafka Streams (KS) state store.
+
+KS state stores can be read by external threads (external to the toplogy context), and so they can be reference in the processing function of PC.
+If no item is present in the state store for the key, then it's a miss.
+If there is, you can join the data any way you please, and potentially call an external system with the joined data, or output it back to a Kafka topic using the `#pollAndProdce` API if trying to avoid https://thorben-janssen.com/dual-writes/[dual write] scnearios.
+
+image::https://lucid.app/publicSegments/view/d144c027-653c-4e77-bfa4-8ecaadba1385/image.png[]
+
+WARNING::Although using a `GlobalKTable` is not strictly nesescary, the https://docs.confluent.io/platform/current/streams/developer-guide/interactive-queries.html[extra network hop] caused by data not being colocated when using a sharded `KTable` may negate the performance benefits in some scenarios.
+For this reason, a `GlobalKTable` is recommended.
+
+WARNING::Performing a join outsode of KS relinquishes ordering efforts KS applies to populating each side of the join.
+Be careful using this technique if your operation is sensitive to the order in which data is populated in the state store vs arriving on the event stream.
+
 .Preprocess in Kafka Streams, then process concurrently
 [source,java,indent=0]
 ----
