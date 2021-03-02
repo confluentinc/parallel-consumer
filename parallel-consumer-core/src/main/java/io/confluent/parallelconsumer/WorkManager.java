@@ -433,19 +433,21 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     continue;
                 }
 
-                boolean hasNotAlreadyPreviouslySucceeded = !workContainer.isUserFunctionSucceeded();
+                boolean hasNotSucceededAlready = !workContainer.isUserFunctionSucceeded();
                 boolean delayHasPassed = workContainer.hasDelayPassed(clock);
-                if (delayHasPassed && workContainer.isNotInFlight() && hasNotAlreadyPreviouslySucceeded) {
+                if (delayHasPassed && workContainer.isNotInFlight() && hasNotSucceededAlready) {
                     log.trace("Taking {} as work", workContainer);
                     workContainer.queueingForExecution();
                     shardWork.add(workContainer);
                 } else {
                     Duration timeInFlight = workContainer.getTimeInFlight();
-                    String msg = "Work ({}) has delay passed? ({}) or is NOT in flight? ({}, time spent in execution queue: {}), hasNotAlreadyPreviouslySucceeded? {} can't take...";
-                    if (toSeconds(timeInFlight) > 10) {
-                        log.warn(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), timeInFlight, hasNotAlreadyPreviouslySucceeded);
+                    String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
+                    int secondsThresholdForTimeSpentInQueueWarning = 10; // too aggressive for some situations? make configurable?
+                    if (toSeconds(timeInFlight) > secondsThresholdForTimeSpentInQueueWarning) {
+                        log.warn("Work has spent over " + secondsThresholdForTimeSpentInQueueWarning + " in queue! "
+                                + msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
                     } else {
-                        log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), timeInFlight, hasNotAlreadyPreviouslySucceeded);
+                        log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
                     }
                 }
 
