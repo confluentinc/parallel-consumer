@@ -10,6 +10,7 @@ import org.apache.kafka.streams.state.KeyValueStore;
 
 public class ParallelJoin {
 
+    // tag::example[]
     /**
      * Needs KeyValueStore injected.
      */
@@ -18,17 +19,18 @@ public class ParallelJoin {
             UserId userId = record.key();
             UserEvent userEvent = record.value();
 
-            UserProfile userDeviceTokenRegistry = store.get(userId);
-            if (userDeviceTokenRegistry != null) {
+            UserProfile userProfile = store.get(userId);
+            if (userProfile != null) { // <1>
                 // join hit
                 // create payload with even details and call third party system, or produce a result message
                 userEvent.getEventPayload();
                 //....
-            } else {
+            } else { // <2>
                 // join miss
                 // drop - not registered devices for that user
             }
         });
     }
+    // end::example[]
 
 }
