@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.WallClock;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -61,6 +62,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
      */
     private Duration retryDelay;
 
+    /**
+     * @see ParallelConsumerOptions#getDefaultMessageRetryDelay()
+     */
     @Setter
     static Duration defaultRetryDelay = Duration.ofSeconds(1);
 
@@ -123,10 +127,15 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public Duration getRetryDelay() {
-        if (retryDelay == null)
-            return defaultRetryDelay;
-        else
-            return retryDelay;
+        var retryDelayProvider = ParallelConsumerOptions.retryDelayProviderStatic;
+        if (retryDelayProvider != null) {
+            return retryDelayProvider.apply(this);
+        } else {
+            if (retryDelay == null)
+                return defaultRetryDelay;
+            else
+                return retryDelay;
+        }
     }
 
     @Override
