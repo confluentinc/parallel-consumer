@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -143,6 +145,16 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
 
+    /**
+     * When present, use this to generate the retry delay, instad of {@link #getDefaultMessageRetryDelay()}.
+     * <p>
+     * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
+     */
+    @Builder.Default
+    private final Function<WorkContainer, Duration> retryDelayProvider;
+
+    public static Function<WorkContainer, Duration> retryDelayProviderStatic;
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
@@ -153,6 +165,7 @@ public class ParallelConsumerOptions<K, V> {
 
         //
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
+        ParallelConsumerOptions.retryDelayProviderStatic = getRetryDelayProvider();
     }
 
     public boolean isUsingTransactionalProducer() {
