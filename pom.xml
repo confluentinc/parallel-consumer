@@ -98,6 +98,7 @@
         <!-- core -->
         <slf4j.version>1.7.30</slf4j.version>
         <kafka.version>2.5.0</kafka.version>
+        <version.unij>0.1.3</version.unij>
 
         <!-- tests -->
         <junit.version>5.7.0</junit.version>
@@ -237,12 +238,12 @@
         <dependency>
             <groupId>pl.tlinkowski.unij</groupId>
             <artifactId>pl.tlinkowski.unij.api</artifactId>
-            <version>0.1.1</version>
+            <version>${version.unij}</version>
         </dependency>
         <dependency>
             <groupId>pl.tlinkowski.unij</groupId>
             <artifactId>pl.tlinkowski.unij.bundle.jdk8</artifactId>
-            <version>0.1.1</version>
+            <version>${version.unij}</version>
             <scope>compile</scope>
         </dependency>
 
