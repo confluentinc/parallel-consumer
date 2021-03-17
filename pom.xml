@@ -102,7 +102,7 @@
         <!-- tests -->
         <junit.version>5.7.0</junit.version>
         <junit.platform.version>1.7.0</junit.platform.version>
-        <testcontainers.version>1.15.0-rc2</testcontainers.version>
+        <testcontainers.version>1.15.2</testcontainers.version>
     </properties>
 
     <profiles>
