@@ -441,10 +441,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     shardWork.add(workContainer);
                 } else {
                     Duration timeInFlight = workContainer.getTimeInFlight();
-                    String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. hasNotSucceededAlready= {}. Time spent in execution queue: {}.";
-                    int thresholdForTimeSpentInQueueWarning = 10; // too aggressive for some situations? make configurable?
-                    if (toSeconds(timeInFlight) > thresholdForTimeSpentInQueueWarning) {
-                        log.warn("Work has spent over " + thresholdForTimeSpentInQueueWarning + " in queue! "
+                    String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
+                    int secondsThresholdForTimeSpentInQueueWarning = 10; // too aggressive for some situations? make configurable?
+                    if (toSeconds(timeInFlight) > secondsThresholdForTimeSpentInQueueWarning) {
+                        log.warn("Work has spent over " + secondsThresholdForTimeSpentInQueueWarning + " in queue! "
                                 + msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
                     } else {
                         log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
