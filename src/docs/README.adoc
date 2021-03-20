@@ -550,9 +550,9 @@ The simplest of the three are the two Consumer commits modes.
 They are of course, `synchronous` and `asynchronous` mode.
 The `transactional` mode is explained in the next section.
 
-`Asynchronous mode is faster, as it doesn't block the control loop.
+`Asynchronous` mode is faster, as it doesn't block the control loop.
 
-`Synchronous will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `Options` class.
+`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `Options` class.
 
 If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.
