@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.SneakyThrows;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.KafkaTestUtils.trimAllGeneisOffset;
+import static io.confluent.csid.utils.LatchTestUtils.*;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
@@ -69,9 +71,9 @@ public class ParallelEoSStreamProcessorTestBase {
 
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
-    protected static int defaultTimeoutSeconds = 5;
+    public static int defaultTimeoutSeconds = 5;
 
-    protected static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
+    public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
     protected static Duration effectivelyInfiniteTimeout = Duration.ofMinutes(20);
 
@@ -366,26 +368,6 @@ public class ParallelEoSStreamProcessorTestBase {
         return commitMode.equals(PERIODIC_CONSUMER_ASYNCHRONOUS);
     }
 
-    protected void awaitLatch(List<CountDownLatch> latches, int latchIndex) {
-        log.trace("Waiting on latch {}", latchIndex);
-        awaitLatch(latches.get(latchIndex));
-    }
-
-    @SneakyThrows
-    protected void awaitLatch(CountDownLatch latch) {
-        awaitLatch(latch, defaultTimeoutSeconds);
-    }
-
-    @SneakyThrows
-    protected void awaitLatch(final CountDownLatch latch, final int seconds) {
-        log.trace("Waiting on latch with timeout {}", defaultTimeout);
-        boolean latchReachedZero = latch.await(seconds, SECONDS);
-        if (latchReachedZero) {
-            log.trace("Latch released");
-        } else {
-            throw new AssertionError("Latch await timeout - " + latch.getCount() + " remaining");
-        }
-    }
 
     protected void releaseAndWait(List<CountDownLatch> locks, List<Integer> lockIndexes) {
         for (Integer i : lockIndexes) {
@@ -395,23 +377,10 @@ public class ParallelEoSStreamProcessorTestBase {
         waitForSomeLoopCycles(1);
     }
 
-    protected void release(List<CountDownLatch> locks, int lockIndex) {
-        log.debug("Releasing {}...", lockIndex);
-        locks.get(lockIndex).countDown();
-    }
-
     protected void releaseAndWait(List<CountDownLatch> locks, int lockIndex) {
         log.debug("Releasing {}...", lockIndex);
         locks.get(lockIndex).countDown();
         waitForSomeLoopCycles(1);
-    }
-
-    protected List<CountDownLatch> constructLatches(int numberOfLatches) {
-        var result = new ArrayList<CountDownLatch>(numberOfLatches);
-        for (var ignore : range(numberOfLatches)) {
-            result.add(new CountDownLatch(1));
-        }
-        return result;
     }
 
     protected void pauseControlToAwaitForLatch(CountDownLatch latch) {

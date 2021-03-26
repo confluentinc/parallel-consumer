@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResul
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.assertj.core.api.Assertions;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +17,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -98,7 +98,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         var collect = myResultStream.collect(Collectors.toList());
 
-        Assertions.assertThat(collect).hasSize(1);
+        assertThat(collect).hasSize(1);
     }
 
 
@@ -123,7 +123,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         verify(myRecordProcessingAction, times(2)).apply(any());
 
-        Assertions.assertThat(myResultStream).hasSize(2);
+        assertThat(myResultStream).hasSize(2);
     }
 
 }

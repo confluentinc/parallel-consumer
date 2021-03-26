@@ -8,10 +8,12 @@ import io.confluent.parallelconsumer.*;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.client.WebClientOptions;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -61,37 +64,68 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public VertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                           Producer<K, V> producer,
-                                           ParallelConsumerOptions options) {
+    public VertxParallelEoSStreamProcessor(ParallelConsumerOptions options) {
         this(Vertx.vertx(), null, options);
     }
 
     /**
      * Provide your own instances of the Vertx engine and it's webclient.
      * <p>
-     * Use this to share a Vertx runtime with different systems for efficiency.
+     * Use this to share a Vertx runtime with different systems for efficiency, or to customise configuration.
+     * <p>
+     * By default Vert.x's {@link WebClient} uses quite small connection limits to servers. PC overrides this to {@link
+     * ParallelConsumerOptions#getMaxConcurrency()}. You can configure these yourself by providing a configured Vert.x
+     * {@link WebClient} with {@link WebClientOptions} set to how you please. Consider also looking at other options
+     * below.
+     *
+     * @see WebClientOptions#setMaxPoolSize
+     * @see WebClientOptions#setMaxWaitQueueSize(int)
+     * @see WebClientOptions#setPipelining(boolean)
+     * @see WebClientOptions#setPipeliningLimit(int)
+     * @see WebClientOptions#setHttp2MaxPoolSize(int)
+     * @see WebClientOptions#setHttp2MultiplexingLimit(int)
      */
     public VertxParallelEoSStreamProcessor(Vertx vertx,
                                            WebClient webClient,
                                            ParallelConsumerOptions options) {
         super(options);
+
+        int cores = Runtime.getRuntime().availableProcessors();
+        VertxOptions vertxOptions = new VertxOptions().setWorkerPoolSize(cores);
+
+        int maxConcurrency = options.getMaxConcurrency();
+        WebClientOptions webClientOptions = new WebClientOptions()
+                .setMaxPoolSize(maxConcurrency)
+                .setHttp2MaxPoolSize(maxConcurrency);
+
         if (vertx == null)
-            vertx = Vertx.vertx();
+            vertx = Vertx.vertx(vertxOptions);
         this.vertx = vertx;
         if (webClient == null)
-            webClient = WebClient.create(vertx);
+            webClient = WebClient.create(vertx, webClientOptions);
         this.webClient = webClient;
+    }
+
+    /**
+     * The vert.x module doesn't use any thread pool for dispatching work, as the work is all done by the vert.x engine.
+     * This thread is only used to dispatch the work to vert.x.
+     * <p>
+     * TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to
+     *  vert.x.
+     */
+    @Override
+    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+        return super.setupWorkerPool(1);
     }
 
     @Override
     public void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
-        vertxHttpRequest((WebClient wc, ConsumerRecord<K, V> rec) -> {
+        vertxHttpRequest((WebClient webClient, ConsumerRecord<K, V> rec) -> {
             RequestInfo reqInf = carefullyRun(requestInfoFunction, rec);
 
-            HttpRequest<Buffer> req = wc.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
+            HttpRequest<Buffer> req = webClient.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
             Map<String, String> params = reqInf.getParams();
             for (var entry : params.entrySet()) {
                 req = req.addQueryParam(entry.getKey(), entry.getValue());
@@ -103,17 +137,17 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     @Override
     public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
-                                 Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) { // TODO remove, redundant over onSend?
+                                 Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
 
         vertxHttpWebClient((webClient, record) -> {
             HttpRequest<Buffer> call = carefullyRun(webClientRequestFunction, webClient, record);
 
             Future<HttpResponse<Buffer>> send = call.send(); // dispatches the work to vertx
 
-            // hook in the users' call back for when the web request get's sent
-            send.onComplete(ar -> {
-                onWebRequestComplete.accept(ar);
-            });
+            // hook in the users' call back for when the web request gets a response
+            send.onComplete(ar ->
+                    onWebRequestComplete.accept(ar)
+            );
 
             return send;
         }, onSend);
@@ -121,38 +155,38 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
 
     @Override
     public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
-                                   Consumer<Future<HttpResponse<Buffer>>> onSend) {
+                                   Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
         Function<ConsumerRecord<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (record) -> {
 
-            Future<HttpResponse<Buffer>> send = carefullyRun(webClientRequestFunction, webClient, record);
+            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, record);
 
-            // send callback
-            onSend.accept(send);
+            // execute user's onSend callback
+            onWebRequestSentCallback.accept(futureWebResponse);
 
             // attach internal handler
             WorkContainer<K, V> wc = wm.getWorkContainerForRecord(record);
             wc.setWorkType(VERTX_TYPE);
 
-            send.onSuccess(h -> {
+            futureWebResponse.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
                 log.trace("Response body: {}", h.bodyAsString());
                 wc.onUserFunctionSuccess();
                 addToMailbox(wc);
             });
-            send.onFailure(h -> {
+            futureWebResponse.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
                 wc.onUserFunctionFailure();
                 addToMailbox(wc);
             });
 
             // add plugin callback hook
-            send.onComplete(ar -> {
+            futureWebResponse.onComplete(ar -> {
                 log.trace("Running plugin hook");
                 this.onVertxCompleteHook.ifPresent(Runnable::run);
             });
 
-            return UniLists.of(send);
+            return UniLists.of(futureWebResponse);
         };
 
         Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
