@@ -7,10 +7,10 @@ package io.confluent.parallelconsumer.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -41,6 +41,7 @@ import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,6 +86,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         WebClient wc = WebClient.create(vertx);
         var build = parallelConsumerOptions.toBuilder()
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER) // force tx
+                .maxConcurrency(10)
                 .build();
         vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(vertx, wc, build);
 

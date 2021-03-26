@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
+import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
