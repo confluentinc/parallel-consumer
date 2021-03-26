@@ -21,8 +21,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * An extension to {@link ParallelEoSStreamProcessor} which uses the <a href="https://vertx.io">Vert.x</a> library and it's non
- * blocking clients to process messages.
+ * An extension to {@link ParallelEoSStreamProcessor} which uses the <a href="https://vertx.io">Vert.x</a> library and
+ * it's non blocking clients to process messages.
  *
  * @param <K>
  * @param <V>
@@ -31,11 +31,8 @@ import java.util.function.Function;
  */
 public interface VertxParallelStreamProcessor<K, V> extends ParallelStreamProcessor<K, V> {
 
-    static <KK, VV> VertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(
-            org.apache.kafka.clients.consumer.Consumer<KK, VV> consumer,
-            org.apache.kafka.clients.producer.Producer<KK, VV> producer,
-            ParallelConsumerOptions options) {
-        return new VertxParallelEoSStreamProcessor<>(consumer, producer, options);
+    static <KK, VV> VertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions options) {
+        return new VertxParallelEoSStreamProcessor<>(options);
     }
 
     /**
@@ -46,6 +43,8 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelStreamProces
      *
      * @param requestInfoFunction  a function taking a {@link ConsumerRecord} and returns a {@link
      *                             VertxParallelEoSStreamProcessor.RequestInfo} object
+     * @param onSend               function executed after the request has been sent
+     * @param onWebRequestComplete function executed when response received for request
      */
     void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction,
                           Consumer<Future<HttpResponse<Buffer>>> onSend,

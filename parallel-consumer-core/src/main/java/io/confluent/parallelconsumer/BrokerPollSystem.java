@@ -94,7 +94,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * @return true if closed cleanly
      */
     private boolean controlLoop() {
-        Thread.currentThread().setName("broker-poll");
+        Thread.currentThread().setName("pc-broker-poll");
         pc.myId.ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
         committer.ifPresent(x -> x.claim());

@@ -58,6 +58,27 @@
             <version>2.27.2</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>me.tongfei</groupId>
+            <artifactId>progressbar</artifactId>
+            <version>0.9.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

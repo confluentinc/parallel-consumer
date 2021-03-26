@@ -203,8 +203,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         checkNotSubscribed(consumer);
         checkAutoCommitIsDisabled(consumer);
 
-        workerPool = new ThreadPoolExecutor(newOptions.getMaxConcurrency(), newOptions.getMaxConcurrency(),
-                0L, MILLISECONDS, new LinkedBlockingQueue<>());
+        workerPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
         this.wm = new WorkManager<>(newOptions, consumer, dynamicExtraLoadFactor);
 
@@ -222,6 +221,20 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+    }
+
+    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+        ThreadFactory defaultFactory = Executors.defaultThreadFactory();
+        ThreadFactory namingThreadFactory = r -> {
+            Thread thread = defaultFactory.newThread(r);
+            String name = thread.getName();
+            thread.setName("pc-"+name);
+            return thread;
+        };
+        ThreadPoolExecutor.AbortPolicy rejectionHandler = new ThreadPoolExecutor.AbortPolicy();
+        LinkedBlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
+        return new ThreadPoolExecutor(poolSize, poolSize, 0L, MILLISECONDS, workQueue,
+                namingThreadFactory, rejectionHandler);
     }
 
     private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
@@ -599,7 +612,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         Callable<Boolean> controlTask = () -> {
             Thread controlThread = Thread.currentThread();
             addInstanceMDC();
-            controlThread.setName("control");
+            controlThread.setName("pc-control");
             log.trace("Control task scheduled");
             this.blockableControlThread = controlThread;
             while (state != closed) {
@@ -771,6 +784,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         brokerPollSubsystem.drain();
         if (!isRecordsAwaitingProcessing()) {
             transitionToClosing();
+        } else {
+            log.debug("Records still waiting processing, won't transition to closing.");
         }
     }
 
