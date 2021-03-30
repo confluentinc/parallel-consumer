@@ -4,14 +4,17 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import lombok.Builder;
-import lombok.Getter;
-import lombok.ToString;
+import lombok.*;
+import lombok.experimental.FieldNameConstants;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Properties;
+import java.util.function.Supplier;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -30,14 +33,40 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Required parameter for all use.
      */
-    private final Consumer<K, V> consumer;
+    @Setter(AccessLevel.PACKAGE)
+    private Consumer<K, V> consumer = null;
+
+    /**
+     * Properties to use to construct a Consumer instance.
+     */
+    private final Properties consumerConfig;
+
+    /**
+     * Factor to supply a Consumer client.
+     */
+    private final Supplier<Consumer<K, V>> consumerSupplier = () -> new KafkaConsumer<>(consumerConfig);
 
     /**
      * Supplying a producer is only needed if using the produce flows.
      *
      * @see ParallelStreamProcessor
      */
-    private final Producer<K, V> producer;
+    @Setter(AccessLevel.PACKAGE)
+    private Producer<K, V> producer = null;
+
+    /**
+     * Properties to use to construct a Producer instance.
+     */
+    private final Properties producerConfig;
+
+    /**
+     * Factor to supply a Producer client.
+     */
+    private final Supplier<Producer<K, V>> producerSupplier = () -> new KafkaProducer<>(producerConfig);
+
+    public void validate() {
+        new ConfigurationValidator<>(this).validate();
+    }
 
     /**
      * The ordering guarantee to use.
@@ -131,23 +160,11 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
 
-    public void validate() {
-        Objects.requireNonNull(consumer, "A consumer must be supplied");
-
-        if (isUsingTransactionalProducer() && producer == null) {
-            throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
-                    commitMode));
-        }
-
-        //
-        WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
-    }
-
     protected boolean isUsingTransactionalProducer() {
         return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }
 
     public boolean isProducerSupplied() {
-        return getProducer() != null;
+        return getProducerSupplier() != null || getProducerConfig() != null;
     }
 }
