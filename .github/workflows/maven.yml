@@ -33,7 +33,7 @@ jobs:
             name: "Newest AK version 2.7.0+ expected to fail"
 
     continue-on-error: ${{ matrix.experimental }}
-    name: "AK: ${{ matrix.ak }} JDK: ${{ matrix.jdk }}"
+    name: "mvn ${{ matrix.mvnPhase }} AK: ${{ matrix.ak }} JDK: ${{ matrix.jdk }}"
     runs-on: ubuntu-latest
 
     steps:
