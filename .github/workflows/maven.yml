@@ -2,7 +2,7 @@
 # For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
 
 # Tests disabled due to flakiness with under resourced github test machines. Confluent Jira works fine. Will fix later.
-name: CI compile only - Java 8 (IT disabled atm, unit tests only)
+name: Unit tests only
 
 on:
   push:
@@ -12,7 +12,27 @@ on:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Why not? because we can.
+        # 2.0.1, 2.1.1, 2.2.2, 2.3.1, 2.4.1 don't work - needs zstd and some kafka client libs.
+        # Doesn't mean it couldn't be modified slightly to work...
+        ak: [2.5.1, 2.6.1]
+        jdk: ['-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64', '']
+        experimental: [false]
+        name: ["Stable AK version"]
+        include:
+# AK 2.4 not supported
+#           - ak: "'[2.4.1,2.5)'" # currently failing
+#             experimental: true
+#             name: "Oldest AK breaking version 2.4.1+ (below 2.5.0) expected to fail"
+          - ak: "'[2.7.0,4)'" # currently failing
+            experimental: true
+            name: "Newest AK version 2.7.0+ expected to fail"
 
+    continue-on-error: ${{ matrix.experimental }}
+    name: "${{ matrix.name }} (AK: ${{ matrix.ak }}) experimental? ${{ matrix.experimental }} JDK: ${{ matrix.jdk }}"
     runs-on: ubuntu-latest
 
     steps:
@@ -71,8 +91,9 @@ jobs:
         key: ${{ runner.os }}-m2
         restore-keys: ${{ runner.os }}-m2
 
-    - name: Test with Maven on Java 8
-      run: mvn -B package -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64
+    - name: Test with Maven
+      #run: mvn -B package -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64 -Dkafka.version=${{ matrix.ak }}
+      run: mvn -B package ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }}
 # - name: Test with Maven on Java 9
 #      run: mvn -B package -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
 #    - name: Test with Maven on Java
