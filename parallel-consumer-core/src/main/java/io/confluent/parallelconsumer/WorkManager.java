@@ -148,6 +148,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private Map<TopicPartition, Integer> partitionsAssignmentEpochs = new HashMap<>();
 
+    // too aggressive for some situations? make configurable?
+    private final Duration thresholdForTimeSpentInQueueWarning = Duration.ofSeconds(10);
+
+    private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
+
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
@@ -386,6 +391,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
         var staleWorkToRemove = new ArrayList<WorkContainer<K, V>>();
 
+        var slowWorkCount = 0;
+
         //
         for (var shard : it) {
             log.trace("Looking for work on shard: {}", shard.getKey());
@@ -433,6 +440,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     continue;
                 }
 
+                // check if work can be taken
                 boolean hasNotSucceededAlready = !workContainer.isUserFunctionSucceeded();
                 boolean delayHasPassed = workContainer.hasDelayPassed(clock);
                 if (delayHasPassed && workContainer.isNotInFlight() && hasNotSucceededAlready) {
@@ -442,9 +450,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 } else {
                     Duration timeInFlight = workContainer.getTimeInFlight();
                     String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
-                    int secondsThresholdForTimeSpentInQueueWarning = 10; // too aggressive for some situations? make configurable?
-                    if (toSeconds(timeInFlight) > secondsThresholdForTimeSpentInQueueWarning) {
-                        log.warn("Work has spent over " + secondsThresholdForTimeSpentInQueueWarning + " in queue! "
+                    if (toSeconds(timeInFlight) > toSeconds(thresholdForTimeSpentInQueueWarning)) {
+                        slowWorkCount++;
+                        log.trace("Work has spent over " + thresholdForTimeSpentInQueueWarning + " in queue! "
                                 + msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
                     } else {
                         log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
@@ -463,6 +471,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 }
             }
             work.addAll(shardWork);
+        }
+
+        if (slowWorkCount > 0) {
+            final int finalSlowWorkCount = slowWorkCount;
+            slowWarningRateLimit.performIfNotLimited(() -> log.warn("Warning: {} records in the queue have been " +
+                            "waiting longer than {}.",
+                    finalSlowWorkCount, toSeconds(thresholdForTimeSpentInQueueWarning)));
+
         }
 
         // remove found stale work outside of loop
