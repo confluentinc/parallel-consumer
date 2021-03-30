@@ -5,11 +5,18 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.WallClock;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
-import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
@@ -26,13 +33,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.*;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.*;
 import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
 import static java.time.Duration.ofMillis;
-import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -200,6 +206,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         this.consumer = options.getConsumer();
 
+        checkGroupIdConfigured(consumer);
         checkNotSubscribed(consumer);
         checkAutoCommitIsDisabled(consumer);
 
@@ -223,12 +230,21 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         }
     }
 
+    private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        try {
+            consumer.groupMetadata();
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Error validating Consumer configuration - no group metadata - missing a " +
+                    "configured GroupId on your Consumer?", e);
+        }
+    }
+
     protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
         ThreadFactory defaultFactory = Executors.defaultThreadFactory();
         ThreadFactory namingThreadFactory = r -> {
             Thread thread = defaultFactory.newThread(r);
             String name = thread.getName();
-            thread.setName("pc-"+name);
+            thread.setName("pc-" + name);
             return thread;
         };
         ThreadPoolExecutor.AbortPolicy rejectionHandler = new ThreadPoolExecutor.AbortPolicy();
@@ -333,12 +349,15 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             coordinatorField.setAccessible(true);
             ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
 
+            if (coordinator == null)
+                throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
+
             Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
             autoCommitEnabledField.setAccessible(true);
             Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
 
             if (isAutoCommitEnabled)
-                throw new IllegalStateException("Consumer auto commit must be disabled, as commits are handled by the library.");
+                throw new IllegalArgumentException("Consumer auto commit must be disabled, as commits are handled by the library.");
         } else {
             // noop - probably MockConsumer being used in testing - which doesn't do auto commits
         }
