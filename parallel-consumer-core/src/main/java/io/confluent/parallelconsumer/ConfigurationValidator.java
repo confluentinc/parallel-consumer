@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer;
 
+import io.confluent.csid.utils.BackportUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.function.Supplier;
 
+import static io.confluent.csid.utils.BackportUtils.requireNonNullElse;
 import static io.confluent.csid.utils.StringUtils.msg;
 
 @Slf4j
@@ -54,7 +56,7 @@ public class ConfigurationValidator<K, V> {
     }
 
     private void instantiateClients() {
-        Supplier<Consumer<K, V>> supplier = Objects.requireNonNullElse(options.getConsumerSupplier(), options.getDefaultConsumerSupplier());
+        Supplier<Consumer<K, V>> supplier = requireNonNullElse(options.getConsumerSupplier(), options.getDefaultConsumerSupplier());
         Consumer<K, V> consumer = supplier.get();
         options.setConsumer(consumer);
 
@@ -68,7 +70,7 @@ public class ConfigurationValidator<K, V> {
         Optional<String> s = consumerGroupMetadata.groupInstanceId();
 
         if (options.isProducerSupplied()) {
-            Supplier<Producer<K, V>> supplier1 = Objects.requireNonNullElse(options.getProducerSupplier(), options.getDefaultProducerSupplier());
+            Supplier<Producer<K, V>> supplier1 = requireNonNullElse(options.getProducerSupplier(), options.getDefaultProducerSupplier());
             Producer<K, V> producer = supplier1.get();
             options.setProducer(producer);
         }

@@ -14,6 +14,8 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static java.util.Objects.requireNonNull;
+
 public class BackportUtils {
 
     /**
@@ -67,6 +69,10 @@ public class BackportUtils {
             pos += cc;
         }
         return output;
+    }
+
+    public static <T> T requireNonNullElse(T obj, T defaultObj) {
+        return (obj != null) ? obj : requireNonNull(defaultObj, "defaultObj");
     }
 
 }
