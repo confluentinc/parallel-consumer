@@ -2,7 +2,7 @@
 # For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
 
 # Tests disabled due to flakiness with under resourced github test machines. Confluent Jira works fine. Will fix later.
-name: Unit tests only
+name: CI
 
 on:
   push:
