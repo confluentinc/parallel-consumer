@@ -753,6 +753,9 @@ See what profiles are active::
 See what plugins or dependencies are available to be updated::
 `mvn versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates`
 
+Run a single unit test::
+`mvn -Dtest=TestCircle test`
+
 Run a specific integration test method in a submodule project, skipping unit tests::
 `mvn -Dit.test=TransactionAndCommitModeTest#testLowMaxPoll -DskipUTs=true verify  -DfailIfNoTests=false --projects parallel-consumer-core`
 
