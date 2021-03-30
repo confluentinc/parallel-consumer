@@ -201,7 +201,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         this.consumer = options.getConsumer();
 
         checkNotSubscribed(consumer);
-        checkAutoCommitIsDisabled(consumer);
 
         workerPool = setupWorkerPool(newOptions.getMaxConcurrency());
 

@@ -39,7 +39,7 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Properties to use to construct a Consumer instance.
      */
-    private final Properties consumerConfig;
+    private final Properties consumerConfig = null;
 
     /**
      * Factor to supply a Consumer client.
@@ -57,7 +57,7 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Properties to use to construct a Producer instance.
      */
-    private final Properties producerConfig;
+    private final Properties producerConfig = null;
 
     /**
      * Factor to supply a Producer client.

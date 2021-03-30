@@ -6,6 +6,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
+import org.apache.kafka.clients.producer.Producer;
 
 import java.lang.reflect.Field;
 import java.util.Properties;
@@ -47,8 +48,8 @@ public class ConfigurationValidator<K, V> {
     }
 
     private void instantiateClients() {
-        options.setConsumer(options.getConsumerSupplier().get());
-        options.setProducer(options.getProducerSupplier().get());
+        options.setConsumer((Consumer) options.getConsumerSupplier().get());
+        options.setProducer((Producer) options.getProducerSupplier().get());
     }
 
     private void checkClientSetup() {
