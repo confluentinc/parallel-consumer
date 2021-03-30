@@ -1,4 +1,4 @@
-package io.confluent.csid;
+package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
@@ -55,6 +55,9 @@ class ConfigValidatorTest {
 
     @Test
     void autoCommitConfigTest() {
+        ConfigurationValidator<Object, Object> objectObjectConfigurationValidator = new ConfigurationValidator<>(ParallelConsumerOptions.builder().build());
+        objectObjectConfigurationValidator.validate();
         throw new RuntimeException();
+
     }
 }
