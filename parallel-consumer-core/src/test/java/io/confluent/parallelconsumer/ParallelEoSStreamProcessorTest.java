@@ -8,11 +8,10 @@ import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.Deserializer;
+import org.apache.kafka.common.serialization.Serdes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -23,9 +22,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
@@ -718,7 +715,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("Producer", "Transaction");
+                    .hasMessageContainingAll("Producer", "Transaction");
         } else {
             parallelConsumer = initAsyncConsumer(optionsWithClients);
             attachLoopCounter(parallelConsumer);
@@ -742,7 +739,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     }
 
     @Test
-    void produceMessageFlowRequiresProducer() {
+    void optionsProduceMessageFlowRequiresProducer() {
         setupClients();
 
         var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
@@ -752,8 +749,51 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Producer", "Transaction");
+                .hasMessageContainingAll("Producer", "Transaction");
     }
+
+
+    @Test
+    void optionsGroupIdRequiredAndAutoCommitDisabled() {
+        Properties properties = new Properties();
+        properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        Deserializer<String> deserializer = Serdes.String().deserializer();
+        var realConsumer = new KafkaConsumer<>(properties, deserializer, deserializer);
+
+        var optionsBuilder = ParallelConsumerOptions.<String, String>builder()
+                .consumer(realConsumer)
+                .commitMode(PERIODIC_CONSUMER_ASYNCHRONOUS);
+        var optionsWithClients = optionsBuilder
+                .build();
+
+        // fail
+        assertThatThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsWithClients))
+                .as("Should error on missing group id")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContainingAll("Consumer", "GroupId");
+
+        // add missing group id, now auto commit should fail
+        properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "dummy-group");
+        optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
+        assertThat(catchThrowable(() -> parallelConsumer = initAsyncConsumer(optionsBuilder.build())))
+                .as("Should error on auto commit enabled by default")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContainingAll("auto", "commit", "disabled");
+
+        // fail auto commit disabled
+        properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+        optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
+        assertThat(catchThrowable(() -> parallelConsumer = initAsyncConsumer(optionsBuilder.build())))
+                .as("Should error on auto commit enabled")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContainingAll("auto", "commit", "disabled");
+
+        // set missing auto commit
+        properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
+        assertThatNoException().isThrownBy(() -> parallelConsumer = initAsyncConsumer(optionsBuilder.build()));
+    }
+
 
     @Test
     void cantUseProduceFlowWithWrongOptions() throws InterruptedException {
@@ -776,7 +816,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertThatThrownBy(() -> parallel.pollAndProduce((record) ->
                 new ProducerRecord<>(INPUT_TOPIC, "hi there")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Producer", "Transaction");
+                .hasMessageContainingAll("Producer", "options");
     }
 
     @ParameterizedTest()
