@@ -39,12 +39,14 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Properties to use to construct a Consumer instance.
      */
-    private final Properties consumerConfig = null;
+    @Builder.Default
+    private Properties consumerConfig = null;
 
     /**
      * Factor to supply a Consumer client.
      */
-    private final Supplier<Consumer<K, V>> consumerSupplier = () -> new KafkaConsumer<>(consumerConfig);
+    private final Supplier<Consumer<K, V>> consumerSupplier;
+    private final Supplier<Consumer<K, V>> defaultConsumerSupplier = () -> new KafkaConsumer<>(consumerConfig);
 
     /**
      * Supplying a producer is only needed if using the produce flows.
@@ -57,12 +59,14 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * Properties to use to construct a Producer instance.
      */
-    private final Properties producerConfig = null;
+    @Builder.Default
+    private Properties producerConfig = null;
 
     /**
      * Factor to supply a Producer client.
      */
-    private final Supplier<Producer<K, V>> producerSupplier = () -> new KafkaProducer<>(producerConfig);
+    private final Supplier<Producer<K, V>> producerSupplier;
+    private final Supplier<Producer<K, V>> defaultProducerSupplier = () -> new KafkaProducer<>(producerConfig);
 
     public void validate() {
         new ConfigurationValidator<>(this).validate();

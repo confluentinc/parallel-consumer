@@ -2,17 +2,23 @@ package io.confluent.parallelconsumer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.lang.reflect.Field;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.function.Supplier;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 
+@Slf4j
 @RequiredArgsConstructor
 public class ConfigurationValidator<K, V> {
 
@@ -48,12 +54,32 @@ public class ConfigurationValidator<K, V> {
     }
 
     private void instantiateClients() {
-        options.setConsumer((Consumer) options.getConsumerSupplier().get());
-        options.setProducer((Producer) options.getProducerSupplier().get());
+        Supplier<Consumer<K, V>> supplier = Objects.requireNonNullElse(options.getConsumerSupplier(), options.getDefaultConsumerSupplier());
+        Consumer<K, V> consumer = supplier.get();
+        options.setConsumer(consumer);
+
+        ConsumerGroupMetadata consumerGroupMetadata = null;
+        try {
+            consumerGroupMetadata = consumer.groupMetadata();
+        } catch (Exception e) {
+            throw new IllegalStateException("Error validating Consumer for PC", e);
+        }
+        String s1 = consumerGroupMetadata.groupId();
+        Optional<String> s = consumerGroupMetadata.groupInstanceId();
+
+        if (options.isProducerSupplied()) {
+            Supplier<Producer<K, V>> supplier1 = Objects.requireNonNullElse(options.getProducerSupplier(), options.getDefaultProducerSupplier());
+            Producer<K, V> producer = supplier1.get();
+            options.setProducer(producer);
+        }
     }
 
     private void checkClientSetup() {
-        if (options.getConsumerConfig() != null ^ options.getConsumerSupplier() != null) {
+        if (options.getConsumerConfig() == null && options.getConsumerSupplier() == null) {
+            throw new IllegalArgumentException("Must either configure a consume config, or a consumer supplier.");
+        }
+
+        if (!(options.getConsumerConfig() == null ^ options.getConsumerSupplier() == null)) {
             throw new IllegalArgumentException("Either supply a Consumer config set to be used, or a Consumer supplier function, but not both.");
         }
 
@@ -63,9 +89,9 @@ public class ConfigurationValidator<K, V> {
     }
 
     private void checkAutoCommitIsDisabled() {
-        if (options.getConsumerConfig() != null)
-            checkAutoCommitIsDisabled(options.getConsumerConfig());
-        else
+//        if (options.getConsumerConfig() != null)
+//            checkAutoCommitIsDisabled(options.getConsumerConfig());
+//        else
             checkAutoCommitIsDisabled(options.getConsumer());
     }
 
