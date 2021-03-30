@@ -14,6 +14,8 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.serialization.Serializer;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -81,7 +83,8 @@ public class CoreAppTest {
 
         @Override
         Producer<String, String> getKafkaProducer() {
-            return new MockProducer<>(true, null, null);
+            var stringSerializer = Serdes.String().serializer();
+            return new MockProducer<>(true, stringSerializer, stringSerializer);
         }
 
         @Override
