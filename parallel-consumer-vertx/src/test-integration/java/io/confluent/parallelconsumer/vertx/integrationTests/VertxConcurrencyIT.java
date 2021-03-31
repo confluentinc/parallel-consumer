@@ -6,6 +6,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.RequestListener;
 import com.github.tomakehurst.wiremock.http.Response;
+import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.csid.utils.TrimListRepresentation;
@@ -23,14 +24,13 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
-import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
+import org.eclipse.jetty.util.ConcurrentArrayQueue;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniMaps;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
@@ -67,7 +67,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 
     static CountDownLatch responseLock = new CountDownLatch(1);
 
-    static List<Request> parallelRequests = new ArrayList<>();
+    static Queue<Request> parallelRequests = new ConcurrentArrayQueue<>();
 
     VertxConcurrencyIT() {
         bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
@@ -85,14 +85,14 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
         stubServer.stubFor(mappingBuilder);
 
         stubServer.addMockServiceRequestListener(new RequestListener() {
-            @SneakyThrows
+
             @Override
             public void requestReceived(final Request request, final Response response) {
-                log.info("req: {}", request);
+                log.debug("req: {}", request);
                 parallelRequests.add(request);
                 bar.stepBy(1);
-                awaitLatch(responseLock);
-                log.info("unlocked");
+                awaitLatch(responseLock, 30); // latch timeout should be longer than awaitility's
+                log.trace("unlocked");
             }
         });
 
@@ -172,39 +172,51 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
                     processedCount.incrementAndGet();
                 }, onWebResponseAsyncResult -> {
                     httpResponceReceivedCount.incrementAndGet();
-                    log.info("Response received complete {}", onWebResponseAsyncResult);
+                    log.trace("Response received complete {}", onWebResponseAsyncResult);
                 }
         );
 
         // wait for all pre-produced messages to be processed and produced
+        log.info("Waiting for {} requests in parallel on server.", expectedMessageCount);
         Assertions.useRepresentation(new TrimListRepresentation());
         var failureMessage = StringUtils.msg("Mock server receives {} requests in parallel from vertx engine",
                 expectedMessageCount);
         try {
-            waitAtMost(ofSeconds(120))
+            waitAtMost(ofSeconds(10))
+                    .pollInterval(ofSeconds(1))
                     .alias(failureMessage)
                     .untilAsserted(() -> {
-                        SoftAssertions all = new SoftAssertions();
-                        all.assertThat(parallelRequests.size()).isEqualTo(expectedMessageCount);
-                        all.assertThat(httpResponceReceivedCount).hasValue(expectedMessageCount);
-                        all.assertAll();
+                        log.info("got {}/{}", parallelRequests.size(), expectedMessageCount);
+                        assertThat(parallelRequests.size()).isEqualTo(expectedMessageCount);
                     });
         } catch (ConditionTimeoutException e) {
             fail(failureMessage + "\n" + e.getMessage());
         }
+        log.info("All {} requests received in parallel by server, releasing server response lock.", expectedMessageCount);
+
+        // all requests were received in parallel, so unlock the server to respond to all of them
+        LatchTestUtils.release(responseLock);
 
         assertNumberOfThreads();
 
-        // all requests were received in parallel, so unlock the server to respond to all of them
-        responseLock.countDown();
+        log.info("Waiting for {} responses from server.", expectedMessageCount);
+        waitAtMost(ofSeconds(10))
+                .alias(failureMessage)
+                .untilAsserted(() -> {
+                    assertThat(httpResponceReceivedCount).hasValue(expectedMessageCount);
+                });
+
+        log.info("All {} responses received.", expectedMessageCount);
+
+        assertNumberOfThreads();
 
         // close
         bar.close();
-
-        pc.closeDrainFirst(Duration.ofSeconds(30));
+        pc.closeDrainFirst();
 
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
+        assertThat(responseLock.getCount()).isZero();
     }
 
     /**
@@ -217,14 +229,25 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
         long pcThreadCount = threadKeys.stream().filter(x -> x.getName().startsWith(pcPrefix)).count();
         long wireMockThreadCount = threadKeys.stream().filter(x -> x.getName().startsWith(wireMockPrefix)).count();
 
+        int expectedPCThreads = 3;
+
         if (pcThreadCount > 0) // pc may not have started
+        {
+            log.info("Checking there are only {} PC threads running", expectedPCThreads);
             assertThat(pcThreadCount)
                     .as("Number of Parallel Consumer threads outside expected estimates")
-                    .isEqualTo(3);
+                    .isEqualTo(expectedPCThreads);
+        }
 
+        log.info("Checking there are about ~{} wire mock threads running to process requests in parallel from vert.x", expectedMessageCount);
         assertThat(wireMockThreadCount)
                 .as("Number of wiremock threads outside expected estimates")
                 .isCloseTo(expectedMessageCount, withPercentage(5));
+
+        log.info("Checking total thread count is about {} plus {}", expectedMessageCount, expectedPCThreads);
+        assertThat(threadKeys.size())
+                .as("Total number of threads")
+                .isCloseTo(expectedMessageCount + expectedPCThreads, withPercentage(15));
     }
 
 }

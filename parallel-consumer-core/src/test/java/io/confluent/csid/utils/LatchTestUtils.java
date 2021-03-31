@@ -48,4 +48,9 @@ public class LatchTestUtils {
         }
         return result;
     }
+
+    public static void release(final CountDownLatch latch) {
+        log.info("Latch countdown");
+        latch.countDown();
+    }
 }
