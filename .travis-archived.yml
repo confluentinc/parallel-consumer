@@ -1,3 +1,5 @@
+# Archived in favour of github actions
+
 language: java
 jdk:
   - openjdk13
@@ -32,8 +34,11 @@ cache:
 
 install: skip
 
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
+# Removed for https://about.codecov.io/security-update/
+# APRIL 15TH, 2021
+# Bash Uploader Security Update
+# after_success:
+#   - bash <(curl -s https://codecov.io/bash)
 
 addons:
   sonarcloud:
