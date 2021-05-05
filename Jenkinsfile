@@ -39,9 +39,9 @@ def job = {
 
   stage('Build') {
     archiveArtifacts artifacts: 'pom.xml'
-    withVaultEnv([["gpg/packaging", "passphrase", "GPG_PASSPHRASE"]]) {
+    withVaultEnv([["gpg/confluent-packaging-private-8B1DA6120C2BF624", "passphrase", "GPG_PASSPHRASE"]]) {
       withVaultFile([["maven/jenkins_maven_global_settings", "settings_xml", "maven-global-settings.xml", "MAVEN_GLOBAL_SETTINGS_FILE"],
-                     ["gpg/packaging", "private_key", "confluent-packaging-private.key", "GPG_PRIVATE_KEY"]]) {
+                     ["gpg/confluent-packaging-private-8B1DA6120C2BF624", "private_key", "confluent-packaging-private.key", "GPG_PRIVATE_KEY"]]) {
         withMaven(globalMavenSettingsFilePath: "${env.MAVEN_GLOBAL_SETTINGS_FILE}") {
           withDockerServer([uri: dockerHost()]) {
             if (params.RELEASE_TAG.trim().equals('')) {
