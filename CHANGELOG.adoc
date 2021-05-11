@@ -3,7 +3,34 @@
 
 = Change Log
 
+// git log --pretty="* %s" 0.3.0.2..HEAD
+
 toc::[]
+
+== v0.3.0.2
+
+=== Fixes and Improvements
+* ci: Add CODEOWNER
+* fix: #101 Validate GroupId is configured on managed consumer
+* Use 8B1DA6120C2BF624 GPG Key For Signing
+* ci: Bump jdk8 version path
+* fix: #97 Vert.x thread and connection pools setup incorrect
+* Disable Travis and Codecov
+* ci: Apache Kafka and JDK build matrix
+* fix: Set Serdes for MockProducer for AK 2.7 partition fix KAFKA-10503 to fix new NPE
+* Only log slow message warnings periodically, once per sweep
+* Upgrade Kafka container version to 6.0.2
+* Clean up stalled message warning logs
+* Reduce log-level if no results are returned from user-function (warn -> debug)
+* Enable java 8 Github
+* Fixes #87 - Upgrade UniJ version for UnsupportedClassVersion error
+* Bump TestContainers to stable release to specifically fix #3574
+* Clarify offset management capabilities
+
+== v0.3.0.1
+
+* fixes #62: Off by one error when restoring offsets when no offsets are encoded in metadata
+* fix: Actually skip work that is found as stale
 
 == v0.3.0.0
 
