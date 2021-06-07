@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import java.io.Closeable;
 import java.time.Duration;
 
@@ -74,6 +73,6 @@ public interface DrainingCloseable extends Closeable {
      *
      * @return the number of consumed but outstanding records to process
      */
-    int workRemaining();
+    long workRemaining();
 
 }
