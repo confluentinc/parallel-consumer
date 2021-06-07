@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import static io.confluent.csid.utils.Range.range;
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeout;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -31,7 +30,7 @@ public class LatchTestUtils {
 
     @SneakyThrows
     public static void awaitLatch(final CountDownLatch latch, final int seconds) {
-        log.trace("Waiting on latch with timeout {}", defaultTimeout);
+        log.trace("Waiting on latch with timeout {}s", seconds);
         boolean latchReachedZero = latch.await(seconds, SECONDS);
         if (latchReachedZero) {
             log.trace("Latch released");

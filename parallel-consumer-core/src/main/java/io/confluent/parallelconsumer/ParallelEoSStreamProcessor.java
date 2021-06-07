@@ -1055,7 +1055,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     @Override
-    public int workRemaining() {
+    public long workRemaining() {
         return wm.getNumberOfEntriesInPartitionQueues();
     }
 

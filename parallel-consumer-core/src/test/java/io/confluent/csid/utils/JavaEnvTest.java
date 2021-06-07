@@ -13,7 +13,7 @@ import static io.confluent.csid.utils.StringTestUtils.pretty;
 class JavaEnvTest {
 
     /**
-     * Used to check the java environment at runtime
+     * Used to manually inspect the java environment at runtime - particularly useful for CI environments
      */
     @Test
     void checkJavaEnvironment() {

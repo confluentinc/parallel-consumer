@@ -77,6 +77,7 @@ public class OffsetMapCodecManager<K, V> {
      */
     public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
+    // todo remove god dependency (WM)
     public OffsetMapCodecManager(final WorkManager<K, V> wm, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.wm = wm;
         this.consumer = consumer;
@@ -95,12 +96,12 @@ public class OffsetMapCodecManager<K, V> {
      */
     void loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
         // todo this should be controlled for - improve consumer management so that this can't happen
-        Map<TopicPartition, OffsetAndMetadata> committed = null;
+        Map<TopicPartition, OffsetAndMetadata> lastCommittedOffsets = null;
         int attempts = 0;
-        while (committed == null) {
+        while (lastCommittedOffsets == null) {
             WakeupException lastWakeupException = null;
             try {
-                committed = consumer.committed(assignment);
+                lastCommittedOffsets = consumer.committed(assignment);
             } catch (WakeupException exception) {
                 log.warn("Woken up trying to get assignment", exception);
                 lastWakeupException = exception;
@@ -110,7 +111,7 @@ public class OffsetMapCodecManager<K, V> {
                 throw new InternalRuntimeError("Failed to get partition assignment - continuously woken up.", lastWakeupException);
         }
 
-        committed.forEach((tp, offsetAndMeta) -> {
+        lastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
                 long nextExpectedOffset = offsetAndMeta.offset();
                 String metadata = offsetAndMeta.metadata();
@@ -136,9 +137,9 @@ public class OffsetMapCodecManager<K, V> {
 
     void loadOffsetMetadataPayload(long nextExpectedOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(nextExpectedOffset, offsetMetadataPayload);
-        wm.raisePartitionHighWaterMark(incompletes.getHighestSeenOffset(), tp);
+        wm.raisePartitionHighWaterMark(tp, incompletes.getHighestSeenOffset());
         Set<Long> incompleteOffsets = incompletes.getIncompleteOffsets();
-        wm.partitionIncompleteOffsets.put(tp, incompleteOffsets);
+        wm.setPartitionIncompleteOffset(tp, incompleteOffsets);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
     }
 
@@ -162,7 +163,8 @@ public class OffsetMapCodecManager<K, V> {
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
     byte[] encodeOffsetsCompressed(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
-        Long nextExpectedOffset = wm.partitionOffsetHighWaterMarks.get(tp) + 1;
+//        Long nextExpectedOffset = wm.partitionOffsetHighWaterMarks.get(tp) + 1;
+        Long nextExpectedOffset = wm.getHighWaterMark(tp) + 1;
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, nextExpectedOffset, incompleteOffsets).invoke();
         if (forcedCodec.isPresent()) {
             OffsetEncoding forcedOffsetEncoding = forcedCodec.get();
@@ -204,9 +206,9 @@ public class OffsetMapCodecManager<K, V> {
     }
 
     String incompletesToBitmapString(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) {
-        StringBuilder runLengthString = new StringBuilder();
+        var runLengthString = new StringBuilder();
         Long lowWaterMark = finalOffsetForPartition;
-        Long highWaterMark = wm.partitionOffsetHighWaterMarks.get(tp);
+        Long highWaterMark = wm.getHighWaterMark(tp);
         long end = highWaterMark - lowWaterMark;
         for (final var relativeOffset : range(end)) {
             long offset = lowWaterMark + relativeOffset;
