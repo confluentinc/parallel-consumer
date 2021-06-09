@@ -5,6 +5,8 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

@@ -1,9 +1,12 @@
-package io.confluent.parallelconsumer;
+package io.confluent.parallelconsumer.state;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.InternalRuntimeError;
+import io.confluent.parallelconsumer.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -185,7 +188,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
-    void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
+    // todo reduce visibility
+    public void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
         getState(tp).risePartitionHighWaterMark(highWater);
     }
 
@@ -197,7 +201,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return previouslyProcessed;
     }
 
-    boolean isPartitionMoreRecordsAllowedToProcess(TopicPartition tp) {
+    // todo terrible name - rename, reduce visibility
+    public boolean isPartitionMoreRecordsAllowedToProcess(TopicPartition tp) {
         return getState(tp).isPartitionMoreRecordsAllowedToProcess();
     }
 

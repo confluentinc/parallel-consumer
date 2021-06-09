@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -94,7 +95,8 @@ public class OffsetMapCodecManager<K, V> {
     /**
      * Load all the previously completed offsets that were not committed
      */
-    void loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
+    // todo make package private?
+    public void loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
         // todo this should be controlled for - improve consumer management so that this can't happen
         Map<TopicPartition, OffsetAndMetadata> lastCommittedOffsets = null;
         int attempts = 0;
@@ -143,7 +145,7 @@ public class OffsetMapCodecManager<K, V> {
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
     }
 
-    String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
+    public String makeOffsetMetadataPayload(long finalOffsetForPartition, TopicPartition tp, Set<Long> incompleteOffsets) throws EncodingNotSupportedException {
         String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, tp, incompleteOffsets);
         return offsetMap;
     }
