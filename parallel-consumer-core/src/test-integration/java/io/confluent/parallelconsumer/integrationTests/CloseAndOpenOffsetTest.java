@@ -2,11 +2,16 @@
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.Range;
-import io.confluent.parallelconsumer.*;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import io.confluent.parallelconsumer.offsets.OffsetEncoding;
+import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;

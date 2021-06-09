@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.ConsumerOffsetCommitter;
+import io.confluent.parallelconsumer.internal.OffsetCommitter;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -53,7 +54,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * several issues with the new implementation of committing offsets through the {@link
  * org.apache.kafka.clients.consumer.KafkaConsumer}.
  *
- * @see io.confluent.parallelconsumer.OffsetCommitter
+ * @see OffsetCommitter
  * @see ConsumerOffsetCommitter
  * @see ProducerManager
  */

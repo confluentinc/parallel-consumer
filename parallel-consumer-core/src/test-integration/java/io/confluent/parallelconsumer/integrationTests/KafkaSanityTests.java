@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
