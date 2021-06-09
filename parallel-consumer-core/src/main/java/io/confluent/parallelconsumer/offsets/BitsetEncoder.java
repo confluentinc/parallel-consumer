@@ -1,10 +1,11 @@
-package io.confluent.parallelconsumer;
+package io.confluent.parallelconsumer.offsets;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.StringUtils;
+import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,7 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.BitSet;
 import java.util.Optional;
 
-import static io.confluent.parallelconsumer.OffsetEncoding.*;
+import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 
 /**
  * Encodes a range of offsets, from an incompletes collection into a BitSet.
@@ -36,7 +37,7 @@ import static io.confluent.parallelconsumer.OffsetEncoding.*;
  * @see OffsetBitSet
  */
 @Slf4j
-class BitsetEncoder extends OffsetEncoder {
+public class BitsetEncoder extends OffsetEncoder {
 
     private final Version version; // default to new version
 

@@ -4,8 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.InternalRuntimeError;
-import io.confluent.parallelconsumer.OffsetCommitter;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;

@@ -85,7 +85,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
-    @Getter(AccessLevel.PACKAGE)
+    // todo make package level
+    @Getter(AccessLevel.PUBLIC)
     protected WorkManager<K, V> wm;
 
     /**
