@@ -11,6 +11,8 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.ConsumerOffsetCommitter;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -52,8 +54,8 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * org.apache.kafka.clients.consumer.KafkaConsumer}.
  *
  * @see io.confluent.parallelconsumer.OffsetCommitter
- * @see io.confluent.parallelconsumer.ConsumerOffsetCommitter
- * @see io.confluent.parallelconsumer.ProducerManager
+ * @see ConsumerOffsetCommitter
+ * @see ProducerManager
  */
 @Slf4j
 public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {

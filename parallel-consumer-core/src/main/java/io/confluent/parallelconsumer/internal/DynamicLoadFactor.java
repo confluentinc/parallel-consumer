@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer;
+package io.confluent.parallelconsumer.internal;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
@@ -92,7 +92,7 @@ public class DynamicLoadFactor {
         return elapsed > coolDown.toMillis();
     }
 
-    boolean isWarmUpPeriodOver() {
+    public boolean isWarmUpPeriodOver() {
         long now = System.currentTimeMillis();
         long elapsed = now - startTimeMs;
         return elapsed > warmUp.toMillis();

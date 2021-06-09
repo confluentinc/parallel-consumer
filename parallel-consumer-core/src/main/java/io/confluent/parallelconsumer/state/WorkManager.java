@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer;
+package io.confluent.parallelconsumer.state;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
@@ -6,7 +6,13 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
+import io.confluent.parallelconsumer.EncodingNotSupportedException;
+import io.confluent.parallelconsumer.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
+import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +35,7 @@ import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMeta
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static lombok.AccessLevel.PACKAGE;
+import static lombok.AccessLevel.PUBLIC;
 
 /**
  * Sharded, prioritised, offset managed, order controlled, delayed work queue.
@@ -58,7 +65,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final ParallelConsumerOptions options;
 
     // todo rename PSM, PartitionStateManager
-    // todo make private
+    @Getter(PUBLIC) // todo reduce visibility
     final PartitionMonitor<K, V> pm;
 
     // todo make private
@@ -86,7 +93,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Useful for testing
      */
-    @Getter(PACKAGE)
+    @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
     @Setter(PACKAGE)
@@ -171,12 +178,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         wmbm.registerWork(records);
     }
 
+    // todo refactor into something more contractual and less leaky
+    // todo make private
     // todo remove - doesn't belong here
-    void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
+    public void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
         pm.raisePartitionHighWaterMark(tp, highWater);
     }
 
-    void setPartitionIncompleteOffset(TopicPartition tp, Set<Long> incompleteOffsets) {
+    // todo refactor into something more contractual and less leaky
+    // todo make private
+    public void setPartitionIncompleteOffset(TopicPartition tp, Set<Long> incompleteOffsets) {
         pm.setPartitionIncompleteOffset(tp, incompleteOffsets);
     }
 
@@ -439,15 +450,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    Integer getWorkQueuedInMailboxCount() {
+    public Integer getWorkQueuedInMailboxCount() {
         return wmbm.getWorkQueuedInMailboxCount();
     }
 
-    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
+    // todo rename
+    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
 
-    boolean hasCommittableOffsets() {
+    public boolean hasCommittableOffsets() {
         return isDirty();
     }
 
@@ -463,6 +475,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * Finds eligible offset positions to commit in each assigned partition
      */
+    // todo rename
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
 
         // todo check works
@@ -616,7 +629,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    boolean checkEpochIsStale(final WorkContainer<K, V> workContainer) {
+    public boolean checkEpochIsStale(final WorkContainer<K, V> workContainer) {
         return pm.checkEpochIsStale(workContainer);
     }
 
@@ -628,7 +641,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
      * should be downloaded (or pipelined in the Consumer)
      */
-    boolean isSufficientlyLoaded() {
+    public boolean isSufficientlyLoaded() {
         return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
     }
 
@@ -669,19 +682,22 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.hasWorkInCommitQueues();
     }
 
-    boolean isRecordsAwaitingProcessing() {
+    // todo not public
+    public boolean isRecordsAwaitingProcessing() {
         int partitionWorkRemainingCount = sm.getWorkQueuedInShardsCount();
         boolean internalQueuesNotEmpty = hasWorkInMailboxes();
         return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
     }
 
-    boolean isRecordsAwaitingToBeCommitted() {
+    // todo not public
+    public boolean isRecordsAwaitingToBeCommitted() {
         // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
         var partitionWorkRemainingCount = getNumberOfEntriesInPartitionQueues();
         return partitionWorkRemainingCount > 0;
     }
 
-    protected void handleFutureResult(WorkContainer<K, V> wc) {
+    // todo not public, rename
+    public void handleFutureResult(WorkContainer<K, V> wc) {
         // todo need to make sure epoch's match, as partition may have been re-assigned after being revoked see PR #46
         // partition may be revoked by a different thread (broker poller) - need to synchronise?
         // https://github.com/confluentinc/parallel-consumer/pull/46 (partition epochs)
@@ -699,7 +715,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    Long getHighWaterMark(TopicPartition tp) {
+    public Long getHighWaterMark(TopicPartition tp) {
         return pm.getHighWaterMark(tp);
     }
 }

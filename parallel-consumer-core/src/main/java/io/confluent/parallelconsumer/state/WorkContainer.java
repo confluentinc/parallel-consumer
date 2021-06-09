@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer;
+package io.confluent.parallelconsumer.state;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.

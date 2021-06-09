@@ -1,9 +1,10 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -143,7 +144,7 @@ public class ParallelConsumerOptions<K, V> {
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
     }
 
-    protected boolean isUsingTransactionalProducer() {
+    public boolean isUsingTransactionalProducer() {
         return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }
 

@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -91,7 +92,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     // todo refactor tests out that depend on this
     private void raiseToHardCodedHighestSeenOffset() {
         //        wm.partitionOffsetHighWaterMarks.put(tp, partitionHighWaterMark);
-        wm.pm.raisePartitionHighWaterMark(tp, partitionHighWaterMark);
+        wm.getPm().raisePartitionHighWaterMark(tp, partitionHighWaterMark);
     }
 
     @BeforeAll

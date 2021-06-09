@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.vertx;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.WorkContainer;
+import io.confluent.parallelconsumer.state.WorkContainer;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -36,7 +36,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
+import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
 public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V>

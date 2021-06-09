@@ -6,6 +6,8 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -128,7 +130,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         {
 //            boolean partitionBlocked = !wm.pm.getState(topicPartition).partitionMoreRecordsAllowedToProcess;
 //            boolean partitionBlocked = !wm.pm.getState(topicPartition).isPartitionMoreRecordsAllowedToProcess();
-            boolean partitionBlocked = wm.pm.isBlocked(topicPartition);
+            boolean partitionBlocked = wm.getPm().isBlocked(topicPartition);
             assertThat(partitionBlocked).isFalse();
         }
 
@@ -138,7 +140,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         {
             ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
             waitForOneLoopCycle();
-            assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue(); // should initially be not blocked
+            assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue(); // should initially be not blocked
             await().untilAsserted(() ->
                     assertThat(processedCount.get()).isGreaterThan(expectedMsgsProcessedUponThresholdBlock) // some new message processed
             );
@@ -149,10 +151,10 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         int expectedMsgsProcessedBeforePartitionBlocks = numRecords + numRecords / 4;
         {
 //            Long partitionOffsetHighWaterMarks = wm.pm.getState(topicPartition).partitionOffsetHighWaterMarks;
-            Long partitionOffsetHighWaterMarks = wm.pm.getHighWaterMark(topicPartition);
+            Long partitionOffsetHighWaterMarks = wm.getPm().getHighWaterMark(topicPartition);
             assertThat(partitionOffsetHighWaterMarks)
                     .isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks); // high water mark is beyond our expected processed count upon blocking
-            assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse(); // blocked
+            assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse(); // blocked
 
             // assert blocked, but can still write payload
             // assert the committed offset metadata contains a payload
@@ -207,7 +209,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
 
             // assert partition still blocked
             waitForOneLoopCycle();
-            await().untilAsserted(() -> assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse());
+            await().untilAsserted(() -> assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse());
 
             // release the message for the second time, allowing it to succeed
             msgLockTwo.countDown();
@@ -216,7 +218,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         // assert partition is now not blocked
         {
             waitForOneLoopCycle();
-            await().untilAsserted(() -> assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
+            await().untilAsserted(() -> assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
         }
 
         // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent (numRecords*2)
@@ -226,7 +228,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
                 List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
                 assertThat(offsets).contains(processedCount.get());
             });
-            await().untilAsserted(() -> assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
+            await().untilAsserted(() -> assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
         }
 
         // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable

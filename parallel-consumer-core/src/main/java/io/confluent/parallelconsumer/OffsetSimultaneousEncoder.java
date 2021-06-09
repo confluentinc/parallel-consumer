@@ -1,9 +1,10 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
