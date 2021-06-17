@@ -13,6 +13,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.OffsetMetadataTooLarge;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.parallel.Isolated;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
@@ -25,6 +26,7 @@ import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Isolated
 @Slf4j
 public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
 

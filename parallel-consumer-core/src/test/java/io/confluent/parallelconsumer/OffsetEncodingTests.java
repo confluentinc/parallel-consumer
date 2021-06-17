@@ -12,6 +12,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -112,10 +114,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @SneakyThrows
     @ParameterizedTest
     @EnumSource(OffsetEncoding.class)
+    // needed due to static accessors in parallel tests
+    @ResourceLock(value = "OffsetMapCodecManager", mode = ResourceAccessMode.READ_WRITE)
     void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) throws BrokenBarrierException, InterruptedException {
         assumeThat("Codec skipped, not applicable", encoding,
                 not(in(of(ByteArray, ByteArrayCompressed)))); // byte array not currently used
 
+        // todo don't use static public accessors to change things - makes parallel testing harder and is smelly
         OffsetMapCodecManager.forcedCodec = Optional.of(encoding);
         OffsetSimultaneousEncoder.compressionForced = true;
 

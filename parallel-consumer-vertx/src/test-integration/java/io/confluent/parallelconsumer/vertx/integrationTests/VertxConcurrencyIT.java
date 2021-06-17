@@ -33,6 +33,7 @@ import org.eclipse.jetty.util.ConcurrentArrayQueue;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniMaps;
 
@@ -59,6 +60,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Testcontainers
 @Slf4j
+@Isolated
 class VertxConcurrencyIT extends BrokerIntegrationTest {
 
     private static ProgressBar bar;
