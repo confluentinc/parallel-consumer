@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.waitAtMost;
@@ -87,7 +88,7 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         var pc = createParallelConsumer(topic, newConsumer);
         pc.poll(consumerRecord -> consumedOffsets.add(consumerRecord.offset()));
         if (check) {
-            waitAtMost(ofSeconds(1)).alias("all produced messages consumed")
+            waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
                     .untilAsserted(() -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
         } else {
             Thread.sleep(2000);

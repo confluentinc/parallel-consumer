@@ -1,6 +1,6 @@
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 package io.confluent.parallelconsumer.integrationTests;
 
@@ -14,6 +14,7 @@ import org.testcontainers.containers.output.Slf4jLogConsumer;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,6 +46,8 @@ public class DbTest extends BrokerIntegrationTest<String, String> {
         }
     }
 
+    static ReentrantLock dbLock = new ReentrantLock();
+
     @SneakyThrows
     @BeforeEach
     public void setupDatabase() {
@@ -54,8 +57,10 @@ public class DbTest extends BrokerIntegrationTest<String, String> {
         dataSource.setPassword(dbc.getPassword());
 
         connection = dataSource.getConnection();
-//        connection = DriverManager.getConnection(dbc.getJdbcUrl(), dbc.getUsername(), dbc.getPassword());
 
+
+        // create if exists doesn't seem to be thread safe - something around postgres creating indexes causes a distinct exception
+        dbLock.lock();
         PreparedStatement create_table = connection.prepareStatement("""
                 CREATE TABLE IF NOT EXISTS DATA(
                    ID SERIAL PRIMARY KEY     NOT NULL,
@@ -64,6 +69,7 @@ public class DbTest extends BrokerIntegrationTest<String, String> {
                 );
                 """);
         create_table.execute();
+        dbLock.unlock();
     }
 
     @SneakyThrows
