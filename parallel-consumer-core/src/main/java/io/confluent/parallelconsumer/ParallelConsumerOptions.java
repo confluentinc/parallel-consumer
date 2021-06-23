@@ -156,6 +156,19 @@ public class ParallelConsumerOptions<K, V> {
 
     public static Function<WorkContainer, Duration> retryDelayProviderStatic;
 
+    /**
+     * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
+     * returned from the user-function. Only relevant if using one of the produce-flows and providing a
+     * {@link ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
+     *
+     * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary re-processing
+     * and duplicates on slow {@link Producer#send} calls.
+     *
+     * @see org.apache.kafka.clients.producer.ProducerConfig#DELIVERY_TIMEOUT_MS_CONFIG
+     */
+    @Builder.Default
+    private final Duration sendTimeout = Duration.ofSeconds(10);
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
