@@ -265,9 +265,10 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void largeOffsetMap() {
-        wm.raisePartitionHighWaterMark(200L, tp);
+        wm.raisePartitionHighWaterMark(200L, tp); // force system to have seen a high offset
         byte[] bytes = om.encodeOffsetsCompressed(0L, tp, incomplete);
-        assertThat(bytes.length).as("very small").isLessThan(30);
+        assertThat(bytes).as("very small")
+                .hasSizeLessThan(30); // arbitrary size expectation based on past observations - expect around 7
     }
 
     @SneakyThrows
