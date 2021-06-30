@@ -132,7 +132,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         boolean closed = state == State.closed;
         boolean doneOrCancelled = false;
         if (this.controlThreadFuture.isPresent()) {
-            doneOrCancelled = controlThreadFuture.get().isDone() || controlThreadFuture.get().isCancelled();
+            Future<Boolean> threadFuture = controlThreadFuture.get();
+            doneOrCancelled = threadFuture.isDone() || threadFuture.isCancelled();
         }
         return closed || doneOrCancelled;
     }

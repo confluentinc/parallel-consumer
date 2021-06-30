@@ -12,6 +12,7 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.Serdes;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -103,6 +104,15 @@ public class ParallelEoSStreamProcessorTestBase {
                 .ordering(UNORDERED)
                 .build();
         setupParallelConsumerInstance(options);
+    }
+
+    @AfterEach
+    public void close() {
+        // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - we
+        // don't want to bubble up an error here that we expect. todo: Ideally the test that does this would be isolated so we can remove this check
+        if (!parallelConsumer.isClosedOrFailed()) {
+            parallelConsumer.close();
+        }
     }
 
     protected List<WorkContainer<String, String>> successfulWork = Collections.synchronizedList(new ArrayList<>());
