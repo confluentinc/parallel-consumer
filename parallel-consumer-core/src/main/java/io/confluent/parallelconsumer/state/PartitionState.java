@@ -7,16 +7,20 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
 
 import java.util.NavigableMap;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 public class PartitionState<K, V> {
+
+    @Getter
+    private final TopicPartition tp;
 
     // visible for testing
     /**
@@ -34,10 +38,13 @@ public class PartitionState<K, V> {
      * @see #onSuccess(WorkContainer)
      * @see #onFailure(WorkContainer)
      */
+    // todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
     // todo make private
     // todo make private and final - needs to move to constructor, see #onPartitionsAssigned and constructor usage
-    @Setter(AccessLevel.PACKAGE)
-    private Set<Long> partitionIncompleteOffsets = new TreeSet<>();
+    // this is derived from partitionCommitQueues WorkContainer states
+    @Setter
+    @Getter
+    private Set<Long> partitionIncompleteOffsets;
 
     // visible for testing
     static final long MISSING_HIGH_WATER_MARK = -1L;
@@ -45,14 +52,15 @@ public class PartitionState<K, V> {
     // visible for testing
     /**
      * The highest seen offset for a partition.
-     *
+     * <p>
      * Starts off as null - no data
      */
     // TODO rename to partitionOffsetHighestSeen - cascading rename
     // todo make private - package
     // todo change to optional instead of -1 - overkill?
-    @Getter(AccessLevel.PACKAGE)
-    private Long partitionOffsetHighWaterMarks = MISSING_HIGH_WATER_MARK;
+    @NonNull
+    @Getter(AccessLevel.PUBLIC)
+    private Long partitionOffsetHighWaterMarks;// = MISSING_HIGH_WATER_MARK;
 
     /**
      * Highest offset which has completed.
@@ -102,6 +110,13 @@ public class PartitionState<K, V> {
     @Getter
     private final NavigableMap<Long, WorkContainer<K, V>> partitionCommitQueues = new ConcurrentSkipListMap<>();
 
+    public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
+        this.tp = tp;
+        this.partitionIncompleteOffsets = incompletes.getIncompleteOffsets();
+        this.partitionOffsetHighWaterMarks = incompletes.getHighestSeenOffset();
+    }
+
+    // todo does this make sense to keep here if state is being rebuilt
     public void incrementPartitionAssignmentEpoch() {
         partitionsAssignmentEpochs++;
     }
@@ -138,13 +153,9 @@ public class PartitionState<K, V> {
         } else {
             Long offsetHighWaterMark = partitionOffsetHighWaterMarks;
 //            Long offsetHighWaterMark = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
-            if (offset <= offsetHighWaterMark) {
-                // within the range of tracked offsets, so must have been previously completed
-                previouslyProcessed = true;
-            } else {
-                // we haven't recorded this far up, so must not have been processed yet
-                previouslyProcessed = false;
-            }
+            // within the range of tracked offsets, so must have been previously completed
+            // we haven't recorded this far up, so must not have been processed yet
+            previouslyProcessed = offsetHighWaterMark != null && offset <= offsetHighWaterMark;
         }
         return previouslyProcessed;
     }

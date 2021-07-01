@@ -80,6 +80,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
         assumeFalse(skip.contains(encoding));
 
+        // todo remove - not even relevant to this test? smelly
         OffsetMapCodecManager.forcedCodec = Optional.of(encoding);
         OffsetSimultaneousEncoder.compressionForced = true;
 
@@ -192,6 +193,9 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                                         .containsExactlyInAnyOrder("2", "4"));
             }
         }
+
+        OffsetMapCodecManager.forcedCodec = Optional.empty();
+        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
     private void send(String topic, int partition, Integer value) throws InterruptedException, ExecutionException {

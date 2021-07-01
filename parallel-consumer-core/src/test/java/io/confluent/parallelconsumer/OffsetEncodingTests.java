@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -177,10 +178,11 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
 
             // check for graceful fall back to the smallest available encoder
-            OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(wmm, consumerSpy);
+            OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
             Set<Long> collect = firstSucceededRecordRemoved.stream().map(x -> x.offset()).collect(Collectors.toSet());
             OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
-            String bestPayload = om.makeOffsetMetadataPayload(1, tp, collect);
+            var state = new PartitionState<String, String>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(25_000L, collect));
+            String bestPayload = om.makeOffsetMetadataPayload(1, state);
             assertThat(bestPayload).isNotEmpty();
         }
         consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
