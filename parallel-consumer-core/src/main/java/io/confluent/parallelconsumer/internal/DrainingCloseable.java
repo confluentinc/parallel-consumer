@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import java.io.Closeable;
 import java.time.Duration;
 
