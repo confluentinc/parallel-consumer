@@ -3,6 +3,8 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
+import io.confluent.parallelconsumer.state.PartitionMonitor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
@@ -149,5 +151,18 @@ public class ParallelConsumerOptions<K, V> {
 
     public boolean isProducerSupplied() {
         return getProducer() != null;
+    }
+
+    @Builder.Default
+    private final TestOptions testOptions = new TestOptions();
+
+    /**
+     * Options tweaked by various tests
+     */
+    static class TestOptions {
+        /**
+         * @see PartitionMonitor#getUSED_PAYLOAD_THRESHOLD_MULTIPLIER()
+         */
+        public double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
     }
 }
