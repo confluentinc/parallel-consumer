@@ -32,7 +32,6 @@ import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -52,7 +51,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Slf4j
 @Isolated
-public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
+class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     static final int DEFAULT_MAX_POLL = 500;
     List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
@@ -114,7 +113,8 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
         pcExecutor.submit(pc1);
 
         // Wait for first consumer to consume messages
-        Awaitility.waitAtMost(Duration.ofSeconds(10)).until(() -> consumedKeys.size() > 10);
+        Awaitility.waitAtMost(ofSeconds(10))
+                .until(() -> consumedKeys.size() > 10);
 
         // Submit second parallel-consumer
         log.info("Running second instance of pc");
@@ -182,7 +182,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
             consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
             KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(false, consumerProps);
 
-            this.parallelConsumer = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
+            this.parallelConsumer = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                     .ordering(order)
                     .consumer(newConsumer)
                     .commitMode(commitMode)

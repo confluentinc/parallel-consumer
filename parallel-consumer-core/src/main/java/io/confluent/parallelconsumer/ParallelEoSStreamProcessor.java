@@ -505,10 +505,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         while (interrupted) {
             log.debug("Still interrupted");
             try {
-                boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(DrainingCloseable.DEFAULT_TIMEOUT), SECONDS);
+                boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(timeout), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("Thread execution pool termination await timeout! Were any processing jobs dead locked or otherwise stuck?");
+                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked or otherwise stuck?", timeout);
                     boolean shutdown = workerPool.isShutdown();
                     boolean terminated = workerPool.isTerminated();
                 }
@@ -947,7 +947,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             for (var work : workToProcess) {
                 // for each record, construct dispatch to the executor and capture a Future
                 log.trace("Sending work ({}) to pool", work);
-                Future outputRecordFuture = workerPool.submit(() -> {
+                Future<List<?>> outputRecordFuture = workerPool.submit(() -> {
                     addInstanceMDC();
                     return userFunctionRunner(usersFunction, callback, work);
                 });

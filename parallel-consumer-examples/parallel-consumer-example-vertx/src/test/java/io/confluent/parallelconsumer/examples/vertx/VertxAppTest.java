@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
@@ -24,11 +25,10 @@ import org.mockito.Mockito;
 import java.time.Duration;
 import java.util.HashMap;
 
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
-public class VertxAppTest {
+class VertxAppTest {
 
     TopicPartition tp = new TopicPartition(VertxApp.inputTopic, 0);
 
@@ -67,7 +67,7 @@ public class VertxAppTest {
             HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
             beginningOffsets.put(tp, 0L);
             mockConsumer.updateBeginningOffsets(beginningOffsets);
-            Mockito.when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
+            Mockito.when(mockConsumer.groupMetadata()).thenReturn(new ConsumerGroupMetadata("groupid")); // todo fix AK mock consumer
             return mockConsumer;
         }
 

@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
@@ -189,7 +188,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         // verify
         var res = getResults(futureStream);
 
-        KafkaTestUtils.assertCommits(producerSpy, of(1));
+        ktu.assertCommits(producerSpy, of(1));
 
         // test results are successes
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);

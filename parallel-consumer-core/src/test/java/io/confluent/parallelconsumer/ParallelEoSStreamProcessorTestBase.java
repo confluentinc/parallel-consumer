@@ -46,11 +46,11 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public class ParallelEoSStreamProcessorTestBase {
 
-    public static final String INPUT_TOPIC = "input";
-    public static final String OUTPUT_TOPIC = "output";
-    public static final String CONSUMER_GROUP_ID = "my-group";
+    public final String INPUT_TOPIC = "input-" + Math.random();
+    public final String OUTPUT_TOPIC = "output-" + Math.random();
+    public final String CONSUMER_GROUP_ID = "my-group" + Math.random();
 
-    public static final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
+    public final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
 
     /**
      * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
@@ -86,7 +86,7 @@ public class ParallelEoSStreamProcessorTestBase {
     ConsumerRecord<String, String> firstRecord;
     ConsumerRecord<String, String> secondRecord;
 
-    KafkaTestUtils ktu;
+    protected KafkaTestUtils ktu;
 
     protected AtomicReference<Integer> loopCountRef;
 
@@ -102,16 +102,25 @@ public class ParallelEoSStreamProcessorTestBase {
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
-        ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
-                .commitMode(PERIODIC_CONSUMER_SYNC)
-                .ordering(UNORDERED)
-                .build();
+        ParallelConsumerOptions<Object, Object> options = getOptions();
         setupParallelConsumerInstance(options);
+    }
+
+    protected ParallelConsumerOptions<Object, Object> getOptions() {
+        ParallelConsumerOptions<Object, Object> options = getDefaultOptions()
+                .build();
+        return options;
+    }
+
+    protected ParallelConsumerOptions.ParallelConsumerOptionsBuilder<Object, Object> getDefaultOptions() {
+        return ParallelConsumerOptions.builder()
+                .commitMode(PERIODIC_CONSUMER_SYNC)
+                .ordering(UNORDERED);
     }
 
     @AfterEach
     public void close() {
-        // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - we
+        // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - wesu
         // don't want to bubble up an error here that we expect. todo: Ideally the test that does this would be isolated so we can remove this check
         if (!parallelConsumer.isClosedOrFailed()) {
             parallelConsumer.close();
@@ -135,7 +144,7 @@ public class ParallelEoSStreamProcessorTestBase {
     protected MockConsumer<String, String> setupClients() {
         instantiateConsumerProducer();
 
-        ktu = new KafkaTestUtils(consumerSpy);
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
 
         return consumerSpy;
     }
@@ -295,7 +304,7 @@ public class ParallelEoSStreamProcessorTestBase {
      */
     public void assertCommits(List<Integer> offsets, Optional<String> description) {
         if (isUsingTransactionalProducer()) {
-            KafkaTestUtils.assertCommits(producerSpy, offsets, description);
+            ktu.assertCommits(producerSpy, offsets, description);
             assertThat(extractAllPartitionsOffsetsSequentially()).isEmpty();
         } else {
             List<Integer> collect = extractAllPartitionsOffsetsSequentially();
@@ -313,7 +322,7 @@ public class ParallelEoSStreamProcessorTestBase {
                 }
             }
 
-            KafkaTestUtils.assertCommits(producerSpy, UniLists.of(), Optional.of("Empty"));
+            ktu.assertCommits(producerSpy, UniLists.of(), Optional.of("Empty"));
         }
     }
 
@@ -356,10 +365,10 @@ public class ParallelEoSStreamProcessorTestBase {
      */
     public void assertCommitLists(List<List<Integer>> offsets) {
         if (isUsingTransactionalProducer()) {
-            KafkaTestUtils.assertCommitLists(producerSpy, offsets, Optional.empty());
+            ktu.assertCommitLists(producerSpy, offsets, Optional.empty());
         } else {
             List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistoryWithGropuId = consumerSpy.getCommitHistoryWithGropuId();
-            KafkaTestUtils.assertCommitLists(commitHistoryWithGropuId, offsets, Optional.empty());
+            ktu.assertCommitLists(commitHistoryWithGropuId, offsets, Optional.empty());
         }
     }
 
