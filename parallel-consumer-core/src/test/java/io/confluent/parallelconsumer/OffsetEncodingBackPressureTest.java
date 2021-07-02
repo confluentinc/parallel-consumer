@@ -92,7 +92,9 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         // wait for all pre-produced messages to be processed and produced
         Assertions.useRepresentation(new TrimListRepresentation());
         waitAtMost(ofSeconds(120))
-//                .failFast(() -> parallelConsumer.isClosedOrFailed(), () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                .failFast("PC died - check logs", parallelConsumer::isClosedOrFailed)
+                //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                 .pollInterval(1, SECONDS)
                 .untilAsserted(() -> {
                     assertThat(processedCount.get()).isEqualTo(99L);
