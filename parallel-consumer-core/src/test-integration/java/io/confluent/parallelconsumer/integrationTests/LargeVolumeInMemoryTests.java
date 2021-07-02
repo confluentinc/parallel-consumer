@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -47,8 +46,6 @@ import static org.mockito.Mockito.mock;
 @Slf4j
 public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
-    KafkaTestUtils ku = new KafkaTestUtils(consumerSpy);
-
     @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
@@ -62,8 +59,8 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
 //        int quantityOfMessagesToProduce = 1_000_000;
         int quantityOfMessagesToProduce = 500;
 
-        List<ConsumerRecord<String, String>> records = ku.generateRecords(quantityOfMessagesToProduce);
-        ku.send(consumerSpy, records);
+        List<ConsumerRecord<String, String>> records = ktu.generateRecords(quantityOfMessagesToProduce);
+        ktu.send(consumerSpy, records);
 
         CountDownLatch allMessagesConsumedLatch = new CountDownLatch(quantityOfMessagesToProduce);
 
@@ -202,8 +199,8 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
         log.info("Running test for {} keys and {} messages", numberOfKeys, quantityOfMessagesToProduce);
 
         List<Integer> keys = range(numberOfKeys).list();
-        HashMap<Integer, List<ConsumerRecord<String, String>>> records = ku.generateRecords(keys, quantityOfMessagesToProduce);
-        ku.send(consumerSpy, records);
+        HashMap<Integer, List<ConsumerRecord<String, String>>> records = ktu.generateRecords(keys, quantityOfMessagesToProduce);
+        ktu.send(consumerSpy, records);
 
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, quantityOfMessagesToProduce);
 

@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -24,8 +25,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.Range.range;
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.CONSUMER_GROUP_ID;
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.INPUT_TOPIC;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,11 +32,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 public class KafkaTestUtils {
 
-    final MockConsumer consumerSpy;
+    private final String INPUT_TOPIC;
+    private final String CONSUMER_GROUP_ID;
+
+    private final MockConsumer consumerSpy;
 
     int offset = 0;
 
-    public static void assignConsumerToTopic(final MockConsumer mc) {
+    public void assignConsumerToTopic(final MockConsumer mc) {
         TopicPartition tp1 = new TopicPartition(INPUT_TOPIC, 1);
         TopicPartition tp0 = new TopicPartition(INPUT_TOPIC, 0);
         mc.assign(Lists.list(tp0, tp1));
@@ -71,7 +73,7 @@ public class KafkaTestUtils {
         return stringStringConsumerRecord;
     }
 
-    public static void assertCommits(MockProducer mp, List<Integer> integers) {
+    public void assertCommits(MockProducer mp, List<Integer> integers) {
         assertCommits(mp, integers, Optional.empty());
     }
 
@@ -80,7 +82,7 @@ public class KafkaTestUtils {
      *
      * @see OffsetMapCodecManager
      */
-    public static void assertCommits(MockProducer mp, List<Integer> expectedOffsets, Optional<String> description) {
+    public void assertCommits(MockProducer mp, List<Integer> expectedOffsets, Optional<String> description) {
         log.debug("Asserting commits of {}", expectedOffsets);
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
@@ -101,7 +103,7 @@ public class KafkaTestUtils {
                 .containsExactlyElementsOf(expectedOffsets);
     }
 
-    public static void assertCommitLists(MockProducer mp, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
+    public void assertCommitLists(MockProducer mp, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
         assertCommitLists(mp.consumerGroupOffsetsHistory(), expectedPartitionOffsets, description);
     }
 
@@ -112,9 +114,9 @@ public class KafkaTestUtils {
      *
      * @see OffsetMapCodecManager
      */
-    public static void assertCommitLists(List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history,
-                                         List<List<Integer>> expectedPartitionOffsets,
-                                         Optional<String> description) {
+    public void assertCommitLists(List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history,
+                                  List<List<Integer>> expectedPartitionOffsets,
+                                  Optional<String> description) {
         log.info("Asserting commits of {}", expectedPartitionOffsets);
 
         AtomicReference<String> topicName = new AtomicReference<>("");

@@ -66,7 +66,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     @Getter
     @Setter(AccessLevel.PUBLIC)
-    private Future<List<Object>> future;
+    private Future<List<?>> future;
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
