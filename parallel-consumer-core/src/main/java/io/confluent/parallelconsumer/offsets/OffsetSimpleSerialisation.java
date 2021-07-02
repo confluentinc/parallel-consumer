@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import com.github.luben.zstd.ZstdInputStream;
 import com.github.luben.zstd.ZstdOutputStream;
 import lombok.SneakyThrows;

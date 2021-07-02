@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
