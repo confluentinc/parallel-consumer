@@ -62,9 +62,10 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         return new RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
     }
 
-    RequestInfo getBadHost() {
+    RequestInfo getBadRequest() {
         int badPort = 1;
-        return new RequestInfo("localhost", badPort, "/", UniMaps.of());
+        String badHostname = "xxxxxxxxx"; // bad host names seem to fail faster than valid host names with invalid ports
+        return new RequestInfo(badHostname, badPort, "/", UniMaps.of());
     }
 
     @BeforeAll
@@ -116,7 +117,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var tupleStream =
-                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> getBadHost());
+                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> getBadRequest());
 
         //
         awaitLatch(latch);
@@ -130,9 +131,10 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(res).extracting(AsyncResult::failed).containsOnly(true);
         assertThat(res).flatExtracting(x ->
                 Arrays.asList(x.cause().getMessage().split(" ")))
-                .contains("Connection", "refused:");
+                .contains("failed", "resolve");
     }
 
+    // todo how is this different from #failingHttpCall ?
     @SneakyThrows
     @Test
     void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
@@ -142,7 +144,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
                     log.debug("Inner user function");
-                    return getBadHost();
+                    return getBadRequest();
                 });
 
         // wait
@@ -157,7 +159,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(actual).isNotNull();
 
         actual.onComplete(tc.failing(ar -> tc.verify(() -> {
-            assertThat(ar).hasMessageContainingAll("Connection", "refused");
+            assertThat(ar).hasMessageContainingAll("failed", "resolve");
             tc.completeNow();
         })));
 
