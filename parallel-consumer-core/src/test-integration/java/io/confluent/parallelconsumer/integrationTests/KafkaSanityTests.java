@@ -14,6 +14,8 @@ import org.apache.kafka.common.errors.OffsetMetadataTooLarge;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.parallel.Isolated;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
@@ -65,6 +67,8 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
      * Test our understanding of the offset metadata payload system - is the DefaultMaxMetadataSize available for each
      * partition, or to the total of all partitions in the commit?
      */
+    @ResourceLock(value = "OffsetMapCodecManager", mode = ResourceAccessMode.READ_WRITE)
+    // todo remove static dependencies
     @Test
     void offsetMetadataSpaceAvailable() {
         numPartitions = 5;
