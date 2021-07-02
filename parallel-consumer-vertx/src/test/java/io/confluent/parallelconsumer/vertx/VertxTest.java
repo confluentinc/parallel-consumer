@@ -11,6 +11,7 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -58,12 +59,13 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     protected static final String stubResponse = "Good times.";
 
-    VertxParallelEoSStreamProcessor.RequestInfo getGoodHost() {
-        return new VertxParallelEoSStreamProcessor.RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
+    RequestInfo getGoodHost() {
+        return new RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
     }
 
-    VertxParallelEoSStreamProcessor.RequestInfo getBadHost() {
-        return new VertxParallelEoSStreamProcessor.RequestInfo("localhost", 1, "", UniMaps.of());
+    RequestInfo getBadHost() {
+        int badPort = 1;
+        return new RequestInfo("localhost", badPort, "/", UniMaps.of());
     }
 
     @BeforeAll
@@ -100,7 +102,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     @SneakyThrows
     @Test
-    public void sanityTest(Vertx vertx, VertxTestContext tc) {
+    void sanityTest(Vertx vertx, VertxTestContext tc) {
         WebClient client = WebClient.create(vertx);
         HttpRequest<Buffer> bufferHttpRequest = client.get(getGoodHost().getPort(), getGoodHost().getHost(), "");
         bufferHttpRequest.send(tc.succeeding(response -> tc.verify(() -> {
@@ -110,16 +112,12 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
     }
 
     @Test
-    @SneakyThrows
-    public void failingHttpCall() {
+    void failingHttpCall() {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var tupleStream =
-                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> {
-                    VertxParallelEoSStreamProcessor.RequestInfo badHost = getBadHost();
-                    return badHost;
-                });
+                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> getBadHost());
 
         //
         awaitLatch(latch);
@@ -138,7 +136,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     @SneakyThrows
     @Test
-    public void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
+    void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
@@ -168,14 +166,14 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
     }
 
     @Test
-    public void testHttpMinimal() {
+    void testHttpMinimal() {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
                     log.debug("Inner user function");
-                    VertxParallelEoSStreamProcessor.RequestInfo goodHost = getGoodHost();
+                    RequestInfo goodHost = getGoodHost();
                     var params = UniMaps.of("randomParam", rec.value());
                     goodHost.setParams(params);
 
@@ -200,7 +198,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     @SneakyThrows
     @Test
-    public void testHttp() {
+    void testHttp() {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
@@ -208,7 +206,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
                 vertxAsync.vertxHttpRequestStream((webClient, rec) -> {
                     log.debug("Inner user function");
                     var data = rec.value();
-                    VertxParallelEoSStreamProcessor.RequestInfo reqInfo = getGoodHost();
+                    RequestInfo reqInfo = getGoodHost();
                     var httpRequest = webClient.get(reqInfo.getPort(), reqInfo.getHost(), reqInfo.getContextPath());
                     httpRequest = httpRequest.addQueryParam("randomParam", data);
 
@@ -234,7 +232,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     @Test
     @Disabled
-    public void handleHttpResponseCodes() {
+    void handleHttpResponseCodes() {
         assertThat(true).isFalse();
     }
 
