@@ -87,13 +87,6 @@ public class PartitionState<K, V> {
     private boolean allowedMoreRecords = true;
 
     /**
-     * Record the generations of partition assignment, for fencing off invalid work
-     */
-    // todo make private
-    @Getter(AccessLevel.PACKAGE)
-    private int partitionsAssignmentEpochs = 0;
-
-    /**
      * Map of offsets to WorkUnits.
      * <p>
      * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
@@ -114,11 +107,6 @@ public class PartitionState<K, V> {
         this.tp = tp;
         this.partitionIncompleteOffsets = incompletes.getIncompleteOffsets();
         this.partitionOffsetHighWaterMarks = incompletes.getHighestSeenOffset();
-    }
-
-    // todo does this make sense to keep here if state is being rebuilt
-    public void incrementPartitionAssignmentEpoch() {
-        partitionsAssignmentEpochs++;
     }
 
     public void risePartitionHighWaterMark(final long highWater) {

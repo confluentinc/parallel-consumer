@@ -28,7 +28,6 @@ import org.assertj.core.internal.StandardComparisonStrategy;
 import org.assertj.core.util.IterableUtil;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
-import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -50,7 +49,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * Test running with multiple instances of parallel-consumer consuming from topic with two partitions.
  */
 @Slf4j
-@Isolated
+//@Isolated
 class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     static final int DEFAULT_MAX_POLL = 500;
@@ -103,13 +102,14 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         // run parallel-consumer
         log.debug("Starting test");
 
-        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
+        ProgressBar bar1 = ProgressBarUtils.getNewMessagesBar("PC1", log, expectedMessageCount);
+        ProgressBar bar2 = ProgressBarUtils.getNewMessagesBar("PC2", log, expectedMessageCount);
 
         ExecutorService pcExecutor = Executors.newFixedThreadPool(2);
 
         // Submit first parallel-consumer
         log.info("Running first instance of pc");
-        ParallelConsumerRunnable pc1 = new ParallelConsumerRunnable(maxPoll, commitMode, order, inputName, bar);
+        ParallelConsumerRunnable pc1 = new ParallelConsumerRunnable(maxPoll, commitMode, order, inputName, bar1);
         pcExecutor.submit(pc1);
 
         // Wait for first consumer to consume messages
@@ -118,7 +118,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
         // Submit second parallel-consumer
         log.info("Running second instance of pc");
-        ParallelConsumerRunnable pc2 = new ParallelConsumerRunnable(maxPoll, commitMode, order, inputName, bar);
+        ParallelConsumerRunnable pc2 = new ParallelConsumerRunnable(maxPoll, commitMode, order, inputName, bar2);
         pcExecutor.submit(pc2);
 
         // wait for all pre-produced messages to be processed and produced
@@ -150,7 +150,8 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
             fail(failureMessage + "\n" + e.getMessage());
         }
 
-        bar.close();
+        bar1.close();
+        bar2.close();
 
         pc1.getParallelConsumer().closeDrainFirst();
         pc2.getParallelConsumer().closeDrainFirst();

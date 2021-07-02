@@ -12,15 +12,24 @@ import org.slf4j.Logger;
 
 @UtilityClass
 public class ProgressBarUtils {
+
     public static ProgressBar getNewMessagesBar(Logger log, int initialMax) {
+        return getNewMessagesBar(null, log, initialMax);
+    }
+
+    public static ProgressBar getNewMessagesBar(String name, Logger log, int initialMax) {
         DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
 
         int max = 100;
+        String usedName = "progress";
+        if (name != null)
+            usedName = name;
+
         ProgressBar build = new ProgressBarBuilder()
                 .setConsumer(delegatingProgressBarConsumer)
                 .setInitialMax(initialMax)
                 .showSpeed()
-                .setTaskName("progress")
+                .setTaskName(usedName)
                 .setUnit("msg", 1)
                 .build();
         return build;

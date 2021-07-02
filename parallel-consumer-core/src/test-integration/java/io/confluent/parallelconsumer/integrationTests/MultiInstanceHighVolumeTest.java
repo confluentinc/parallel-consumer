@@ -56,7 +56,8 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
         String inputTopicName = setupTopic(this.getClass().getSimpleName() + "-input");
 
         List<String> expectedKeys = new ArrayList<>();
-        int expectedMessageCount = 10_000_000;
+//        int expectedMessageCount = 10_000_000;
+        int expectedMessageCount = 30_000_00;
         log.info("Producing {} messages before starting test", expectedMessageCount);
 
         produceMessages(inputTopicName, expectedKeys, expectedMessageCount);
@@ -120,11 +121,6 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
 //                }
         );
         return bar;
-    }
-
-    private void callBack(final io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult<String, String, String, String> consumeProduceResult) {
-        producedCount.incrementAndGet();
-        producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
     }
 
     @SneakyThrows
