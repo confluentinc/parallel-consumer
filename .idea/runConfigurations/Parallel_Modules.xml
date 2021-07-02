@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Parallel Modules" type="Multirun" singleton="false" separateTabs="false" reuseTabsWithFailures="true" startOneByOne="false" markFailedProcess="true" hideSuccessProcess="true" delayTime="0.0">
+    <runConfiguration name="All core" type="JUnit" />
+    <runConfiguration name="All Vertx" type="JUnit" />
+    <runConfiguration name="All example-core" type="JUnit" />
+    <runConfiguration name="All example-vertx" type="JUnit" />
+    <runConfiguration name="All example-streams" type="JUnit" />
+    <method v="2" />
+  </configuration>
+</component>
