@@ -209,8 +209,10 @@ public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, 
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(2000))
-//                    .failFast(() -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
-//                                    || producedCount.get() > expectedMessageCount,
+                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                    .failFast("PC died, check logs.",
+                            () -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
+                                    || producedCount.get() > expectedMessageCount)
 //                            () -> {
 //                                if (pc.isClosedOrFailed())
 //                                    return pc.getFailureCause();
