@@ -75,6 +75,12 @@ public class OffsetSimultaneousEncoder {
     public static boolean compressionForced = false;
 
     /**
+     * Used to prevent tests running in parallel that depends on setting static state in this class. Manipulation of
+     * static state in tests needs to be removed to this isn't necessary.
+     */
+    public static final String COMPRESSION_FORCED_RESOURCE_LOCK = "Value doesn't matter, just needs a constant";
+
+    /**
      * The encoders to run
      */
     private final Set<OffsetEncoder> encoders = new HashSet<>();

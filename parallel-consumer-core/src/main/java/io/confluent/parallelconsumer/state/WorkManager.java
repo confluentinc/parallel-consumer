@@ -158,12 +158,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         wmbm.onPartitionsRemoved(partitions);
     }
 
-    public void registerWork(List<ConsumerRecords<K, V>> records) {
-        for (var record : records) {
-            registerWork(record);
-        }
-    }
-
     public void registerWork(ConsumerRecords<K, V> records) {
         wmbm.registerWork(records);
     }
@@ -211,8 +205,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return true if the record was taken, false if it was skipped (previously successful)
      */
     // todo rename to maybeTakeRecord
+    // move to PM, if returns true, sm.addWorkContainer
     private boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec) {
         if (rec == null) return false;
+
+        if (!pm.isPartitionAssigned(rec)) {
+            log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTP(rec), rec);
+            return false;
+        }
 
         if (pm.isRecordPreviouslyProcessed(rec)) {
             log.trace("Record previously processed, skipping. offset: {}", rec.offset());
@@ -224,7 +224,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             int currentPartitionEpoch = pm.getEpoch(rec, tp);
             var wc = new WorkContainer<>(currentPartitionEpoch, rec);
 
-            pm.raisePartitionHighWaterMark(tp, offset); // todo move into addWorkContainer
+            pm.raisePartitionHighWaterMark(tp, offset); // todo move into addWorkContainer!!
 
             sm.addWorkContainer(wc);
 
@@ -244,6 +244,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Depth first work retrieval.
      */
+    // todo refactor
     public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
         int workToGetDelta = requestedMaxWorkToRetrieve;
 
@@ -293,7 +294,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
                 {
                     if (checkEpochIsStale(workContainer)) {
-                        // this state should never happen
+                        // this state should never happen, as work should get removed from shards upon partition revocation
                         log.debug("Work is in queue with stale epoch. Will remove now. Was it not removed properly on revoke? Or are we in a race state? {}", workContainer);
                         staleWorkToRemove.add(workContainer);
                         continue; // skip
@@ -372,6 +373,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Tries to ensure there are at least this many records available in the queues
      */
+    // todo rename - shunt messages from internal buffer into queues
     private void tryToEnsureAvailableCapacity(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
         int available = sm.getWorkQueuedInShardsCount();
@@ -403,7 +405,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             sm.removeShard(key);
 //            sm.processingShards.remove(key);
         }
-        successfulWorkListeners.forEach((c) -> c.accept(wc)); // notify listeners
+
+        // notify listeners
+        successfulWorkListeners.forEach((c) -> c.accept(wc));
+
         numberRecordsOutForProcessing--;
     }
 

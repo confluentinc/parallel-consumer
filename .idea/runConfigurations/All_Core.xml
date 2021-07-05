@@ -1,10 +1,10 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="All core unit tests" type="JUnit" factoryName="JUnit" singleton="false">
+  <configuration default="false" name="All Core" type="JUnit" factoryName="JUnit">
     <module name="parallel-consumer-core" />
+    <option name="PACKAGE_NAME" value="" />
     <option name="MAIN_CLASS_NAME" value="" />
     <option name="METHOD_NAME" value="" />
-    <option name="TEST_OBJECT" value="directory" />
-    <dir value="$PROJECT_DIR$/parallel-consumer-core/src/test/java" />
+    <option name="TEST_OBJECT" value="package" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

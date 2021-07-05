@@ -49,11 +49,9 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * Test running with multiple instances of parallel-consumer consuming from topic with two partitions.
  */
 @Slf4j
-//@Isolated
 class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     static final int DEFAULT_MAX_POLL = 500;
-    List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
     AtomicInteger count = new AtomicInteger();
 
     @ParameterizedTest
@@ -114,7 +112,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
         // Wait for first consumer to consume messages
         Awaitility.waitAtMost(ofSeconds(10))
-                .until(() -> consumedKeys.size() > 10);
+                .until(() -> pc1.getConsumedKeys().size() > 10);
 
         // Submit second parallel-consumer
         log.info("Running second instance of pc");
@@ -134,15 +132,15 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
-                        log.trace("Processed-count: {}", consumedKeys.size());
+                        log.trace("Processed-count: {}", getAllConsumedKeys(pc1, pc2).size());
                         if (progressTracker.hasProgressNotBeenMade()) {
-                            expectedKeys.removeAll(consumedKeys);
+                            expectedKeys.removeAll(getAllConsumedKeys(pc1, pc2));
                             throw progressTracker.constructError(msg("No progress, missing keys: {}.", expectedKeys));
                         }
                         SoftAssertions all = new SoftAssertions();
-                        all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").containsAll(expectedKeys);
+                        all.assertThat(new ArrayList<>(getAllConsumedKeys(pc1, pc2))).as("all expected are consumed").containsAll(expectedKeys);
                         // NB: Re-balance causes re-processing, and this is probably expected. Leaving test like this anyway
-                        all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed only once").hasSizeGreaterThanOrEqualTo(expectedKeys.size());
+                        all.assertThat(new ArrayList<>(getAllConsumedKeys(pc1, pc2))).as("all expected are consumed only once").hasSizeGreaterThanOrEqualTo(expectedKeys.size());
 
                         all.assertAll();
                     });
@@ -156,10 +154,24 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         pc1.getParallelConsumer().closeDrainFirst();
         pc2.getParallelConsumer().closeDrainFirst();
 
+        assertThat(pc1.consumedKeys).hasSizeGreaterThan(0);
+        assertThat(pc2.consumedKeys).as("Second PC should have taken over some of the work and consumed some records")
+                .hasSizeGreaterThan(0);
+
         pcExecutor.shutdown();
 
-        Collection<?> duplicates = IterableUtil.toCollection(StandardComparisonStrategy.instance().duplicatesFrom(consumedKeys));
+        Collection<?> duplicates = IterableUtil.toCollection(StandardComparisonStrategy.instance().duplicatesFrom(getAllConsumedKeys(pc1, pc2)));
         log.info("Duplicate consumed keys (at least one is expected due to the rebalance): {}", duplicates);
+        assertThat(duplicates)
+                .as("There should be very few duplicate keys")
+                .hasSizeLessThan(3);
+    }
+
+    ArrayList<String> getAllConsumedKeys(ParallelConsumerRunnable pc1, ParallelConsumerRunnable pc2) {
+        ArrayList<String> keys = new ArrayList<>();
+        keys.addAll(pc1.consumedKeys);
+        keys.addAll(pc2.consumedKeys);
+        return keys;
     }
 
     int instanceId = 0;
@@ -174,6 +186,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         private final String inputTopic;
         private final ProgressBar bar;
         private ParallelEoSStreamProcessor<String, String> parallelConsumer;
+        private final List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public void run() {

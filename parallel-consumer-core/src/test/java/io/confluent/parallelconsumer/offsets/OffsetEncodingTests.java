@@ -17,7 +17,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -26,16 +25,19 @@ import pl.tlinkowski.unij.api.UniSets;
 
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.BrokenBarrierException;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArray;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArrayCompressed;
+import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK;
+import static io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assume.assumeThat;
+import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
+import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ_WRITE;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
@@ -76,6 +78,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             100_000_0L,
 //            100_000_000L, // very~ slow
     })
+    @ResourceLock(value = COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void largeIncompleteOffsetValues(long nextExpectedOffset) {
         var incompletes = new HashSet<Long>();
         long lowWaterMark = 123L;
@@ -108,6 +111,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 log.info("Encoding not performed: " + encodingToUse);
             }
         }
+
+        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
     /**
@@ -120,8 +125,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @ParameterizedTest
     @EnumSource(OffsetEncoding.class)
     // needed due to static accessors in parallel tests
-    @ResourceLock(value = "OffsetMapCodecManager", mode = ResourceAccessMode.READ_WRITE)
-    void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) throws BrokenBarrierException, InterruptedException {
+    @ResourceLock(value = METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
+    // depends on OffsetMapCodecManager#DefaultMaxMetadataSize
+    @ResourceLock(value = COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
+    void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) {
         assumeThat("Codec skipped, not applicable", encoding,
                 not(in(of(ByteArray, ByteArrayCompressed)))); // byte array not currently used
 
@@ -213,6 +220,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 }
             }
         }
+
+        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
     /**
@@ -227,6 +236,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
      */
     @SneakyThrows
     @Test
+    @ResourceLock(value = COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void ensureEncodingGracefullyWorksWhenOffsetsArentSequentialTwo() {
         long nextExpectedOffset = 101;
         long lowWaterMark = 0;
@@ -264,6 +274,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 log.info("Encoding not performed: " + encodingToUse);
             }
         }
+
+        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
 }

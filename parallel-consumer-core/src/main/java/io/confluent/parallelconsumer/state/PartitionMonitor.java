@@ -8,10 +8,7 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -47,6 +44,12 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
+//    private final Object stateLatchLock = new Object();
+//    private ReentrantLock stateLock = new ReentrantLock();
+//    private CountDownLatch stateLatch = new CountDownLatch(0);
+//    private Phaser statePhaser = new Phaser();
+//    private Semaphore stateSemaphore = new Semaphore(1, true);
+
     /**
      * Hold the tracking state for each of our managed partitions.
      */
@@ -58,12 +61,67 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * Record the generations of partition assignment, for fencing off invalid work.
      * <p>
      * This must live outside of {@link PartitionState}, as it must be tracked across partition lifecycles.
+     * <p>
+     * Starts at zero.
      */
     private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new HashMap<>();
 
+    @SneakyThrows
     public PartitionState<K, V> getState(TopicPartition tp) {
-        return states.get(tp);
+//        maybeWaitForRebalance();
+        // may cause the system to wait for a rebalance to finish
+        PartitionState<K, V> kvPartitionState;
+        synchronized (states) {
+            kvPartitionState = states.get(tp);
+        }
+        return kvPartitionState;
     }
+//
+//    @SneakyThrows
+//    private void maybeWaitForRebalance() throws InterruptedException {
+//        synchronized (stateLatchLock) {
+//            if (stateLatch.getCount() > 0)
+//                log.debug("State locked for rebalance, waiting...");
+//            boolean success = stateLatch.await(60, SECONDS);// todo throw checked?
+//            if (!success) throw new TimeoutException("Timeout waiting for rebalance to finish");
+//        }
+//    }
+
+//    @SneakyThrows
+//    private void maybeWaitForRebalance() throws InterruptedException {
+//            if (statePhaser.getPhase() > 0)
+//                log.debug("State locked for rebalance, waiting...");
+//            statePhaser.arriveAndDeregister()
+//            statePhaser.awaitAdvance(statePhaser.getPhase())
+//            statePhaser.arrive()
+//            boolean success = statePhaser.arriveAndAwaitAdvance(60, SECONDS);// todo throw checked?
+//            if (!success) throw new TimeoutException("Timeout waiting for rebalance to finish");
+//
+//    }
+//
+//    @SneakyThrows
+//    private void maybeWaitForRebalance() throws InterruptedException {
+//        if (stateSemaphore.availablePermits() < 1)
+//            log.debug("State locked for rebalance, waiting...");
+////        boolean success = stateSemaphore.tryAcquire(60, SECONDS);// todo throw checked?
+//        stateSemaphore.acquireUninterruptibly();
+////        if (!success) throw new TimeoutException("Timeout waiting for rebalance to finish");
+//        // rebalance finished
+//        stateSemaphore.release();
+//    }
+//
+//    @SneakyThrows
+//    private void lockState() {
+////        synchronized (stateLatchLock) {
+////            stateLatch = new CountDownLatch(1);
+////        }
+//        stateSemaphore.acquireUninterruptibly();
+//    }
+//
+//    private void unlockState() {
+////        stateLatch.countDown();
+//        stateSemaphore.release();
+//    }
 
     /**
      * Load offset map for assigned partitions
@@ -71,28 +129,32 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         log.debug("Partitions assigned: {}", partitions);
+//        lockState();
+        synchronized (states) {
 
-        for (final TopicPartition partition : partitions) {
-            if (states.containsKey(partition))
-                log.warn("New assignment of partition {} which already exists in partition state. Could be a state bug.", partition);
+            for (final TopicPartition partition : partitions) {
+                if (states.containsKey(partition))
+                    log.warn("New assignment of partition {} which already exists in partition state. Could be a state bug.", partition);
 
-        }
+            }
 
-        incrementPartitionAssignmentEpoch(partitions);
+            incrementPartitionAssignmentEpoch(partitions);
 
-        try {
-            Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation
-            var partitionStates = om.loadOffsetMapForPartition(partitionsSet);
-            states.putAll(partitionStates);
-        } catch (Exception e) {
-            log.error("Error in onPartitionsAssigned", e);
-            throw e;
-        }
+            try {
+                Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
+                OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation
+                var partitionStates = om.loadOffsetMapForPartition(partitionsSet);
+                states.putAll(partitionStates);
+            } catch (Exception e) {
+                log.error("Error in onPartitionsAssigned", e);
+                throw e;
+            }
 
-        // todo delete
+            // todo delete
 //        wm.raisePartitionHighWaterMark(tp, incompletes.getHighestSeenOffset());
 
+//        unlockState();
+        }
     }
 
     /**
@@ -115,8 +177,12 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        incrementPartitionAssignmentEpoch(partitions);
-        resetOffsetMapAndRemoveWork(partitions);
+//        lockState();
+        synchronized (states) {
+            incrementPartitionAssignmentEpoch(partitions);
+            resetOffsetMapAndRemoveWork(partitions);
+        }
+//        unlockState();
     }
 
     /**
@@ -143,18 +209,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         offsetsToSend.forEach((tp, meta) -> {
-//            Set<Long> offsets = getState(tp).partitionIncompleteOffsets;
-//            boolean trackedOffsetsForThisPartitionExist = offsets != null && !offsets.isEmpty();
-//            if (trackedOffsetsForThisPartitionExist) {
-//                long newLowWaterMark = meta.offset();
-//                offsets.removeIf(offset -> offset < newLowWaterMark);
-//            }
-
-//            //
-//            var partition = getState(tp);
-//            partition.truncateOffsets(meta.offset());
-
-            //
             var partition = getState(tp);
             partition.onOffsetCommitSuccess(meta);
         });
@@ -162,10 +216,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private void resetOffsetMapAndRemoveWork(Collection<TopicPartition> partitions) {
         for (TopicPartition partition : partitions) {
-//            partitionIncompleteOffsets.remove(partition);
-//            partitionOffsetHighWaterMarks.remove(partition);
-
-            PartitionState state = states.remove(partition);
+            var state = states.remove(partition);
 
             //
             NavigableMap<Long, WorkContainer<K, V>> oldWorkPartitionQueue = state.getPartitionCommitQueues();
@@ -177,8 +228,19 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
     }
 
+    // todo remove tp - derived from rec
     public int getEpoch(final ConsumerRecord<K, V> rec, final TopicPartition tp) {
         Integer epoch = partitionsAssignmentEpochs.get(tp);
+        rec.topic();
+        if (epoch == null) {
+            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
+        }
+        return epoch;
+    }
+
+    public int getEpoch(final ConsumerRecord<K, V> rec) {
+        Integer epoch = partitionsAssignmentEpochs.get(toTP(rec));
+        rec.topic();
         if (epoch == null) {
             throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
         }
@@ -219,6 +281,12 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     boolean isRecordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
         var tp = toTP(rec);
         var partition = getState(tp);
+        if (partition == null) {
+            // todo delete block - should never get here
+            int epoch = getEpoch(rec, tp);
+            log.error("No state found for partition {}, presuming message never before been processed. Partition epoch: {}", tp, epoch);
+            return false;
+        }
         boolean previouslyProcessed = partition.isRecordPreviouslyProcessed(rec);
         log.trace("Record {} previously seen? {}", rec.offset(), previouslyProcessed);
         return previouslyProcessed;
@@ -233,8 +301,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         for (var partition : this.states.values()) {
             if (partition.hasWorkInCommitQueue())
                 return true;
-//            if (!partition.getValue().partitionCommitQueues.isEmpty())
-//                return true;
         }
         return false;
     }
@@ -260,12 +326,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         state.setAllowedMoreRecords(moreMessagesAllowed);
     }
 
-//    public void setPartitionIncompleteOffset(final TopicPartition tp, final Set<Long> incompleteOffsets) {
-//        PartitionState state = getState(tp);
-////        state.partitionIncompleteOffsets = incompleteOffsets;
-//        state.setPartitionIncompleteOffsets(incompleteOffsets);
-//    }
-
     public Long getHighWaterMark(final TopicPartition tp) {
         return getState(tp).getPartitionOffsetHighWaterMarks();
     }
@@ -278,7 +338,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     /**
      * Checks if partition is blocked with back pressure.
-     *
+     * <p>
      * If false, more messages are allowed to process for this partition.
      * <p>
      * If true, we have calculated that we can't record any more offsets for this partition, as our best performing
@@ -363,4 +423,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
     }
 
+    public boolean isPartitionAssigned(ConsumerRecord<K, V> rec) {
+        return (getState(toTP(rec)) != null);
+    }
 }
