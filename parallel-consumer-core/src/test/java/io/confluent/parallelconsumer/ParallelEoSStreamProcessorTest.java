@@ -38,7 +38,6 @@ import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
@@ -132,7 +131,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         log.debug("Closing...");
         parallelConsumer.close();
 
-        assertThat(processedStates.values()).as("sanity - all expected messages are processed").containsExactly(true, true);
+        assertThat(processedStates.values()).as("sanity - all expected messages are processed")
+                .containsExactly(true, true);
     }
 
     private void setupParallelConsumerInstance(final CommitMode commitMode) {
@@ -690,7 +690,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         //
         assertThat(time).as("Should not be blocked for any reason")
-                .isLessThan(ofMillis(500));
+                .isLessThan(ofSeconds(1));
     }
 
     @ParameterizedTest()

@@ -9,6 +9,7 @@ import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
@@ -43,13 +44,14 @@ import static org.mockito.Mockito.mock;
 /**
  * Mocked out comparative volume tests
  */
+//@Isolated
 @Slf4j
-public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
+class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
     @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    public void load(CommitMode commitMode) {
+    void load(CommitMode commitMode) {
         setupClients();
         setupParallelConsumerInstance(ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
@@ -138,11 +140,11 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
      */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    public void timingOfDifferentOrderingTypes(CommitMode commitMode) {
+    void timingOfDifferentOrderingTypes(CommitMode commitMode) {
         var quantityOfMessagesToProduce = 10_00;
         var defaultNumKeys = 20;
 
-        ParallelConsumerOptions baseOptions = ParallelConsumerOptions.builder()
+        ParallelConsumerOptions<?, ?> baseOptions = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
                 .commitMode(commitMode)
                 .build();
@@ -198,6 +200,9 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
     private void testTiming(int numberOfKeys, int quantityOfMessagesToProduce) {
         log.info("Running test for {} keys and {} messages", numberOfKeys, quantityOfMessagesToProduce);
 
+        List<WorkContainer<String, String>> successfulWork = new Vector<>();
+        super.injectWorkSuccessListener(parallelConsumer.getWm(), successfulWork);
+
         List<Integer> keys = range(numberOfKeys).list();
         HashMap<Integer, List<ConsumerRecord<String, String>>> records = ktu.generateRecords(keys, quantityOfMessagesToProduce);
         ktu.send(consumerSpy, records);
@@ -218,8 +223,17 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
         });
 
         waitAtMost(defaultTimeout.multipliedBy(10)).untilAsserted(() -> {
-            assertThat(super.successfulWork.size()).as("All messages expected messages were processed and successful").isEqualTo(quantityOfMessagesToProduce);
-            assertThat(producerSpy.history().size()).as("All messages expected messages were processed and results produced").isEqualTo(quantityOfMessagesToProduce);
+            // assertj's size checker uses an iterator so must be synchronised.
+            // .size() wouldn't need it but this output is nicer
+            synchronized (successfulWork) {
+                assertThat(successfulWork)
+                        .as("All expected messages were processed and successful")
+                        .hasSize(quantityOfMessagesToProduce);
+            }
+
+            assertThat(producerSpy.history())
+                    .as("All messages expected messages were processed and results produced")
+                    .hasSize(quantityOfMessagesToProduce);
         });
         bar.close();
 
@@ -276,9 +290,6 @@ public class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase
             List<Map<TopicPartition, OffsetAndMetadata>> commitHistory = consumerSpy.getCommitHistoryInt();
             assertThat(commitHistory).as("No offsets committed").hasSizeGreaterThan(0); // non-tx
         }
-
-        // clear messages
-        super.successfulWork.clear();
     }
 
 }
