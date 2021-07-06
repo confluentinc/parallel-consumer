@@ -14,11 +14,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -68,7 +68,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     }
 
     @Test
-    public void testConsumeAndProduce() {
+    void testConsumeAndProduce() {
         var latch = new CountDownLatch(1);
         var stream = streaming.pollProduceAndStream((record) -> {
             String apply = myRecordProcessingAction.apply(record);
@@ -96,14 +96,13 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
             }
         });
 
-        var collect = myResultStream.collect(Collectors.toList());
-
-        assertThat(collect).hasSize(1);
+        await().untilAsserted(() ->
+                assertThat(myResultStream).hasSize(1));
     }
 
 
     @Test
-    public void testFlatMapProduce() {
+    void testFlatMapProduce() {
         var latch = new CountDownLatch(1);
         var myResultStream = streaming.pollProduceAndStream((record) -> {
             String apply1 = myRecordProcessingAction.apply(record);
@@ -123,7 +122,8 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         verify(myRecordProcessingAction, times(2)).apply(any());
 
-        assertThat(myResultStream).hasSize(2);
+        await().untilAsserted(() ->
+                assertThat(myResultStream).hasSize(2));
     }
 
 }
