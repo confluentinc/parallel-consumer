@@ -382,8 +382,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 });
 
                 await().alias("Only the one remaining failing message should be submitted for processing")
-                        .pollDelay(ofSeconds(1))
-                        .atLeast(ofMillis(1000))
+                        .pollDelay(ofMillis(1000))
+                        .atLeast(ofMillis(500))
                         .untilAsserted(() -> {
                                     assertThat(readByThree)
                                             .as("Contains only previously failed messages")

@@ -50,7 +50,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Field txManagerField;
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
-    private final long sendTimeoutSeconds = 2L;
+    private final long sendTimeoutSeconds = 5L;
 
     public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions options) {
         super(newConsumer, wm);
