@@ -23,10 +23,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
@@ -41,6 +38,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
@@ -83,11 +81,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertCommits(of(), "All erroring, so nothing committed except initial");
     }
 
+    /**
+     * Checks that for messages that are currently undergoing processing, that no offsets for them are committed
+     */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
-        ParallelConsumerOptions options = getBaseOptions(commitMode).toBuilder()
+    void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
+        var options = getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)
                 .build();
         setupParallelConsumerInstance(options);
@@ -99,7 +100,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         var locks = constructLatches(2);
 
-        var processedStates = new HashMap<Integer, Boolean>();
+        var processedStates = new LinkedHashMap<Integer, Boolean>();
 
         var startBarrierLatch = new CountDownLatch(1);
 
@@ -131,8 +132,16 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         log.debug("Closing...");
         parallelConsumer.close();
 
-        assertThat(processedStates.values()).as("sanity - all expected messages are processed")
-                .containsExactly(true, true);
+        assertThat(processedStates)
+                .as("sanity - all expected messages are processed")
+                .containsExactly(
+                        entry(1, true),
+                        entry(0, true)
+                );
+
+        assertThat(processedStates)
+                .as("sanity - all expected messages are processed")
+                .containsValues(true, true);
     }
 
     private void setupParallelConsumerInstance(final CommitMode commitMode) {
@@ -152,7 +161,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void offsetsAreNeverCommittedForMessagesStillInFlightShort(CommitMode commitMode) {
+    void offsetsAreNeverCommittedForMessagesStillInFlightShort(CommitMode commitMode) {
         offsetsAreNeverCommittedForMessagesStillInFlightSimplest(commitMode);
         log.info("Test start");
 
@@ -163,7 +172,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @Disabled
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    public void offsetsAreNeverCommittedForMessagesStillInFlightLong(CommitMode commitMode) {
+    void offsetsAreNeverCommittedForMessagesStillInFlightLong(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
         sendSecondRecord(consumerSpy);
@@ -285,7 +294,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         parallelConsumer.requestCommitAsap();
 
-        waitForSomeLoopCycles(5); // async commit can be slow - todo change this to event based
+        waitForSomeLoopCycles(50); // async commit can be slow - todo change this to event based
 
         // make sure only base offsets are committed for partition (next expected = 0 and 2 respectively)
 //        assertCommits(of(2));
@@ -294,11 +303,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish 2
         releaseAndWait(locks, 2);
         parallelConsumer.requestCommitAsap();
-        waitForOneLoopCycle();
 
-        // make sure only 2 on it's partition of committed
+        // make sure only 2 on it's partition is committed
 //        assertCommits(of(2, 3));
-        assertCommitLists(of(of(), of(2, 3)));
+        await().untilAsserted(() ->
+                assertCommitLists(of(of(), of(2, 3))));
 
         // finish 0
         releaseAndWait(locks, 0);
@@ -320,7 +329,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             waitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
 
         //
-        assertCommitLists(of(of(2), of(2, 3, 4)));
+        await().untilAsserted(() ->
+                assertCommitLists(of(of(2), of(2, 3, 4))));
     }
 
     @Test
@@ -345,7 +355,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // cause a control loop error
         parallelConsumer.addLoopEndCallBack(() -> {
-            throw new RuntimeException("My fake control loop error");
+            throw new FakeRuntimeError("My fake control loop error");
         });
 
         //
@@ -574,9 +584,13 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertCommits(of(0, 2, 3, 6, 8));
     }
 
+    /**
+     * Check that when processing in key order, when work is not completed or taking a long time, that the commit system
+     * doesn't break.
+     */
     @SneakyThrows
     @Test
-    public void processInKeyOrderWorkNotReturnedDoesntBreakCommits() {
+    void processInKeyOrderWorkNotReturnedDoesntBreakCommits() {
         ParallelConsumerOptions options = ParallelConsumerOptions.builder()
                 .commitMode(PERIODIC_CONSUMER_SYNC)
                 .ordering(KEY)
@@ -625,9 +639,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             log.debug("Message offset {} processed...", offset);
         });
 
-        waitForOneLoopCycle();
-
-        assertThat(polled).as("input data check").hasSize(3);
+        await().untilAsserted(() ->
+                assertThat(polled)
+                        .as("sanity check - the records have been polled")
+                        .hasSize(3)
+        );
 
         //
         awaitLatch(twoLoopLatch);

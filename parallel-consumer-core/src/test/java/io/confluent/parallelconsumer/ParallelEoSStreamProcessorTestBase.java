@@ -75,7 +75,7 @@ public class ParallelEoSStreamProcessorTestBase {
 
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
-    public static int defaultTimeoutSeconds = 1;
+    public static int defaultTimeoutSeconds = 10;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
@@ -281,7 +281,7 @@ public class ParallelEoSStreamProcessorTestBase {
         loopLatchV = new CountDownLatch(waitForCount);
         boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
         if (timeout)
-            throw new TimeoutException(msg("Timeout {} waiting for {} on latch with {} left", defaultTimeoutSeconds, waitForCount, loopLatchV.getCount()));
+            throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeoutSeconds, waitForCount, loopLatchV.getCount()));
     }
 
     @SneakyThrows
@@ -372,7 +372,7 @@ public class ParallelEoSStreamProcessorTestBase {
     }
 
     /**
-     * Checks a list of commits of a list of partitions
+     * Checks a list of commits of a list of partitions - outer list is partition, inner list is commits
      */
     public void assertCommitLists(List<List<Integer>> offsets) {
         if (isUsingTransactionalProducer()) {

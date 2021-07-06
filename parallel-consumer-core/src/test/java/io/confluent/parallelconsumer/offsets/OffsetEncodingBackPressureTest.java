@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.csid.utils.TrimListRepresentation;
+import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -15,7 +16,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
@@ -47,7 +47,7 @@ import static org.awaitility.Awaitility.waitAtMost;
  * <p>
  * See {@link OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK}
  */
-@Isolated
+//@Isolated
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -90,7 +90,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     log.debug("force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark");
                     awaitLatch(msgLock, 60);
                     log.debug("very slow message awoken, throwing exception");
-                    throw new RuntimeException("Fake error");
+                    throw new FakeRuntimeError("Fake error");
                 } else {
                     log.debug("Second attempt, sleeping");
                     awaitLatch(msgLockTwo, 60);
