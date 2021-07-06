@@ -14,7 +14,6 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.ConsumerOffsetCommitter;
 import io.confluent.parallelconsumer.internal.OffsetCommitter;
 import io.confluent.parallelconsumer.internal.ProducerManager;
-import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -30,7 +29,6 @@ import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junitpioneer.jupiter.CartesianProductTest;
 
 import java.util.*;
@@ -46,7 +44,6 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.waitAtMost;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -61,6 +58,9 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see ConsumerOffsetCommitter
  * @see ProducerManager
  */
+// have yet to narrow down why this test needs to run isolated
+//@Execution(ExecutionMode.SAME_THREAD)
+//@Isolated
 @Slf4j
 class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
 
@@ -68,13 +68,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
     int DEFAULT_MAX_POLL_RECORDS_CONFIG = 500;
     int HIGH_MAX_POLL_RECORDS_CONFIG = 10_000;
 
-    public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
-    public List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());
-    public AtomicInteger processedCount = new AtomicInteger(0);
-    public AtomicInteger producedCount = new AtomicInteger(0);
-
     // is sensitive to changes in metadata size
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
+//    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
     @CartesianProductTest(factory = "enumSets")
     void testDefaultMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 5000;
@@ -188,6 +183,11 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         assertThat(endOffsets).containsEntry(tp, ((long) expectedMessageCount));
         assertThat(beginOffsets.get(tp)).isZero();
 
+
+        List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
+        List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());
+        AtomicInteger processedCount = new AtomicInteger(0);
+        AtomicInteger producedCount = new AtomicInteger(0);
 
         pc.pollAndProduce(record -> {
                     log.trace("Still going {}", record.offset());

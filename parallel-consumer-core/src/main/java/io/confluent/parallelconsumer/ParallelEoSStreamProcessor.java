@@ -816,7 +816,8 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
-            if (workMailBox.isEmpty() && state.equals(running)) {
+            boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running);
+            if (noWorkToDoAndStillRunning) {
                 if (log.isDebugEnabled()) {
                     log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
                             timeout, workerPool.getActiveCount(), getWorkerQueueSize());
@@ -827,7 +828,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
                 log.trace("Blocking poll finish");
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
-                updateLastCommitCheckTime();
             } else {
                 // don't set the lock or log anything
                 firstBlockingPoll = workMailBox.poll();
@@ -860,7 +860,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      */
     private void commitOffsetsMaybe() {
         Duration elapsedSinceLast = getTimeSinceLastCommit();
-        boolean commitFrequencyOK = toSeconds(elapsedSinceLast) >= toSeconds(timeBetweenCommits);
+        boolean commitFrequencyOK = elapsedSinceLast.compareTo(timeBetweenCommits) > 0;
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean commitCommand = isCommandedToCommit();
         boolean shouldCommitNow = commitFrequencyOK || !lingerBeneficial || commitCommand;
