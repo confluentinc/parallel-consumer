@@ -74,7 +74,9 @@
         <jvm.location>${java.home}</jvm.location>
         <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
         <jvm9.location>-insert jvm9 location via environment variable-</jvm9.location>
-        <license.mode>check</license.mode>
+        <!-- default to format when on developer machines, check when in CI -->
+        <!-- change to format when ready to do the big update -->
+        <license.mode>help</license.mode>
         <delombok.output>${project.basedir}/target/delombok</delombok.output>
 
         <!-- standard props -->
@@ -155,6 +157,7 @@
             <id>license-format</id>
             <activation>
                 <os>
+                    <!-- this doesnt' work? remove -->
                     <!-- improve to instead be !jenkins && !travis  / !CI -->
                     <family>mac</family>
                 </os>
@@ -171,6 +174,13 @@
                     <url>https://maven.pkg.github.com/whelk-io/asciidoc-template-maven-plugin</url>
                 </pluginRepository>
             </pluginRepositories>
+        </profile>
+        <profile>
+            <!-- Profile to always run in Continuous Integration (Jenkins, Github Workflows etc) environments -->
+            <id>ci</id>
+            <properties>
+                <license.mode>check</license.mode>
+            </properties>
         </profile>
         <profile>
             <id>maven-central</id>
@@ -387,7 +397,7 @@
                 <groupId>com.mycila</groupId>
                 <artifactId>license-maven-plugin</artifactId>
                 <version>${mycila.version}</version>
-                <inherited>false</inherited>
+                <inherited>true</inherited>
                 <!-- To apply the license run: -->
                 <!-- ↪ mvn com.mycila:license-maven-plugin:format-->
                 <configuration>
