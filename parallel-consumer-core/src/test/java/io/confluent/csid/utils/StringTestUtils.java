@@ -1,5 +1,9 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020-2021 Confluent, Inc.
+ */
+
 import lombok.experimental.UtilityClass;
 import org.assertj.core.presentation.StandardRepresentation;
 

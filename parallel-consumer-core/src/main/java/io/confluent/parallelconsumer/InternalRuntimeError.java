@@ -1,5 +1,8 @@
 package io.confluent.parallelconsumer;
 
+/*-
+ * Copyright (C) 2020-2021 Confluent, Inc.
+ */
 public class InternalRuntimeError extends RuntimeException {
 
     public InternalRuntimeError(final String message) {
