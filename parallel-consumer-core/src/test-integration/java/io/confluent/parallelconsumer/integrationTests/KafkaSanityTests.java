@@ -4,7 +4,6 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -12,8 +11,6 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.OffsetMetadataTooLarge;
-import org.apache.kafka.common.internals.Topic;
-import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import pl.tlinkowski.unij.api.UniLists;

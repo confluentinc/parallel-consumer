@@ -5,8 +5,6 @@ package io.confluent.csid.utils;
  */
 
 import org.junit.jupiter.api.DisplayNameGenerator;
-import org.junit.platform.commons.util.StringUtils;
-import org.mockito.internal.util.StringUtil;
 
 import java.lang.reflect.Method;
 

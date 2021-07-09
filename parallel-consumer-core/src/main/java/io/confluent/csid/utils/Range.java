@@ -4,7 +4,10 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
@@ -13,7 +16,7 @@ import java.util.stream.IntStream;
  */
 public class Range implements Iterable<Integer> {
 
-    private long limit;
+    private final long limit;
 
     public Range(long limit) {
         this.limit = limit;

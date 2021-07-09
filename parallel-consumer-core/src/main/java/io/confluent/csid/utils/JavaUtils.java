@@ -1,8 +1,6 @@
 package io.confluent.csid.utils;
 
 import io.confluent.parallelconsumer.InternalRuntimeError;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 import java.util.List;

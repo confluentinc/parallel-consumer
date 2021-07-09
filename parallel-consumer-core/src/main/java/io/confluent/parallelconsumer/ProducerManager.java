@@ -9,7 +9,6 @@ import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.clients.producer.internals.TransactionManager;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.utils.Timer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -204,7 +203,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                             // tx has completed since we last tried, start a new one
                             producer.beginTransaction();
                         }
-                        boolean ready = (lastErrorSavedForRethrow != null) ? !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION") : true;
+                        boolean ready = lastErrorSavedForRethrow == null || !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION");
                         if (ready) {
                             // try again
                             log.error("Transaction was already in READY state - tx completed between interrupt and retry");

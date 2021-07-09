@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
-import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.SneakyThrows;
@@ -20,13 +19,15 @@ import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.KafkaTestUtils.trimAllGeneisOffset;
-import static io.confluent.csid.utils.LatchTestUtils.*;
-import static io.confluent.csid.utils.Range.range;
+import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;

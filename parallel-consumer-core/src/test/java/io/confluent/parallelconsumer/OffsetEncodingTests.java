@@ -1,8 +1,6 @@
 package io.confluent.parallelconsumer;
 
-import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.KafkaTestUtils;
-import io.confluent.csid.utils.ThreadUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -18,10 +16,10 @@ import pl.tlinkowski.unij.api.UniSets;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
-import static io.confluent.parallelconsumer.OffsetEncoding.*;
+import static io.confluent.parallelconsumer.OffsetEncoding.ByteArray;
+import static io.confluent.parallelconsumer.OffsetEncoding.ByteArrayCompressed;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.in;
@@ -73,7 +71,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         incompletes.addAll(UniSets.of(lowWaterMark, 2345L, 8765L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
-        encoder.compressionForced = true;
+        OffsetSimultaneousEncoder.compressionForced = true;
 
         //
         encoder.invoke();
@@ -220,7 +218,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         var incompletes = new HashSet<>(UniSets.of(1L, 4L, 5L, 100L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
-        encoder.compressionForced = true;
+        OffsetSimultaneousEncoder.compressionForced = true;
 
         //
         encoder.invoke();
