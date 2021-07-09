@@ -4,12 +4,9 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import lombok.experimental.UtilityClass;
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;

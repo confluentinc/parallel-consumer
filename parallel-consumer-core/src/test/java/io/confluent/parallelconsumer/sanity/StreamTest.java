@@ -8,7 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -43,7 +46,7 @@ public class StreamTest {
             @Override
             public String next() {
                 count++;
-                return new String(count + " " + Math.random());
+                return count + " " + Math.random();
 
             }
         };
@@ -54,7 +57,7 @@ public class StreamTest {
 
         List<String> collect = stream
                 .map(x -> {
-                            log.info(x.toString());
+                            log.info(x);
                             return x.toUpperCase();
                         }
                 )

@@ -1,9 +1,6 @@
 package io.confluent.csid.utils;
 
 import com.google.auto.service.AutoService;
-import lombok.extern.slf4j.Slf4j;
-import org.junit.platform.engine.TestExecutionResult;
-import org.junit.platform.engine.reporting.ReportEntry;
 import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;

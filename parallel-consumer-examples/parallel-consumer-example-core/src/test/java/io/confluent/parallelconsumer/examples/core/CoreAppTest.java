@@ -15,14 +15,11 @@ import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.common.serialization.Serializer;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
-import java.util.HashMap;
 
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
 import static org.mockito.Mockito.when;
