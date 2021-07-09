@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
@@ -128,7 +127,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
      * chances no work has completed in the last second.
      */
-    private AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
+    private final AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
     /**
      * If true, more messages are allowed to process for this partition.
@@ -146,7 +145,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Record the generations of partition asignment, for fencing off invalid work
      */
-    private Map<TopicPartition, Integer> partitionsAssignmentEpochs = new HashMap<>();
+    private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new HashMap<>();
 
     // too aggressive for some situations? make configurable?
     private final Duration thresholdForTimeSpentInQueueWarning = Duration.ofSeconds(10);
@@ -339,13 +338,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             previouslyProcessed = false;
         } else {
             Long offsetHighWaterMark = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
-            if (offset <= offsetHighWaterMark) {
-                // within the range of tracked offsets, so must have been previously completed
-                previouslyProcessed = true;
-            } else {
-                // we haven't recorded this far up, so must not have been processed yet
-                previouslyProcessed = false;
-            }
+            // within the range of tracked offsets, so must have been previously completed
+            // we haven't recorded this far up, so must not have been processed yet
+            previouslyProcessed = offset <= offsetHighWaterMark;
         }
         log.trace("Record {} previously seen? {}", rec.offset(), previouslyProcessed);
         return previouslyProcessed;

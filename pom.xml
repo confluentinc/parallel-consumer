@@ -75,8 +75,7 @@
         <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
         <jvm9.location>-insert jvm9 location via environment variable-</jvm9.location>
         <!-- default to format when on developer machines, check when in CI -->
-        <!-- change to format when ready to do the big update -->
-        <license.mode>help</license.mode>
+        <license.mode>format</license.mode>
         <delombok.output>${project.basedir}/target/delombok</delombok.output>
 
         <!-- standard props -->

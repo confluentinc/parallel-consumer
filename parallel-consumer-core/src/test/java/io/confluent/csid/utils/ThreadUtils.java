@@ -1,5 +1,8 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020-2021 Confluent, Inc.
+ */
 import lombok.SneakyThrows;
 
 public class ThreadUtils {

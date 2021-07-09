@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.examples.vertx;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.vertx.VertxTest;
