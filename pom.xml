@@ -182,6 +182,7 @@
             <id>ci</id>
             <properties>
                 <license.mode>check</license.mode>
+                <parallel-tests>false</parallel-tests>
             </properties>
         </profile>
         <profile>
