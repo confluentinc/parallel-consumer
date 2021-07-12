@@ -18,7 +18,6 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -26,6 +25,7 @@ import java.util.concurrent.Future;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.awaitility.Awaitility.waitAtMost;
 
 /**
@@ -95,13 +95,11 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         var pc = createParallelConsumer(topic, newConsumer);
         pc.poll(consumerRecord -> consumedOffsets.add(consumerRecord.offset()));
         if (check) {
-            try {
+            assertThatCode(() -> {
                 waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
                         .untilAsserted(
                                 () -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
-            } catch (ConcurrentModificationException e) {
-                throw new AssertionError("Collection modified while testing", e);
-            }
+            }).doesNotThrowAnyException(); // wait for no concurrent exceptions
         } else {
             Thread.sleep(2000);
         }
@@ -114,7 +112,11 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         newConsumer.subscribe(UniSets.of(topicNameForTest));
         newConsumer.poll(ofSeconds(1));
         Map<TopicPartition, OffsetAndMetadata> committed = newConsumer.committed(newConsumer.assignment());
-        assertThat(committed.get(new TopicPartition(topicNameForTest, 0)).offset()).isEqualTo(expectedOffset);
+        TopicPartition tp = new TopicPartition(topicNameForTest, 0);
+        OffsetAndMetadata offsetAndMetadata = committed.get(tp);
+        assertThat(offsetAndMetadata).as("Should have commit history for this partition {}", tp).isNotNull();
+        long offset = offsetAndMetadata.offset();
+        assertThat(offset).isEqualTo(expectedOffset);
         newConsumer.close();
     }
 
