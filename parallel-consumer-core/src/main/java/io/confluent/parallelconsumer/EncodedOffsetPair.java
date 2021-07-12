@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -83,10 +84,10 @@ final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetCompressed -> deserialiseBitSetWrap(decompressZstd(data), v1);
             case RunLength -> runLengthDecodeToString(runLengthDeserialise(data));
             case RunLengthCompressed -> runLengthDecodeToString(runLengthDeserialise(decompressZstd(data)));
-            case BitSetV2-> deserialiseBitSetWrap(data, v2);
-            case BitSetV2Compressed-> deserialiseBitSetWrap(data, v2);
-            case RunLengthV2-> deserialiseBitSetWrap(data, v2);
-            case RunLengthV2Compressed-> deserialiseBitSetWrap(data, v2);
+            case BitSetV2 -> deserialiseBitSetWrap(data, v2);
+            case BitSetV2Compressed -> deserialiseBitSetWrap(data, v2);
+            case RunLengthV2 -> deserialiseBitSetWrap(data, v2);
+            case RunLengthV2Compressed -> deserialiseBitSetWrap(data, v2);
             default -> throw new InternalRuntimeError("Invalid state"); // todo why is this needed? what's not covered?
         };
         return binaryArrayString;

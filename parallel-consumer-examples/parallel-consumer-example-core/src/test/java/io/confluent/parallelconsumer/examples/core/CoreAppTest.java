@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.examples.core;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import lombok.SneakyThrows;

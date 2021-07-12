@@ -13,12 +13,12 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class WallClockStub extends AdvancingWallClockProvider {
 
-  @NonNull
-  private Instant baseTime;
+    @NonNull
+    private final Instant baseTime;
 
-  @Override
-  public Instant getNow() {
-    return baseTime;
-  }
+    @Override
+    public Instant getNow() {
+        return baseTime;
+    }
 
 }

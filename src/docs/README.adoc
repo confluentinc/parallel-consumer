@@ -1,4 +1,3 @@
-
 //
 // STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
 //
@@ -65,7 +64,6 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=example]
 ----
 
-
 toc::[]
 
 == Motivation
@@ -87,13 +85,14 @@ When reading the below, keep in mind that the unit of concurrency and thus perfo
 Currently, you can't adjust the number of partitions in your Kafka topics without jumping through a lot of hoops, or breaking your key ordering.
 
 ==== Before
+
 .The slow consumer situation with the raw Apache Kafka Consumer client
 image::https://lucid.app/publicSegments/view/98ad200f-97b2-479b-930c-2805491b2ce7/image.png[align="center"]
 
 ==== After
+
 .Example usage of the Parallel Consumer
 image::https://lucid.app/publicSegments/view/2cb3b7e2-bfdf-4e78-8247-22ec394de965/image.png[align="center"]
-
 
 === Background
 
@@ -112,6 +111,7 @@ The Parallel Consumer provides a solution to this problem.
 In addition, the <<http-with-vertx,Vert.x extension>> to this library supplies non-blocking interfaces, allowing higher still levels of concurrency with a further simplified interface.
 
 === FAQ
+
 [qanda]
 Why not just run more consumers?::
 The typical way to address performance issues in a Kafka system, is to increase the number of consumers reading from a topic.
@@ -119,7 +119,7 @@ This is effective in many situations, but falls short in a lot too.
 
 * Primarily: You cannot use more consumers than you have partitions available to read from.
 For example, if you have a topic with five partitions, you cannot use a group with more than five consumers to read from it.
-* Running more extra consumers has resource implications - each consumer takes up resources on both the client  and broker side.
+* Running more extra consumers has resource implications - each consumer takes up resources on both the client and broker side.
 Each consumer adds a lot of overhead in terms of memory, CPU, and network bandwidth.
 * Large consumer groups (especially many large groups) can cause a lot of strain on the consumer group coordination system, such as rebalance storms.
 * Even with several partitions, you cannot achieve the performance levels obtainable by *per-key* ordered or unordered concurrent processing.
@@ -189,8 +189,8 @@ The end-to-end latency of the responses to these answers needs to be as low as t
 We can break out as described below into the tool for processing that step, then return to the Kafka Streams context.
 * Provisioning extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
-
 == Feature List
+
 * Have massively parallel consumption processing without running hundreds or thousands of
 ** Kafka consumer clients
 ** topic partitions
@@ -230,8 +230,8 @@ For example, if you have a key set of 10,000 unique keys, and you need to call a
 The user just has to provide a function to extract from the message the HTTP call parameters and construct the HTTP request object.
 
 === Illustrative Performance Example
-.(see link:./parallel-consumer-core/src/test-integration/java/io/confluent/parallelconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
 
+.(see link:./parallel-consumer-core/src/test-integration/java/io/confluent/parallelconsumer/integrationTests/VolumeTests.java[VolumeTests.java])
 These performance comparison results below, even though are based on real performance measurement results, are for illustrative purposes.
 To see how the performance of the tool is related to instance counts, partition counts, key distribution and how it would relate to the vanilla client.
 Actual results will vary wildly depending upon the setup being deployed into.
@@ -258,7 +258,7 @@ As an illustrative example of relative performance, given:
 ** numberOfThreads = 16
 
 .Comparative performance of order modes and key spaces
-[cols="1,1,1,3", options="header"]
+[cols="1,1,1,3",options="header"]
 |===
 |Ordering
 |Number of keys
@@ -321,7 +321,6 @@ As an illustrative example of relative performance, given:
 |As there is no order restriction, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
 |===
 
-
 == Support and Issues
 
 WARNING: This library is experimental, and Confluent does not currently offer support for this library.
@@ -335,11 +334,9 @@ NOTE: We are very interested to hear about your experiences!
 
 If you have questions, head over to the https://launchpass.com/confluentcommunity[Confluent Slack community], or raise an https://github.com/confluentinc/parallel-consumer/issues[issue] on GitHub.
 
-
 == License
 
 This library is copyright Confluent Inc, and licensed under the Apache License Version 2.0.
-
 
 == Usage
 
@@ -364,7 +361,6 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 [source,xml,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/pom.xml[tag=exampleDep]
 
-
 === Common Preparation
 
 .Setup the client
@@ -372,7 +368,8 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-ver
 ----
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=exampleSetup]
 ----
-<1> Setup your clients as per normal. A Producer is only required if using the `produce` flows.
+<1> Setup your clients as per normal.
+A Producer is only required if using the `produce` flows.
 <2> Choose your ordering type, `KEY` in this case.
 This ensures maximum concurrency, while ensuring messages are processed and committed in `KEY` order, making sure no offset is committed unless all offsets before it in it's partition, are completed also.
 <3> The maximum number of concurrent processing operations to be performing at any given time.
@@ -417,7 +414,6 @@ You can also optionally provide a callback function to be run after the message(
 [source,java,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=exampleProduce]
 
-
 ==== Callbacks vs Streams
 
 You have the option to either use callbacks to be notified of events, or use the `Streaming` versions of the API, which use the `java.util.stream.Stream` system:
@@ -445,7 +441,7 @@ See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example
 Use your Streams app to process your data first, then send anything needed to be processed concurrently to an output topic, to be consumed by the parallel consumer.
 
 .Example usage with Kafka Streams
-image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage, align="center"]
+image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage,align="center"]
 
 .Preprocess in Kafka Streams, then process concurrently
 [source,java,indent=0]
@@ -508,7 +504,6 @@ This option is most like normal operation, except if the consumer is assigned mo
 .Partition ordered concurrent processing of messages
 image::https://lucid.app/publicSegments/view/30ad8632-e8fe-4e05-8afd-a2b6b3bab309/image.png[align="center"]
 
-
 === Ordered by Key
 
 Most similar to ordered by partition, this mode ensures process ordering by *key* (per partition).
@@ -526,7 +521,6 @@ image::https://lucid.app/publicSegments/view/f7a05e99-24e6-4ea3-b3d0-978e306aa56
 === Retries and Ordering
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
-
 
 == Result Models
 
@@ -581,7 +575,7 @@ One can then use this library to consume from an input topic, produced by KS to 
 For a code example, see the <<streams-usage-code>> section.
 
 .Example usage with Kafka Streams
-image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage, align="center"]
+image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage,align="center"]
 
 [[roadmap]]
 == Roadmap
@@ -609,7 +603,6 @@ For released changes, see the link:CHANGELOG.adoc[CHANGELOG].
 
 * Apache Kafka KIP?
 * Call backs only offset has been committed
-
 
 == Usage Requirements
 
@@ -683,6 +676,7 @@ Run a specific integration test method in a submodule project, skipping unit tes
 
 Run `git bisect` to find a bad commit, edit the Maven command in `bisect.sh` and run::
 [source=bash]
+
 ----
 git bisect start good bad
 git bisect run ./bisect.sh
@@ -716,8 +710,7 @@ This will leave the container running after the JUnit test is complete for reuse
 Testcontainers detects if a container is reusable by hashing the container creation parameters from the JUnit test.
 If an existing container is _not_ reusable, a new container will be created, **but the old container will not be removed**.
 
-Target | Description
---- | ---
+Target | Description --- | ---
 `testcontainers-list` | List all containers labeled as testcontainers
 `testcontainers-clean` | Remove all containers labeled as testcontainers
 
@@ -734,8 +727,7 @@ docker container ls --filter 'label=org.testcontainers=true' --format '{{.ID}}' 
 docker container ls --filter 'label=org.testcontainers=true'
 ----
 
-> NOTE: `testcontainers-clean` removes **all** docker containers on your system with the `io.testcontainers=true` label
-> (including the most recent container which may be reusable).
+> NOTE: `testcontainers-clean` removes **all** docker containers on your system with the `io.testcontainers=true` label > (including the most recent container which may be reusable).
 
 See https://github.com/testcontainers/testcontainers-java/pull/1781[this testcontainers PR] for details on the reusable containers feature.
 
@@ -757,16 +749,17 @@ These are the main sub systems:
 Each thread collaborates with the others through thread safe Java collections.
 
 .Core Architecture. Threads are represented by letters and colours, with their steps in sequential numbers.
-image::https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59ed/image.png[Core Architecture, align="center"]
+image::https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59ed/image.png[Core Architecture,align="center"]
 
 === Vert.x Architecture
 
-The Vert.x module is an optional extension to the core module. As depicted in the diagram, the architecture extends the core architecture.
+The Vert.x module is an optional extension to the core module.
+As depicted in the diagram, the architecture extends the core architecture.
 
 Instead of the work thread pool count being the degree of concurrency, it is controlled by a max parallel requests setting, and work is performed asynchronously on the Vert.x engine by a _core_ count aligned Vert.x managed thread pool using Vert.x asynchronous IO plugins (https://vertx.io/docs/vertx-core/java/#_verticles[verticles]).
 
 .Vert.x Architecture
-image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture, align="center"]
+image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture,align="center"]
 
 === Transactional System Architecture
 
@@ -782,7 +775,8 @@ Across a system failure, only completed messages not stored as such in the last 
 This is not an _exactly once guarantee_, as message replay cannot be prevented across failure.
 
 CAUTION: Note that Kafka's Exactly Once Semantics (EoS) (transactional processing) also does not prevent _duplicate message replay_ - it *presents* an _effectively once_ result messages in Kafka topics.
-Messages may _still_ be replayed when using `EoS`. This is an important consideration when using it, especially when integrating with thrid party systems, which is a very common pattern for utilising this project.
+Messages may _still_ be replayed when using `EoS`.
+This is an important consideration when using it, especially when integrating with thrid party systems, which is a very common pattern for utilising this project.
 
 As mentioned previously, offsets are always committed in the correct order and only once all previous messages have been successfully processed; regardless of <<ordering-guarantees,ordering mode>> selected.
 We call this the "highest committable offset".
@@ -824,11 +818,11 @@ If both serialised formats are significantly large, they are then both compresse
 *** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again if random.
 * Gets stored along with base offset for each partition, in the offset `commitsync` `metadata` string
 * The offset commit metadata has a hardcoded limit of 4096 bytes per partition (@see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`)
-** Because of this, if our map doesn't fit into this, we have to drop it and not use it, losing the shorter replay benefits. However with runlength encoding and typical offset patterns this should be quite rare.
+** Because of this, if our map doesn't fit into this, we have to drop it and not use it, losing the shorter replay benefits.
+However with runlength encoding and typical offset patterns this should be quite rare.
 *** Work is being done on continuous and predictive space requirements, which will optionally prevent the system from continuing past a point by introducing local backpressure which it can't proceed without dropping the encoded map information - see https://github.com/confluentinc/parallel-consumer/issues/53[Exact continuous offset encoding for precise offset payload size back pressure].
 ** Not being able to fit the map into the metadata, depends on message acknowledgement patterns in the use case and the numbers of messages involved.
 Also the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
-
 
 == Attribution
 

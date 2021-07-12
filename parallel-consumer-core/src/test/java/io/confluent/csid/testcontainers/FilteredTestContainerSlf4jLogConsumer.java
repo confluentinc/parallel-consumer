@@ -20,7 +20,7 @@ import static org.slf4j.event.Level.TRACE;
 
 /**
  * Filters out some log levels from the test container (e.g. Kafka's container has TRACE level set by default).
- *
+ * <p>
  * Enable logging for this class to get log statements from docker.
  */
 @Slf4j

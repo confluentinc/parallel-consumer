@@ -18,15 +18,15 @@ jobs:
         # Why not? because we can.
         # 2.0.1, 2.1.1, 2.2.2, 2.3.1, 2.4.1 don't work - needs zstd and some kafka client libs.
         # Doesn't mean it couldn't be modified slightly to work...
-        ak: [2.5.1, 2.6.1]
-        jdk: ['-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.292/x64', '']
-        experimental: [false]
-        name: ["Stable AK version"]
+        ak: [ 2.5.1, 2.6.1 ]
+        jdk: [ '-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.292/x64', '' ]
+        experimental: [ false ]
+        name: [ "Stable AK version" ]
         include:
-# AK 2.4 not supported
-#           - ak: "'[2.4.1,2.5)'" # currently failing
-#             experimental: true
-#             name: "Oldest AK breaking version 2.4.1+ (below 2.5.0) expected to fail"
+          # AK 2.4 not supported
+          #           - ak: "'[2.4.1,2.5)'" # currently failing
+          #             experimental: true
+          #             name: "Oldest AK breaking version 2.4.1+ (below 2.5.0) expected to fail"
           - ak: "'[2.7.0,4)'" # currently failing
             experimental: true
             name: "Newest AK version 2.7.0+ expected to fail"
@@ -36,64 +36,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Setup JDK 1.8
-      uses: actions/setup-java@v1
-      with:
-        java-version: 1.8
+      - name: Setup JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
 
-    # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
-    - name: Show java 1.8 home
-   # /opt/hostedtoolcache/jdk/8.0.282/x64/bin/java
-      run: which java
+      # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
+      - name: Show java 1.8 home
+        # /opt/hostedtoolcache/jdk/8.0.282/x64/bin/java
+        run: which java
 
-#     - name: Setup JDK 1.9
-#       uses: actions/setup-java@v1
-#       with:
-#         java-version: 1.9
+      #     - name: Setup JDK 1.9
+      #       uses: actions/setup-java@v1
+      #       with:
+      #         java-version: 1.9
 
-#    - name: Show java 1.9 home
-    # /opt/hostedtoolcache/jdk/9.0.7/x64
-#      run: which java
+      #    - name: Show java 1.9 home
+      # /opt/hostedtoolcache/jdk/9.0.7/x64
+      #      run: which java
 
-    - name: Setup Java JDK 13
-      uses: actions/setup-java@v1.4.3
-      with:
-        java-version: '13.0.2'
-        java-package: jdk
-        architecture: x64
+      - name: Setup Java JDK 13
+        uses: actions/setup-java@v1.4.3
+        with:
+          java-version: '13.0.2'
+          java-package: jdk
+          architecture: x64
 
-#    - name: Show java 13 home
-    # /opt/hostedtoolcache/jdk/13.0.2/x64/bin/java
-#      run: which java
+      #    - name: Show java 13 home
+      # /opt/hostedtoolcache/jdk/13.0.2/x64/bin/java
+      #      run: which java
 
-#    - name: Show java version
-#      run: java -version
+      #    - name: Show java version
+      #      run: java -version
 
-#     - name: Show mvn version
-#       run: mvn -version
+      #     - name: Show mvn version
+      #       run: mvn -version
 
-#    - name: Build with Maven on Java 13
-#      run: mvn -B package --file pom.xml
+      #    - name: Build with Maven on Java 13
+      #      run: mvn -B package --file pom.xml
 
-#    - name: Cache the Maven packages to speed up build
-#      uses: actions/cache@v1
-#      with:
-#        path: ~/.m2
-#        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-#        restore-keys: ${{ runner.os }}-m2
+      #    - name: Cache the Maven packages to speed up build
+      #      uses: actions/cache@v1
+      #      with:
+      #        path: ~/.m2
+      #        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+      #        restore-keys: ${{ runner.os }}-m2
 
-    - name: Cache Maven packages
-      uses: actions/cache@v1
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-m2
-        restore-keys: ${{ runner.os }}-m2
+      - name: Cache Maven packages
+        uses: actions/cache@v1
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2
+          restore-keys: ${{ runner.os }}-m2
 
-    - name: Test with Maven
-      #run: mvn -B package -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64 -Dkafka.version=${{ matrix.ak }}
-      run: mvn -Pci -B package ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }}
+      - name: Test with Maven
+        #run: mvn -B package -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64 -Dkafka.version=${{ matrix.ak }}
+        run: mvn -Pci -B package ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }}
 # - name: Test with Maven on Java 9
 #      run: mvn -B package -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
 #    - name: Test with Maven on Java
