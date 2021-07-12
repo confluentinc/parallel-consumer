@@ -1,9 +1,8 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
-package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.FakeRuntimeError;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.ResourceLocks;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.shaded.org.apache.commons.lang.math.RandomUtils;
@@ -89,10 +87,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     @SneakyThrows
     @ParameterizedTest
     @EnumSource()
-    @ResourceLocks({
-            @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ),
-//            @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
-    })
+    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
     void offsetsOpenClose(OffsetEncoding encoding) {
         var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
         assumeFalse(skip.contains(encoding));

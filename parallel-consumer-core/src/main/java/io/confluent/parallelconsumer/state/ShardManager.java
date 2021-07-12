@@ -21,7 +21,6 @@ public class ShardManager<K, V> {
     @Getter
     private final ParallelConsumerOptions options;
 
-    // todo performance: disable/remove if using partition order
     /**
      * Map of Object keys to Map of offset to WorkUnits
      * <p>
@@ -32,6 +31,7 @@ public class ShardManager<K, V> {
      * @see K
      * @see WorkManager#maybeGetWork()
      */
+    // todo performance: disable/remove if using partition order
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new HashMap<>();
 
     private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> getShards(){

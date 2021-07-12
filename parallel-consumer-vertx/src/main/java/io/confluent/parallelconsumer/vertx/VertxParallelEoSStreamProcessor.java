@@ -166,7 +166,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
             onWebRequestSentCallback.accept(futureWebResponse);
 
             // attach internal handler
-            WorkContainer<K, V> wc = wm.sm.getWorkContainerForRecord(record);
+            WorkContainer<K, V> wc = wm.getSm().getWorkContainerForRecord(record);
             wc.setWorkType(VERTX_TYPE);
 
             futureWebResponse.onSuccess(h -> {
