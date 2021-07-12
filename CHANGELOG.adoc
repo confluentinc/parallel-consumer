@@ -7,6 +7,17 @@
 
 toc::[]
 
+== v0.3.1.0
+
+=== Fixes and Improvements
+
+* Major refactor to code base - primarily the two large God classes
+** Partition state now tracked separately
+** Code moved into packages
+* Busy spin in some cases fixed (lower CPU usage)
+* Reduce use of static data for test assertions - remaining identified for later removal
+* Various fixes for parallel testing stability
+
 == v0.3.0.3
 
 === Fixes and Improvements
