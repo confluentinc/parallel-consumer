@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.presentation.StandardRepresentation;
 import org.testcontainers.shaded.com.google.common.collect.Lists;

@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import lombok.SneakyThrows;

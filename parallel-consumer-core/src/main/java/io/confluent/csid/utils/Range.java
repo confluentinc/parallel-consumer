@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -63,7 +64,7 @@ public class Range implements Iterable<Integer> {
     }
 
     public IntStream toStream() {
-        return IntStream.range(0, (int)limit);
+        return IntStream.range(0, (int) limit);
     }
 
     static IntStream rangeStream(int i) {

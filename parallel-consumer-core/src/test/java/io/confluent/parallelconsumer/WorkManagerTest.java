@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -237,7 +238,7 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0,null);
+        var wc = new WorkContainer<String, String>(0, null);
         assertThat(wc.hasDelayPassed(clock)).isTrue(); // when new, there's no delay
         wc.fail(clock);
         assertThat(wc.hasDelayPassed(clock)).isFalse();

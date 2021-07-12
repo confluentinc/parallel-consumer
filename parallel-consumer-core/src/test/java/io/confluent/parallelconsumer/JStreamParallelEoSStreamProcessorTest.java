@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -109,8 +110,8 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
             String apply2 = myRecordProcessingAction.apply(record);
 
             var list = Lists.list(
-                    new ProducerRecord<>(OUTPUT_TOPIC,"key", apply1),
-                    new ProducerRecord<>(OUTPUT_TOPIC,"key", apply2));
+                    new ProducerRecord<>(OUTPUT_TOPIC, "key", apply1),
+                    new ProducerRecord<>(OUTPUT_TOPIC, "key", apply2));
 
             latch.countDown();
             return list;
