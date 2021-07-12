@@ -7,6 +7,34 @@
 
 toc::[]
 
+== v0.3.0.3
+
+=== Fixes and Improvements
+
+==== Overview
+
+* Tests now run in parallel
+* License fixing / updating and code formatting
+* License format runs properly now when local, check on CI
+* Fix running on Windows and Linux
+* Fix JAVA_HOME issues
+
+==== Details:
+
+* tests: Enable the fail fast feature now that it's merged upstream
+* tests: Turn on parallel test runs
+* format: Format license, fix placement
+* format: Apply Idea formatting (fix license layout)
+* format: Update mycila license-plugin
+* test: Disable redundant vert.x test - too complicated to fix for little gain
+* test: Fix thread counting test by closing PC @After
+* test: Test bug due to static state overrides when run as a suite
+* format: Apply license format and run every All Idea build
+* format: Organise imports
+* fix: Apply license format when in dev laptops - CI only checks
+* fix: javadoc command for various OS and envs when JAVA_HOME missing
+* fix: By default, correctly run time JVM as jvm.location
+
 == v0.3.0.2
 
 === Fixes and Improvements
