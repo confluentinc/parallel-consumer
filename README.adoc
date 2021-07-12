@@ -414,6 +414,7 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 
 [source,java]
 ----
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
