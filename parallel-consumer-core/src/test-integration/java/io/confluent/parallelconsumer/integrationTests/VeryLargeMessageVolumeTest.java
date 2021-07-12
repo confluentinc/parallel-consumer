@@ -50,7 +50,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * <p>
  * RuntimeException when running with very high options in 0.2.0.0 (Bitset too long to encode) #35
  */
-//@Isolated
 @Slf4j
 public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, String> {
 

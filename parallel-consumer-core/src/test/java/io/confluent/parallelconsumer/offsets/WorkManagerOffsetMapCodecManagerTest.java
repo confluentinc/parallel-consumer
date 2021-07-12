@@ -51,7 +51,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     TreeSet<Long> incomplete = new TreeSet<>(UniSets.of(2L, 3L));
 
-    // todo why o?
+    // todo why 0?
     long finalOffsetForPartition = 0;
 
     /**
@@ -95,8 +95,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     // todo refactor tests out that depend on this
     private void raiseToHardCodedHighestSeenOffset() {
-        //        wm.partitionOffsetHighWaterMarks.put(tp, partitionHighWaterMark);
-        wm.getPm().raisePartitionHighWaterMark(tp, partitionHighWaterMark);
+        wm.getPm().maybeRaiseHighestSeenOffset(tp, partitionHighWaterMark);
     }
 
     @BeforeAll
@@ -120,15 +119,12 @@ class WorkManagerOffsetMapCodecManagerTest {
         range(entries).toStream()
                 .mapToObj(x -> RandomUtils.nextBoolean())
                 .forEach(x -> randomInput.append((x) ? 'x' : 'o'));
-//                .forEach(x -> randomInput.append('x'));
-//        randomInput.setCharAt(1354, 'o');
         return randomInput;
     }
 
     @SneakyThrows
     @Test
     void serialiseCycle() {
-//        raiseToHardCodedHighestSeenOffset();
         String serialised = om.serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, state);
         log.info("Size: {}", serialised.length());
 
@@ -235,8 +231,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void loadCompressedRunLengthEncoding() {
-//        raiseToHardCodedHighestSeenOffset();
-
         byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, state);
         OffsetMapCodecManager.HighestOffsetAndIncompletes longs = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, bytes);
         assertThat(longs.getIncompleteOffsets().toArray()).containsExactly(incomplete.toArray());
@@ -257,7 +251,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @Test
     void binaryArrayConstruction() {
-        state.risePartitionHighWaterMark(6L);
+        state.maybeRaiseHighestSeenOffset(6L);
 
         String s = om.incompletesToBitmapString(1L, state); //2,3
         assertThat(s).isEqualTo("xooxx");
@@ -295,7 +289,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void largeOffsetMap() {
-        state.risePartitionHighWaterMark(200L); // force system to have seen a high offset
+        state.maybeRaiseHighestSeenOffset(200L); // force system to have seen a high offset
         byte[] bytes = om.encodeOffsetsCompressed(0L, state);
         int smallestCompressionObserved = 10;
         assertThat(bytes).as("very small")
@@ -323,7 +317,6 @@ class WorkManagerOffsetMapCodecManagerTest {
             log.info("in: {}", inputString);
 //            log.info("length: {} comp bytes: {} comp bits: {}, uncompressed bits: {}, run length {}, run length compressed: {}", inputLength, compressedBytes, compressedBits, bitsBytes.length, runlengthBytes.length, rlBytesCompressed);
         }
-        return; // breakpoint
     }
 
     @SneakyThrows
@@ -331,7 +324,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     void deserialiseBitset() {
         var input = "oxxooooooo";
         long highWater = input.length();
-//        wm.raisePartitionHighWaterMark(tp, highWater);
 
         Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, input);
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highWater, longs);
@@ -347,8 +339,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void compressionCycle() {
-//        raiseToHardCodedHighestSeenOffset();
-
         byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, state);
 
         OffsetMapCodecManager.HighestOffsetAndIncompletes deserialised = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, serialised);
@@ -375,9 +365,9 @@ class WorkManagerOffsetMapCodecManagerTest {
         for (final String input : inputsToCompress) {
             // override high water mark setup, as the test sets it manually
             setup();
-            wm.getPm().raisePartitionHighWaterMark(tp, 0L); // hard reset to zero
+            wm.getPm().maybeRaiseHighestSeenOffset(tp, 0L); // hard reset to zero
             long highWater = input.length();
-            wm.getPm().raisePartitionHighWaterMark(tp, highWater);
+            wm.getPm().maybeRaiseHighestSeenOffset(tp, highWater);
 
             //
             log.debug("Testing round - size: {} input: '{}'", input.length(), input);

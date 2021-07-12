@@ -55,11 +55,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final ParallelConsumerOptions options;
 
     // todo rename PSM, PartitionStateManager
-    @Getter(PUBLIC) // todo reduce visibility
+    @Getter(PUBLIC)
     final PartitionMonitor<K, V> pm;
 
     // todo make private
-    public final ShardManager sm;
+    @Getter(PUBLIC)
+    private final ShardManager<K, V> sm;
 
     /**
      * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting
@@ -90,10 +91,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private WallClock clock = new WallClock();
 
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
-
-    // visible for testing
-    // TODO rename MISSING_HIGHEST_SEEN
-    long MISSING_HIGH_WATER_MARK = -1L;
 
     /**
      * Get's set to true whenever work is returned completed, so that we know when a commit needs to be made.
@@ -162,19 +159,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         wmbm.registerWork(records);
     }
 
-    // todo refactor into something more contractual and less leaky
-    // todo make private
-    // todo remove - doesn't belong here
-//    public void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
-//        pm.raisePartitionHighWaterMark(tp, highWater);
-//    }
-
-//    // todo refactor into something more contractual and less leaky
-//    // todo make private
-//    public void setPartitionIncompleteOffset(TopicPartition tp, Set<Long> incompleteOffsets) {
-//        pm.setPartitionIncompleteOffset(tp, incompleteOffsets);
-//    }
-
     /**
      * @param requestedMaxWorkToRetrieve try to move at least this many messages into the inbound queues
      */
@@ -205,7 +189,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return true if the record was taken, false if it was skipped (previously successful)
      */
     // todo rename to maybeTakeRecord
-    // move to PM, if returns true, sm.addWorkContainer
+    // todo move to PM, if returns true, sm.addWorkContainer
     private boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec) {
         if (rec == null) return false;
 
@@ -218,13 +202,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             log.trace("Record previously processed, skipping. offset: {}", rec.offset());
             return false;
         } else {
-            long offset = rec.offset();
             TopicPartition tp = toTP(rec);
 
             int currentPartitionEpoch = pm.getEpoch(rec, tp);
             var wc = new WorkContainer<>(currentPartitionEpoch, rec);
-
-            pm.raisePartitionHighWaterMark(tp, offset); // todo move into addWorkContainer!!
 
             sm.addWorkContainer(wc);
 
@@ -259,11 +240,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         List<WorkContainer<K, V>> work = new ArrayList<>();
 
         //
-//        var it = sm.getIterator(iterationResumePoint);
         LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> it =
                 sm.getIterator(iterationResumePoint);
-//        LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> it =
-//                new LoopingResumingIterator<>(iterationResumePoint, sm.processingShards);
 
         var staleWorkToRemove = new ArrayList<WorkContainer<K, V>>();
 
@@ -304,9 +282,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 // TODO refactor this and the rest of the partition state monitoring code out
                 // check we have capacity in offset storage to process more messages
                 TopicPartition topicPartition = workContainer.getTopicPartition();
-//                boolean notAllowedMoreRecords = !pm.allowsMoreRecordsToProcess(topicPartition);
                 boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
-//                boolean notAllowedMoreRecords = !pm.getState(topicPartition).partitionMoreRecordsAllowedToProcess;
                 // If the record has been previously attempted, it is already represented in the current offset encoding,
                 // and may in fact be the message holding up the partition so must be retried, in which case we don't want to skip it
                 boolean recordNeverAttempted = !workContainer.hasPreviouslyFailed();
@@ -384,7 +360,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         ingestPolledRecordsIntoQueues(extraNeededFromInboxToSatisfy);
     }
 
-    // todo move most to SM
+    // todo move most to ShardManager
     public void onSuccess(WorkContainer<K, V> wc) {
         log.trace("Processing success...");
         workStateIsDirtyNeedsCommitting.set(true);
@@ -403,7 +379,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         if (keyOrdering && shard.isEmpty()) {
             log.trace("Removing empty shard (key: {})", key);
             sm.removeShard(key);
-//            sm.processingShards.remove(key);
         }
 
         // notify listeners
@@ -412,11 +387,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         numberRecordsOutForProcessing--;
     }
 
-    // todo remove?
-
     /**
      * @see PartitionMonitor#onOffsetCommitSuccess(Map)
      */
+    // todo remove?
     public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
         pm.onOffsetCommitSuccess(offsetsToSend);
     }
@@ -428,11 +402,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         putBack(wc);
     }
 
-    // todo move to sm
-
     /**
      * Idempotent - work may have not been removed, either way it's put back
      */
+    // todo move to ShardManager
     private void putBack(WorkContainer<K, V> wc) {
         log.debug("Work FAILED, returning to shard");
         ConsumerRecord<K, V> cr = wc.getCr();
@@ -460,8 +433,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return isDirty();
     }
 
-    // todo move to partition monitor
-
     /**
      * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as
      * work is submitted and returned.
@@ -472,29 +443,28 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * Finds eligible offset positions to commit in each assigned partition
      */
+    // todo move to PartitionMonitor / PartitionState
     // todo rename
-    // todo move into partition state
     // todo remove completely as state of offsets should be tracked live, no need to scan for them
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
 
-        // todo check works
+        //
         if (!isDirty()) {
             // nothing to commit
             return UniMaps.of();
         }
 
-
+        //
         Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
         int count = 0;
         int removed = 0;
         log.trace("Scanning for in order in-flight work that has completed...");
 
-
-//        for (final var partitionQueueEntry : partitionCommitQueues.entrySet()) {
-        Set<Map.Entry<TopicPartition, PartitionState<K, V>>> set = pm.getStates().entrySet();
+        //
+        Set<Map.Entry<TopicPartition, PartitionState<K, V>>> set = pm.getPartitionStates().entrySet();
         for (final Map.Entry<TopicPartition, PartitionState<K, V>> partitionStateEntry : set) {
             var partitionState = partitionStateEntry.getValue();
-            Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getPartitionCommitQueues();
+            Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getCommitQueues();
             TopicPartition topicPartitionKey = partitionStateEntry.getKey();
             log.trace("Starting scan of partition: {}", topicPartitionKey);
 
@@ -524,8 +494,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                         log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset ({}). Will mark as complete in the offset map.",
                                 container.getCr().offset(), lowWaterMark);
                         // no-op - offset map is only for not succeeded or completed offsets
-//                        // mark as complete complete so remove from work
-//                        workToRemove.add(container);
                     } else {
                         log.trace("Offset {} is complete, but failed processing. Will track in offset map as not complete. Can't do normal offset commit past this point.", container.getCr().offset());
                         iteratedBeyondLowWaterMarkBeingLowestCommittableOffset = true;
@@ -616,21 +584,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.hasWorkInCommitQueues();
     }
 
-    // todo not public
     public boolean isRecordsAwaitingProcessing() {
         int partitionWorkRemainingCount = sm.getWorkQueuedInShardsCount();
         boolean internalQueuesNotEmpty = hasWorkInMailboxes();
         return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
     }
 
-    // todo not public
     public boolean isRecordsAwaitingToBeCommitted() {
         // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
         var partitionWorkRemainingCount = getNumberOfEntriesInPartitionQueues();
         return partitionWorkRemainingCount > 0;
     }
 
-    // todo not public, rename
     public void handleFutureResult(WorkContainer<K, V> wc) {
         // todo need to make sure epoch's match, as partition may have been re-assigned after being revoked see PR #46
         // partition may be revoked by a different thread (broker poller) - need to synchronise?
@@ -649,7 +614,4 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public Long getHighWaterMark(TopicPartition tp) {
-        return pm.getHighWaterMark(tp);
-    }
 }

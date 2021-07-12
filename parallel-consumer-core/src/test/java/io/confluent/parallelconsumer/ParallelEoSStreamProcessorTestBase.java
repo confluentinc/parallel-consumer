@@ -133,8 +133,8 @@ public class ParallelEoSStreamProcessorTestBase {
 
     @AfterEach
     public void close() {
-        // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - wesu
-        // don't want to bubble up an error here that we expect. todo: Ideally the test that does this would be isolated so we can remove this check
+        // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - we
+        // don't want to bubble up an error here that we expect from here.
         if (!parallelConsumer.isClosedOrFailed()) {
             parallelConsumer.close();
         }
@@ -165,7 +165,7 @@ public class ParallelEoSStreamProcessorTestBase {
     protected void instantiateConsumerProducer() {
         LongPollingMockConsumer<String, String> consumer = new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST);
         MockProducer<String, String> producer = new MockProducer<>(true,
-                Serdes.String().serializer(), Serdes.String().serializer()); // TODO do async testing
+                Serdes.String().serializer(), Serdes.String().serializer());
 
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
@@ -176,7 +176,7 @@ public class ParallelEoSStreamProcessorTestBase {
 
     /**
      * Need to make sure we only use {@link ParallelEoSStreamProcessor#subscribe} methods, and not do manual assignment,
-     * otherwise rebalance listeneres don't fire (because there are never rebalances).
+     * otherwise rebalance listeners don't fire (because there are never rebalances).
      */
     protected void subscribeParallelConsumerAndMockConsumerTo(String topic) {
         List<String> of = of(topic);
