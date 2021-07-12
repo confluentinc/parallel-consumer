@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;

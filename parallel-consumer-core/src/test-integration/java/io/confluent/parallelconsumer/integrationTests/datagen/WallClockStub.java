@@ -1,8 +1,8 @@
+package io.confluent.parallelconsumer.integrationTests.datagen;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests.datagen;
 
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import lombok.NonNull;
