@@ -74,12 +74,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    public void start() {
+    public void start(String managedExecutorService) {
         ExecutorService executorService;
         try {
-            executorService = InitialContext.doLookup("java:comp/DefaultManagedExecutorService");
+            executorService = InitialContext.doLookup(managedExecutorService);
         } catch (NamingException e) {
-            log.info("Using Java SE Thread");
+            log.debug("Using Java SE Thread",e);
             executorService = Executors.newSingleThreadExecutor();
         }
         Future<Boolean> submit = executorService.submit(this::controlLoop);

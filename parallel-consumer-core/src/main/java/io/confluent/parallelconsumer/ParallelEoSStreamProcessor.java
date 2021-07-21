@@ -228,9 +228,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
         ThreadFactory defaultFactory;
         try {
-            defaultFactory = InitialContext.doLookup("java:comp/DefaultManagedThreadFactory");
+            defaultFactory = InitialContext.doLookup(options.getManagedThreadFactory());
         } catch (NamingException e) {
-            log.info("Using Java SE Thread");
+            log.debug("Using Java SE Thread",e);
             defaultFactory = Executors.defaultThreadFactory();
         }
         ThreadFactory finalDefaultFactory = defaultFactory;
@@ -642,13 +642,13 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return true;
         };
 
-        brokerPollSubsystem.start();
+        brokerPollSubsystem.start(options.getManagedExecutorService());
 
         ExecutorService executorService;
         try {
-            executorService = InitialContext.doLookup("java:comp/DefaultManagedExecutorService");
+            executorService = InitialContext.doLookup(options.getManagedExecutorService());
         } catch (NamingException e) {
-            log.info("Using Java SE Thread");
+            log.debug("Using Java SE Thread",e);
             executorService = Executors.newSingleThreadExecutor();
         }
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);

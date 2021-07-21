@@ -40,6 +40,18 @@ public class ParallelConsumerOptions<K, V> {
     private final Producer<K, V> producer;
 
     /**
+     * Path to Managed executor service for Java EE
+     */
+    @Builder.Default
+    private final String managedExecutorService = "java:comp/DefaultManagedExecutorService";
+
+    /**
+     * Path to Managed thread factory for Java EE
+     */
+    @Builder.Default
+    private final String managedThreadFactory = "java:comp/DefaultManagedThreadFactory";
+
+    /**
      * The ordering guarantee to use.
      */
     public enum ProcessingOrder {
