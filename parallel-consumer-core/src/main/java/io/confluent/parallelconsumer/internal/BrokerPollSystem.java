@@ -16,13 +16,12 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
 
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.MDC_INSTANCE_ID;
@@ -75,8 +74,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    public void start() {
-        Future<Boolean> submit = Executors.newSingleThreadExecutor().submit(this::controlLoop);
+    public void start(String managedExecutorService) {
+        ExecutorService executorService;
+        try {
+            executorService = InitialContext.doLookup(managedExecutorService);
+        } catch (NamingException e) {
+            log.debug("Using Java SE Thread",e);
+            executorService = Executors.newSingleThreadExecutor();
+        }
+        Future<Boolean> submit = executorService.submit(this::controlLoop);
         this.pollControlThreadFuture = Optional.of(submit);
     }
 
