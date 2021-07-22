@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.GeneralUtils;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -52,6 +53,10 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @Slf4j
 public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
+
+    static {
+        GeneralUtils.checkLogging();
+    }
 
     public static final String MDC_INSTANCE_ID = "pcId";
     private final ParallelConsumerOptions options;
