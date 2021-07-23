@@ -22,6 +22,7 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.utils.Time;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -282,4 +283,34 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
         }
     }
 
+    @Override
+    public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
+        blockInvalidCoreMethodUse();
+    }
+
+    private void blockInvalidCoreMethodUse() {
+        throw new IllegalStateException("Can't use core methods from vert.x module. \n" +
+                "Throwing an exception here is ATM easier then doing the full vert.s base class refactor (https://github.com/confluentinc/parallel-consumer/pull/133) \n" +
+                "Use the core module directly instead. See https://github.com/confluentinc/parallel-consumer/issues/99");
+    }
+
+    @Override
+    public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction, Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        blockInvalidCoreMethodUse();
+    }
+
+    @Override
+    public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
+        blockInvalidCoreMethodUse();
+    }
+
+    @Override
+    public void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction) {
+        blockInvalidCoreMethodUse();
+    }
+
+    @Override
+    public void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction, Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        blockInvalidCoreMethodUse();
+    }
 }
