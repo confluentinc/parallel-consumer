@@ -24,7 +24,7 @@ public interface DrainingCloseable extends Closeable {
     }
 
     /**
-     * Close the consumer. Uses a reasonable default timeout, and drains by default.
+     * Close the consumer, without draining. Uses a reasonable default timeout.
      *
      * @see #DEFAULT_TIMEOUT
      * @see #close(Duration, DrainingMode)
