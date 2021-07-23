@@ -181,7 +181,7 @@
             <id>ci</id>
             <properties>
                 <license.mode>check</license.mode>
-                <parallel-tests>false</parallel-tests>
+                <parallel-tests>true</parallel-tests>
             </properties>
         </profile>
         <profile>
