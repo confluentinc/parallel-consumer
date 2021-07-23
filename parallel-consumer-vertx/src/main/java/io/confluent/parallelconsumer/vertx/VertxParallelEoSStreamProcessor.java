@@ -290,7 +290,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
 
     private void blockInvalidCoreMethodUse() {
         throw new IllegalStateException("Can't use core methods from vert.x module. \n" +
-                "Throwing an exception here is ATM easier then doing the full vert.s base class refactor (https://github.com/confluentinc/parallel-consumer/pull/133) \n" +
+                "Throwing an exception here is ATM easier then doing the full vert.x base class refactor (https://github.com/confluentinc/parallel-consumer/pull/133) \n" +
                 "Use the core module directly instead. See https://github.com/confluentinc/parallel-consumer/issues/99");
     }
 

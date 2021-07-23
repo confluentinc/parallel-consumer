@@ -42,6 +42,7 @@ import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.awaitility.Awaitility.await;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -245,6 +246,16 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
         if (!success)
             throw new AssertionError("Timeout reached");
         return list;
+    }
+
+    @Test
+    void coreMethodsBlocked() {
+        assertThatCode(() ->
+                parallelConsumer.poll(stringStringConsumerRecord -> {
+                    //ignore
+                }))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("core", "methods");
     }
 
 }
