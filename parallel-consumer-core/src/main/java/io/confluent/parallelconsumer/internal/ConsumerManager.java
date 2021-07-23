@@ -27,6 +27,14 @@ public class ConsumerManager<K, V> {
 
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
+    /**
+     * Since Kakfa 2.7, multi threaded access to consumer group metadata was blocked, so before and after polling, save
+     * a copy of the metadata.
+     *
+     * @since 2.7.0
+     */
+    private ConsumerGroupMetadata metaCache;
+
     private int erroneousWakups = 0;
     private int correctPollWakeups = 0;
     private int noWakeups = 0;
@@ -42,7 +50,9 @@ public class ConsumerManager<K, V> {
                 commitRequested = false;
             }
             pollingBroker.set(true);
+            metaCache = consumer.groupMetadata();
             records = consumer.poll(timeoutToUse);
+            metaCache = consumer.groupMetadata();
             log.debug("Poll completed normally and returned {}...", records.count());
         } catch (WakeupException w) {
             correctPollWakeups++;
@@ -100,7 +110,7 @@ public class ConsumerManager<K, V> {
     }
 
     public ConsumerGroupMetadata groupMetadata() {
-        return consumer.groupMetadata();
+        return metaCache;
     }
 
     public void close(final Duration defaultTimeout) {
