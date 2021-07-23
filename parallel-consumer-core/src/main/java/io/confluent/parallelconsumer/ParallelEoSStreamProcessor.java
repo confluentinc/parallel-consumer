@@ -574,13 +574,12 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
         this.state = State.draining;
-        interruptControlThread();
     }
 
     /**
-     * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to make tests
-     * run faster, or to move on to shutting down the {@link BrokerPollSystem} so that less messages are downloaded and
-     * queued.
+     * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to inform
+     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
+     * BrokerPollSystem} so that less messages are downloaded and queued.
      */
     private void interruptControlThread() {
         if (blockableControlThread != null) {
@@ -815,7 +814,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         } else {
             state = State.closing;
         }
-        interruptControlThread();
     }
 
     /**
@@ -1052,7 +1050,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
             if (noTransactionInProgress) {
                 log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-                this.blockableControlThread.interrupt();
+                interruptControlThread();
             } else {
                 log.trace("Would have interrupted control thread, but TX in progress");
             }

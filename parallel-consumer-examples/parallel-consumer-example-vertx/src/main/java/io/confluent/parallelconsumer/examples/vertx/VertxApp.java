@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.vertx;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -15,7 +15,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import pl.tlinkowski.unij.api.UniMaps;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
 
@@ -72,7 +71,7 @@ public class VertxApp {
     }
 
     void close() {
-        this.parallelConsumer.closeDrainFirst(Duration.ofSeconds(2));
+        this.parallelConsumer.closeDrainFirst();
     }
 
     protected void postSetup() {
