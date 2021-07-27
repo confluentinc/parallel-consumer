@@ -26,6 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
 
+    static {
+        System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
+    }
+
     int numPartitions = 1;
 
     String topic;

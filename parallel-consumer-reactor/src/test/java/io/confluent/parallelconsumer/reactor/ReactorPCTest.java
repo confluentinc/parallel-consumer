@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.reactor;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -25,7 +26,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.BaseStream;
 
-import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject.assertThat;
@@ -93,9 +93,8 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
     @Test
     void concurrencyTest() {
         //
-        var quantity = 100000;
-        var expectedQuantity = quantity + 1;
-        var consumerRecords = ktu.generateRecords(quantity);
+        var quantity = 100_000;
+        var consumerRecords = ktu.generateRecords(quantity - 1); // -1 coz already has 1 record primed (all tests do)
         ktu.send(consumerSpy, consumerRecords);
         log.info("Finished priming records");
 
@@ -104,7 +103,9 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
 
         //
         ConcurrentLinkedQueue<Object> msgs = new ConcurrentLinkedQueue<>();
+
         var finishedCount = new AtomicInteger(0);
+        var maxConcurrentRecordsSeen = new AtomicInteger(0);
         var completeOrProblem = new CountDownLatch(1);
         var maxConcurrency = MAX_CONCURRENCY;
 
@@ -115,7 +116,8 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
                         log.trace("Reactor user function executing: {}", rec);
                         msgs.add(rec);
                         if (msgs.size() > maxConcurrency) {
-                            log.error("More records out for processing than max concurrency settings");
+                            log.error("More records submitted for processing than max concurrency settings ({} vs {})", msgs.size(), maxConcurrency);
+                            // fail fast - test already failed
                             completeOrProblem.countDown();
                         }
                     })
@@ -123,34 +125,46 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
                     .delayElement(Duration.ofMillis((int) (100 * Math.random())))
                     .doOnNext(s -> {
                         log.trace("User function after delay. Records pending: {}, removing from out for processing: {}", msgs.size(), rec);
+                        int currentConcurrentRecords = msgs.size();
+                        int highestSoFar = Math.max(currentConcurrentRecords, maxConcurrentRecordsSeen.get());
+                        maxConcurrentRecordsSeen.set(highestSoFar);
+
+                        //
                         boolean removed = msgs.remove(rec);
                         assertWithMessage("record was present and removed")
                                 .that(removed).isTrue();
 
-                        int finished = finishedCount.incrementAndGet();
-                        if (finished > quantity - 1)
+                        //
+                        int numberOfFinishedRecords = finishedCount.incrementAndGet();
+                        boolean allExpectedRecordsPareProcessed = numberOfFinishedRecords > quantity - 1;
+                        if (allExpectedRecordsPareProcessed) {
+                            // release the latch to indicate processing complete
                             completeOrProblem.countDown();
+                        }
 
+                        //
                         bar.step();
                     });
             return result;
         });
 
-        completeOrProblem.await();
-        assertThat(msgs.size()).isLessThan(maxConcurrency);
+        //
+        LatchTestUtils.awaitLatch(completeOrProblem, 450);
+        assertWithMessage("Max concurrency should never be exceeded")
+                .that(maxConcurrentRecordsSeen.get()).isLessThan(maxConcurrency);
+        log.info("Max concurrency was {}", maxConcurrentRecordsSeen.get());
 
+        //
         await()
                 // perform testing for at least some time - see fail fast
                 .atMost(Duration.ofSeconds(2))
                 // make sure out for processing recs never exceeds max concurrency
-                .failFast("max concurrency exceeded", () -> {
-                    return msgs.size() > maxConcurrency;
-                })
+                .failFast("Max concurrency exceeded", () -> msgs.size() > maxConcurrency)
                 .untilAsserted(() -> {
                     assertWithMessage("Number of completed messages")
-                            .that(finishedCount.get()).isEqualTo(expectedQuantity);
+                            .that(finishedCount.get()).isEqualTo(quantity);
 
-                    assertThat(consumerSpy).hasCommittedToPartition(topicPartition).offset(expectedQuantity);
+                    assertThat(consumerSpy).hasCommittedToPartition(topicPartition).offset(quantity);
                 });
 
         bar.close();

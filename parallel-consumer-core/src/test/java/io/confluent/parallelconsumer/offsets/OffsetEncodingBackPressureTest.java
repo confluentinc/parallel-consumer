@@ -170,7 +170,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
                 // assert blocked, but can still write payload
                 // assert the committed offset metadata contains a payload
-                await().untilAsserted(() ->
+                waitAtMost(ofSeconds(60)).untilAsserted(() ->
                         {
                             OffsetAndMetadata partitionCommit = getLastCommit();
                             //

@@ -8,14 +8,16 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Controls a loading factor. Is used to ensure enough messages in multiples of our target concurrency are queued ready
  * for processing.
  * <p>
  * Ensures that increases in loading factor aren't performed a) too soon after the last increase ({@link
- * #isNoCoolDown()})  and b) too soon after starting the system ({@link #isWarmUpPeriodOver()}).
+ * #isNotCoolingDown()})  and b) too soon after starting the system ({@link #isWarmUpPeriodOver()}).
  */
+// todo make so can be fractional like 50% - this is because some systems need a fractional factor, like 1.1 or 1.2 rather than 2
 @Slf4j
 public class DynamicLoadFactor {
 
@@ -28,13 +30,29 @@ public class DynamicLoadFactor {
      * memory usage, but more importantly, more offsets may be beyond the highest committable offset for processing
      * (which if the serialised information can't fit, will be dropped and could cause much larger replays than
      * necessary).
+     * <p>
+     * Starts off as 2, so there's a good guarantee that we start off with enough data queued up.
      */
     private static final int DEFAULT_INITIAL_LOADING_FACTOR = 2;
 
     private final long startTimeMs = System.currentTimeMillis();
-    private final Duration coolDown = Duration.ofSeconds(1);
-    private final Duration warmUp = Duration.ofSeconds(0); // CG usually takes 5 seconds to start running
-    private final int stepUpFactorBy = 2;
+
+    /**
+     * Min duration between steps - i.e. don't ever step up faster than this
+     */
+    private final Duration coolDown = Duration.ofSeconds(2);
+
+    /**
+     * Delay after initial start, before any steps are allowed.
+     * <p>
+     * Consumer Group usually takes a few seconds to start running
+     */
+    private final Duration warmUp = Duration.ofSeconds(2);
+
+    /**
+     * The amount to increase the current load by, each step
+     */
+    private final int stepUpFactorBy = 1;
 
     /**
      * Upper safety cap on multiples of target queue size to reach (e.g. with 20 threads, this would be 20 * 100 =
@@ -49,6 +67,7 @@ public class DynamicLoadFactor {
     @Getter
     private int currentFactor = DEFAULT_INITIAL_LOADING_FACTOR;
     private long lastSteppedFactor = currentFactor;
+    private Instant lastStepTime = Instant.MIN;
 
     /**
      * Try to increase the loading factor
@@ -56,42 +75,56 @@ public class DynamicLoadFactor {
      * @return true if could step up
      */
     public boolean maybeStepUp() {
-        long nowMs = System.currentTimeMillis();
         if (couldStep()) {
-            return doStep(nowMs, lastSteppedFactor);
+            return doStep();
         }
         return false;
     }
 
-    private synchronized boolean doStep(final long nowMs, final long myLastStep) {
-        if (currentFactor < maxFactor) {
-            // compare and set
-            if (myLastStep == lastSteppedFactor) {
-                currentFactor = currentFactor + stepUpFactorBy;
-                long delta = currentFactor - myLastStep;
-                log.debug("Stepped up load factor by {} from {} to {}", delta, myLastStep, currentFactor);
-                lastSteppedFactor = currentFactor;
-                return true;
-            } else {
-                // already done
-                return false;
-            }
-        } else {
+    private synchronized boolean doStep() {
+        if (isMaxReached()) {
             return false;
+        } else {
+            // compare and set
+            currentFactor = currentFactor + stepUpFactorBy;
+            long delta = currentFactor - lastSteppedFactor;
+            log.debug("Stepped up load factor by {} from {} to {}", delta, lastSteppedFactor, currentFactor);
+
+            //
+            lastSteppedFactor = currentFactor;
+            lastStepTime = Instant.now();
+            return true;
         }
     }
 
+    /**
+     * Checks various conditions to see if a step is allowed
+     *
+     * @return true is a step-up is now allowed
+     */
     boolean couldStep() {
-        return isWarmUpPeriodOver() && isNoCoolDown();
+        boolean warmUpPeriodOver = isWarmUpPeriodOver();
+        boolean noCoolDown = isNotCoolingDown();
+        return warmUpPeriodOver && noCoolDown;
     }
 
-    private boolean isNoCoolDown() {
-        if (lastSteppedFactor == 0) return true;
-        long now = System.currentTimeMillis();
-        long elapsed = now - lastSteppedFactor;
-        return elapsed > coolDown.toMillis();
+    /**
+     * @return true if the cool-down period is over
+     * @see #coolDown
+     */
+    private boolean isNotCoolingDown() {
+        var now = Instant.now();
+        Duration elapsed = Duration.between(lastStepTime, now);
+        boolean coolDownElapsed = elapsed.compareTo(coolDown) > 0;
+        return coolDownElapsed;
     }
 
+    /**
+     * Is the warm-up period over?
+     *
+     * @return true if warn up os over
+     * @see #warmUp
+     */
     public boolean isWarmUpPeriodOver() {
         long now = System.currentTimeMillis();
         long elapsed = now - startTimeMs;
