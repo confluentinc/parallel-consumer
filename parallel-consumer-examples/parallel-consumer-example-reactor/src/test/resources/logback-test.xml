@@ -1,0 +1,38 @@
+<!--
+
+    Copyright (C) 2020-2021 Confluent, Inc.
+
+-->
+<configuration packagingData="true" scan="true" scanPeriod="5 seconds">
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{mm:ss.SSS} %highlight(%-5level) %yellow([%thread]) %X{offset} %cyan(\(%file:%line#%M\)) %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <logger name="io.confluent.csid" level="info"/>
+    <!--    <logger name="io.confluent.csid" level="debug" />-->
+    <!--    <logger name="io.confluent.csid" level="trace" />-->
+
+    <!--    <logger name="io.confluent.csid.asyncconsumer.WorkManager" level="info" />-->
+    <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumer" level="info" />-->
+
+    <!-- containers -->
+    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="debug"/>
+
+    <!-- related -->
+    <logger name="org.apache.kafka.clients" level="warn"/>
+    <logger name="org.postgresql" level="info"/>
+
+    <!-- external -->
+    <logger name="io.vertx" level="debug"/>
+    <logger name="io.netty" level="info"/>
+
+</configuration>

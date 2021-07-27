@@ -46,6 +46,7 @@ import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static lombok.AccessLevel.PROTECTED;
 
 /**
  * @see ParallelConsumer
@@ -54,6 +55,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
+
+    @Getter(PROTECTED)
     private final ParallelConsumerOptions options;
 
     /**
@@ -94,6 +97,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     /**
      * Collection of work waiting to be
      */
+    @Getter(PROTECTED)
     private final BlockingQueue<WorkContainer<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
@@ -727,14 +731,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         //
         if (state == running || state == draining) {
-            int target = getQueueTargetLoaded();
-            BlockingQueue<Runnable> queue = workerPool.getQueue();
-            int current = queue.size();
-            int delta = target - current;
-
-            log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
-                    target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
+            int delta = calculateQuantityToRequest();
             var records = wm.maybeGetWork(delta);
+
             gotWorkCount = records.size();
             lastWorkRequestWasFulfilled = gotWorkCount >= delta;
 
@@ -752,6 +751,23 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         return gotWorkCount;
     }
 
+    /**
+     * Pluggable interface for instructing the framework how many work units to attempt to retreive from the work
+     * manager for this control loop
+     *
+     * @return number of {@link WorkContainer} to try to get
+     */
+    protected int calculateQuantityToRequest() {
+        int target = getQueueTargetLoaded();
+        BlockingQueue<Runnable> queue = workerPool.getQueue();
+        int current = queue.size();
+        int delta = target - current;
+
+        log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
+                target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
+        return delta;
+    }
+
     private int getQueueTargetLoaded() {
         return getPoolQueueTarget() * dynamicExtraLoadFactor.getCurrentFactor();
     }
@@ -759,7 +775,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     /**
      * Checks the system has enough pressure, if not attempts to step up the load factor.
      */
-    private void checkPressure() {
+    protected void checkPressure() {
         boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getMaxConcurrency();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) if (isPoolQueueLow() {} && dynamicExtraLoadFactor.isWarmUpPeriodOver() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {})",
@@ -961,9 +977,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      *
      * @param workToProcess the polled records to process
      */
-    private <R> void submitWorkToPool(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
-                                      Consumer<R> callback,
-                                      List<WorkContainer<K, V>> workToProcess) {
+    protected <R> void submitWorkToPool(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
+                                        Consumer<R> callback,
+                                        List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerPool);
             for (var work : workToProcess) {
@@ -1016,7 +1032,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.error("Error processing record", e);
+            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             wc.onUserFunctionFailure();
             addToMailbox(wc); // always add on error
             throw e; // trow again to make the future failed
