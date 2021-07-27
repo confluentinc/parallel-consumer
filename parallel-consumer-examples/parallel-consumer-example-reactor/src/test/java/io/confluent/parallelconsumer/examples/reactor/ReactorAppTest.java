@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.examples.vertx;
+package io.confluent.parallelconsumer.examples.reactor;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
@@ -29,9 +29,9 @@ import java.util.HashMap;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
-class VertxAppTest {
+class ReactorAppTest {
 
-    TopicPartition tp = new TopicPartition(VertxApp.inputTopic, 0);
+    TopicPartition tp = new TopicPartition(ReactorApp.inputTopic, 0);
 
     @Timeout(20)
     @SneakyThrows
@@ -41,13 +41,13 @@ class VertxAppTest {
         WireMockServer wireMockServer = new WireMockUtils().setupWireMock();
         int port = wireMockServer.port();
 
-        VertxAppAppUnderTest coreApp = new VertxAppAppUnderTest(port);
+        ReactorAppAppUnderTest coreApp = new ReactorAppAppUnderTest(port);
 
         coreApp.run();
 
-        coreApp.mockConsumer.addRecord(new ConsumerRecord(VertxApp.inputTopic, 0, 0, "a key 1", "a value"));
-        coreApp.mockConsumer.addRecord(new ConsumerRecord(VertxApp.inputTopic, 0, 1, "a key 2", "a value"));
-        coreApp.mockConsumer.addRecord(new ConsumerRecord(VertxApp.inputTopic, 0, 2, "a key 3", "a value"));
+        coreApp.mockConsumer.addRecord(new ConsumerRecord(ReactorApp.inputTopic, 0, 0, "a key 1", "a value"));
+        coreApp.mockConsumer.addRecord(new ConsumerRecord(ReactorApp.inputTopic, 0, 1, "a key 2", "a value"));
+        coreApp.mockConsumer.addRecord(new ConsumerRecord(ReactorApp.inputTopic, 0, 2, "a key 3", "a value"));
 
         Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
             KafkaTestUtils.assertLastCommitIs(coreApp.mockConsumer, 3);
@@ -57,7 +57,7 @@ class VertxAppTest {
     }
 
     @RequiredArgsConstructor
-    class VertxAppAppUnderTest extends VertxApp {
+    class ReactorAppAppUnderTest extends ReactorApp {
 
         private final int port;
 

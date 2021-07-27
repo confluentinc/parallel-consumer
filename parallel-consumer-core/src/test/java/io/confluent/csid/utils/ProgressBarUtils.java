@@ -20,7 +20,6 @@ public class ProgressBarUtils {
     public static ProgressBar getNewMessagesBar(String name, Logger log, int initialMax) {
         DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
 
-        int max = 100;
         String usedName = "progress";
         if (name != null)
             usedName = name;
