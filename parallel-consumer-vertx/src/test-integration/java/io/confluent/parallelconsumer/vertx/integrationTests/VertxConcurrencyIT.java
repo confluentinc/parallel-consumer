@@ -12,7 +12,7 @@ import com.github.tomakehurst.wiremock.http.RequestListener;
 import com.github.tomakehurst.wiremock.http.Response;
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
-import io.confluent.csid.utils.StringUtils;
+import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
@@ -44,11 +44,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.lang.Thread.getAllStackTraces;
+import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.assertj.core.data.Percentage.withPercentage;
@@ -63,18 +67,23 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Isolated
 class VertxConcurrencyIT extends BrokerIntegrationTest {
 
+    private static final com.google.common.flogger.FluentLogger flog = com.google.common.flogger.FluentLogger.forEnclosingClass();
+
     private static ProgressBar bar;
-    static final int expectedMessageCount = 200;
+    static final int expectedMessageCount = 2000;
+    static final int expectedConcurrentCount = 100; // also used to set max concurrency
 
     public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
     public AtomicInteger processedCount = new AtomicInteger(0);
-    public AtomicInteger httpResponceReceivedCount = new AtomicInteger(0);
+    public static AtomicInteger numberRequestsProcessing = new AtomicInteger(0);
+    public static AtomicInteger highestConcurrency = new AtomicInteger(0);
+    public AtomicInteger httpResponseReceivedCount = new AtomicInteger(0);
 
     public static WireMockServer stubServer;
 
     static CountDownLatch responseLock = new CountDownLatch(1);
 
-    static Queue<Request> parallelRequests = new ConcurrentArrayQueue<>();
+    static Queue<Request> requestsReceivedOnServer = new ConcurrentArrayQueue<>();
 
     VertxConcurrencyIT() {
         bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
@@ -83,7 +92,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
     @BeforeAll
     static void setupWireMock() {
         WireMockConfiguration options = wireMockConfig().dynamicPort()
-                .containerThreads(expectedMessageCount * 2); // ensure wiremock has enough threads to respond to everything in parallel
+                .containerThreads(expectedConcurrentCount * 2); // ensure wiremock has enough threads to respond to everything in parallel
 
         stubServer = new WireMockServer(options);
         MappingBuilder mappingBuilder = get(urlPathEqualTo("/"))
@@ -96,10 +105,15 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
             @Override
             public void requestReceived(final Request request, final Response response) {
                 log.debug("req: {}", request);
-                parallelRequests.add(request);
+                numberRequestsProcessing.getAndIncrement();
+                requestsReceivedOnServer.add(request);
                 bar.stepBy(1);
                 awaitLatch(responseLock, 30); // latch timeout should be longer than awaitility's
                 log.trace("unlocked");
+                int highest = highestConcurrency.get();
+                highestConcurrency.set(Math.max(highest, numberRequestsProcessing.get()));
+                ThreadUtils.sleepLog(400); // slow down responses to cause concurrency limits to be reached
+                numberRequestsProcessing.getAndDecrement();
             }
         });
 
@@ -165,7 +179,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
                 .consumer(newConsumer)
                 .producer(newProducer)
                 .commitMode(commitMode)
-                .maxConcurrency(1000)
+                .maxConcurrency(expectedConcurrentCount)
                 .build());
         pc.subscribe(of(inputName));
 
@@ -176,55 +190,70 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
         assertThat(endOffsets.get(tp)).isEqualTo(expectedMessageCount);
         assertThat(beginOffsets.get(tp)).isEqualTo(0L);
 
-
+        //
         pc.vertxHttpReqInfo(record -> {
                     consumedKeys.add(record.key());
                     return new VertxParallelEoSStreamProcessor.RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
                 }, onSend -> {
                     processedCount.incrementAndGet();
                 }, onWebResponseAsyncResult -> {
-                    httpResponceReceivedCount.incrementAndGet();
-                    log.trace("Response received complete {}", onWebResponseAsyncResult);
+            httpResponseReceivedCount.incrementAndGet();
+            log.trace("Response received complete {}", onWebResponseAsyncResult);
                 }
         );
 
         // wait for all pre-produced messages to be processed and produced
-        log.info("Waiting for {} requests in parallel on server.", expectedMessageCount);
+        log.info("Waiting for {}/2 requests in parallel on server.", expectedConcurrentCount);
         Assertions.useRepresentation(new TrimListRepresentation());
-        var failureMessage = StringUtils.msg("Mock server receives {} requests in parallel from vertx engine",
-                expectedMessageCount);
+        var failureMessage = msg("Mock server receives {} requests in parallel from vertx engine",
+                expectedMessageCount / 2);
         try {
-            waitAtMost(ofSeconds(10))
-                    .pollInterval(ofSeconds(1))
+            waitAtMost(ofSeconds(20))
+                    .pollInterval(ofMillis(200))
                     .alias(failureMessage)
                     .untilAsserted(() -> {
-                        log.info("got {}/{}", parallelRequests.size(), expectedMessageCount);
-                        assertThat(parallelRequests.size()).isEqualTo(expectedMessageCount);
+                        log.info("got {}/{}", requestsReceivedOnServer.size(), expectedConcurrentCount / 2);
+                        assertThat(requestsReceivedOnServer.size()).isGreaterThanOrEqualTo(expectedConcurrentCount / 2);
                     });
         } catch (ConditionTimeoutException e) {
             fail(failureMessage + "\n" + e.getMessage());
         }
-        log.info("All {} requests received in parallel by server, releasing server response lock.", expectedMessageCount);
+        log.info("{} requests received in parallel by server, releasing server response lock.", requestsReceivedOnServer.size());
 
         // all requests were received in parallel, so unlock the server to respond to all of them
         LatchTestUtils.release(responseLock);
 
-        assertNumberOfThreads();
+//        assertNumberOfThreads();
 
-        log.info("Waiting for {} responses from server.", expectedMessageCount);
-        waitAtMost(ofSeconds(10))
+        log.info("Waiting for {} responses from server, while checking concurrent requests never exceed max concurrency.", expectedMessageCount);
+        waitAtMost(ofSeconds(60))
                 .alias(failureMessage)
+                .failFast(msg("max concurrency exceeded {}", expectedConcurrentCount), () -> {
+                    int concurrent = numberRequestsProcessing.get();
+                    if (concurrent > expectedConcurrentCount) {
+                        log.error("Concurrency too high {}", concurrent);
+                        return true;
+                    }
+                    return false;
+                })
                 .untilAsserted(() -> {
-                    assertThat(httpResponceReceivedCount).hasValue(expectedMessageCount);
+                    flog.atInfo().atMostEvery(1, SECONDS).log("Concurrency level: %s", numberRequestsProcessing.get());
+                    assertThat(httpResponseReceivedCount).hasValue(expectedMessageCount);
                 });
 
         log.info("All {} responses received.", expectedMessageCount);
 
-        assertNumberOfThreads();
+//        assertNumberOfThreads();
 
         // close
         bar.close();
         pc.closeDrainFirst();
+
+        //
+        int highestConcurrencyCount = highestConcurrency.get();
+        log.info("Highest concurrency was {}", highestConcurrencyCount);
+        assertWithMessage("Should at some point reach max concurrency")
+                .that(highestConcurrencyCount).isAtLeast(expectedConcurrentCount);
 
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
@@ -251,10 +280,10 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
                     .isEqualTo(expectedPCThreads);
         }
 
-        log.info("Checking there are about ~{} wire mock threads running to process requests in parallel from vert.x", expectedMessageCount);
+        log.info("Checking there are about ~{} wire mock threads running to process requests in parallel from vert.x", expectedConcurrentCount / 2);
         assertThat(wireMockThreadCount)
                 .as("Number of wiremock threads outside expected estimates")
-                .isCloseTo(expectedMessageCount, withPercentage(8));
+                .isCloseTo(expectedConcurrentCount / 2, withPercentage(60));
 
     }
 

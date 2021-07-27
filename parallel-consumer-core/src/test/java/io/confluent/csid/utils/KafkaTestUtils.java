@@ -174,7 +174,9 @@ public class KafkaTestUtils {
         while (count < quantity) {
             Integer key = getRandomKey(keys);
             int recsCountForThisKey = (int) (Math.random() * quantity);
-            ConsumerRecord<String, String> rec = makeRecord(key.toString(), count + "");
+            String value = count + "";
+            String keyString = key.toString();
+            ConsumerRecord<String, String> rec = makeRecord(keyString, value);
 //            var consumerRecords = generateRecordsForKey(key, recsCountForThisKey);
             keyRecords.computeIfAbsent(key, (ignore) -> new ArrayList<>()).add(rec);
 //            keyRecords.put(key, consumerRecords);

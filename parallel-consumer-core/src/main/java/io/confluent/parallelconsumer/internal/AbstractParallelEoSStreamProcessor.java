@@ -130,7 +130,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
      * sure threads always have work to do.
      */
-    private final DynamicLoadFactor dynamicExtraLoadFactor = new DynamicLoadFactor();
+    protected final DynamicLoadFactor dynamicExtraLoadFactor = new DynamicLoadFactor();
 
     /**
      * If the system failed with an exception, it is referenced here.
@@ -712,7 +712,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     isPoolQueueLow(),
                     dynamicExtraLoadFactor.isWarmUpPeriodOver(),
                     moreWorkInQueuesAvailableThatHaveNotBeenPulled);
-        if (isPoolQueueLow() && dynamicExtraLoadFactor.isWarmUpPeriodOver() && moreWorkInQueuesAvailableThatHaveNotBeenPulled && lastWorkRequestWasFulfilled) {
+
+        if (isPoolQueueLow()
+                && moreWorkInQueuesAvailableThatHaveNotBeenPulled
+                && lastWorkRequestWasFulfilled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",

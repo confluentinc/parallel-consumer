@@ -155,7 +155,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     protected void primeFirstRecord() {
-        firstRecord = ktu.makeRecord("key-0", "v0");
+        firstRecord = ktu.makeRecord("key-0", "v0-first-primed-record");
         consumerSpy.addRecord(firstRecord);
     }
 
