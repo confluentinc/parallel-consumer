@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -61,19 +62,19 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
 
     /**
-     * The commit interval for the main {@link ParentParallelEoSStreamProcessor} control thread. Actually the timeout
+     * The commit interval for the main {@link AbstractParallelEoSStreamProcessor} control thread. Actually the timeout
      * that we poll the {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop
      * cycles, making our test waiting go faster.
      *
-     * @see ParentParallelEoSStreamProcessor#workMailBox
-     * @see ParentParallelEoSStreamProcessor#processWorkCompleteMailBox
+     * @see AbstractParallelEoSStreamProcessor#workMailBox
+     * @see AbstractParallelEoSStreamProcessor#processWorkCompleteMailBox
      */
     public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected LongPollingMockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
 
-    protected ParentParallelEoSStreamProcessor<String, String> parentParallelConsumer;
+    protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
     public static int defaultTimeoutSeconds = 10;
 
@@ -175,7 +176,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     /**
-     * Need to make sure we only use {@link ParentParallelEoSStreamProcessor#subscribe} methods, and not do manual
+     * Need to make sure we only use {@link AbstractParallelEoSStreamProcessor#subscribe} methods, and not do manual
      * assignment, otherwise rebalance listeners don't fire (because there are never rebalances).
      */
     protected void subscribeParallelConsumerAndMockConsumerTo(String topic) {
@@ -208,14 +209,14 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         loopCountRef = attachLoopCounter(parentParallelConsumer);
     }
 
-    protected abstract ParentParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions);
+    protected abstract AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions);
 
     protected void sendSecondRecord(MockConsumer<String, String> consumer) {
         secondRecord = ktu.makeRecord("key-0", "v1");
         consumer.addRecord(secondRecord);
     }
 
-    protected AtomicReference<Integer> attachLoopCounter(ParentParallelEoSStreamProcessor parallelConsumer) {
+    protected AtomicReference<Integer> attachLoopCounter(AbstractParallelEoSStreamProcessor parallelConsumer) {
         final AtomicReference<Integer> currentLoop = new AtomicReference<>(0);
         parentParallelConsumer.addLoopEndCallBack(() -> {
             Integer currentNumber = currentLoop.get();

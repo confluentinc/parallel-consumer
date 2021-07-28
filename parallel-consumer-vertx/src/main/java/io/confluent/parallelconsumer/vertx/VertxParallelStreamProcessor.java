@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.vertx;
 
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
@@ -20,12 +20,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * An extension to {@link ParentParallelEoSStreamProcessor} which uses the <a href="https://vertx.io">Vert.x</a> library
- * and it's non blocking clients to process messages.
+ * An extension to {@link AbstractParallelEoSStreamProcessor} which uses the <a href="https://vertx.io">Vert.x</a>
+ * library and it's non blocking clients to process messages.
  *
  * @param <K>
  * @param <V>
- * @see ParentParallelEoSStreamProcessor
+ * @see AbstractParallelEoSStreamProcessor
  * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
  */
 public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, V> {

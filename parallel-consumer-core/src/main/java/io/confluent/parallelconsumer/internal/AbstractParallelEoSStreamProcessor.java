@@ -1,11 +1,12 @@
-package io.confluent.parallelconsumer;
+package io.confluent.parallelconsumer.internal;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.WallClock;
-import io.confluent.parallelconsumer.internal.*;
+import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.AccessLevel;
@@ -48,7 +49,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class ParentParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -183,7 +184,7 @@ public abstract class ParentParallelEoSStreamProcessor<K, V> implements Parallel
      *
      * @see ParallelConsumerOptions
      */
-    public ParentParallelEoSStreamProcessor(ParallelConsumerOptions newOptions) {
+    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions newOptions) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
@@ -1010,7 +1011,7 @@ public abstract class ParentParallelEoSStreamProcessor<K, V> implements Parallel
      * <p>
      * Useful for testing and controlling loop progression.
      */
-    void addLoopEndCallBack(Runnable r) {
+    public void addLoopEndCallBack(Runnable r) {
         this.controlLoopHooks.add(r);
     }
 
