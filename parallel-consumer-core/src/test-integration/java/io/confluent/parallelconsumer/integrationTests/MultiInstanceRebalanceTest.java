@@ -10,7 +10,7 @@ import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -186,7 +186,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         private final ProcessingOrder order;
         private final String inputTopic;
         private final ProgressBar bar;
-        private ParallelEoSStreamProcessor<String, String> parallelConsumer;
+        private ParentParallelEoSStreamProcessor<String, String> parallelConsumer;
         private final List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
 
         @Override
@@ -197,7 +197,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
             consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
             KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(false, consumerProps);
 
-            this.parallelConsumer = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
+            this.parallelConsumer = new ParentParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                     .ordering(order)
                     .consumer(newConsumer)
                     .commitMode(commitMode)

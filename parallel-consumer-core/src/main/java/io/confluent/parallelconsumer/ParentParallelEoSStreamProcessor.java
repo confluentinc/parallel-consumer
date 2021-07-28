@@ -52,7 +52,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
+public class ParentParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -186,7 +186,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessor(ParallelConsumerOptions newOptions) {
+    public ParentParallelEoSStreamProcessor(ParallelConsumerOptions newOptions) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);

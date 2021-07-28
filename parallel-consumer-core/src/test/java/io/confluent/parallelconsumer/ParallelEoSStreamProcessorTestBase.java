@@ -61,19 +61,19 @@ public class ParallelEoSStreamProcessorTestBase {
     public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
 
     /**
-     * The commit interval for the main {@link ParallelEoSStreamProcessor} control thread. Actually the timeout that we
-     * poll the {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop cycles,
-     * making our test waiting go faster.
+     * The commit interval for the main {@link ParentParallelEoSStreamProcessor} control thread. Actually the timeout
+     * that we poll the {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop
+     * cycles, making our test waiting go faster.
      *
-     * @see ParallelEoSStreamProcessor#workMailBox
-     * @see ParallelEoSStreamProcessor#processWorkCompleteMailBox
+     * @see ParentParallelEoSStreamProcessor#workMailBox
+     * @see ParentParallelEoSStreamProcessor#processWorkCompleteMailBox
      */
     public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected LongPollingMockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
 
-    protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
+    protected ParentParallelEoSStreamProcessor<String, String> parallelConsumer;
 
     public static int defaultTimeoutSeconds = 10;
 
@@ -175,8 +175,8 @@ public class ParallelEoSStreamProcessorTestBase {
     }
 
     /**
-     * Need to make sure we only use {@link ParallelEoSStreamProcessor#subscribe} methods, and not do manual assignment,
-     * otherwise rebalance listeners don't fire (because there are never rebalances).
+     * Need to make sure we only use {@link ParentParallelEoSStreamProcessor#subscribe} methods, and not do manual
+     * assignment, otherwise rebalance listeners don't fire (because there are never rebalances).
      */
     protected void subscribeParallelConsumerAndMockConsumerTo(String topic) {
         List<String> of = of(topic);
@@ -208,8 +208,8 @@ public class ParallelEoSStreamProcessorTestBase {
         loopCountRef = attachLoopCounter(parallelConsumer);
     }
 
-    protected ParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
+    protected ParentParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        parallelConsumer = new ParentParallelEoSStreamProcessor<>(parallelConsumerOptions);
 
         return parallelConsumer;
     }
@@ -219,7 +219,7 @@ public class ParallelEoSStreamProcessorTestBase {
         consumer.addRecord(secondRecord);
     }
 
-    protected AtomicReference<Integer> attachLoopCounter(ParallelEoSStreamProcessor parallelConsumer) {
+    protected AtomicReference<Integer> attachLoopCounter(ParentParallelEoSStreamProcessor parallelConsumer) {
         final AtomicReference<Integer> currentLoop = new AtomicReference<>(0);
         parallelConsumer.addLoopEndCallBack(() -> {
             Integer currentNumber = currentLoop.get();

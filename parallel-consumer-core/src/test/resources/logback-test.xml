@@ -31,7 +31,7 @@
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer" level="trace"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="error"/>-->
-<!--            <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="trace"/>-->
+<!--            <logger name="io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor" level="trace"/>-->
     <!--                <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
     <!--    <logger name="io.confluent.csid" level="info"/>-->

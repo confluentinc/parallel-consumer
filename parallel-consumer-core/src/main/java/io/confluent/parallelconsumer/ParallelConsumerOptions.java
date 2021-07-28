@@ -19,7 +19,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 
 /**
- * The options for the {@link ParallelEoSStreamProcessor} system.
+ * The options for the {@link ParentParallelEoSStreamProcessor} system.
  *
  * @see #builder()
  * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder

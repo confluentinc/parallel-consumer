@@ -264,7 +264,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         Assumptions.assumeThat(parallelConsumer)
                 .as("Should only test on core PC - this test is very complicated to get to work with vert.x " +
                         "thread system, as the event and locking system needed is quite different")
-                .isExactlyInstanceOf(ParallelEoSStreamProcessor.class);
+                .isExactlyInstanceOf(ParentParallelEoSStreamProcessor.class);
 
         setupParallelConsumerInstance(getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)

@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.integrationTests;
 import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -117,7 +117,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         // first client
         {
             //
-            var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
+            var asyncOne = new ParentParallelEoSStreamProcessor<String, String>(options);
 
             //
             asyncOne.subscribe(UniLists.of(rebalanceTopic));
@@ -187,7 +187,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
             KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
             var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
-            try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
+            try (var asyncThree = new ParentParallelEoSStreamProcessor<String, String>(optionsThree)) {
                 asyncThree.subscribe(UniLists.of(rebalanceTopic));
 
                 // read what we're given
@@ -250,7 +250,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
 
-        try (var asyncOne = new ParallelEoSStreamProcessor<String, String>(options)) {
+        try (var asyncOne = new ParentParallelEoSStreamProcessor<String, String>(options)) {
 
             asyncOne.subscribe(UniLists.of(topic));
 
@@ -278,7 +278,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 .consumer(newConsumerThree)
                 .producer(producerThree)
                 .build();
-        try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
+        try (var asyncThree = new ParentParallelEoSStreamProcessor<String, String>(optionsThree)) {
             asyncThree.subscribe(UniLists.of(topic));
 
             // read what we're given
@@ -331,7 +331,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                     .consumer(consumer)
                     .producer(producerOne)
                     .build();
-            var asyncOne = new ParallelEoSStreamProcessor<String, String>(options);
+            var asyncOne = new ParentParallelEoSStreamProcessor<String, String>(options);
 
             asyncOne.subscribe(UniLists.of(topic));
 
@@ -366,7 +366,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                     .consumer(newConsumerThree)
                     .producer(producerThree)
                     .build();
-            try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
+            try (var asyncThree = new ParentParallelEoSStreamProcessor<String, String>(optionsThree)) {
                 asyncThree.subscribe(UniLists.of(topic));
 
                 // read what we're given
