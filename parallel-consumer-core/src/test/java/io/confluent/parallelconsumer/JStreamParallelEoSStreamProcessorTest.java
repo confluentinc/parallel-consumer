@@ -36,7 +36,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     }
 
     @Override
-    protected ParentParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions options) {
+    protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions options) {
         streaming = new JStreamParallelEoSStreamProcessor<>(options);
 
         return streaming;

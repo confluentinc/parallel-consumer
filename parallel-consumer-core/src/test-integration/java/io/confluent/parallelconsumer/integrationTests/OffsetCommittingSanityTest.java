@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -120,8 +120,8 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         newConsumer.close();
     }
 
-    private ParentParallelEoSStreamProcessor<String, String> createParallelConsumer(String topicName, Consumer consumer) {
-        ParentParallelEoSStreamProcessor<String, String> pc = new ParentParallelEoSStreamProcessor<>(ParallelConsumerOptions.builder()
+    private ParallelEoSStreamProcessor<String, String> createParallelConsumer(String topicName, Consumer consumer) {
+        ParallelEoSStreamProcessor<String, String> pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.builder()
                 .consumer(consumer)
                 .build()
         );

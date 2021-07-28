@@ -15,7 +15,19 @@ import java.util.function.Function;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
-public class ParallelEoSStreamProcessor<K, V> extends ParentParallelEoSStreamProcessor<K, V> {
+public class ParallelEoSStreamProcessor<K, V> extends ParentParallelEoSStreamProcessor<K, V>
+        implements ParallelStreamProcessor<K, V> {
+
+    /**
+     * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
+     * way as per normal.
+     *
+     * @param newOptions
+     * @see ParallelConsumerOptions
+     */
+    public ParallelEoSStreamProcessor(final ParallelConsumerOptions newOptions) {
+        super(newOptions);
+    }
 
     @Override
     public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
@@ -36,7 +48,7 @@ public class ParallelEoSStreamProcessor<K, V> extends ParentParallelEoSStreamPro
     public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // todo refactor out the producer system to a sub class
-        if (!options.isProducerSupplied()) {
+        if (!getOptions().isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
         }
 
@@ -54,7 +66,7 @@ public class ParallelEoSStreamProcessor<K, V> extends ParentParallelEoSStreamPro
             log.trace("Producing {} messages in result...", recordListToProduce.size());
             for (ProducerRecord<K, V> toProduce : recordListToProduce) {
                 log.trace("Producing {}", toProduce);
-                RecordMetadata produceResultMeta = producerManager.get().produceMessage(toProduce);
+                RecordMetadata produceResultMeta = super.getProducerManager().get().produceMessage(toProduce);
                 var result = new ConsumeProduceResult<>(consumedRecord, toProduce, produceResultMeta);
                 results.add(result);
             }

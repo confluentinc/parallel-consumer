@@ -48,7 +48,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class ParentParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class ParentParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -75,6 +75,7 @@ public abstract class ParentParallelEoSStreamProcessor<K, V> implements Parallel
 
     private Instant lastCommitCheckTime = Instant.now();
 
+    @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
@@ -921,9 +922,9 @@ public abstract class ParentParallelEoSStreamProcessor<K, V> implements Parallel
     /**
      * Run the supplied function.
      */
-    protected <R> List<Tuple<ConsumerRecord<K, V>, R>> userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
-                                                                          Consumer<R> callback,
-                                                                          WorkContainer<K, V> wc) {
+    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> userFunctionRunner(Function<ConsumerRecord<K, V>, List<R>> usersFunction,
+                                                                                           Consumer<R> callback,
+                                                                                           WorkContainer<K, V> wc) {
         // call the user's function
         List<R> resultsFromUserFunction;
         try {
