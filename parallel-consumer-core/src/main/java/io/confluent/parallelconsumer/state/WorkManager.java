@@ -542,7 +542,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
-     * should be downloaded (or pipelined in the Consumer)
+     *         should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
         return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
@@ -615,4 +615,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
+    public boolean isSystemIdle() {
+        return getNumberRecordsOutForProcessing() == 0;
+    }
 }

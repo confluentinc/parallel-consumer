@@ -760,7 +760,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             setupData();
 
             parallelConsumer.poll((ignore) -> {
-                log.debug("rec: {}", ignore);
+                log.debug("Test record processor - rec: {}", ignore);
             });
 
             //

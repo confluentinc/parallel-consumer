@@ -63,7 +63,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private WallClock clock = new WallClock();
 
     /**
-     * Kafka's default auto commit frequency
+     * Kafka's default auto commit frequency. https://docs.confluent.io/platform/current/clients/consumer.html#id1
      */
     private static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY = 5000;
 
@@ -114,7 +114,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Thread blockableControlThread;
 
     /**
-     * @see #notifyNewWorkRegistered
+     * @see #notifySomethingToDo
      * @see #processWorkCompleteMailBox
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
@@ -314,7 +314,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        notifyNewWorkRegistered();
+        notifySomethingToDo();
     }
 
     /**
@@ -504,6 +504,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
         this.state = State.draining;
+        notifySomethingToDo();
     }
 
     /**
@@ -756,6 +757,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } else {
             state = State.closing;
         }
+        notifySomethingToDo();
     }
 
     /**
@@ -771,7 +773,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
         try {
-            boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running);
+            boolean workAvailable = wm.hasWorkInMailboxes() && wm.isSystemIdle();
+            boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running) && !workAvailable;
             if (noWorkToDoAndStillRunning) {
                 if (log.isDebugEnabled()) {
                     log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
@@ -987,7 +990,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #processWorkCompleteMailBox
      * @see #blockableControlThread
      */
-    public void notifyNewWorkRegistered() {
+    public void notifySomethingToDo() {
         if (currentlyPollingWorkCompleteMailBox.get()) {
             boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
             if (noTransactionInProgress) {

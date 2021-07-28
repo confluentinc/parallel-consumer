@@ -55,11 +55,12 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     /**
      * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
-     * lower value shouldn't affect test speed much unless many different batches of messages are "published".
+     * lower value shouldn't affect test speed much unless many different batches of messages are "published" as test
+     * messages are queued up at the beginning and the polled.
      *
      * @see LongPollingMockConsumer#poll(Duration)
      */
-    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 100;
+    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 500;
 
     /**
      * The commit interval for the main {@link AbstractParallelEoSStreamProcessor} control thread. Actually the timeout
@@ -137,7 +138,10 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - we
         // don't want to bubble up an error here that we expect from here.
         if (!parentParallelConsumer.isClosedOrFailed()) {
+            log.debug("Test finished, closing pc...");
             parentParallelConsumer.close();
+        } else {
+            log.debug("Test finished, pc already closed.");
         }
     }
 
