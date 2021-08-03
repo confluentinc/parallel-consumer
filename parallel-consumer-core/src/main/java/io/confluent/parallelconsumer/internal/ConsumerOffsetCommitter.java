@@ -42,6 +42,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
     private final CommitMode commitMode;
 
+    private final Duration commitTimeout;
+
     private Optional<Thread> owningThread = Optional.empty();
 
     /**
@@ -57,6 +59,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, final ParallelConsumerOptions options) {
         super(newConsumer, newWorkManager);
         commitMode = options.getCommitMode();
+        commitTimeout = options.getOffsetCommitTimeout();
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
         }
@@ -151,7 +154,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             try {
                 log.debug("Waiting on a commit response");
                 Duration timeout = AbstractParallelEoSStreamProcessor.DEFAULT_TIMEOUT;
-                CommitResponse take = commitResponseQueue.poll(timeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
+                CommitResponse take = commitResponseQueue.poll(commitTimeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
                 if (take == null)
                     throw new InternalRuntimeError(msg("Timeout waiting for commit response {} to request {}", timeout, commitRequest));
                 waitingOnCommitResponse = take.getRequest().getId() != commitRequest.getId();
