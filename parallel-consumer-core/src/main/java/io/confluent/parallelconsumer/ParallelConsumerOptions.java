@@ -169,6 +169,13 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration sendTimeout = Duration.ofSeconds(10);
 
+    /**
+     * Controls how long to block while waiting for offsets to be committed.
+     * Only relevant if using {@link CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
+     */
+    @Builder.Default
+    private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
