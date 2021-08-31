@@ -67,6 +67,8 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
         );
 ----
 
+An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
+
 toc::[]
 
 == Motivation
