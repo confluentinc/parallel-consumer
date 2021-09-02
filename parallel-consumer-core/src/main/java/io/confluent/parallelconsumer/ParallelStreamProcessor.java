@@ -29,6 +29,14 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     }
 
     /**
+     * Register a function to be applied in parallel to each received message
+     *
+     * @param usersVoidConsumptionFunction the function
+     */
+    void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
+
+
+    /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link
      * ProducerRecord}s to be sent back to the broker.
      *

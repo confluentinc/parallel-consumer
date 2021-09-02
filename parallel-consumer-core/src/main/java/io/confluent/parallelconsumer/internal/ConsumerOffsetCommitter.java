@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -151,7 +150,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
             try {
                 log.debug("Waiting on a commit response");
-                Duration timeout = ParallelEoSStreamProcessor.DEFAULT_TIMEOUT;
+                Duration timeout = AbstractParallelEoSStreamProcessor.DEFAULT_TIMEOUT;
                 CommitResponse take = commitResponseQueue.poll(timeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
                 if (take == null)
                     throw new InternalRuntimeError(msg("Timeout waiting for commit response {} to request {}", timeout, commitRequest));

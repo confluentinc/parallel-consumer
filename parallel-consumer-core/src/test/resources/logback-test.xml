@@ -15,28 +15,28 @@
             <!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%class{0}.java:%line\)) %msg%n</pattern>-->
             <!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%file:%line\)) %msg%n</pattern>-->
             <!--            <pattern>%highlight(%-5level) %yellow([%thread]) %blue(\(%file:%line\)) %cyan(#%M) %msg%n</pattern>-->
-            <pattern>%d{mm:ss.SSS} %X{pcId} %highlight(%-5level) %yellow([%thread]) %X{offset} %cyan(\(%file:%line\)#%M) %msg%n
-            </pattern>
+            <pattern>%d{mm:ss.SSS} %X{pcId} %highlight(%-5level) %yellow([%thread]) %X{offset} %cyan(\(%file:%line\)#%M) %msg%n</pattern>
             <!--            <pattern>%highlight(%-5level) %yellow([%thread]) %cyan(\(%logger{36}:%line#%M\))  %msg%n</pattern>-->
         </encoder>
     </appender>
 
     <root level="warn">
-<!--    <root level="debug">-->
+        <!--    <root level="debug">-->
         <appender-ref ref="STDOUT"/>
     </root>
 
     <!-- primary -->
     <logger name="io.confluent.parallelconsumer" level="info"/>
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
+    <!--    <logger name="io.confluent.csid" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer" level="trace"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="error"/>-->
-<!--            <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="trace"/>-->
+    <!--            <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
     <!--                <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
     <!--    <logger name="io.confluent.csid" level="info"/>-->
-    <!--    <logger name="io.confluent.csid.utils" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid" level="debug"/>-->
+    <!--        <logger name="io.confluent.csid.utils" level="debug"/>-->
+
 
     <!--            <logger name="io.confluent.parallelconsumer" level="trace" />-->
 
