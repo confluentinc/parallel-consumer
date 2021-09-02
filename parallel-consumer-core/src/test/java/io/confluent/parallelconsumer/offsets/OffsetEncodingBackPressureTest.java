@@ -86,7 +86,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 int attemptNumber = attempts.incrementAndGet();
                 if (attemptNumber == 1) {
                     log.debug("force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark");
-                    awaitLatch(msgLock, 60);
+                    awaitLatch(msgLock, 120);
                     log.debug("very slow message awoken, throwing exception");
                     throw new FakeRuntimeError("Fake error");
                 } else {
