@@ -358,6 +358,7 @@ Where `${project.version}` is the version to be used:
 * artifact ID: `parallel-consumer-core`
 * version: image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
+
 .Core Module Dependency
 [source,xml,indent=0]
         <dependency>
@@ -418,15 +419,16 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 
 [source,java]
 ----
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
  * Currently there is no direct implementation, only the {@link ParallelStreamProcessor} version (see {@link
- * ParallelEoSStreamProcessor}), but there may be in the future.
+ * AbstractParallelEoSStreamProcessor}), but there may be in the future.
  *
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
- * @see ParallelEoSStreamProcessor
+ * @see AbstractParallelEoSStreamProcessor
  * @see #poll(Consumer)
  */
 ----
