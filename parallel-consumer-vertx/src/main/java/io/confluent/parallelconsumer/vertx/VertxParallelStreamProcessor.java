@@ -14,9 +14,7 @@ import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.ProducerRecord;
 
-import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -78,7 +76,8 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
                             Consumer<Future<HttpResponse<Buffer>>> onSend);
 
     /**
-     * todo docs result
+     * Consumer from the Broker concurrently - use the various Vert.x systems to return us a vert.x Future based on this
+     * record.
      */
     void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result);
 }
