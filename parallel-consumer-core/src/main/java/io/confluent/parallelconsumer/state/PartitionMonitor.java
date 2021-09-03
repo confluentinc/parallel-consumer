@@ -292,7 +292,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     /**
-     * Get final offset data, build the the offset map, and replace it in our map of offset data to send
+     * Get final offset data, build the offset map, and replace it in our map of offset data to send
      *
      * @param offsetsToSend
      * @param topicPartitionKey
@@ -309,7 +309,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             long offsetOfNextExpectedMessage;
             OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
             if (finalOffsetOnly == null) {
-                // no new low water mark to commit, so use the last one again
+                // no new low watermark to commit, so use the last one again
                 offsetOfNextExpectedMessage = incompleteOffsets.iterator().next(); // first element
             } else {
                 offsetOfNextExpectedMessage = finalOffsetOnly.offset();

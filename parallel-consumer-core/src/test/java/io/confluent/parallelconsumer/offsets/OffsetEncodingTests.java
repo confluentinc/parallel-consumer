@@ -7,14 +7,12 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -150,11 +148,16 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000, "akey", "avalue")); // higher than Short.MAX_VALUE
         int avoidOffByOne = 2;
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000 + Short.MAX_VALUE + avoidOffByOne, "akey", "avalue")); // runlength higher than Short.MAX_VALUE
+        int highest = 40_000 + Short.MAX_VALUE + avoidOffByOne + 1;
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, highest, "akey", "avalue")); // will complete to force whole encoding
 
-        var firstSucceededRecordRemoved = new ArrayList<>(records);
-        firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 0).findFirst().get());
-        firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 69).findFirst().get());
-        firstSucceededRecordRemoved.remove(firstSucceededRecordRemoved.stream().filter(x -> x.offset() == 25_000).findFirst().get());
+
+        var incompleteRecords = new ArrayList<>(records);
+        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 0).findFirst().get());
+        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 69).findFirst().get());
+        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 25_000).findFirst().get());
+        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highest).findFirst().get());
+
 
         //
         ktu.send(consumerSpy, records);
@@ -167,7 +170,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         ConsumerRecords<String, String> crs = new ConsumerRecords<>(recordsMap);
 
         // write offsets
-        Map<TopicPartition, OffsetAndMetadata> completedEligibleOffsetsAndRemove;
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
@@ -182,24 +184,29 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             KafkaTestUtils.completeWork(wmm, work, 25_000);
 
-            completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
+            KafkaTestUtils.completeWork(wmm, work, highest);
+
+
+            var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
 
             // check for graceful fall back to the smallest available encoder
             OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
-            Set<Long> collect = firstSucceededRecordRemoved.stream().map(x -> x.offset()).collect(Collectors.toSet());
             OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
-            var state = new PartitionState<String, String>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(25_000L, collect));
+            var state = wmm.getPm().getState(tp);
             String bestPayload = om.makeOffsetMetadataPayload(1, state);
             assertThat(bestPayload).isNotEmpty();
+
+            //
+            consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
         }
-        consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
+
+        // simulate a rebalance or some sort of reset, by instantiating a new WM with the state from the last
 
         // read offsets
         {
             WorkManager<String, String> newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(crs);
-//            ThreadUtils.sleepQuietly(1);
             List<WorkContainer<String, String>> workRetrieved = newWm.maybeGetWork();
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
@@ -208,13 +215,16 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                         -> {
                     assertThatThrownBy(() ->
                             assertThat(workRetrieved).extracting(WorkContainer::getCr)
-                                    .containsExactlyElementsOf(firstSucceededRecordRemoved))
+                                    .containsExactlyElementsOf(incompleteRecords))
                             .hasMessageContaining("but some elements were not")
                             .hasMessageContaining("offset = 25000");
                 }
                 default -> {
-                    assertThat(workRetrieved).extracting(WorkContainer::getCr)
-                            .containsExactlyElementsOf(firstSucceededRecordRemoved);
+                    List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
+                    Collections.sort(expected);
+                    assertThat(workRetrieved.stream().map(WorkContainer::offset))
+                            .as("Contains only incomplete records")
+                            .containsExactlyElementsOf(expected);
                 }
             }
         }
