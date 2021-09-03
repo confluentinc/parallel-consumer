@@ -1,0 +1,73 @@
+<!--
+
+    Copyright (C) 2020-2021 Confluent, Inc.
+
+-->
+<configuration packagingData="true" scan="true" scanPeriod="5 seconds">
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- encoders are assigned the type
+             ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
+        <encoder>
+            <!--            <pattern>%d{mm:ss.SSS} [%thread] %-5level (%class{0}.java:%line\)#%M - %msg%n</pattern>-->
+            <!--            <pattern>[%thread] %-5level .\(%class{0}.java:%line\)#%M - %msg%n</pattern>-->
+            <!--            <pattern>[%thread] %-5level .\(%file:%line\)#%M - %msg%n</pattern>-->
+            <!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%class{0}.java:%line\)) %msg%n</pattern>-->
+            <!--            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%file:%line\)) %msg%n</pattern>-->
+            <!--            <pattern>%highlight(%-5level) %yellow([%thread]) %blue(\(%file:%line\)) %cyan(#%M) %msg%n</pattern>-->
+            <pattern>%d{mm:ss.SSS} %X{pcId} %highlight(%-5level) %yellow([%thread]) %X{offset} %cyan(\(%file:%line#%M\)) %msg%n
+            </pattern>
+            <!--            <pattern>%highlight(%-5level) %yellow([%thread]) %cyan(\(%logger{36}:%line#%M\))  %msg%n</pattern>-->
+        </encoder>
+    </appender>
+
+    <root level="warn">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!--    vert.x module-->
+    <logger name="io.confluent.parallelconsumer.vertx" level="info"/>
+
+    <!-- primary -->
+    <logger name="io.confluent.parallelconsumer" level="info"/>
+    <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
+    <!--        <logger name="io.confluent.parallelconsumer" level="trace"/>-->
+    <!--            <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessor" level="trace"/>-->
+    <!--                <logger name="io.confluent.parallelconsumer.BrokerPollSystem" level="trace"/>-->
+    <!--        <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
+    <!--    <logger name="io.confluent.csid" level="info"/>-->
+    <!--    <logger name="io.confluent.csid.utils" level="debug"/>-->
+    <!--    <logger name="io.confluent.csid" level="debug"/>-->
+
+    <!--            <logger name="io.confluent.parallelconsumer" level="trace" />-->
+
+    <!-- notable specifics -->
+<!--        <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase" level="debug"/>-->
+<!--    <logger name="io.confluent.parallelconsumer.integrationTests" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.LargeVolumeInMemoryTests" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumerTestBase" level="trace"/>-->
+<!--        <logger name="io.confluent.parallelconsumer.WorkManager" level="trace" />-->
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumer" level="info" />-->
+    <!--    <logger name="io.confluent.parallelconsumer.OffsetMapCodecManager" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
+<!--    <logger name="io.confluent.parallelconsumer.OffsetRunLength" level="trace"/>-->
+
+    <!-- containers -->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="debug"/>-->
+
+    <!-- related -->
+    <!--    <logger name="org.apache.kafka.clients" level="info"/>-->
+    <!--    <logger name="org.apache.kafka.clients" level="warn"/>-->
+    <!--    <logger name="org.apache.kafka.clients" level="debug"/>-->
+
+    <logger name="org.postgresql" level="info"/>
+
+    <!-- external -->
+    <!--    <logger name="io.vertx" level="debug"/>-->
+    <logger name="io.netty" level="info"/>
+
+    <!-- kafka internal -->
+    <!--    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug"/>-->
+
+</configuration>

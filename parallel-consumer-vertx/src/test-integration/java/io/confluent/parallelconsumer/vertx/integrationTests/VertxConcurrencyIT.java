@@ -226,7 +226,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 //        assertNumberOfThreads();
 
         log.info("Waiting for {} responses from server, while checking concurrent requests never exceed max concurrency.", expectedMessageCount);
-        waitAtMost(ofSeconds(60))
+        waitAtMost(ofSeconds(120))
                 .alias(failureMessage)
                 .failFast(msg("max concurrency exceeded {}", expectedConcurrentCount), () -> {
                     int concurrent = numberRequestsProcessing.get();
