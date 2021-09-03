@@ -51,7 +51,7 @@ def job = {
                             sh '''
                           set +x
                           gpg --import < $GPG_PRIVATE_KEY;
-                          mvn --batch-mode clean deploy -P maven-central -Dgpg.passphrase=$GPG_PASSPHRASE
+                          mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE
                       '''
                         }
                         currentBuild.result = 'Success'
