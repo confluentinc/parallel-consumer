@@ -356,7 +356,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
 
     protected List<OffsetAndMetadata> extractAllPartitionsOffsetsAndMetadataSequentially() {
-        var result = new ArrayList<Integer>();
         // copy the list for safe concurrent access
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
         return history.stream()

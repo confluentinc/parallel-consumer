@@ -246,18 +246,16 @@ public class KafkaTestUtils {
 
 
     public static void completeWork(final WorkManager<String, String> wmm, List<WorkContainer<String, String>> work, long offset) {
-        WorkContainer<String, String> foundWork = work.stream()
+        WorkContainer<String, String> workMatchingProvidedOffset = work.stream()
                 .filter(x ->
                         x.getCr().offset() == offset
                 )
                 .findFirst().get();
-        KafkaTestUtils.completeWork(wmm, foundWork);
+        KafkaTestUtils.completeWork(wmm, workMatchingProvidedOffset);
     }
 
     public static void completeWork(final WorkManager<String, String> wmm, final WorkContainer<String, String> wc) {
-        FutureTask future = new FutureTask<>(() -> {
-            return true;
-        });
+        FutureTask future = new FutureTask<>(() -> true);
         future.run();
         assertThat(future).isDone();
         wc.setFuture(future);

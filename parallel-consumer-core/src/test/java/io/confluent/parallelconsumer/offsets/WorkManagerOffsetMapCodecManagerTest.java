@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.PartitionState;
+import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.xerial.snappy.SnappyOutputStream;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -49,22 +51,28 @@ class WorkManagerOffsetMapCodecManagerTest {
     /**
      * set pf incomplete offsets in our sample data
      */
-    TreeSet<Long> incomplete = new TreeSet<>(UniSets.of(2L, 3L));
-
-    // todo why 0?
-    long finalOffsetForPartition = 0;
+    TreeSet<Long> incompleteOffsets = new TreeSet<>(UniSets.of(0L, 2L, 3L));
 
     /**
-     * Sample data runs up to a highest seen offset of 4
+     * Committable offset of 2, meaning 1 is complete and 2 and 3 are incomplete. 4 is also complete.
      */
-    // todo docs why 4?
+    long finalOffsetForPartition = 0L;
+
+    /**
+     * Sample data runs up to a highest seen offset of 4. Where offset 3 and 3 are incomplete.
+     */
     long partitionHighWaterMark = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(partitionHighWaterMark, incomplete));
+    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(partitionHighWaterMark, incompleteOffsets));
+
+    {
+        WorkContainer mock = Mockito.mock(WorkContainer.class);
+        Mockito.doReturn(partitionHighWaterMark).when(mock).offset();
+        state.updateHighestSucceededOffsetSoFar(mock); // in this case the highest seen is also the highest succeeded
+    }
 
     /**
-     * o = incomplete
-     * x = complete
+     * o = incomplete x = complete
      */
     static List<String> simpleSampleInputsToCompress = UniLists.of(
             "",
@@ -129,10 +137,11 @@ class WorkManagerOffsetMapCodecManagerTest {
         log.info("Size: {}", serialised.length());
 
         //
-        Set<Long> longs = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(finalOffsetForPartition, serialised).getIncompleteOffsets();
+        OffsetMapCodecManager.HighestOffsetAndIncompletes highestOffsetAndIncompletes = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(finalOffsetForPartition, serialised);
+        Set<Long> deserializedIncompletes = highestOffsetAndIncompletes.getIncompleteOffsets();
 
         //
-        assertThat(longs.toArray()).containsExactly(incomplete.toArray());
+        assertThat(deserializedIncompletes.toArray()).containsExactly(incompleteOffsets.toArray());
     }
 
     /**
@@ -233,7 +242,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     void loadCompressedRunLengthEncoding() {
         byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, state);
         OffsetMapCodecManager.HighestOffsetAndIncompletes longs = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, bytes);
-        assertThat(longs.getIncompleteOffsets().toArray()).containsExactly(incomplete.toArray());
+        assertThat(longs.getIncompleteOffsets().toArray()).containsExactly(incompleteOffsets.toArray());
     }
 
     @Test
@@ -323,10 +332,11 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void deserialiseBitset() {
         var input = "oxxooooooo";
-        long highWater = input.length();
+        long highestSucceeded = input.length() - 1;
 
-        Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, input);
-        OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highWater, longs);
+        int nextExpectedOffset = 0;
+        Set<Long> incompletes = OffsetMapCodecManager.bitmapStringToIncomplete(nextExpectedOffset, input);
+        OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(nextExpectedOffset, highestSucceeded, incompletes);
         encoder.invoke();
         byte[] pack = encoder.packSmallest();
 
@@ -343,7 +353,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         OffsetMapCodecManager.HighestOffsetAndIncompletes deserialised = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, serialised);
 
-        assertThat(deserialised.getIncompleteOffsets()).isEqualTo(incomplete);
+        assertThat(deserialised.getIncompleteOffsets()).isEqualTo(incompleteOffsets);
     }
 
     @Test
@@ -352,13 +362,14 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         String stringMap = om.incompletesToBitmapString(finalOffsetForPartition, state);
         List<Integer> integers = OffsetRunLength.runLengthEncode(stringMap);
-        assertThat(integers).as("encoding of map: " + stringMap).containsExactlyElementsOf(UniLists.of(0, 2, 2));
+        assertThat(integers).as("encoding of map: " + stringMap).containsExactlyElementsOf(UniLists.of(1, 1, 2));
 
         assertThat(OffsetRunLength.runLengthDecodeToString(integers)).isEqualTo(stringMap);
     }
 
     /**
-     * Compare compression performance on different types of inputs, and tests that each encoding type is decompressed again correctly
+     * Compare compression performance on different types of inputs, and tests that each encoding type is decompressed
+     * again correctly
      */
     @Test
     void differentInputsAndCompressions() {

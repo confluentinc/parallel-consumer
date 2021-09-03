@@ -43,12 +43,9 @@ public class OffsetSimultaneousEncoder {
     private final long lowWaterMark;
 
     /**
-     * The next expected offset to be returned by the broker
-     */
-    private final long nextExpectedOffset;
-
-    /**
-     * The difference between the base offset (the offset to be committed) and the highest seen offset
+     * The difference between the base offset (the offset to be committed) and the highest seen offset.
+     * <p>
+     * {@link BitSet} only supports {@link Integer#MAX_VALUE) bits
      */
     private final int length;
 
@@ -85,23 +82,30 @@ public class OffsetSimultaneousEncoder {
      */
     private final Set<OffsetEncoder> encoders = new HashSet<>();
 
-    // TODO remove one - next expected is low water mark + 1
-    public OffsetSimultaneousEncoder(long lowWaterMark, Long nextExpectedOffset, Set<Long> incompleteOffsets) {
+    public OffsetSimultaneousEncoder(long lowWaterMark, long highestSucceededOffset, Set<Long> incompleteOffsets) {
         this.lowWaterMark = lowWaterMark;
-        this.nextExpectedOffset = nextExpectedOffset;
         this.incompleteOffsets = incompleteOffsets;
 
-        long longLength = this.nextExpectedOffset - this.lowWaterMark;
-        length = (int) longLength;
+        //
+        if (highestSucceededOffset == -1)// nothing succeeded yet
+            highestSucceededOffset = lowWaterMark;
+
+        long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
+        if (bitsetLengthL < 0) {
+            throw new IllegalStateException("Cannot have negative length Bitset");
+        }
+
+        // BitSet only support Integer.MAX_VALUE bits
+        length = (int) bitsetLengthL;
         // sanity
-        if (longLength != length) throw new IllegalArgumentException("Integer overflow");
+        if (bitsetLengthL != length) throw new IllegalArgumentException("Integer overflow");
 
         initEncoders();
     }
 
     private void initEncoders() {
         if (length > LARGE_INPUT_MAP_SIZE_THRESHOLD) {
-            log.debug("~Large input map size: {} (start: {} end: {})", length, lowWaterMark, nextExpectedOffset);
+            log.debug("~Large input map size: {} (start: {} end: {})", length, lowWaterMark, lowWaterMark + length);
         }
 
         try {
@@ -155,11 +159,11 @@ public class OffsetSimultaneousEncoder {
      *  TODO VERY large offests ranges are slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
      */
     public OffsetSimultaneousEncoder invoke() {
-        log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, nextExpectedOffset);
+        log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, lowWaterMark + length);
         log.trace("Incompletes are: {}", this.incompleteOffsets);
 
         //
-        log.debug("Encode loop offset start,end: [{},{}] length: {}", this.lowWaterMark, this.nextExpectedOffset, length);
+        log.debug("Encode loop offset start,end: [{},{}] length: {}", this.lowWaterMark, lowWaterMark + length, length);
         /*
          * todo refactor this loop into the encoders (or sequential vs non sequential encoders) as RunLength doesn't need
          *  to look at every offset in the range, only the ones that change from 0 to 1. BitSet however needs to iterate
