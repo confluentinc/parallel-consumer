@@ -54,13 +54,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Getter(AccessLevel.PACKAGE)
     private final Map<TopicPartition, PartitionState<K, V>> states = new HashMap<>();
 
-    /**
-     * Record the generations of partition assignment, for fencing off invalid work.
-     * <p>
-     * This must live outside of {@link PartitionState}, as it must be tracked across partition lifecycles.
-     */
-    private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new HashMap<>();
-
     public PartitionState<K, V> getState(TopicPartition tp) {
         return states.get(tp);
     }
@@ -75,10 +68,13 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         for (final TopicPartition partition : partitions) {
             if (states.containsKey(partition))
                 log.warn("New assignment of partition {} which already exists in partition state. Could be a state bug.", partition);
-
+// todo delete
+//
+//            states.putIfAbsent(partition, new PartitionState<>());
+//
+//            var state = states.get(partition);
+//            state.incrementPartitionAssignmentEpoch();
         }
-
-        incrementPartitionAssignmentEpoch(partitions);
 
         try {
             Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
@@ -157,6 +153,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             //
             var partition = getState(tp);
             partition.onOffsetCommitSuccess(meta);
+
         });
     }
 
@@ -178,18 +175,17 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     public int getEpoch(final ConsumerRecord<K, V> rec, final TopicPartition tp) {
-        Integer epoch = partitionsAssignmentEpochs.get(tp);
-        if (epoch == null) {
+        PartitionState partitionState = states.get(tp);
+        if (partitionState == null) {
             throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
         }
-        return epoch;
+        return partitionState.getPartitionsAssignmentEpochs();
     }
 
     private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
         for (final TopicPartition partition : partitions) {
-            int epoch = partitionsAssignmentEpochs.getOrDefault(partition, -1);
-            epoch++;
-            partitionsAssignmentEpochs.put(partition, epoch);
+            PartitionState state = getState(partition);
+            state.incrementPartitionAssignmentEpoch();
         }
     }
 
@@ -201,7 +197,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     boolean checkEpochIsStale(final WorkContainer<K, V> workContainer) {
         var topicPartitionKey = workContainer.getTopicPartition();
 
-        Integer currentPartitionEpoch = partitionsAssignmentEpochs.get(topicPartitionKey);
+        int currentPartitionEpoch = getState(topicPartitionKey).getPartitionsAssignmentEpochs();
         int workEpoch = workContainer.getEpoch();
         if (currentPartitionEpoch != workEpoch) {
             log.debug("Epoch mismatch {} vs {} for record {} - were partitions lost? Skipping message - it's already assigned to a different consumer (possibly me).",
@@ -302,7 +298,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * @param incompleteOffsets
      * @return
      */
-    //todo refactor
     void addEncodedOffsets(Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
                            TopicPartition topicPartitionKey,
                            LinkedHashSet<Long> incompleteOffsets) {
