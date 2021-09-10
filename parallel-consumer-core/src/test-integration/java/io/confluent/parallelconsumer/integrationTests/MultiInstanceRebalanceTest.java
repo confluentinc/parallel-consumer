@@ -25,6 +25,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.assertj.core.internal.StandardComparisonStrategy;
+import org.assertj.core.util.IterableUtil;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,13 +42,13 @@ import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
-import static org.assertj.core.util.IterableUtil.toCollection;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Test running with multiple instances of parallel-consumer consuming from topic with two partitions.
  */
+//@Isolated
 @Slf4j
 class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
@@ -160,12 +161,11 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
         pcExecutor.shutdown();
 
-        Collection<?> duplicates = toCollection(StandardComparisonStrategy.instance()
-                .duplicatesFrom(getAllConsumedKeys(pc1, pc2)));
+        Collection<?> duplicates = IterableUtil.toCollection(StandardComparisonStrategy.instance().duplicatesFrom(getAllConsumedKeys(pc1, pc2)));
         log.info("Duplicate consumed keys (at least one is expected due to the rebalance): {}", duplicates);
         assertThat(duplicates)
-                .as("There should be few duplicate keys")
-                .hasSizeLessThan(10); // in some env, there are a lot more. i.e. Jenkins running parallel suits
+                .as("There should be very few duplicate keys")
+                .hasSizeLessThan(4);
     }
 
     ArrayList<String> getAllConsumedKeys(ParallelConsumerRunnable pc1, ParallelConsumerRunnable pc2) {
@@ -211,7 +211,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
             parallelConsumer.poll(record -> {
                         // simulate work
                         try {
-                            Thread.sleep(150);
+                            Thread.sleep(100);
                         } catch (InterruptedException e) {
                             // ignore
                         }
