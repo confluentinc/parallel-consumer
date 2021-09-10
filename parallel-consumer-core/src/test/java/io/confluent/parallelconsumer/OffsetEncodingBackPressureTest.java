@@ -40,7 +40,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
     void backPressureShouldPreventTooManyMessagesBeingQueuedForProcessing() {
         // mock messages downloaded for processing > MAX_TO_QUEUE
         // make sure work manager doesn't queue more than MAX_TO_QUEUE
-//        final int numRecords = 1_000_0;
+//      final int numRecords = 1_000_0;
         final int numRecords = 1_00;
         parallelConsumer.setLongPollTimeout(ofMillis(200));
 //        parallelConsumer.setTimeBetweenCommits();
