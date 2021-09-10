@@ -1,8 +1,8 @@
-package io.confluent.parallelconsumer.integrationTests.sanity;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+package io.confluent.parallelconsumer.integrationTests.sanity;
 
 import io.confluent.csid.utils.ProgressBarUtils;
 import lombok.SneakyThrows;
