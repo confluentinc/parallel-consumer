@@ -673,14 +673,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // one more step
         waitForOneLoopCycle();
 
-        await().untilAsserted(() -> {
-            //
-            try { // see above
-                assertCommits(of(0, 1, 3), "Remaining two records should be committed as a single offset");
-            } catch (AssertionError e) {
-                assertCommits(of(1, 3), "Bootstrap commit is optional. See msg in code above");
-            }
-        });
+        //
+        try { // see above
+            assertCommits(of(0, 1, 3), "Remaining two records should be committed as a single offset");
+        } catch (AssertionError e) {
+            assertCommits(of(1, 3), "Bootstrap commit is optional. See msg in code above");
+        }
     }
 
     @ParameterizedTest()
@@ -704,8 +702,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         waitForOneLoopCycle();
 
-        await().untilAsserted(() ->
-                assertCommits(of(1)));
+        assertCommits(of(1));
 
         // close
         Duration time = time(() -> {
