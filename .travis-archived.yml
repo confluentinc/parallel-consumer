@@ -53,4 +53,4 @@ script:
   # -Djvm9.location=/home/travis/openjdk9
   - ~/bin/install-jdk.sh --target /home/travis/openjdk9 --feature 9
   - mvn -version
-  - mvn -Pci clean verify versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates --fail-at-end -P jvm9-release -Djvm9.location=/home/travis/openjdk9
+  - mvn clean verify versions:display-plugin-updates versions:display-property-updates versions:display-dependency-updates --fail-at-end -P jvm9-release -Djvm9.location=/home/travis/openjdk9
