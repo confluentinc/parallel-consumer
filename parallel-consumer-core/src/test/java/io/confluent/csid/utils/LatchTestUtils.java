@@ -31,20 +31,7 @@ public class LatchTestUtils {
     @SneakyThrows
     public static void awaitLatch(final CountDownLatch latch, final int seconds) {
         log.trace("Waiting on latch with timeout {}s", seconds);
-        Instant start = now();
-        boolean latchReachedZero = false;
-        while (now().isBefore(start.plusSeconds(seconds))) {
-            try {
-                latchReachedZero = latch.await(seconds, SECONDS);
-            } catch (InterruptedException e) {
-                log.trace("Latch await interrupted", e);
-            }
-            if (latchReachedZero)
-                break;
-            else
-                log.trace("Latch wait aborted, but timeout ({}s) not reached - will try to wait again remaining {}",
-                        seconds, seconds - toSeconds(between(start, now())));
-        }
+        boolean latchReachedZero = latch.await(seconds, SECONDS);
         if (latchReachedZero) {
             log.trace("Latch released");
         } else {
