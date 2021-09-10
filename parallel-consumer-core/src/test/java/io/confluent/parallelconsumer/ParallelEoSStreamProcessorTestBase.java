@@ -73,7 +73,7 @@ public class ParallelEoSStreamProcessorTestBase {
 
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
-    public static int defaultTimeoutSeconds = 1;
+    public static int defaultTimeoutSeconds = 5;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();

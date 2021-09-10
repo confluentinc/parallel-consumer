@@ -126,9 +126,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
 
         // partition not blocked
         {
-//            boolean partitionBlocked = !wm.pm.getState(topicPartition).partitionMoreRecordsAllowedToProcess;
-//            boolean partitionBlocked = !wm.pm.getState(topicPartition).isPartitionMoreRecordsAllowedToProcess();
-            boolean partitionBlocked = wm.pm.isBlocked(topicPartition);
+            boolean partitionBlocked = !wm.partitionMoreRecordsAllowedToProcess.get(topicPartition);
             assertThat(partitionBlocked).isFalse();
         }
 
@@ -138,7 +136,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         {
             ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
             waitForOneLoopCycle();
-            assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue(); // should initially be not blocked
+            assertThat(wm.partitionMoreRecordsAllowedToProcess.get(topicPartition)).isTrue(); // should initially be not blocked
             await().untilAsserted(() ->
                     assertThat(processedCount.get()).isGreaterThan(expectedMsgsProcessedUponThresholdBlock) // some new message processed
             );
@@ -148,11 +146,9 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         // assert partition now blocked from threshold
         int expectedMsgsProcessedBeforePartitionBlocks = numRecords + numRecords / 4;
         {
-//            Long partitionOffsetHighWaterMarks = wm.pm.getState(topicPartition).partitionOffsetHighWaterMarks;
-            Long partitionOffsetHighWaterMarks = wm.pm.getHighWaterMark(topicPartition);
-            assertThat(partitionOffsetHighWaterMarks)
+            assertThat(wm.partitionOffsetHighWaterMarks.get(topicPartition))
                     .isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks); // high water mark is beyond our expected processed count upon blocking
-            assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse(); // blocked
+            assertThat(wm.partitionMoreRecordsAllowedToProcess.get(topicPartition)).isFalse(); // blocked
 
             // assert blocked, but can still write payload
             // assert the committed offset metadata contains a payload
@@ -207,7 +203,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
 
             // assert partition still blocked
             waitForOneLoopCycle();
-            await().untilAsserted(() -> assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse());
+            await().untilAsserted(() -> assertThat(wm.partitionMoreRecordsAllowedToProcess.get(topicPartition)).isFalse());
 
             // release the message for the second time, allowing it to succeed
             msgLockTwo.countDown();
@@ -216,7 +212,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         // assert partition is now not blocked
         {
             waitForOneLoopCycle();
-            await().untilAsserted(() -> assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
+            await().untilAsserted(() -> assertThat(wm.partitionMoreRecordsAllowedToProcess.get(topicPartition)).isTrue());
         }
 
         // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent (numRecords*2)
@@ -226,7 +222,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
                 List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
                 assertThat(offsets).contains(processedCount.get());
             });
-            await().untilAsserted(() -> assertThat(wm.pm.isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
+            await().untilAsserted(() -> assertThat(wm.partitionMoreRecordsAllowedToProcess.get(topicPartition)).isTrue());
         }
 
         // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable

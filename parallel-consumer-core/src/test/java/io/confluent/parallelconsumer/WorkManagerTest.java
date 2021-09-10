@@ -28,7 +28,6 @@ import java.util.*;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
-import static java.util.Comparator.comparingLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -36,7 +35,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see WorkManager
  */
 @Slf4j
-class WorkManagerTest {
+public class WorkManagerTest {
 
     public static final String INPUT_TOPIC = "input";
     public static final String OUTPUT_TOPIC = "output";
@@ -84,11 +83,11 @@ class WorkManagerTest {
     private void registerSomeWork() {
         String key = "key-0";
         int partition = 0;
-        var rec0 = makeRec("0", key, partition);
-        var rec1 = makeRec("1", key, partition);
-        var rec2 = makeRec("2", key, partition);
+        var rec = makeRec("0", key, partition);
+        var rec2 = makeRec("1", key, partition);
+        var rec3 = makeRec("2", key, partition);
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec0, rec1, rec2));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec, rec2, rec3));
         var recs = new ConsumerRecords<>(m);
         wm.registerWork(recs);
     }
@@ -100,26 +99,27 @@ class WorkManagerTest {
     }
 
     @Test
-    void testRemovedUnordered() {
+    public void testRemovedUnordered() {
         setupWorkManager(ParallelConsumerOptions.builder().ordering(UNORDERED).build());
         registerSomeWork();
 
         int max = 1;
-        var gottenWork = wm.maybeGetWork(max);
-        assertThat(gottenWork).hasSize(1);
-        assertOffsets(gottenWork, of(0));
+        var works = wm.maybeGetWork(max);
+        assertThat(works).hasSize(1);
+        assertOffsets(works, of(0));
 
-        wm.onSuccess(gottenWork.get(0));
+        wm.onSuccess(works.get(0));
 
-        gottenWork = wm.maybeGetWork(max);
-        assertThat(gottenWork).hasSize(1);
-        assertOffsets(gottenWork, of(1));
+        works = wm.maybeGetWork(max);
+        assertThat(works).hasSize(1);
+        assertOffsets(works, of(1));
     }
 
     @Test
-    void testUnorderedAndDelayed() {
+    public void testUnorderedAndDelayed() {
         setupWorkManager(ParallelConsumerOptions.builder().ordering(UNORDERED).build());
         registerSomeWork();
+
 
         int max = 2;
 
@@ -154,13 +154,8 @@ class WorkManagerTest {
                 .isEqualTo(of(0, 2, 1));
     }
 
-    /**
-     * Checks the offsets of the work, matches the offsets in the provided list
-     */
-    private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>>
-    assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
+    private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>> assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
         return assertThat(works)
-                .as("offsets of work given")
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(expected);
     }
@@ -415,8 +410,8 @@ class WorkManagerTest {
     }
 
     @Test
-    void orderedByKeyParallel() {
-        var build = ParallelConsumerOptions.builder().ordering(KEY).build();
+    public void orderedByKeyParallel() {
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(KEY);
@@ -425,14 +420,14 @@ class WorkManagerTest {
 
         var partition = 2;
         assignPartition(2);
+        var rec = new ConsumerRecord<>(INPUT_TOPIC, partition, 10, "key-a", "value");
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "key-a", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "key-b", "value");
-        var rec0 = new ConsumerRecord<>(INPUT_TOPIC, partition, 10, "key-a", "value");
         var rec4 = new ConsumerRecord<>(INPUT_TOPIC, partition, 12, "key-c", "value");
         var rec5 = new ConsumerRecord<>(INPUT_TOPIC, partition, 15, "key-a", "value");
         var rec6 = new ConsumerRecord<>(INPUT_TOPIC, partition, 20, "key-c", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec0, rec4, rec5, rec6));
+        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec, rec4, rec5, rec6));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -441,7 +436,6 @@ class WorkManagerTest {
         //
         var works = wm.maybeGetWork();
         works.sort(Comparator.naturalOrder()); // we actually don't care about the order
-        // one record per key
         assertOffsets(works, of(0, 6, 8, 12));
         successAll(works);
 
@@ -469,19 +463,19 @@ class WorkManagerTest {
     //        @Test
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
-    void highVolumeKeyOrder(int quantity) {
+    public void highVolumeKeyOrder(int quantity) {
         int uniqueKeys = 100;
 
-        var build = ParallelConsumerOptions.builder().ordering(KEY).build();
+        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
-        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer(OffsetResetStrategy.EARLIEST));
 
         List<Integer> keys = range(uniqueKeys).list();
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());
-        flattened.sort(comparingLong(ConsumerRecord::offset));
+        Collections.sort(flattened, (o1, o2) -> Long.compare(o1.offset(), o2.offset()));
 
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         m.put(new TopicPartition(INPUT_TOPIC, 0), flattened);
@@ -498,8 +492,8 @@ class WorkManagerTest {
     }
 
     @Test
-    void treeMapOrderingCorrect() {
-        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+    public void treeMapOrderingCorrect() {
+        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer(OffsetResetStrategy.EARLIEST));
 
         int i = 10;
         var records = ktu.generateRecords(i);
@@ -538,7 +532,7 @@ class WorkManagerTest {
         }
 
         //
-        assertThat(wm.sm.getWorkQueuedInShardsCount()).isZero();
+        assertThat(wm.getWorkQueuedInShardsCount()).isZero();
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(3);
 
         // drain commit queue

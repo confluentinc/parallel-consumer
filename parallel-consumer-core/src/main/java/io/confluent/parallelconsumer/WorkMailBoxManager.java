@@ -14,8 +14,6 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static io.confluent.csid.utils.KafkaUtils.toTP;
-
 /**
  * Handles the incoming mail for {@link WorkManager}.
  */
@@ -90,7 +88,7 @@ public class WorkMailBoxManager<K, V> {
     /**
      * Take our inbound messages from the {@link BrokerPollSystem} and add them to our registry.
      */
-    private synchronized void flattenBatchQueue() {
+    public synchronized void processInbox() {
         drainSharedMailbox();
 
         // flatten
@@ -108,24 +106,19 @@ public class WorkMailBoxManager<K, V> {
      */
     public synchronized void onPartitionsRemoved(final Collection<TopicPartition> removedPartitions) {
         log.debug("Removing stale work from inbox queues");
-        flattenBatchQueue();
-        internalFlattenedMailQueue.removeIf(rec ->
-                removedPartitions.contains(toTP(rec))
-        );
+        processInbox();
+        internalFlattenedMailQueue.removeIf(x -> {
+            TopicPartition topicPartition = new TopicPartition(x.topic(), x.partition());
+            boolean recordShouldBeRemoved = removedPartitions.contains(topicPartition);
+            return recordShouldBeRemoved;
+        });
     }
 
     public synchronized boolean internalFlattenedMailQueueIsEmpty() {
         return internalFlattenedMailQueue.isEmpty();
     }
 
-    /**
-     * @return the next element in our outbound queue, or null if empty
-     */
     public synchronized ConsumerRecord<K, V> internalFlattenedMailQueuePoll() {
-        if (internalBatchMailQueue.isEmpty()) {
-            // flatten the batch queue in batches when needed
-            flattenBatchQueue();
-        }
         return internalFlattenedMailQueue.poll();
     }
 
