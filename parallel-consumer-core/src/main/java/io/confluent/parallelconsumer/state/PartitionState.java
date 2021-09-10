@@ -81,10 +81,10 @@ public class PartitionState<K, V> {
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
     // todo get/set make private
-    // todo rename more eloquently - isAllowedMoreRecords?
+    // rename more eloquently
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
-    private boolean allowedMoreRecords = true;
+    private boolean partitionMoreRecordsAllowedToProcess = true;
 
     /**
      * Record the generations of partition assignment, for fencing off invalid work

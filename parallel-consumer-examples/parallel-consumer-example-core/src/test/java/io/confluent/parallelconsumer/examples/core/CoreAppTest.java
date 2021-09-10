@@ -9,7 +9,6 @@ import io.confluent.csid.utils.LongPollingMockConsumer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
@@ -22,11 +21,12 @@ import org.mockito.Mockito;
 
 import java.time.Duration;
 
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
 import static org.mockito.Mockito.when;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
-class CoreAppTest {
+public class CoreAppTest {
 
     @SneakyThrows
     @Test
@@ -74,8 +74,7 @@ class CoreAppTest {
 
         @Override
         Consumer<String, String> getKafkaConsumer() {
-            when(mockConsumer.groupMetadata())
-                    .thenReturn(new ConsumerGroupMetadata("groupid")); // todo fix AK mock consumer
+            when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
             return mockConsumer;
         }
 

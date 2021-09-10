@@ -476,7 +476,7 @@ class WorkManagerTest {
         var build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
-        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         List<Integer> keys = range(uniqueKeys).list();
 
@@ -500,7 +500,7 @@ class WorkManagerTest {
 
     @Test
     void treeMapOrderingCorrect() {
-        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(new MockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         int i = 10;
         var records = ktu.generateRecords(i);

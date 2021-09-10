@@ -39,11 +39,13 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
      * have to drop the offset payload entirely.
      */
-    @Getter
     @Setter
-    private double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
+    public static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
 
     private final Consumer<K, V> consumer;
+
+    // remove backward dep
+    private final WorkManager<K, V> wm;
 
     private final ShardManager<K, V> sm;
 
@@ -54,7 +56,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Getter(AccessLevel.PACKAGE)
     private final Map<TopicPartition, PartitionState<K, V>> states = new HashMap<>();
 
-    public PartitionState<K, V> getState(TopicPartition tp) {
+    private PartitionState<K, V> getState(TopicPartition tp) {
         return states.get(tp);
     }
 
@@ -195,7 +197,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * @return true if epoch doesn't match, false if ok
      */
     boolean checkEpochIsStale(final WorkContainer<K, V> workContainer) {
-        var topicPartitionKey = workContainer.getTopicPartition();
+        TopicPartition topicPartitionKey = workContainer.getTopicPartition();
 
         int currentPartitionEpoch = getState(topicPartitionKey).getPartitionsAssignmentEpochs();
         int workEpoch = workContainer.getEpoch();
@@ -221,8 +223,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     // todo terrible name - rename, reduce visibility
-    public boolean isAllowedMoreRecords(TopicPartition tp) {
-        return getState(tp).isAllowedMoreRecords();
+    public boolean isPartitionMoreRecordsAllowedToProcess(TopicPartition tp) {
+        return getState(tp).isPartitionMoreRecordsAllowedToProcess();
     }
 
     public boolean hasWorkInCommitQueues() {
@@ -253,7 +255,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     void setPartitionMoreRecordsAllowedToProcess(TopicPartition topicPartitionKey, boolean moreMessagesAllowed) {
         var state = getState(topicPartitionKey);
         //state.partitionMoreRecordsAllowedToProcess = moreMessagesAllowed;
-        state.setAllowedMoreRecords(moreMessagesAllowed);
+        state.setPartitionMoreRecordsAllowedToProcess(moreMessagesAllowed);
     }
 
 //    public void setPartitionIncompleteOffset(final TopicPartition tp, final Set<Long> incompleteOffsets) {
@@ -286,7 +288,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
     public boolean isBlocked(final TopicPartition topicPartition) {
-        return !isAllowedMoreRecords(topicPartition);
+        return !getState(topicPartition).isPartitionMoreRecordsAllowedToProcess();
     }
 
 

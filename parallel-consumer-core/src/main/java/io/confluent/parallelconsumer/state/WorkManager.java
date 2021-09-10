@@ -29,7 +29,6 @@ import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static lombok.AccessLevel.PACKAGE;
@@ -111,17 +110,17 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+    public WorkManager(ParallelConsumerOptions options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this(options, consumer, new DynamicLoadFactor());
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor) {
+    public WorkManager(final ParallelConsumerOptions newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor) {
         this.options = newOptions;
         this.consumer = consumer;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
-        this.wmbm = new WorkMailBoxManager<>();
-        this.sm = new ShardManager<K, V>(options);
-        this.pm = new PartitionMonitor<>(consumer, sm);
+        this.wmbm = new WorkMailBoxManager<K, V>();
+        this.sm = new ShardManager(options);
+        this.pm = new PartitionMonitor<>(consumer, this, sm);
     }
 
     /**
@@ -392,8 +391,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         Object key = sm.computeShardKey(cr);
         // remove from processing queues
         var shard = sm.getShard(key);
-        if (shard == null)
-            throw new NullPointerException(msg("Shard is missing for key {}", key));
         long offset = cr.offset();
         shard.remove(offset);
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)

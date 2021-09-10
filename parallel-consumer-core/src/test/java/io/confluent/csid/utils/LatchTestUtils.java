@@ -7,17 +7,12 @@ package io.confluent.csid.utils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeoutException;
 
-import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
-import static java.time.Duration.between;
-import static java.time.Instant.now;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 @Slf4j
@@ -38,7 +33,7 @@ public class LatchTestUtils {
         log.trace("Waiting on latch with timeout {}s", seconds);
         Instant start = now();
         boolean latchReachedZero = false;
-        while (start.isAfter(now().minusSeconds(seconds))) {
+        while (now().isBefore(start.plusSeconds(seconds))) {
             try {
                 latchReachedZero = latch.await(seconds, SECONDS);
             } catch (InterruptedException e) {
@@ -53,7 +48,7 @@ public class LatchTestUtils {
         if (latchReachedZero) {
             log.trace("Latch released");
         } else {
-            throw new TimeoutException("Latch await timeout - " + latch.getCount() + " remaining");
+            throw new AssertionError("Latch await timeout - " + latch.getCount() + " remaining");
         }
     }
 

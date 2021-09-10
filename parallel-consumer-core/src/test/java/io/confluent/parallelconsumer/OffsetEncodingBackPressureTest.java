@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
-import io.confluent.parallelconsumer.state.PartitionState;
+import io.confluent.parallelconsumer.state.PartitionMonitor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -38,7 +38,7 @@ import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.waitAtMost;
 
 @Slf4j
-class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
+public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
@@ -127,6 +127,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
         // partition not blocked
         {
+//            boolean partitionBlocked = !wm.pm.getState(topicPartition).partitionMoreRecordsAllowedToProcess;
+//            boolean partitionBlocked = !wm.pm.getState(topicPartition).isPartitionMoreRecordsAllowedToProcess();
             boolean partitionBlocked = wm.getPm().isBlocked(topicPartition);
             assertThat(partitionBlocked).isFalse();
         }
@@ -137,7 +139,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         {
             ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
             waitForOneLoopCycle();
-            assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue(); // should initially be not blocked
+            assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue(); // should initially be not blocked
             await().untilAsserted(() ->
                     assertThat(processedCount.get()).isGreaterThan(expectedMsgsProcessedUponThresholdBlock) // some new message processed
             );
@@ -147,13 +149,11 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         // assert partition now blocked from threshold
         int expectedMsgsProcessedBeforePartitionBlocks = numRecords + numRecords / 4;
         {
+//            Long partitionOffsetHighWaterMarks = wm.pm.getState(topicPartition).partitionOffsetHighWaterMarks;
             Long partitionOffsetHighWaterMarks = wm.getPm().getHighWaterMark(topicPartition);
             assertThat(partitionOffsetHighWaterMarks)
                     .isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks); // high water mark is beyond our expected processed count upon blocking
-            PartitionState<String, String> state = wm.getPm().getState(topicPartition);
-            assertThat(wm.getPm().isBlocked(topicPartition))
-                    .as("Partition SHOULD be blocked due to back pressure")
-                    .isTrue(); // blocked
+            assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse(); // blocked
 
             // assert blocked, but can still write payload
             // assert the committed offset metadata contains a payload
@@ -175,7 +175,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         // test max payload exceeded, payload dropped
         {
             // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
-            wm.getPm().setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
+            PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2); // set system threshold > 100% to allow too many messages to process so we high our hard limit
 
             //
             ktu.send(consumerSpy, ktu.generateRecords(expectedMsgsProcessedBeforePartitionBlocks));
@@ -208,7 +208,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
             // assert partition still blocked
             waitForOneLoopCycle();
-            await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isFalse());
+            await().untilAsserted(() -> assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isFalse());
 
             // release the message for the second time, allowing it to succeed
             msgLockTwo.countDown();
@@ -217,7 +217,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         // assert partition is now not blocked
         {
             waitForOneLoopCycle();
-            await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
+            await().untilAsserted(() -> assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
         }
 
         // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent (numRecords*2)
@@ -227,7 +227,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
                 assertThat(offsets).contains(processedCount.get());
             });
-            await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
+            await().untilAsserted(() -> assertThat(wm.getPm().isPartitionMoreRecordsAllowedToProcess(topicPartition)).isTrue());
         }
 
         // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
