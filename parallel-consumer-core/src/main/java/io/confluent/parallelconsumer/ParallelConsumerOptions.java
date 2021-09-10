@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;

@@ -6,6 +6,8 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
+import io.confluent.parallelconsumer.EncodingNotSupportedException;
+import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -29,6 +31,7 @@ import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
+import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static lombok.AccessLevel.PACKAGE;
@@ -49,6 +52,14 @@ import static lombok.AccessLevel.PUBLIC;
  */
 @Slf4j
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
+
+    /**
+     * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
+     * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
+     * have to drop the offset payload entirely.
+     */
+    @Setter
+    public static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
 
     @Getter
     private final ParallelConsumerOptions options;
@@ -170,15 +181,15 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // todo refactor into something more contractual and less leaky
     // todo make private
     // todo remove - doesn't belong here
-//    public void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
-//        pm.raisePartitionHighWaterMark(tp, highWater);
-//    }
+    public void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
+        pm.raisePartitionHighWaterMark(tp, highWater);
+    }
 
-//    // todo refactor into something more contractual and less leaky
-//    // todo make private
-//    public void setPartitionIncompleteOffset(TopicPartition tp, Set<Long> incompleteOffsets) {
-//        pm.setPartitionIncompleteOffset(tp, incompleteOffsets);
-//    }
+    // todo refactor into something more contractual and less leaky
+    // todo make private
+    public void setPartitionIncompleteOffset(TopicPartition tp, Set<Long> incompleteOffsets) {
+        pm.setPartitionIncompleteOffset(tp, incompleteOffsets);
+    }
 
     /**
      * @param requestedMaxWorkToRetrieve try to move at least this many messages into the inbound queues
@@ -465,8 +476,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * Finds eligible offset positions to commit in each assigned partition
      */
     // todo rename
-    // todo move into partition state
-    // todo remove completely as state of offsets should be tracked live, no need to scan for them
     <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
 
         // todo check works
@@ -483,7 +492,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
 
 //        for (final var partitionQueueEntry : partitionCommitQueues.entrySet()) {
-        Set<Map.Entry<TopicPartition, PartitionState<K, V>>> set = pm.getStates().entrySet();
+        Set<Map.Entry<TopicPartition, PartitionState<K, V>>> set = pm.states.entrySet();
         for (final Map.Entry<TopicPartition, PartitionState<K, V>> partitionStateEntry : set) {
             var partitionState = partitionStateEntry.getValue();
             Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getPartitionCommitQueues();
@@ -534,7 +543,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 }
             }
 
-            pm.addEncodedOffsets(offsetsToSend, topicPartitionKey, incompleteOffsets);
+            addEncodedOffsets(offsetsToSend, topicPartitionKey, incompleteOffsets);
 
             if (remove) {
                 removed += workToRemove.size();
@@ -548,6 +557,71 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
                 count, removed, offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;
+    }
+
+    /**
+     * Get final offset data, build the the offset map, and replace it in our map of offset data to send
+     *
+     * @param offsetsToSend
+     * @param topicPartitionKey
+     * @param incompleteOffsets
+     * @return
+     */
+    // todo move to partition monitor
+    private void addEncodedOffsets(Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
+                                   TopicPartition topicPartitionKey,
+                                   LinkedHashSet<Long> incompleteOffsets) {
+        // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
+        boolean offsetEncodingNeeded = !incompleteOffsets.isEmpty();
+        if (offsetEncodingNeeded) {
+            long offsetOfNextExpectedMessage;
+            OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
+            if (finalOffsetOnly == null) {
+                // no new low water mark to commit, so use the last one again
+                offsetOfNextExpectedMessage = incompleteOffsets.iterator().next(); // first element
+            } else {
+                offsetOfNextExpectedMessage = finalOffsetOnly.offset();
+            }
+
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this, this.consumer);
+            try {
+                String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, topicPartitionKey, incompleteOffsets);
+                int metaPayloadLength = offsetMapPayload.length();
+                boolean moreMessagesAllowed;
+                OffsetAndMetadata offsetWithExtraMap;
+                // todo move
+                double pressureThresholdValue = DefaultMaxMetadataSize * USED_PAYLOAD_THRESHOLD_MULTIPLIER;
+
+                if (metaPayloadLength > DefaultMaxMetadataSize) {
+                    // exceeded maximum API allowed, strip the payload
+                    moreMessagesAllowed = false;
+                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage); // strip payload
+                    log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
+                                    "Warning: messages might be replayed on rebalance. " +
+                                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
+                            metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+                } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
+                    // try to turn on back pressure before max size is reached
+                    moreMessagesAllowed = false;
+                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
+                                    "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
+                            metaPayloadLength, pressureThresholdValue, DefaultMaxMetadataSize);
+                } else { // and thus (metaPayloadLength <= pressureThresholdValue)
+                    moreMessagesAllowed = true;
+                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
+                    log.debug("Payload size {} within threshold {}", metaPayloadLength, pressureThresholdValue);
+                }
+
+                pm.setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, moreMessagesAllowed);
+                offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
+            } catch (EncodingNotSupportedException e) {
+                pm.setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, false);
+                log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
+            }
+        } else {
+            pm.setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, true);
+        }
     }
 
     /**

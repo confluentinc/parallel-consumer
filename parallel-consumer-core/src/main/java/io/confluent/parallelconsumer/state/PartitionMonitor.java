@@ -4,14 +4,10 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.EncodingNotSupportedException;
 import io.confluent.parallelconsumer.InternalRuntimeError;
 import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -24,7 +20,6 @@ import java.util.*;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMetadataSize;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -33,14 +28,6 @@ import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMeta
 @RequiredArgsConstructor
 // todo rename to partition manager
 public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
-
-    /**
-     * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
-     * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
-     * have to drop the offset payload entirely.
-     */
-    @Setter
-    public static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
 
     private final Consumer<K, V> consumer;
 
@@ -52,9 +39,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     /**
      * Hold the tracking state for each of our managed partitions.
      */
-    // todo make private
-    @Getter(AccessLevel.PACKAGE)
-    private final Map<TopicPartition, PartitionState<K, V>> states = new HashMap<>();
+    Map<TopicPartition, PartitionState<K, V>> states = new HashMap<>();
 
     private PartitionState<K, V> getState(TopicPartition tp) {
         return states.get(tp);
@@ -70,27 +55,21 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         for (final TopicPartition partition : partitions) {
             if (states.containsKey(partition))
                 log.warn("New assignment of partition {} which already exists in partition state. Could be a state bug.", partition);
-// todo delete
-//
-//            states.putIfAbsent(partition, new PartitionState<>());
-//
-//            var state = states.get(partition);
-//            state.incrementPartitionAssignmentEpoch();
+
+            states.putIfAbsent(partition, new PartitionState<>());
+
+            var state = states.get(partition);
+            state.incrementPartitionAssignmentEpoch();
         }
 
         try {
             Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation
-            var partitionStates = om.loadOffsetMapForPartition(partitionsSet);
-            states.putAll(partitionStates);
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<K, V>(this.wm, this.consumer); // todo remove throw away instance creation
+            om.loadOffsetMapForPartition(partitionsSet);
         } catch (Exception e) {
             log.error("Error in onPartitionsAssigned", e);
             throw e;
         }
-
-        // todo delete
-//        wm.raisePartitionHighWaterMark(tp, incompletes.getHighestSeenOffset());
-
     }
 
     /**
@@ -258,11 +237,11 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         state.setPartitionMoreRecordsAllowedToProcess(moreMessagesAllowed);
     }
 
-//    public void setPartitionIncompleteOffset(final TopicPartition tp, final Set<Long> incompleteOffsets) {
-//        PartitionState state = getState(tp);
-////        state.partitionIncompleteOffsets = incompleteOffsets;
-//        state.setPartitionIncompleteOffsets(incompleteOffsets);
-//    }
+    public void setPartitionIncompleteOffset(final TopicPartition tp, final Set<Long> incompleteOffsets) {
+        PartitionState state = getState(tp);
+//        state.partitionIncompleteOffsets = incompleteOffsets;
+        state.setPartitionIncompleteOffsets(incompleteOffsets);
+    }
 
     public Long getHighWaterMark(final TopicPartition tp) {
         return getState(tp).getPartitionOffsetHighWaterMarks();
@@ -290,74 +269,4 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     public boolean isBlocked(final TopicPartition topicPartition) {
         return !getState(topicPartition).isPartitionMoreRecordsAllowedToProcess();
     }
-
-
-    /**
-     * Get final offset data, build the the offset map, and replace it in our map of offset data to send
-     *
-     * @param offsetsToSend
-     * @param topicPartitionKey
-     * @param incompleteOffsets
-     * @return
-     */
-    void addEncodedOffsets(Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
-                           TopicPartition topicPartitionKey,
-                           LinkedHashSet<Long> incompleteOffsets) {
-        // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
-        boolean offsetEncodingNeeded = !incompleteOffsets.isEmpty();
-        if (offsetEncodingNeeded) {
-            // todo offsetOfNextExpectedMessage should be an attribute of State - consider deriving it from the state class
-            long offsetOfNextExpectedMessage;
-            OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
-            if (finalOffsetOnly == null) {
-                // no new low water mark to commit, so use the last one again
-                offsetOfNextExpectedMessage = incompleteOffsets.iterator().next(); // first element
-            } else {
-                offsetOfNextExpectedMessage = finalOffsetOnly.offset();
-            }
-
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer);
-            try {
-                PartitionState<K, V> state = getState(topicPartitionKey);
-                // todo smelly - update the partition state with the new found incomplete offsets. This field is used by nested classes accessing the state
-                state.setPartitionIncompleteOffsets(incompleteOffsets);
-                String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, state);
-                int metaPayloadLength = offsetMapPayload.length();
-                boolean moreMessagesAllowed;
-                OffsetAndMetadata offsetWithExtraMap;
-                // todo move
-                double pressureThresholdValue = DefaultMaxMetadataSize * USED_PAYLOAD_THRESHOLD_MULTIPLIER;
-
-                if (metaPayloadLength > DefaultMaxMetadataSize) {
-                    // exceeded maximum API allowed, strip the payload
-                    moreMessagesAllowed = false;
-                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage); // strip payload
-                    log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                                    "Warning: messages might be replayed on rebalance. " +
-                                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
-                            metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
-                } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
-                    // try to turn on back pressure before max size is reached
-                    moreMessagesAllowed = false;
-                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                    log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
-                                    "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                            metaPayloadLength, pressureThresholdValue, DefaultMaxMetadataSize);
-                } else { // and thus (metaPayloadLength <= pressureThresholdValue)
-                    moreMessagesAllowed = true;
-                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                    log.debug("Payload size {} within threshold {}", metaPayloadLength, pressureThresholdValue);
-                }
-
-                setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, moreMessagesAllowed);
-                offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
-            } catch (EncodingNotSupportedException e) {
-                setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, false);
-                log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
-            }
-        } else {
-            setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, true);
-        }
-    }
-
 }

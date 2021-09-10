@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -59,8 +58,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     // todo docs why 4?
     long partitionHighWaterMark = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(partitionHighWaterMark, incomplete));
-
     /**
      * o = incomplete
      * x = complete
@@ -89,7 +86,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         wm = new WorkManager<>(ParallelConsumerOptions.builder().build(), consumer);
         wm.onPartitionsAssigned(UniLists.of(tp));
-        om = new OffsetMapCodecManager(consumer);
+        om = new OffsetMapCodecManager(wm, consumer);
     }
 
     // todo refactor tests out that depend on this
@@ -127,8 +124,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void serialiseCycle() {
-//        raiseToHardCodedHighestSeenOffset();
-        String serialised = om.serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, state);
+        raiseToHardCodedHighestSeenOffset();
+
+        String serialised = om.serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, tp, incomplete);
         log.info("Size: {}", serialised.length());
 
         //
@@ -234,9 +232,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void loadCompressedRunLengthEncoding() {
-//        raiseToHardCodedHighestSeenOffset();
+        raiseToHardCodedHighestSeenOffset();
 
-        byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, state);
+        byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
         OffsetMapCodecManager.HighestOffsetAndIncompletes longs = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, bytes);
         assertThat(longs.getIncompleteOffsets().toArray()).containsExactly(incomplete.toArray());
     }
@@ -256,9 +254,8 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @Test
     void binaryArrayConstruction() {
-        state.risePartitionHighWaterMark(6L);
-
-        String s = om.incompletesToBitmapString(1L, state); //2,3
+        wm.raisePartitionHighWaterMark(tp, 6L);
+        String s = om.incompletesToBitmapString(1L, tp, incomplete); //2,3
         assertThat(s).isEqualTo("xooxx");
     }
 
@@ -294,8 +291,8 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void largeOffsetMap() {
-        state.risePartitionHighWaterMark(200L); // force system to have seen a high offset
-        byte[] bytes = om.encodeOffsetsCompressed(0L, state);
+        wm.raisePartitionHighWaterMark(tp, 200L); // force system to have seen a high offset
+        byte[] bytes = om.encodeOffsetsCompressed(0L, tp, incomplete);
         int smallestCompressionObserved = 10;
         assertThat(bytes).as("very small")
                 .hasSizeLessThan(smallestCompressionObserved); // arbitrary size expectation based on past observations - expect around 7
@@ -330,7 +327,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     void deserialiseBitset() {
         var input = "oxxooooooo";
         long highWater = input.length();
-//        wm.raisePartitionHighWaterMark(tp, highWater);
+        wm.raisePartitionHighWaterMark(tp, highWater);
 
         Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, input);
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highWater, longs);
@@ -346,9 +343,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void compressionCycle() {
-//        raiseToHardCodedHighestSeenOffset();
+        raiseToHardCodedHighestSeenOffset();
 
-        byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, state);
+        byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
 
         OffsetMapCodecManager.HighestOffsetAndIncompletes deserialised = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, serialised);
 
@@ -359,7 +356,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     void runLengthEncoding() {
         raiseToHardCodedHighestSeenOffset();
 
-        String stringMap = om.incompletesToBitmapString(finalOffsetForPartition, state);
+        String stringMap = om.incompletesToBitmapString(finalOffsetForPartition, tp, incomplete);
         List<Integer> integers = OffsetRunLength.runLengthEncode(stringMap);
         assertThat(integers).as("encoding of map: " + stringMap).containsExactlyElementsOf(UniLists.of(0, 2, 2));
 
@@ -374,9 +371,10 @@ class WorkManagerOffsetMapCodecManagerTest {
         for (final String input : inputsToCompress) {
             // override high water mark setup, as the test sets it manually
             setup();
-            wm.getPm().raisePartitionHighWaterMark(tp, 0L); // hard reset to zero
+//            wm.partitionOffsetHighWaterMarks.put(tp, 0L); // hard reset to zero
+//            wm.pm.raisePartitionHighWaterMark(tp, 0L); // hard reset to zero
             long highWater = input.length();
-            wm.getPm().raisePartitionHighWaterMark(tp, highWater);
+            wm.raisePartitionHighWaterMark(tp, highWater);
 
             //
             log.debug("Testing round - size: {} input: '{}'", input.length(), input);
@@ -397,8 +395,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 assertThat(recoveredIncompletes).containsExactlyInAnyOrderElementsOf(longs);
 
                 //
-                var state = new PartitionState<String, String>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(highWater, recoveredIncompletes));
-                String recoveredOffsetBitmapAsString = om.incompletesToBitmapString(finalOffsetForPartition, state);
+                String recoveredOffsetBitmapAsString = om.incompletesToBitmapString(finalOffsetForPartition, tp, recoveredIncompletes);
                 assertThat(recoveredOffsetBitmapAsString).isEqualTo(input);
             }
         }

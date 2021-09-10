@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;

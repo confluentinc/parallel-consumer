@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
-import io.confluent.parallelconsumer.state.PartitionMonitor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -15,6 +14,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.waitAtMost;
 
+@Isolated
 @Slf4j
 public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -175,7 +176,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         // test max payload exceeded, payload dropped
         {
             // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
-            PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2); // set system threshold > 100% to allow too many messages to process so we high our hard limit
+            WorkManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2); // set system threshold > 100% to allow too many messages to process so we high our hard limit
 
             //
             ktu.send(consumerSpy, ktu.generateRecords(expectedMsgsProcessedBeforePartitionBlocks));

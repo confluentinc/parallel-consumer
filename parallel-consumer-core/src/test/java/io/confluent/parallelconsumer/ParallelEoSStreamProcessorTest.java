@@ -276,7 +276,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             try {
                 latchForMsg.await();
             } catch (InterruptedException e) {
-                log.error(e.toString());
+                // ignore
             }
         });
 
