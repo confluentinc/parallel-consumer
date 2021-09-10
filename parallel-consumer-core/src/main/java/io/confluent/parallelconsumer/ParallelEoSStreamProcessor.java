@@ -1,8 +1,9 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.WallClock;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -162,7 +163,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
          */
         draining,
         closing,
-        closed
+        closed;
     }
 
     /**
@@ -734,7 +735,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
             log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
                     target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
-            var records = wm.maybeGetWork(delta);
+            var records = wm.<R>maybeGetWork(delta);
             gotWorkCount = records.size();
             lastWorkRequestWasFulfilled = gotWorkCount >= delta;
 

@@ -1,8 +1,5 @@
 package io.confluent.parallelconsumer;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
 /**
  * This exception is only used when there is an exception thrown from code provided by the user.
  */

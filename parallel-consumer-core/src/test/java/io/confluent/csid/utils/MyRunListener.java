@@ -1,9 +1,5 @@
 package io.confluent.csid.utils;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
-
 import com.google.auto.service.AutoService;
 import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestIdentifier;

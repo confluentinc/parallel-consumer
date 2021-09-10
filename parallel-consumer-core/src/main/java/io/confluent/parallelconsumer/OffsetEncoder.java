@@ -1,8 +1,5 @@
 package io.confluent.parallelconsumer;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 

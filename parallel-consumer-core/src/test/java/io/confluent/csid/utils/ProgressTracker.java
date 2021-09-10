@@ -1,8 +1,5 @@
 package io.confluent.csid.utils;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
 import io.confluent.parallelconsumer.InternalRuntimeError;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +31,7 @@ public class ProgressTracker {
 
     private int roundsAllowed = 3;
 
-    private final int coldRoundsAllowed = 20;
+    private int coldRoundsAllowed = 20;
 
     @Getter
     private int highestRoundCountSeen = 0;

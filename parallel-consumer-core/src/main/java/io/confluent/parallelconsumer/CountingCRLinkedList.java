@@ -1,8 +1,5 @@
 package io.confluent.parallelconsumer;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

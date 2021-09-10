@@ -1,7 +1,3 @@
-
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
 package io.confluent.parallelconsumer.vertx.integrationTests;
 
 import com.github.tomakehurst.wiremock.WireMockServer;

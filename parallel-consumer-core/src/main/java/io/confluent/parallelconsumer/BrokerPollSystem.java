@@ -1,8 +1,9 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import lombok.Getter;
 import lombok.Setter;

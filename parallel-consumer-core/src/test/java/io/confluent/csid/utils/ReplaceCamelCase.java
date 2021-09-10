@@ -1,8 +1,9 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020 Confluent, Inc.
  */
+
 import org.junit.jupiter.api.DisplayNameGenerator;
 
 import java.lang.reflect.Method;

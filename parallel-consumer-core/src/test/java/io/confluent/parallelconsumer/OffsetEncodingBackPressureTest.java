@@ -1,9 +1,5 @@
 package io.confluent.parallelconsumer;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
-
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.SneakyThrows;

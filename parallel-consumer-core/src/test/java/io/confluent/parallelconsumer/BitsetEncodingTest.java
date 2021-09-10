@@ -1,9 +1,5 @@
 package io.confluent.parallelconsumer;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
-
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
