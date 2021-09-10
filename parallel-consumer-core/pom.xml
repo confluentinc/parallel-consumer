@@ -81,22 +81,6 @@
             <version>42.2.18.jre7</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.github.tomakehurst</groupId>
-            <artifactId>wiremock</artifactId>
-            <version>2.27.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.truth</groupId>
-            <artifactId>truth</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.truth.extensions</groupId>
-            <artifactId>truth-java8-extension</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
 </project>

@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.examples.vertx;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import io.confluent.csid.utils.WireMockUtils;
+import io.confluent.parallelconsumer.vertx.WireMockUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;

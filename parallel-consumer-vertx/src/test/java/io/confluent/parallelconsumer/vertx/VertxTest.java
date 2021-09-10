@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.vertx;
  */
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import io.confluent.csid.utils.WireMockUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;

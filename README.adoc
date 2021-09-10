@@ -112,7 +112,6 @@ If <<ordering-guarantees,log ordering>> isn't a concern this can be an unwelcome
 The Parallel Consumer provides a solution to this problem.
 
 In addition, the <<http-with-vertx,Vert.x extension>> to this library supplies non-blocking interfaces, allowing higher still levels of concurrency with a further simplified interface.
-Also included now is a <<project-reactor,module for>> https://projectreactor.io[Project Reactor.io].
 
 === FAQ
 
@@ -484,11 +483,6 @@ In future versions, we plan to look at supporting other streaming systems like h
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/parallelconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
-
-[[project-reactor]]
-=== Project Reactor
-
-TODO example
 
 [[streams-usage-code]]
 === Kafka Streams Concurrent Processing
