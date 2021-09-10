@@ -25,16 +25,8 @@ import java.util.function.Function;
 public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
 
     static <KK, VV> ParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
-        return new ParallelEoSStreamProcessor(options);
+        return new ParentParallelEoSStreamProcessor(options);
     }
-
-    /**
-     * Register a function to be applied in parallel to each received message
-     *
-     * @param usersVoidConsumptionFunction the function
-     */
-    void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
-
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link

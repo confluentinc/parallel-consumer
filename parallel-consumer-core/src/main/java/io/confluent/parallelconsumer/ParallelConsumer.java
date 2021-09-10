@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer;
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import lombok.Data;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.Collection;
 import java.util.function.Consumer;
@@ -46,6 +47,13 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
      * @see org.apache.kafka.clients.consumer.KafkaConsumer#subscribe(Pattern, ConsumerRebalanceListener)
      */
     void subscribe(Pattern pattern, ConsumerRebalanceListener callback);
+
+    /**
+     * Register a function to be applied in parallel to each received message
+     *
+     * @param usersVoidConsumptionFunction the function
+     */
+    void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
 
     /**
      * A simple tuple structure.

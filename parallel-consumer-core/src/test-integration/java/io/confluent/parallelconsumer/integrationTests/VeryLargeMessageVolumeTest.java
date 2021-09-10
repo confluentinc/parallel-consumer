@@ -10,7 +10,7 @@ import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
@@ -112,7 +112,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(true, consumerProps);
 
-        var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
+        var pc = new ParentParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .consumer(newConsumer)
                 .producer(newProducer)

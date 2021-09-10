@@ -4,8 +4,8 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -28,7 +28,7 @@ import java.util.function.Function;
  * @see ParentParallelEoSStreamProcessor
  * @see #vertxHttpReqInfo(Function, Consumer, Consumer)
  */
-public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, V> {
+public interface VertxParallelStreamProcessor<K, V> extends ParallelStreamProcessor<K, V> {
 
     static <KK, VV> VertxParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions options) {
         return new VertxParallelEoSStreamProcessor<>(options);
