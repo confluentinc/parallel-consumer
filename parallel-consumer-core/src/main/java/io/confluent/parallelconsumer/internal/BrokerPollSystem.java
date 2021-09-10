@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.Setter;
@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
-import static io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor.MDC_INSTANCE_ID;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.closed;
 import static io.confluent.parallelconsumer.internal.State.running;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -47,7 +47,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private volatile boolean paused = false;
 
-    private final ParentParallelEoSStreamProcessor<K, V> pc;
+    private final ParallelEoSStreamProcessor<K, V> pc;
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
@@ -61,7 +61,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ParentParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions options) {
+    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions options) {
         this.wm = wm;
         this.pc = pc;
 

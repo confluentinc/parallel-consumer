@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
 
@@ -16,7 +16,7 @@ import java.util.concurrent.ThreadPoolExecutor;
  * Overrides key aspects required in common for other threading engines like Vert.x and Reactor
  */
 @Slf4j
-public abstract class ExternalEngine<K, V> extends ParentParallelEoSStreamProcessor<K, V> {
+public abstract class ExternalEngine<K, V> extends ParallelEoSStreamProcessor<K, V> {
 
     public ExternalEngine(final ParallelConsumerOptions newOptions) {
         super(newOptions);

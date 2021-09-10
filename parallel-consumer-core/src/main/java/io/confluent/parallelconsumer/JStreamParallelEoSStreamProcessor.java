@@ -15,7 +15,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 @Slf4j
-public class JStreamParallelEoSStreamProcessor<K, V> extends ParentParallelEoSStreamProcessor<K, V> implements JStreamParallelStreamProcessor<K, V> {
+public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V> implements JStreamParallelStreamProcessor<K, V> {
 
     private final Stream<ConsumeProduceResult<K, V, K, V>> stream;
 

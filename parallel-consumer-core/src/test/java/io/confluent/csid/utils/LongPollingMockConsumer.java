@@ -4,7 +4,6 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -107,7 +106,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
      * assignments, use reflection to access the registered rebalance listener, call the listener, and only then close
      * the consumer.
      *
-     * @see ParentParallelEoSStreamProcessor#onPartitionsRevoked
+     * @see io.confluent.parallelconsumer.ParallelEoSStreamProcessor#onPartitionsRevoked
      */
     private void revokeAssignment() throws NoSuchFieldException, IllegalAccessException {
         ConsumerRebalanceListener consumerRebalanceListener = getRebalanceListener();

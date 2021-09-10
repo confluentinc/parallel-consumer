@@ -7,8 +7,8 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -91,7 +91,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     /**
      * Nasty reflection but better than relying on user supplying their config
      *
-     * @see ParentParallelEoSStreamProcessor#checkAutoCommitIsDisabled
+     * @see ParallelEoSStreamProcessor#checkAutoCommitIsDisabled
      */
     @SneakyThrows
     private boolean getProducerIsTransactional() {

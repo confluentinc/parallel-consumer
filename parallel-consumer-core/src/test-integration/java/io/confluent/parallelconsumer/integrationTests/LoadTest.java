@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
@@ -82,7 +82,7 @@ public class LoadTest extends DbTest {
                 .maxConcurrency(3)
                 .build();
 
-        ParentParallelEoSStreamProcessor<String, String> async = new ParentParallelEoSStreamProcessor<>(options);
+        ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);
         async.subscribe(Pattern.compile(topic));
 
         AtomicInteger msgCount = new AtomicInteger(0);

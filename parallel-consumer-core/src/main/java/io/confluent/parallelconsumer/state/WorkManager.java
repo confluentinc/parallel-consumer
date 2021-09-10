@@ -8,7 +8,7 @@ import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.Getter;
@@ -132,9 +132,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Clear offset map for revoked partitions
      * <p>
-     * {@link ParentParallelEoSStreamProcessor#onPartitionsRevoked} handles committing off offsets upon revoke
+     * {@link ParallelEoSStreamProcessor#onPartitionsRevoked} handles committing off offsets upon revoke
      *
-     * @see ParentParallelEoSStreamProcessor#onPartitionsRevoked
+     * @see ParallelEoSStreamProcessor#onPartitionsRevoked
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {

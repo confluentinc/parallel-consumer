@@ -10,7 +10,7 @@ import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.ConsumerOffsetCommitter;
 import io.confluent.parallelconsumer.internal.OffsetCommitter;
 import io.confluent.parallelconsumer.internal.ProducerManager;
@@ -158,7 +158,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
         int numThreads = 16;
 //        int numThreads = 1000;
-        var pc = new ParentParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
+        var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .consumer(newConsumer)
                 .producer(newProducer)
