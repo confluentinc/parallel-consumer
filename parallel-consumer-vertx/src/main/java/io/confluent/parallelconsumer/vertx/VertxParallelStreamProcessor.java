@@ -54,8 +54,6 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      *
      * @param webClientRequestFunction Given the {@link WebClient} and a {@link ConsumerRecord}, return us the {@link
      *                                 HttpRequest}
-     * @param onSend
-     * @param onWebRequestComplete
      */
     void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                           Consumer<Future<HttpResponse<Buffer>>> onSend,
@@ -74,10 +72,4 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      */
     void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                             Consumer<Future<HttpResponse<Buffer>>> onSend);
-
-    /**
-     * Consumer from the Broker concurrently - use the various Vert.x systems to return us a vert.x Future based on this
-     * record.
-     */
-    void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result);
 }

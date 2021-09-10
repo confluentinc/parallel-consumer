@@ -8,6 +8,7 @@ import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
@@ -86,7 +87,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 int attemptNumber = attempts.incrementAndGet();
                 if (attemptNumber == 1) {
                     log.debug("force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark");
-                    awaitLatch(msgLock, 120);
+                    awaitLatch(msgLock, 60);
                     log.debug("very slow message awoken, throwing exception");
                     throw new FakeRuntimeError("Fake error");
                 } else {
@@ -162,7 +163,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
                         .isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks); // high water mark is beyond our expected processed count upon blocking
-
+                PartitionState<String, String> state = wm.getPm().getState(topicPartition);
                 assertThat(wm.getPm().isBlocked(topicPartition))
                         .as("Partition SHOULD be blocked due to back pressure")
                         .isTrue(); // blocked
