@@ -328,9 +328,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertThat(false).isTrue();
     }
 
-    @ParameterizedTest
+    @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    void controlFlowException(CommitMode commitMode) {
+    public void controlFlowException(CommitMode commitMode) {
         // setup again manually to use subscribe instead of assign (for revoke testing)
         instantiateConsumerProducer();
         parallelConsumer = initAsyncConsumer(getBaseOptions(commitMode));
