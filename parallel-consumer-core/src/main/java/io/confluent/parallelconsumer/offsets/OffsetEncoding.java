@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;

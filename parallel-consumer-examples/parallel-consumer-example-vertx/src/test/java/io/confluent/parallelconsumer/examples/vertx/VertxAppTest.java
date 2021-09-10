@@ -4,10 +4,9 @@ package io.confluent.parallelconsumer.examples.vertx;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import com.github.tomakehurst.wiremock.WireMockServer;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import io.confluent.parallelconsumer.vertx.WireMockUtils;
+import io.confluent.parallelconsumer.vertx.VertxTest;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -36,10 +35,10 @@ class VertxAppTest {
     @Timeout(20)
     @SneakyThrows
     @Test
-    void test() {
+    public void test() {
         log.info("Test start");
-        WireMockServer wireMockServer = new WireMockUtils().setupWireMock();
-        int port = wireMockServer.port();
+        VertxTest.setupWireMock();
+        int port = VertxTest.stubServer.port();
 
         VertxAppAppUnderTest coreApp = new VertxAppAppUnderTest(port);
 

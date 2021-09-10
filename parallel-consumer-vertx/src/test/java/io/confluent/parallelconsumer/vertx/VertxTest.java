@@ -5,6 +5,8 @@ package io.confluent.parallelconsumer.vertx;
  */
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.MappingBuilder;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
@@ -23,7 +25,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.assertj.core.api.Assertions;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -46,11 +50,13 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
-class VertxTest extends ParallelEoSStreamProcessorTestBase {
+public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
 
-    WireMockServer stubServer;
+    public static WireMockServer stubServer;
+
+    protected static final String stubResponse = "Good times.";
 
     RequestInfo getGoodHost() {
         return new RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
@@ -62,15 +68,17 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
         return new RequestInfo(badHostname, badPort, "/", UniMaps.of());
     }
 
-    @BeforeEach
-    void setupWireMock() {
-        WireMockUtils wireMockUtils = new WireMockUtils();
-        stubServer = wireMockUtils.setupWireMock();
-    }
-
-    @AfterEach
-    void closeWireMock() {
-        stubServer.stop();
+    @BeforeAll
+    public static void setupWireMock() {
+        WireMockConfiguration options = wireMockConfig().dynamicPort();
+        stubServer = new WireMockServer(options);
+        MappingBuilder mappingBuilder = get(urlPathEqualTo("/"))
+                .willReturn(aResponse()
+                        .withBody(stubResponse));
+        stubServer.stubFor(mappingBuilder);
+        stubServer.stubFor(get(urlPathEqualTo("/api")).
+                willReturn(aResponse().withBody(stubResponse)));
+        stubServer.start();
     }
 
     @Override
@@ -186,7 +194,7 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
         // test results are successes
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
-        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(WireMockUtils.stubResponse);
+        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(stubResponse);
     }
 
     @SneakyThrows
@@ -214,7 +222,7 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(res).hasSize(1).doesNotContainNull();
         assertThat(res).extracting(AsyncResult::cause).containsOnlyNulls();
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
-        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(WireMockUtils.stubResponse);
+        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(stubResponse);
     }
 
     private List<AsyncResult<HttpResponse<Buffer>>> getResults(
