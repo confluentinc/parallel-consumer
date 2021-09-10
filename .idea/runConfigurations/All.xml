@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="All" type="JUnit" factoryName="JUnit" singleton="false">
+  <configuration default="false" name="All" type="JUnit" factoryName="JUnit">
     <useClassPathOnly />
     <option name="PACKAGE_NAME" value="io.confluent" />
     <option name="MAIN_CLASS_NAME" value="" />

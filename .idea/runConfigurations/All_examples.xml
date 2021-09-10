@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="All examples" type="JUnit" factoryName="JUnit" singleton="false">
+  <configuration default="false" name="All examples" type="JUnit" factoryName="JUnit">
     <useClassPathOnly />
     <extension name="coverage">
       <pattern>
