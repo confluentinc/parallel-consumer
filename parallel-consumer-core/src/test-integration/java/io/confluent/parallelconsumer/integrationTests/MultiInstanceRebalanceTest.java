@@ -128,9 +128,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
         ProgressTracker progressTracker = new ProgressTracker(count);
         try {
             waitAtMost(ofSeconds(30))
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
-                    // .failFast( () -> pc1.getFailureCause(), () -> pc1.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
-                    .failFast("PC died - check logs", () -> pc1.getParallelConsumer().isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+//                    .failFast(() -> pc1.isClosedOrFailed(), () -> pc1.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {

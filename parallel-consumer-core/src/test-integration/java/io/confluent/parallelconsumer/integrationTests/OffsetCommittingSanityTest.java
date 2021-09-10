@@ -17,7 +17,6 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
 
@@ -89,12 +88,8 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         var pc = createParallelConsumer(topic, newConsumer);
         pc.poll(consumerRecord -> consumedOffsets.add(consumerRecord.offset()));
         if (check) {
-            try {
-                waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
-                        .untilAsserted(() -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
-            } catch (ConcurrentModificationException e) {
-                throw new AssertionError("Collection modified while testing", e);
-            }
+            waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
+                    .untilAsserted(() -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
         } else {
             Thread.sleep(2000);
         }

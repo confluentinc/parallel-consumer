@@ -164,9 +164,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(ofSeconds(120))
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
-                    .failFast("PC died - check logs", pc::isClosedOrFailed)
-                    //, () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+//                    .failFast(() -> pc.isClosedOrFailed(), () -> pc.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
