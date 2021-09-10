@@ -7,14 +7,6 @@
 
 toc::[]
 
-== v0.3.2.0
-
-=== Fixes and Improvements
-
-* Major: Upgrade to Apache Kafka 2.8 (still compatible with 2.6 and 2.7 though)
-* Adds support for managed executor service (Java EE Compatibility feature)
-* #65 support for custom retry delay providers
-
 == v0.3.1.0
 
 === Fixes and Improvements
