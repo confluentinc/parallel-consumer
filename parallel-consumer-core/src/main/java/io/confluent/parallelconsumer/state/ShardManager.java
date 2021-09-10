@@ -13,7 +13,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -35,11 +34,11 @@ public class ShardManager<K, V> {
     // todo performance: disable/remove if using partition order
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new HashMap<>();
 
-    private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> getShards() {
+    private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> getShards(){
         return processingShards;
     }
 
-    NavigableMap<Long, WorkContainer<K, V>> getShard(Object key) {
+    NavigableMap<Long, WorkContainer<K, V>> getShard(Object key){
         return processingShards.get(key);
     }
 
@@ -103,11 +102,7 @@ public class ShardManager<K, V> {
 
     public void addWorkContainer(final WorkContainer<K, V> wc) {
         Object shardKey = computeShardKey(wc.getCr());
-        processingShards.computeIfAbsent(shardKey,
-                // uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some
-                // concurrency errors (missing WorkContainers)
-                (ignore) -> new ConcurrentSkipListMap<>())
-                .put(wc.offset(), wc);
+        processingShards.computeIfAbsent(shardKey, (ignore) -> new TreeMap<>()).put(wc.offset(), wc);
     }
 
     void removeShard(final Object key) {
