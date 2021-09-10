@@ -72,7 +72,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     @Getter
     private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY);
 
-    private Instant lastCommitCheckTime = Instant.now();
+    private Instant lastCommit = Instant.now();
 
     private final Optional<ProducerManager<K, V>> producerManager;
 
@@ -810,7 +810,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
-        final Duration timeout = getTimeToNextCommitCheck(); // don't sleep longer than when we're expected to maybe commit
+        final Duration timeout = getTimeToNextCommit(); // don't sleep longer than when we're expected to maybe commit
 
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
@@ -826,7 +826,6 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
                 log.trace("Blocking poll finish");
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
-                updateLastCommitCheckTime();
             } else {
                 // don't set the lock or log anything
                 firstBlockingPoll = workMailBox.poll();
@@ -911,13 +910,10 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         return workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
     }
 
-    private Duration getTimeToNextCommitCheck() {
+    private Duration getTimeToNextCommit() {
         // draining is a normal running mode for the controller
         if (state == running || state == draining) {
-            Duration timeSinceLastCommit = getTimeSinceLastCommit();
-            Duration timeBetweenCommits = getTimeBetweenCommits();
-            Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
-            return minus;
+            return getTimeBetweenCommits().minus(getTimeSinceLastCommit());
         } else {
             log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
             return Duration.ZERO;
@@ -926,7 +922,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
     private Duration getTimeSinceLastCommit() {
         Instant now = clock.getNow();
-        return Duration.between(lastCommitCheckTime, now);
+        return Duration.between(lastCommit, now);
     }
 
     private void commitOffsetsThatAreReady() {
@@ -935,11 +931,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return;
         }
         committer.retrieveOffsetsAndCommit();
-        updateLastCommitCheckTime();
-    }
-
-    private void updateLastCommitCheckTime() {
-        lastCommitCheckTime = Instant.now();
+        lastCommit = Instant.now();
     }
 
     /**
