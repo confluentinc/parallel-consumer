@@ -1,25 +1,24 @@
-package io.confluent.parallelconsumer.offsets;
+package io.confluent.parallelconsumer;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
-import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
 
-import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrap;
-import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrapToIncompletes;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
-import static io.confluent.parallelconsumer.offsets.OffsetRunLength.*;
-import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.decompressZstd;
-import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
+import static io.confluent.parallelconsumer.OffsetBitSet.deserialiseBitSetWrap;
+import static io.confluent.parallelconsumer.OffsetBitSet.deserialiseBitSetWrapToIncompletes;
+import static io.confluent.parallelconsumer.OffsetEncoding.*;
+import static io.confluent.parallelconsumer.OffsetEncoding.Version.v1;
+import static io.confluent.parallelconsumer.OffsetEncoding.Version.v2;
+import static io.confluent.parallelconsumer.OffsetRunLength.*;
+import static io.confluent.parallelconsumer.OffsetSimpleSerialisation.decompressZstd;
+import static io.confluent.parallelconsumer.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
 
 /**
  * @see #unwrap

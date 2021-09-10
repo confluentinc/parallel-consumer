@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.offsets;
+package io.confluent.parallelconsumer;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
@@ -6,8 +6,8 @@ package io.confluent.parallelconsumer.offsets;
 
 import java.nio.ByteBuffer;
 
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArray;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArrayCompressed;
+import static io.confluent.parallelconsumer.OffsetEncoding.ByteArray;
+import static io.confluent.parallelconsumer.OffsetEncoding.ByteArrayCompressed;
 
 class ByteBufferEncoder extends OffsetEncoder {
 

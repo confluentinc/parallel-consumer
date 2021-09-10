@@ -4,10 +4,10 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.EncodingNotSupportedException;
+import io.confluent.parallelconsumer.InternalRuntimeError;
+import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
-import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
-import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ import java.util.*;
 
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
+import static io.confluent.parallelconsumer.OffsetMapCodecManager.DefaultMaxMetadataSize;
 
 /**
  * In charge of managing {@link PartitionState}s.

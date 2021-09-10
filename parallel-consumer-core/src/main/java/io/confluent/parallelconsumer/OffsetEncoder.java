@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.offsets;
+package io.confluent.parallelconsumer;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
