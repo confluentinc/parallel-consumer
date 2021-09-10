@@ -3,7 +3,6 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;

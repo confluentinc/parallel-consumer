@@ -10,7 +10,6 @@ toc::[]
 == v0.3.0.2
 
 === Fixes and Improvements
-
 * ci: Add CODEOWNER
 * fix: #101 Validate GroupId is configured on managed consumer
 * Use 8B1DA6120C2BF624 GPG Key For Signing
@@ -50,12 +49,11 @@ This is to try to prevent the situation where the payload is too large to fit at
 * Default ordering mode is now `KEY` ordering (was `UNORDERED`).
 ** This is a better default as it's the safest mode yet high performing mode.
 It maintains the partition ordering characteristic that all keys are processed in log order, yet for most use cases will be close to as fast as `UNORDERED` when the key space is large enough.
-* https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs 2,147,483,647) for both BitSet and run-length encoding.
+* https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs  2,147,483,647) for both BitSet and run-length encoding.
 * Commit modes have been renamed to make it clearer that they are periodic, not per message.
 * Minor performance improvement, switching away from concurrent collections.
 
 === Fixes
-
 * Maximum offset payload space increased to correctly not be inversely proportional to assigned partition quantity.
 * Run-length encoding now supports compacted topics, plus other bug fixes as well as fixes to Bitset encoding.
 

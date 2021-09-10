@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.vertx;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.WorkContainer;
@@ -112,7 +111,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
      * This thread is only used to dispatch the work to vert.x.
      * <p>
      * TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to
-     * vert.x.
+     *  vert.x.
      */
     @Override
     protected ThreadPoolExecutor setupWorkerPool(int poolSize) {

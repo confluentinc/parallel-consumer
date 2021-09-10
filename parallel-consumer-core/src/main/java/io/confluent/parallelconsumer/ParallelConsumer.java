@@ -13,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 // tag::javadoc[]
-
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
@@ -62,7 +61,7 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
      * @param <R>
      */
     @Data
-    class Tuple<L, R> {
+    public static class Tuple<L, R> {
         private final L left;
         private final R right;
 

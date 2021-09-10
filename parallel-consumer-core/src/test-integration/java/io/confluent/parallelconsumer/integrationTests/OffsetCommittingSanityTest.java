@@ -26,7 +26,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 
 /**
  * Test offset restoring from boundary conditions, i.e. when no offset data is encoded in metadata
- * <p>
+ *
  * Reproduces issue 62: https://github.com/confluentinc/parallel-consumer/issues/62
  *
  * @see io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest#closeOpenBoundaryCommits

@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.sanity;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -65,5 +64,5 @@ public class StreamTest {
 
         Assertions.assertThat(collect).hasSize(max);
     }
-
+    
 }

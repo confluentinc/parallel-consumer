@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.StringUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -79,6 +78,8 @@ class BitsetEncoder extends OffsetEncoder {
      * Switch from encoding bitset length as a short to an integer (length of 32,000 was reasonable too short).
      * <p>
      * Integer.MAX_VALUE should always be good enough as system restricts large from being processed at once.
+     *
+     *
      */
     // TODO refactor inivtV2 and V1 together, passing in the Short or Integer
     private ByteBuffer initV2(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {

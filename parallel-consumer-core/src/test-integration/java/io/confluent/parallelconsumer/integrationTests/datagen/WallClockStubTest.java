@@ -17,12 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public class WallClockStubTest {
 
-    @Test
-    void test() {
-        WallClockStub clock = new WallClockStub(GenUtils.randomSeedInstant);
-        assertThat(clock.getNow()).isEqualTo(GenUtils.randomSeedInstant);
-        Duration time = ofMillis(1);
-        Instant nowAndAdvance = clock.advanceAndGet(time);
-        assertThat(nowAndAdvance).isEqualTo(GenUtils.randomSeedInstant.plus(time));
-    }
+  @Test
+  void test() {
+    WallClockStub clock = new WallClockStub(GenUtils.randomSeedInstant);
+    assertThat(clock.getNow()).isEqualTo(GenUtils.randomSeedInstant);
+    Duration time = ofMillis(1);
+    Instant nowAndAdvance = clock.advanceAndGet(time);
+    assertThat(nowAndAdvance).isEqualTo(GenUtils.randomSeedInstant.plus(time));
+  }
 }

@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.examples.vertx;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.vertx.VertxTest;
@@ -48,7 +47,7 @@ public class VertxAppTest {
         coreApp.mockConsumer.addRecord(new ConsumerRecord(VertxApp.inputTopic, 0, 1, "a key 2", "a value"));
         coreApp.mockConsumer.addRecord(new ConsumerRecord(VertxApp.inputTopic, 0, 2, "a key 3", "a value"));
 
-        Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+        Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(()->{
             KafkaTestUtils.assertLastCommitIs(coreApp.mockConsumer, 3);
         });
 

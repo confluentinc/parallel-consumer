@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.vertx;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.Java8StreamUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.vertx.core.Future;

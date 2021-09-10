@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
-
 import java.nio.ByteBuffer;
 
 import static io.confluent.parallelconsumer.OffsetEncoding.ByteArray;

@@ -18,7 +18,7 @@ import java.util.function.Function;
  * Parallel message consumer which also can optionally produce 0 or many {@link ProducerRecord} results to be published
  * back to Kafka.
  *
- * @see #pollAndProduce
+ * @see #pollAndProduce 
  * @see #pollAndProduceMany
  */
 public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
