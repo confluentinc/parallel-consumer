@@ -4,11 +4,9 @@ package io.confluent.parallelconsumer.model;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.CollectionUtils;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class CommitHistory {
@@ -24,9 +22,8 @@ public class CommitHistory {
         return history.stream().anyMatch(x -> x.offset() == offset);
     }
 
-    public Optional<Long> highestCommit() {
-        Optional<OffsetAndMetadata> last = CollectionUtils.getLast(history);
-        return last.map(OffsetAndMetadata::offset);
+    public long highestCommit() {
+        return history.get(history.size() - 1).offset();
     }
 
     public List<Long> getOffsetHistory() {

@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.truth;
  */
 
 import com.google.common.truth.FailureMetadata;
-import com.google.common.truth.OptionalSubject;
 import com.google.common.truth.Subject;
 import io.confluent.parallelconsumer.model.CommitHistory;
 
@@ -31,9 +30,9 @@ public class CommitHistorySubject extends Subject {
         return assertAbout(commitHistories()).that(actual);
     }
 
+
     public void atLeastOffset(int needleCommit) {
-        check("atLeastOffset()").about(OptionalSubject.optionals()).that(actual.highestCommit()).isPresent();
-        check("atLeastOffset()").that(actual.highestCommit().get()).isAtLeast(needleCommit);
+        check("atLeastOffset()").that(actual.highestCommit()).isAtLeast(needleCommit);
     }
 
     public void offset(long quantity) {
