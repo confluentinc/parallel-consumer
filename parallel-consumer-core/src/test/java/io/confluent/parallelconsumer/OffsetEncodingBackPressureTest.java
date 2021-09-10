@@ -49,7 +49,6 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.setLongPollTimeout(ofMillis(200));
 //        parallelConsumer.setTimeBetweenCommits();
 
-        // todo - very smelly - store for restoring
         var realMax = OffsetMapCodecManager.DefaultMaxMetadataSize;
 
         OffsetMapCodecManager.DefaultMaxMetadataSize = 40; // reduce available to make testing easier
@@ -216,9 +215,7 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
             await().untilAsserted(() -> assertThat(wm.partitionMoreRecordsAllowedToProcess.get(topicPartition)).isTrue());
         }
 
-        // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
         OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient
-        OffsetMapCodecManager.forcedCodec = Optional.empty();
     }
 
     private OffsetAndMetadata getLastCommit() {
