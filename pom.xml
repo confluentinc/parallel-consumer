@@ -70,8 +70,8 @@
     </distributionManagement>
 
     <properties>
-        <!-- when running mvn locally from cmd line, use default jvm for jvm8 - by default uses the runtime JVM -->
-        <jvm.location>${java.home}</jvm.location>
+        <!-- when running mvn locally from cmd line, use default jvm for jvm8 -->
+        <jvm.location>${JAVA_HOME}</jvm.location>
         <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
         <jvm9.location>-insert jvm9 location via environment variable-</jvm9.location>
         <license.mode>check</license.mode>
@@ -342,17 +342,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>com.soebes.maven.plugins</groupId>
-                <artifactId>echo-maven-plugin</artifactId>
-                <version>0.4.0</version>
-                <!-- very useful for debugging maven runtime state -->
-                <!--                <configuration>-->
-                <!--                    <echos>-->
-                <!--                        <echo>vars: ${JAVA_HOME} ${java.home} ${jvm.location}</echo>-->
-                <!--                    </echos>-->
-                <!--                </configuration>-->
-            </plugin>
             <plugin>
                 <groupId>io.whelk.asciidoc</groupId>
                 <artifactId>asciidoc-template-maven-plugin</artifactId>
