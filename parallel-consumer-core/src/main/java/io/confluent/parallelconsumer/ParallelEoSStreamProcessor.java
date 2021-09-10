@@ -25,8 +25,6 @@ import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
 import pl.tlinkowski.unij.api.UniLists;
 
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
 import java.io.Closeable;
 import java.lang.reflect.Field;
 import java.time.Duration;
@@ -226,16 +224,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     }
 
     protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
-        ThreadFactory defaultFactory;
-        try {
-            defaultFactory = InitialContext.doLookup(options.getManagedThreadFactory());
-        } catch (NamingException e) {
-            log.debug("Using Java SE Thread",e);
-            defaultFactory = Executors.defaultThreadFactory();
-        }
-        ThreadFactory finalDefaultFactory = defaultFactory;
+        ThreadFactory defaultFactory = Executors.defaultThreadFactory();
         ThreadFactory namingThreadFactory = r -> {
-            Thread thread = finalDefaultFactory.newThread(r);
+            Thread thread = defaultFactory.newThread(r);
             String name = thread.getName();
             thread.setName("pc-" + name);
             return thread;
@@ -642,15 +633,9 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
             return true;
         };
 
-        brokerPollSubsystem.start(options.getManagedExecutorService());
+        brokerPollSubsystem.start();
 
-        ExecutorService executorService;
-        try {
-            executorService = InitialContext.doLookup(options.getManagedExecutorService());
-        } catch (NamingException e) {
-            log.debug("Using Java SE Thread",e);
-            executorService = Executors.newSingleThreadExecutor();
-        }
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
     }
