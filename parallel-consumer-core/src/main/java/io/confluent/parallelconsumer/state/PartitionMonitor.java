@@ -8,10 +8,7 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -25,7 +22,6 @@ import java.util.*;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
-import static lombok.AccessLevel.PACKAGE;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -48,11 +44,18 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
+//    private final Object stateLatchLock = new Object();
+//    private ReentrantLock stateLock = new ReentrantLock();
+//    private CountDownLatch stateLatch = new CountDownLatch(0);
+//    private Phaser statePhaser = new Phaser();
+//    private Semaphore stateSemaphore = new Semaphore(1, true);
+
     /**
      * Hold the tracking state for each of our managed partitions.
      */
-    @Getter(PACKAGE)
-    private final Map<TopicPartition, PartitionState<K, V>> partitionStates = new HashMap<>();
+    // todo make private
+    @Getter(AccessLevel.PACKAGE)
+    private final Map<TopicPartition, PartitionState<K, V>> states = new HashMap<>();
 
     /**
      * Record the generations of partition assignment, for fencing off invalid work.
@@ -65,13 +68,60 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     @SneakyThrows
     public PartitionState<K, V> getState(TopicPartition tp) {
+//        maybeWaitForRebalance();
         // may cause the system to wait for a rebalance to finish
         PartitionState<K, V> kvPartitionState;
-        synchronized (partitionStates) {
-            kvPartitionState = partitionStates.get(tp);
+        synchronized (states) {
+            kvPartitionState = states.get(tp);
         }
         return kvPartitionState;
     }
+//
+//    @SneakyThrows
+//    private void maybeWaitForRebalance() throws InterruptedException {
+//        synchronized (stateLatchLock) {
+//            if (stateLatch.getCount() > 0)
+//                log.debug("State locked for rebalance, waiting...");
+//            boolean success = stateLatch.await(60, SECONDS);// todo throw checked?
+//            if (!success) throw new TimeoutException("Timeout waiting for rebalance to finish");
+//        }
+//    }
+
+//    @SneakyThrows
+//    private void maybeWaitForRebalance() throws InterruptedException {
+//            if (statePhaser.getPhase() > 0)
+//                log.debug("State locked for rebalance, waiting...");
+//            statePhaser.arriveAndDeregister()
+//            statePhaser.awaitAdvance(statePhaser.getPhase())
+//            statePhaser.arrive()
+//            boolean success = statePhaser.arriveAndAwaitAdvance(60, SECONDS);// todo throw checked?
+//            if (!success) throw new TimeoutException("Timeout waiting for rebalance to finish");
+//
+//    }
+//
+//    @SneakyThrows
+//    private void maybeWaitForRebalance() throws InterruptedException {
+//        if (stateSemaphore.availablePermits() < 1)
+//            log.debug("State locked for rebalance, waiting...");
+////        boolean success = stateSemaphore.tryAcquire(60, SECONDS);// todo throw checked?
+//        stateSemaphore.acquireUninterruptibly();
+////        if (!success) throw new TimeoutException("Timeout waiting for rebalance to finish");
+//        // rebalance finished
+//        stateSemaphore.release();
+//    }
+//
+//    @SneakyThrows
+//    private void lockState() {
+////        synchronized (stateLatchLock) {
+////            stateLatch = new CountDownLatch(1);
+////        }
+//        stateSemaphore.acquireUninterruptibly();
+//    }
+//
+//    private void unlockState() {
+////        stateLatch.countDown();
+//        stateSemaphore.release();
+//    }
 
     /**
      * Load offset map for assigned partitions
@@ -79,10 +129,11 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         log.debug("Partitions assigned: {}", partitions);
-        synchronized (this.partitionStates) {
+//        lockState();
+        synchronized (states) {
 
             for (final TopicPartition partition : partitions) {
-                if (this.partitionStates.containsKey(partition))
+                if (states.containsKey(partition))
                     log.warn("New assignment of partition {} which already exists in partition state. Could be a state bug.", partition);
 
             }
@@ -93,12 +144,16 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation
                 var partitionStates = om.loadOffsetMapForPartition(partitionsSet);
-                this.partitionStates.putAll(partitionStates);
+                states.putAll(partitionStates);
             } catch (Exception e) {
                 log.error("Error in onPartitionsAssigned", e);
                 throw e;
             }
 
+            // todo delete
+//        wm.raisePartitionHighWaterMark(tp, incompletes.getHighestSeenOffset());
+
+//        unlockState();
         }
     }
 
@@ -122,10 +177,12 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        synchronized (this.partitionStates) {
+//        lockState();
+        synchronized (states) {
             incrementPartitionAssignmentEpoch(partitions);
             resetOffsetMapAndRemoveWork(partitions);
         }
+//        unlockState();
     }
 
     /**
@@ -158,11 +215,11 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     private void resetOffsetMapAndRemoveWork(Collection<TopicPartition> partitions) {
-        for (TopicPartition tp : partitions) {
-            var partition = this.partitionStates.remove(tp);
+        for (TopicPartition partition : partitions) {
+            var state = states.remove(partition);
 
             //
-            NavigableMap<Long, WorkContainer<K, V>> oldWorkPartitionQueue = partition.getCommitQueues();
+            NavigableMap<Long, WorkContainer<K, V>> oldWorkPartitionQueue = state.getPartitionCommitQueues();
             if (oldWorkPartitionQueue != null) {
                 sm.removeShardsFoundIn(oldWorkPartitionQueue);
             } else {
@@ -182,8 +239,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     public int getEpoch(final ConsumerRecord<K, V> rec) {
-        var tp = toTP(rec);
-        Integer epoch = partitionsAssignmentEpochs.get(tp);
+        Integer epoch = partitionsAssignmentEpochs.get(toTP(rec));
         rec.topic();
         if (epoch == null) {
             throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
@@ -217,13 +273,9 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
-
-    private void maybeRaiseHighestSeenOffset(WorkContainer<K, V> wc) {
-        maybeRaiseHighestSeenOffset(wc.getTopicPartition(), wc.offset());
-    }
-
-    public void maybeRaiseHighestSeenOffset(TopicPartition tp, long highWater) {
-        getState(tp).maybeRaiseHighestSeenOffset(highWater);
+    // todo reduce visibility
+    public void raisePartitionHighWaterMark(TopicPartition tp, long highWater) {
+        getState(tp).risePartitionHighWaterMark(highWater);
     }
 
     boolean isRecordPreviouslyProcessed(ConsumerRecord<K, V> rec) {
@@ -240,12 +292,13 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return previouslyProcessed;
     }
 
+    // todo terrible name - rename, reduce visibility
     public boolean isAllowedMoreRecords(TopicPartition tp) {
         return getState(tp).isAllowedMoreRecords();
     }
 
     public boolean hasWorkInCommitQueues() {
-        for (var partition : this.partitionStates.values()) {
+        for (var partition : this.states.values()) {
             if (partition.hasWorkInCommitQueue())
                 return true;
         }
@@ -253,24 +306,33 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     public long getNumberOfEntriesInPartitionQueues() {
-        return partitionStates.values().stream()
+        //states.values().stream().collect(x->x.getCommitQueueSize());
+//        int count = 0;
+//        for (var e : this.states.values()) {
+//            count += e.getCommitQueueSize();
+//        }
+//        return count;
+
+        // todo is this worse?
+        return states.values().stream()
                 .mapToLong(PartitionState::getCommitQueueSize)
                 .reduce(Long::sum).orElse(0);
     }
 
-    private void setPartitionMoreRecordsAllowedToProcess(TopicPartition topicPartitionKey, boolean moreMessagesAllowed) {
+    // todo can set private? - package private to work manager
+    void setPartitionMoreRecordsAllowedToProcess(TopicPartition topicPartitionKey, boolean moreMessagesAllowed) {
         var state = getState(topicPartitionKey);
+        //state.partitionMoreRecordsAllowedToProcess = moreMessagesAllowed;
         state.setAllowedMoreRecords(moreMessagesAllowed);
     }
 
-    public Long getHighestSeenOffset(final TopicPartition tp) {
-        return getState(tp).getOffsetHighestSeen();
+    public Long getHighWaterMark(final TopicPartition tp) {
+        return getState(tp).getPartitionOffsetHighWaterMarks();
     }
 
     public void addWorkContainer(final WorkContainer<K, V> wc) {
-        maybeRaiseHighestSeenOffset(wc);
-        var tp = wc.getTopicPartition();
-        NavigableMap<Long, WorkContainer<K, V>> queue = getState(tp).getCommitQueues();
+        TopicPartition tp = wc.getTopicPartition();
+        NavigableMap<Long, WorkContainer<K, V>> queue = getState(tp).getPartitionCommitQueues();
         queue.put(wc.offset(), wc);
     }
 
@@ -291,12 +353,14 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return !isAllowedMoreRecords(topicPartition);
     }
 
+
     /**
      * Get final offset data, build the the offset map, and replace it in our map of offset data to send
      *
      * @param offsetsToSend
      * @param topicPartitionKey
      * @param incompleteOffsets
+     * @return
      */
     //todo refactor
     void addEncodedOffsets(Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
@@ -319,7 +383,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             try {
                 PartitionState<K, V> state = getState(topicPartitionKey);
                 // todo smelly - update the partition state with the new found incomplete offsets. This field is used by nested classes accessing the state
-                state.setIncompleteOffsets(incompleteOffsets);
+                state.setPartitionIncompleteOffsets(incompleteOffsets);
                 String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, state);
                 int metaPayloadLength = offsetMapPayload.length();
                 boolean moreMessagesAllowed;

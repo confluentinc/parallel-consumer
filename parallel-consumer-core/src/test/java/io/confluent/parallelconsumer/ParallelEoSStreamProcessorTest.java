@@ -260,11 +260,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @EnumSource(CommitMode.class)
     @SneakyThrows
     void offsetCommitsAreIsolatedPerPartition(CommitMode commitMode) {
-        // Disable this test for vert.x for now
-        Assumptions.assumeThat(parallelConsumer)
-                .as("Should only test on core PC - this test is very complicated to get to work with vert.x " +
-                        "thread system, as the event and locking system needed is quite different")
-                .isExactlyInstanceOf(ParallelEoSStreamProcessor.class);
+        // test is very complicated to get to work with vert.x thread system, as the event and locking system needed is quite different
+        // todo disable this test for vert.x for now
+        Assumptions.assumeThat(parallelConsumer).isExactlyInstanceOf(ParallelEoSStreamProcessor.class);
 
         setupParallelConsumerInstance(getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)

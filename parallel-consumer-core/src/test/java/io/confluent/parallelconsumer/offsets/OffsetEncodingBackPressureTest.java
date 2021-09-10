@@ -160,7 +160,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // assert partition now blocked from threshold
             int expectedMsgsProcessedBeforePartitionBlocks = numRecords + numRecords / 4;
             {
-                Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
+                Long partitionOffsetHighWaterMarks = wm.getPm().getHighWaterMark(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
                         .isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks); // high water mark is beyond our expected processed count upon blocking
                 PartitionState<String, String> state = wm.getPm().getState(topicPartition);

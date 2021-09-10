@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -16,14 +17,12 @@ import java.util.NavigableMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
 
-import static lombok.AccessLevel.PACKAGE;
-import static lombok.AccessLevel.PUBLIC;
-
 public class PartitionState<K, V> {
 
     @Getter
     private final TopicPartition tp;
 
+    // visible for testing
     /**
      * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
      * <p>
@@ -39,27 +38,34 @@ public class PartitionState<K, V> {
      * @see #onSuccess(WorkContainer)
      * @see #onFailure(WorkContainer)
      */
-    // visible for testing
     // todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
+    // todo make private
+    // todo make private and final - needs to move to constructor, see #onPartitionsAssigned and constructor usage
     // this is derived from partitionCommitQueues WorkContainer states
+    @Setter
     @Getter
-    @Setter // todo remove setter - leaky abstraction, shouldn't be needed
-    private Set<Long> incompleteOffsets;
+    private Set<Long> partitionIncompleteOffsets;
 
+    // visible for testing
+    static final long MISSING_HIGH_WATER_MARK = -1L;
+
+    // visible for testing
     /**
      * The highest seen offset for a partition.
      * <p>
      * Starts off as null - no data
      */
-    // visible for testing
+    // TODO rename to partitionOffsetHighestSeen - cascading rename
+    // todo make private - package
+    // todo change to optional instead of -1 - overkill?
     @NonNull
-    @Getter(PUBLIC)
-    private Long offsetHighestSeen;
+    @Getter(AccessLevel.PUBLIC)
+    private Long partitionOffsetHighWaterMarks;// = MISSING_HIGH_WATER_MARK;
 
     /**
      * Highest offset which has completed.
      */
-    // todo not used - future feature? only used be continuous encoder branches - used in continuous encoding  branch
+    // todo not used - future feature? only used be continuous encoder branches
     // todo null valid? change to option?
     // Long partitionOffsetHighestSucceeded;
 
@@ -71,13 +77,13 @@ public class PartitionState<K, V> {
      * size.
      * <p>
      * Default (missing elements) is true - more messages can be processed.
-     * <p>
-     * AKA high water mark (which is a deprecated description).
      *
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
-    @Getter(PACKAGE)
-    @Setter(PACKAGE)
+    // todo get/set make private
+    // todo rename more eloquently - isAllowedMoreRecords?
+    @Getter(AccessLevel.PACKAGE)
+    @Setter(AccessLevel.PACKAGE)
     private boolean allowedMoreRecords = true;
 
     /**
@@ -91,30 +97,32 @@ public class PartitionState<K, V> {
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
-    @Getter(PACKAGE)
-    private final NavigableMap<Long, WorkContainer<K, V>> commitQueues = new ConcurrentSkipListMap<>();
+    // todo rename commitQueue
+    // todo make private
+    // todo remove state access
+    @Getter
+    private final NavigableMap<Long, WorkContainer<K, V>> partitionCommitQueues = new ConcurrentSkipListMap<>();
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
         this.tp = tp;
-        this.incompleteOffsets = incompletes.getIncompleteOffsets();
-        this.offsetHighestSeen = incompletes.getHighestSeenOffset();
+        this.partitionIncompleteOffsets = incompletes.getIncompleteOffsets();
+        this.partitionOffsetHighWaterMarks = incompletes.getHighestSeenOffset();
     }
 
-    public void maybeRaiseHighestSeenOffset(final long highestSeen) {
+    public void risePartitionHighWaterMark(final long highWater) {
         // rise the high water mark
-        Long oldHighestSeen = this.offsetHighestSeen;
-        if (oldHighestSeen == null || highestSeen >= oldHighestSeen) {
-            offsetHighestSeen = highestSeen;
+        Long oldHighWaterMark = this.partitionOffsetHighWaterMarks;
+        if (oldHighWaterMark == null || highWater >= oldHighWaterMark) {
+            partitionOffsetHighWaterMarks = highWater;
         }
     }
 
     /**
      * Removes all offsets that fall below the new low water mark.
-     *
      * @param newLowWaterMark // todo rename variable from newLowWaterMark
      */
     public void truncateOffsets(final long newLowWaterMark) {
-        incompleteOffsets.removeIf(offset -> offset < newLowWaterMark);
+        partitionIncompleteOffsets.removeIf(offset -> offset < newLowWaterMark);
     }
 
     public void onOffsetCommitSuccess(final OffsetAndMetadata meta) {
@@ -122,8 +130,8 @@ public class PartitionState<K, V> {
         truncateOffsets(newLowWaterMark);
     }
 
-    public boolean isRecordPreviouslyProcessed(final ConsumerRecord<K, V> rec) {
-        Set<Long> incompleteOffsets = this.incompleteOffsets;
+    public <K, V> boolean isRecordPreviouslyProcessed(final ConsumerRecord<K, V> rec) {
+        Set<Long> incompleteOffsets = partitionIncompleteOffsets;
         //Set<Long> incompleteOffsets = this.partitionIncompleteOffsets.getOrDefault(tp, new TreeSet<>());
         boolean previouslyProcessed;
         long offset = rec.offset();
@@ -131,7 +139,8 @@ public class PartitionState<K, V> {
             // record previously saved as having not been processed, can exit early
             previouslyProcessed = false;
         } else {
-            Long offsetHighWaterMark = offsetHighestSeen;
+            Long offsetHighWaterMark = partitionOffsetHighWaterMarks;
+//            Long offsetHighWaterMark = partitionOffsetHighWaterMarks.getOrDefault(tp, MISSING_HIGH_WATER_MARK);
             // within the range of tracked offsets, so must have been previously completed
             // we haven't recorded this far up, so must not have been processed yet
             previouslyProcessed = offsetHighWaterMark != null && offset <= offsetHighWaterMark;
@@ -140,11 +149,11 @@ public class PartitionState<K, V> {
     }
 
     public boolean hasWorkInCommitQueue() {
-        return !commitQueues.isEmpty();
+        return !partitionCommitQueues.isEmpty();
     }
 
     public int getCommitQueueSize() {
-        return commitQueues.size();
+        return partitionCommitQueues.size();
     }
 
 }

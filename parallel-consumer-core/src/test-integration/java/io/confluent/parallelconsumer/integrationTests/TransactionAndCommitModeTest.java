@@ -58,6 +58,9 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see ConsumerOffsetCommitter
  * @see ProducerManager
  */
+// have yet to narrow down why this test needs to run isolated
+//@Execution(ExecutionMode.SAME_THREAD)
+//@Isolated
 @Slf4j
 class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
 
@@ -66,6 +69,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
     int HIGH_MAX_POLL_RECORDS_CONFIG = 10_000;
 
     // is sensitive to changes in metadata size
+//    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
     @CartesianProductTest(factory = "enumSets")
     void testDefaultMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 5000;
@@ -100,6 +104,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         runTest(LOW_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
     }
 
+    // is sensitive to changes in metadata size
+//    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
     @CartesianProductTest(factory = "enumSets")
     public void testHighMaxPollEnum(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 10000;
@@ -275,5 +281,6 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         all.assertThat(one).containsAll(two);
         all.assertAll();
     }
+
 
 }
