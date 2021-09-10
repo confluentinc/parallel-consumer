@@ -120,7 +120,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         // notify control work has been registered, in case it's sleeping waiting for work that will never come
                         if (!wm.hasWorkInFlight()) {
                             log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
-                            pc.notifySomethingToDo();
+                            pc.notifyNewWorkRegistered();
                         }
                     }
                 }
