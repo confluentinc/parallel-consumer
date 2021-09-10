@@ -625,7 +625,6 @@
                     and "no @param for <C>"
                     -->
                     <additionalOptions>-Xdoclint:none</additionalOptions>
-                    <javadocExecutable>${java.home}/bin/javadoc</javadocExecutable>
                 </configuration>
                 <executions>
                     <execution>
