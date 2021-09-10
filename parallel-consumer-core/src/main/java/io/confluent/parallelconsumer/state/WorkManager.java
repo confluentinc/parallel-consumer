@@ -246,7 +246,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         var staleWorkToRemove = new ArrayList<WorkContainer<K, V>>();
 
         var slowWorkCount = 0;
-        var slowWorkTopics = new HashSet<String>();
 
         //
         for (var shard : it) {
@@ -307,7 +306,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
                     if (toSeconds(timeInFlight) > toSeconds(thresholdForTimeSpentInQueueWarning)) {
                         slowWorkCount++;
-                        slowWorkTopics.add(workContainer.getCr().topic());
                         log.trace("Work has spent over " + thresholdForTimeSpentInQueueWarning + " in queue! "
                                 + msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
                     } else {
@@ -332,8 +330,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         if (slowWorkCount > 0) {
             final int finalSlowWorkCount = slowWorkCount;
             slowWarningRateLimit.performIfNotLimited(() -> log.warn("Warning: {} records in the queue have been " +
-                            "waiting longer than {}s for following topics {}.",
-                    finalSlowWorkCount, toSeconds(thresholdForTimeSpentInQueueWarning), slowWorkTopics));
+                            "waiting longer than {}.",
+                    finalSlowWorkCount, toSeconds(thresholdForTimeSpentInQueueWarning)));
+
         }
 
         // remove found stale work outside of loop
