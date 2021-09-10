@@ -6,7 +6,6 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.Range;
-import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -44,12 +43,15 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
+import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK;
+import static io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
+import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ_WRITE;
 
 /**
  * Series of tests that check when we close a PC with incompletes encoded, when we open a new one, the correct messages
@@ -90,8 +92,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     @ParameterizedTest
     @EnumSource()
     @ResourceLocks({
-            @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ),
-//            @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
+            @ResourceLock(value = METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ), // depends on OffsetMapCodecManager#DefaultMaxMetadataSize
+            @ResourceLock(value = COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     })
     void offsetsOpenClose(OffsetEncoding encoding) {
         var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
@@ -133,11 +135,11 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 log.info("Read by consumer ONE: {}", x);
                 if (x.value().equals("4")) {
                     log.info("Throwing fake error for message 4");
-                    throw new FakeRuntimeError("Fake error - Message 4");
+                    throw new RuntimeException("Message 4");
                 }
                 if (x.value().equals("2")) {
                     log.info("Throwing fake error for message 2");
-                    throw new FakeRuntimeError("Fake error - Message 2");
+                    throw new RuntimeException("Message 2");
                 }
                 successfullInOne.add(x);
             });
@@ -344,7 +346,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             asyncOne.poll(x -> {
                 String value = x.value();
                 if (failingMessages.contains(value)) {
-                    throw new FakeRuntimeError("Fake error for message " + value);
+                    throw new RuntimeException("Fake error for message " + value);
                 }
                 readByOne.add(value);
             });

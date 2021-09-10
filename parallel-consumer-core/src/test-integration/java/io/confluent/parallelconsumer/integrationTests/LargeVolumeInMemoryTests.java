@@ -44,6 +44,7 @@ import static org.mockito.Mockito.mock;
 /**
  * Mocked out comparative volume tests
  */
+//@Isolated
 @Slf4j
 class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
@@ -158,45 +159,38 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             log.info("Duration for Unordered processing in round {} with {} keys was {}", round, defaultNumKeys, unorderedDuration);
         }
 
-        var keyOrderingSizeToResults = Maps.<Integer, Duration>newTreeMap();
+        var keyResults = Maps.<Integer, Duration>newTreeMap();
         for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
             setupParallelConsumerInstance(baseOptions.toBuilder().ordering(KEY).build());
             log.debug("By key, {} keys", keySize);
-            var keyOrderDuration = time(() -> testTiming(keySize, quantityOfMessagesToProduce));
+            Duration keyOrderDuration = time(() -> testTiming(keySize, quantityOfMessagesToProduce));
             log.info("Duration for Key order processing {} keys was {}", keySize, keyOrderDuration);
-            keyOrderingSizeToResults.put(keySize, keyOrderDuration);
+            keyResults.put(keySize, keyOrderDuration);
         }
 
         setupParallelConsumerInstance(baseOptions.toBuilder().ordering(PARTITION).build());
         log.debug("By partition");
-        var partitionOrderDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
+        Duration partitionOrderDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
         log.info("Duration for Partition order processing {} keys was {}", defaultNumKeys, partitionOrderDuration);
 
-        log.info("Key duration results:\n{}", keyOrderingSizeToResults);
+        log.info("Key duration results:\n{}", keyResults);
 
         log.info("Unordered duration: {}", unorderedDuration);
 
+        int numOfKeysToCompare = 5; // needs to be small enough that there's a significant difference between unordered and key of x
+        Duration keyOrderHalfDefaultKeySize = keyResults.get(numOfKeysToCompare);
         assertThat(unorderedDuration).as("UNORDERED should be faster than PARTITION order")
                 .isLessThan(partitionOrderDuration);
 
-        // compare key order to partition order
-        int numOfKeysToCompare = 20; // needs to be small enough that there's a significant difference between unordered and key of x
-        Duration keyOrderHalfDefaultKeySize = keyOrderingSizeToResults.get(numOfKeysToCompare);
-
         if (commitMode.equals(PERIODIC_CONSUMER_SYNC)) {
-            assertThat(unorderedDuration)
-                    .as("Committing synchronously from the controller causes a large overhead, making UNORDERED " +
-                            "very close in speed to KEY order, keySize of: " + numOfKeysToCompare)
-                    .isCloseTo(keyOrderHalfDefaultKeySize,
-                            keyOrderHalfDefaultKeySize.plus(keyOrderHalfDefaultKeySize.dividedBy(5))); // within 20%
+            assertThat(unorderedDuration).as("Committing synchronously from the controller causes a large overhead, making UNORDERED very close in speed to KEY order, keySize of: " + numOfKeysToCompare)
+                    .isCloseTo(keyOrderHalfDefaultKeySize, keyOrderHalfDefaultKeySize.plus(keyOrderHalfDefaultKeySize.dividedBy(5))); // within 20%
         } else {
-            assertThat(unorderedDuration)
-                    .as("UNORDERED should be faster than KEY order, keySize of: " + numOfKeysToCompare)
+            assertThat(unorderedDuration).as("UNORDERED should be faster than KEY order, keySize of: " + numOfKeysToCompare)
                     .isLessThan(keyOrderHalfDefaultKeySize);
         }
 
-        assertThat(keyOrderHalfDefaultKeySize)
-                .as("KEY order should be faster than PARTITION order")
+        assertThat(keyOrderHalfDefaultKeySize).as("KEY order is faster than PARTITION order")
                 .isLessThan(partitionOrderDuration);
     }
 
@@ -228,7 +222,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 //            log.debug(x.toString());
         });
 
-        waitAtMost(defaultTimeout.multipliedBy(15)).untilAsserted(() -> {
+        waitAtMost(defaultTimeout.multipliedBy(10)).untilAsserted(() -> {
             // assertj's size checker uses an iterator so must be synchronised.
             // .size() wouldn't need it but this output is nicer
             synchronized (successfulWork) {
@@ -238,7 +232,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             }
 
             assertThat(producerSpy.history())
-                    .as("Expected number of produced messages")
+                    .as("All messages expected messages were processed and results produced")
                     .hasSize(quantityOfMessagesToProduce);
         });
         bar.close();

@@ -33,7 +33,7 @@ public class ProgressTracker {
     @Getter
     private final AtomicInteger rounds = new AtomicInteger(0);
 
-    private int roundsAllowed = 10;
+    private int roundsAllowed = 3;
 
     private final int coldRoundsAllowed = 20;
 

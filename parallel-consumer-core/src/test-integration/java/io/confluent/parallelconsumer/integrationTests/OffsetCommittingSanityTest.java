@@ -97,8 +97,7 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         if (check) {
             try {
                 waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
-                        .untilAsserted(
-                                () -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
+                        .untilAsserted(() -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
             } catch (ConcurrentModificationException e) {
                 throw new AssertionError("Collection modified while testing", e);
             }

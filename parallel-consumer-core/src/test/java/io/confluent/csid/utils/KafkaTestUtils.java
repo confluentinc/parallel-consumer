@@ -146,8 +146,7 @@ public class KafkaTestUtils {
             expectedMap.put(tp, new HashSet<>(offsets));
         }
 
-        assertThat(partitionToCommittedOffsets)
-                .describedAs(description.orElse("Which offsets are committed and in the expected order"))
+        assertThat(partitionToCommittedOffsets).describedAs(description.orElse("Which offsets are committed and in the expected order"))
                 .containsExactlyEntriesOf(expectedMap);
     }
 

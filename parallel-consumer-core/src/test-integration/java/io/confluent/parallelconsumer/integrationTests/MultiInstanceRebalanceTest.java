@@ -164,7 +164,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         log.info("Duplicate consumed keys (at least one is expected due to the rebalance): {}", duplicates);
         assertThat(duplicates)
                 .as("There should be very few duplicate keys")
-                .hasSizeLessThan(4);
+                .hasSizeLessThan(3);
     }
 
     ArrayList<String> getAllConsumedKeys(ParallelConsumerRunnable pc1, ParallelConsumerRunnable pc2) {

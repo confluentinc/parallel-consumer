@@ -14,7 +14,6 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.ConsumerOffsetCommitter;
 import io.confluent.parallelconsumer.internal.OffsetCommitter;
 import io.confluent.parallelconsumer.internal.ProducerManager;
-import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -30,7 +29,6 @@ import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junitpioneer.jupiter.CartesianProductTest;
 
 import java.util.*;
@@ -46,7 +44,6 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.waitAtMost;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -62,7 +59,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see ProducerManager
  */
 @Slf4j
-class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
+public class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
 
     int LOW_MAX_POLL_RECORDS_CONFIG = 1;
     int DEFAULT_MAX_POLL_RECORDS_CONFIG = 500;
@@ -73,13 +70,12 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
     public AtomicInteger processedCount = new AtomicInteger(0);
     public AtomicInteger producedCount = new AtomicInteger(0);
 
-    // is sensitive to changes in metadata size
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
+    // default
     @CartesianProductTest(factory = "enumSets")
     void testDefaultMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 5000;
         if (order.equals(PARTITION))
-            numMessages = 1000; // much slower, do less
+            numMessages = 1000; // much slower
         runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
     }
 
@@ -95,12 +91,11 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
     }
 
     @RepeatedTest(5)
-    void testTransactionalDefaultMaxPoll() {
+    public void testTransactionalDefaultMaxPoll() {
         runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, PERIODIC_TRANSACTIONAL_PRODUCER, KEY);
     }
 
-    // is sensitive to changes in metadata size
-//    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
+    // low
     @CartesianProductTest(factory = "enumSets")
     public void testLowMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 5000;
@@ -109,8 +104,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         runTest(LOW_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
     }
 
-    // is sensitive to changes in metadata size
-//    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
+    // high counts
     @CartesianProductTest(factory = "enumSets")
     public void testHighMaxPollEnum(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 10000;
@@ -185,8 +179,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         TopicPartition tp = new TopicPartition(inputName, 0);
         Map<TopicPartition, Long> beginOffsets = newConsumer.beginningOffsets(of(tp));
         Map<TopicPartition, Long> endOffsets = newConsumer.endOffsets(of(tp));
-        assertThat(endOffsets).containsEntry(tp, ((long) expectedMessageCount));
-        assertThat(beginOffsets.get(tp)).isZero();
+        assertThat(endOffsets.get(tp)).isEqualTo(expectedMessageCount);
+        assertThat(beginOffsets.get(tp)).isEqualTo(0L);
 
 
         pc.pollAndProduce(record -> {

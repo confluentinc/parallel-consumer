@@ -41,8 +41,6 @@ public class OffsetMapCodecManager<K, V> {
     /**
      * Used to prevent tests running in parallel that depends on setting static state in this class. Manipulation of
      * static state in tests needs to be removed to this isn't necessary.
-     * <p>
-     * todo remove static state manipulation from tests (make non static)
      */
     public static final String METADATA_DATA_SIZE_RESOURCE_LOCK = "Value doesn't matter, just needs a constant";
 
