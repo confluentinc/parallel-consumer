@@ -24,10 +24,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.OffsetEncoding.*;
+import static io.confluent.csid.utils.Range.range;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  * TODO: use compressed avro instead for a more reliable long term schema system? or string encoding with a version
@@ -107,7 +108,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         log.info("Size: {}", serialised.length());
 
         //
-        Set<Long> longs = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(finalOffsetForPartition, serialised).getIncompleteOffsets();
+        Set<Long> longs = om.deserialiseIncompleteOffsetMapFromBase64(finalOffsetForPartition, serialised).getIncompleteOffsets();
 
         //
         assertThat(longs.toArray()).containsExactly(incomplete.toArray());
@@ -210,21 +211,21 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void loadCompressedRunLengthEncoding() {
         byte[] bytes = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
-        OffsetMapCodecManager.HighestOffsetAndIncompletes longs = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, bytes);
+        OffsetMapCodecManager.HighestOffsetAndIncompletes longs = om.decodeCompressedOffsets(finalOffsetForPartition, bytes);
         assertThat(longs.getIncompleteOffsets().toArray()).containsExactly(incomplete.toArray());
     }
 
     @Test
     void decodeOffsetMap() {
-        Set<Long> set = OffsetMapCodecManager.bitmapStringToIncomplete(2L, "ooxx");
+        Set<Long> set = om.bitmapStringToIncomplete(2L, "ooxx");
         assertThat(set).containsExactly(2L, 3L);
 
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "ooxxoxox")).containsExactly(2L, 3L, 6L, 8L);
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "o")).containsExactly(2L);
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "x")).containsExactly();
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "")).containsExactly();
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "ooo")).containsExactly(2L, 3L, 4L);
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "xxx")).containsExactly();
+        assertThat(om.bitmapStringToIncomplete(2L, "ooxxoxox")).containsExactly(2L, 3L, 6L, 8L);
+        assertThat(om.bitmapStringToIncomplete(2L, "o")).containsExactly(2L);
+        assertThat(om.bitmapStringToIncomplete(2L, "x")).containsExactly();
+        assertThat(om.bitmapStringToIncomplete(2L, "")).containsExactly();
+        assertThat(om.bitmapStringToIncomplete(2L, "ooo")).containsExactly(2L, 3L, 4L);
+        assertThat(om.bitmapStringToIncomplete(2L, "xxx")).containsExactly();
     }
 
     @Test
@@ -277,7 +278,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         for (var inputString : inputs) {
             int inputLength = inputString.length();
 
-            Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, inputString);
+            Set<Long> longs = om.bitmapStringToIncomplete(finalOffsetForPartition, inputString);
 
             OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, partitionHighWaterMark, longs).invoke();
             byte[] byteByte = simultaneousEncoder.getEncodingMap().get(ByteArray);
@@ -302,7 +303,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         long highWater = input.length();
         wm.raisePartitionHighWaterMark(highWater, tp);
 
-        Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, input);
+        Set<Long> longs = om.bitmapStringToIncomplete(finalOffsetForPartition, input);
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highWater, longs);
         encoder.invoke();
         byte[] pack = encoder.packSmallest();
@@ -318,7 +319,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     void compressionCycle() {
         byte[] serialised = om.encodeOffsetsCompressed(finalOffsetForPartition, tp, incomplete);
 
-        OffsetMapCodecManager.HighestOffsetAndIncompletes deserialised = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, serialised);
+        OffsetMapCodecManager.HighestOffsetAndIncompletes deserialised = om.decodeCompressedOffsets(finalOffsetForPartition, serialised);
 
         assertThat(deserialised.getIncompleteOffsets()).isEqualTo(incomplete);
     }
@@ -343,7 +344,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
             //
             log.debug("Testing round - size: {} input: '{}'", input.length(), input);
-            Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, input);
+            Set<Long> longs = om.bitmapStringToIncomplete(finalOffsetForPartition, input);
             OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highWater, longs);
             encoder.invoke();
 
@@ -352,7 +353,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 byte[] result = encoder.packEncoding(pair);
 
                 //
-                OffsetMapCodecManager.HighestOffsetAndIncompletes recoveredIncompleteOffsetTuple = OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, result);
+                OffsetMapCodecManager.HighestOffsetAndIncompletes recoveredIncompleteOffsetTuple = om.decodeCompressedOffsets(finalOffsetForPartition, result);
                 Set<Long> recoveredIncompletes = recoveredIncompleteOffsetTuple.getIncompleteOffsets();
 
                 //

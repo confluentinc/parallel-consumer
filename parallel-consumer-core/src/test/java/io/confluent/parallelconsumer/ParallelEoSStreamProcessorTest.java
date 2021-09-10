@@ -22,17 +22,13 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
-import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
-import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
+import static io.confluent.csid.utils.LatchTestUtils.*;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;

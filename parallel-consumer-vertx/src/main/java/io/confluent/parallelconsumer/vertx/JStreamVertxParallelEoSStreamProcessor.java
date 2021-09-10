@@ -4,8 +4,8 @@ package io.confluent.parallelconsumer.vertx;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.Java8StreamUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.csid.utils.Java8StreamUtils;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -16,6 +16,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.Producer;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedDeque;

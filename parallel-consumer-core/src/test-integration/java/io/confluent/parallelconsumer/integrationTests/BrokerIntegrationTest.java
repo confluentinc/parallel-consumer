@@ -4,8 +4,8 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;

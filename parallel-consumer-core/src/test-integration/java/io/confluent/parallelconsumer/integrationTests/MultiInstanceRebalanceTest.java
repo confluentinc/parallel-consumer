@@ -4,16 +4,12 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.ProgressBarUtils;
-import io.confluent.csid.utils.ProgressTracker;
-import io.confluent.csid.utils.TrimListRepresentation;
+import io.confluent.csid.utils.*;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
 import org.apache.commons.lang3.RandomUtils;
@@ -31,12 +27,14 @@ import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.lang.reflect.Array;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.time.Duration.ofSeconds;

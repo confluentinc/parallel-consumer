@@ -5,11 +5,13 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
+import java.util.Set;
 
 import static io.confluent.parallelconsumer.OffsetBitSet.deserialiseBitSetWrap;
 import static io.confluent.parallelconsumer.OffsetBitSet.deserialiseBitSetWrapToIncompletes;
