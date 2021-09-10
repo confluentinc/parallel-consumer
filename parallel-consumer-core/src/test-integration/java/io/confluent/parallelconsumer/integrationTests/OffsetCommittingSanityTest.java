@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +20,6 @@ import pl.tlinkowski.unij.api.UniSets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Future;
 
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
@@ -113,14 +111,7 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         var newConsumer = kcu.createNewConsumer(false);
         newConsumer.subscribe(UniSets.of(topicNameForTest));
         newConsumer.poll(ofSeconds(1));
-        Set<TopicPartition> assignment = newConsumer.assignment();
-        Truth.assertWithMessage("Should be assigned some partitions").that(assignment).isNotEmpty();
-
-        //
-        Map<TopicPartition, OffsetAndMetadata> committed = newConsumer.committed(assignment);
-        Truth.assertThat(committed).isNotEmpty();
-
-        //
+        Map<TopicPartition, OffsetAndMetadata> committed = newConsumer.committed(newConsumer.assignment());
         TopicPartition tp = new TopicPartition(topicNameForTest, 0);
         OffsetAndMetadata offsetAndMetadata = committed.get(tp);
         assertThat(offsetAndMetadata).as("Should have commit history for this partition {}", tp).isNotNull();
