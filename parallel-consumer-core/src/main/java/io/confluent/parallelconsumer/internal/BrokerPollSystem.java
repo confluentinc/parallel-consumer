@@ -184,7 +184,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         Duration thisLongPollTimeout = state == running ? BrokerPollSystem.longPollTimeout
                 : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
-        log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if subs are paused, or no data available on broker.", toSeconds(thisLongPollTimeout));
+        log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if subs are paused, or no data available on broker.", toSeconds(thisLongPollTimeout)); // java 8
         return consumerManager.poll(thisLongPollTimeout);
     }
 

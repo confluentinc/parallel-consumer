@@ -64,8 +64,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
             log.info("streaming test {}", x.getIn().value());
         });
 
-        await().untilAsserted(() ->
-                assertThat(peekedStream).hasSize(1));
+        assertThat(peekedStream).hasSize(1);
     }
 
     @Test

@@ -16,7 +16,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
@@ -48,7 +47,7 @@ import static org.awaitility.Awaitility.waitAtMost;
  * <p>
  * See {@link OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK}
  */
-@Isolated // messes with static state - breaks other tests running in parallel
+//@Isolated
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -56,9 +55,11 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
      * that no further messages for the given partitions can be taken for processing, until more messages complete.
      */
+//    @SneakyThrows
     @Test
     // needed due to static accessors in parallel tests
     @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = ResourceAccessMode.READ_WRITE)
+    // changes OffsetMapCodecManager#DefaultMaxMetadataSize
     void backPressureShouldPreventTooManyMessagesBeingQueuedForProcessing() throws OffsetDecodingError {
         // mock messages downloaded for processing > MAX_TO_QUEUE
         // make sure work manager doesn't queue more than MAX_TO_QUEUE

@@ -129,11 +129,15 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // So it's data is setup can be used in other tests, finish 0
         releaseAndWait(locks, 0);
 
-        parallelConsumer.requestCommitAsap();
-        waitForSomeLoopCycles(5);
-
         log.debug("Closing...");
         parallelConsumer.close();
+
+        assertThat(processedStates)
+                .as("sanity - all expected messages are processed")
+                .containsExactly(
+                        entry(1, true),
+                        entry(0, true)
+                );
 
         assertThat(processedStates)
                 .as("sanity - all expected messages are processed")
@@ -154,12 +158,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .build();
     }
 
-    /**
-     * {@link #offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode)} doesnt check the final offsets -
-     * that's what this test does.
-     *
-     * @param commitMode
-     */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
@@ -168,8 +166,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         log.info("Test start");
 
         // next expected offset is now 2
-        await().untilAsserted(() ->
-                assertCommits(of(2), "Only one of the two offsets committed, as they were coalesced for efficiency"));
+        assertCommits(of(2), "Only one of the two offsets committed, as they were coalesced for efficiency");
     }
 
     @Disabled
@@ -653,16 +650,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         waitForOneLoopCycle();
 
         //
-        await().untilAsserted(() -> {
-            try {
-                // simpler way of making the bootstrap commit optional in the results, than adding the required barrier
-                // locks to ensure it's existence, which has been tested else where
-                assertCommits(of(0, 1), "Only 0 should be committed, as even though 2 is also finished, 1 should be " +
-                        "blocking the partition");
-            } catch (AssertionError e) {
-                assertCommits(of(1), "Bootstrap commit is optional. See msg in code above");
-            }
-        });
+        try {
+            // simpler way of making the bootstrap commit optional in the results, than adding the required barrier
+            // locks to ensure it's existence, which has been tested else where
+            assertCommits(of(0, 1), "Only 0 should be committed, as even though 2 is also finished, 1 should be " +
+                    "blocking the partition");
+        } catch (AssertionError e) {
+            assertCommits(of(1), "Bootstrap commit is optional. See msg in code above");
+        }
 
         //
         msg1latch.countDown(); // release remaining processing lock
@@ -851,7 +846,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    void produceMessageFlow(CommitMode commitMode) {
+    public void produceMessageFlow(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
         parallelConsumer.pollAndProduce((ignore) -> new ProducerRecord<>("Hello", "there"));
@@ -860,15 +855,19 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         waitForSomeLoopCycles(2);
 
         parallelConsumer.requestCommitAsap();
-
-        //
-        await().untilAsserted(() ->
-                assertCommits(of(1)));
+//        requestCommitAndPause();
 
         parallelConsumer.closeDrainFirst();
 
+        //
+        assertCommits(of(1));
 
         assertThat(producerSpy.history()).hasSize(1);
+    }
+
+    private void requestCommitAndPause() {
+        parallelConsumer.requestCommitAsap();
+        waitForSomeLoopCycles(2);
     }
 
 }
