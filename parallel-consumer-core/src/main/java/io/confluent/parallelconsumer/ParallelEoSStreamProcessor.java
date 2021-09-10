@@ -230,7 +230,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         try {
             defaultFactory = InitialContext.doLookup(options.getManagedThreadFactory());
         } catch (NamingException e) {
-            log.debug("Using Java SE Thread", e);
+            log.debug("Using Java SE Thread",e);
             defaultFactory = Executors.defaultThreadFactory();
         }
         ThreadFactory finalDefaultFactory = defaultFactory;
@@ -485,7 +485,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
                 log.trace("Interrupted", e);
             } catch (ExecutionException | TimeoutException e) {
                 log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
-                        "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
+                        "(state was {}). Try increasing your time-out to allow the system to drain, or close withing " +
                         "draining.", state, e);
                 throw e;
             }
@@ -648,7 +648,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
         try {
             executorService = InitialContext.doLookup(options.getManagedExecutorService());
         } catch (NamingException e) {
-            log.debug("Using Java SE Thread", e);
+            log.debug("Using Java SE Thread",e);
             executorService = Executors.newSingleThreadExecutor();
         }
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
