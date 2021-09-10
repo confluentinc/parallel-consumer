@@ -31,7 +31,6 @@ import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
-import static org.assertj.core.util.Lists.list;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -72,10 +71,9 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
         var consumedByOne = Collections.synchronizedList(new ArrayList<ConsumerRecord<?, ?>>());
         var consumedByTwo = Collections.synchronizedList(new ArrayList<ConsumerRecord<?, ?>>());
         var consumedByThree = Collections.synchronizedList(new ArrayList<ConsumerRecord<?, ?>>());
-        List<ProgressBar> bars = list();
-        bars.add(run(expectedMessageCount / 3, pcOne, consumedByOne));
-        bars.add(run(expectedMessageCount / 3, pcTwo, consumedByTwo));
-        bars.add(run(expectedMessageCount / 3, pcThree, consumedByThree));
+        run(expectedMessageCount / 3, pcOne, consumedByOne);
+        run(expectedMessageCount / 3, pcTwo, consumedByTwo);
+        run(expectedMessageCount / 3, pcThree, consumedByThree);
 
         // wait for all pre-produced messages to be processed and produced
         Assertions.useRepresentation(new TrimListRepresentation());
@@ -106,8 +104,6 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
 
         // sanity
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
-
-        bars.forEach(ProgressBar::close);
     }
 
     Integer barId = 0;

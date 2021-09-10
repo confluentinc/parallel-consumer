@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="All example-vertx" type="JUnit" factoryName="JUnit">
-    <module name="parallel-consumer-example-vertx" />
+  <configuration default="false" name="All core" type="JUnit" factoryName="JUnit">
+    <module name="parallel-consumer-core" />
     <option name="PACKAGE_NAME" value="" />
     <option name="MAIN_CLASS_NAME" value="" />
     <option name="METHOD_NAME" value="" />

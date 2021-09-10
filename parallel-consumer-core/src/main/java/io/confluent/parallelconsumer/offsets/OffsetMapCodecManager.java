@@ -39,12 +39,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class OffsetMapCodecManager<K, V> {
 
     /**
-     * Used to prevent tests running in parallel that depends on setting static state in this class. Manipulation of
-     * static state in tests needs to be removed to this isn't necessary.
-     */
-    public static final String METADATA_DATA_SIZE_RESOURCE_LOCK = "Value doesn't matter, just needs a constant";
-
-    /**
      * Maximum size of the commit offset metadata
      *
      * @see <a href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>

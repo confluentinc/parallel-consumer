@@ -23,8 +23,6 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.ResourceLocks;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.shaded.org.apache.commons.lang.math.RandomUtils;
@@ -43,15 +41,10 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK;
-import static io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK;
-import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ_WRITE;
 
 /**
  * Series of tests that check when we close a PC with incompletes encoded, when we open a new one, the correct messages
@@ -78,10 +71,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     }
 
     /**
-     * Publish some messages, some fail, shutdown, startup again, consume again - check we only consume the failed
-     * messages
-     * <p>
-     * Test with different encodings to make sure each encoding can be used to reload
+     * Publish some messages some fail shutdown startup again consume again - check we only consume the failed messages
      * <p>
      * Sometimes fails as 5 is not committed in the first run and comes out in the 2nd
      * <p>
@@ -91,10 +81,6 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     @SneakyThrows
     @ParameterizedTest
     @EnumSource()
-    @ResourceLocks({
-            @ResourceLock(value = METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ), // depends on OffsetMapCodecManager#DefaultMaxMetadataSize
-            @ResourceLock(value = COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
-    })
     void offsetsOpenClose(OffsetEncoding encoding) {
         var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
         assumeFalse(skip.contains(encoding));
@@ -317,7 +303,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     void largeNumberOfMessagesSmallOffsetBitmap() {
         setupTopic();
 
-        int quantity = 10_000;
+        int quantity = 10000;
         assertThat(quantity).as("Test expects to process all the produced messages in a single poll")
                 .isLessThanOrEqualTo(KafkaClientUtils.MAX_POLL_RECORDS);
         send(quantity, topic, 0);
@@ -385,11 +371,10 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
                 await().alias("Only the one remaining failing message should be submitted for processing")
                         .pollDelay(ofSeconds(1))
-                        .atLeast(ofMillis(1000))
+                        .atLeast(ofSeconds(1))
                         .untilAsserted(() -> {
-                                    assertThat(readByThree)
-                                            .as("Contains only previously failed messages")
-                                            .hasSize(numberOfFailingMessages);
+                                    assertThat(readByThree.size()).as("Contains only previously failed messages")
+                                            .isEqualTo(numberOfFailingMessages);
                                 }
                         );
 

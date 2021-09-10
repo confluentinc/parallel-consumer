@@ -46,11 +46,11 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public class ParallelEoSStreamProcessorTestBase {
 
-    public String INPUT_TOPIC;
-    public String OUTPUT_TOPIC;
-    public String CONSUMER_GROUP_ID;
+    public final String INPUT_TOPIC = "input-" + Math.random();
+    public final String OUTPUT_TOPIC = "output-" + Math.random();
+    public final String CONSUMER_GROUP_ID = "my-group" + Math.random();
 
-    public ConsumerGroupMetadata DEFAULT_GROUP_METADATA;
+    public final ConsumerGroupMetadata DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
 
     /**
      * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
@@ -98,23 +98,10 @@ public class ParallelEoSStreamProcessorTestBase {
      * Time to wait to verify some assertion types
      */
     long verificationWaitDelay;
-    protected TopicPartition topicPartition;
-
-    /**
-     * Unique topic names for each test method
-     */
-    public void setupTopicNames() {
-        INPUT_TOPIC = "input-" + Math.random();
-        OUTPUT_TOPIC = "output-" + Math.random();
-        CONSUMER_GROUP_ID = "my-group" + Math.random();
-        topicPartition = new TopicPartition(INPUT_TOPIC, 0);
-        DEFAULT_GROUP_METADATA = new ConsumerGroupMetadata(CONSUMER_GROUP_ID);
-    }
+    protected TopicPartition topicPartition = new TopicPartition(INPUT_TOPIC, 0);
 
     @BeforeEach
     public void setupAsyncConsumerTestBase() {
-        setupTopicNames();
-
         ParallelConsumerOptions<Object, Object> options = getOptions();
         setupParallelConsumerInstance(options);
     }
@@ -140,12 +127,12 @@ public class ParallelEoSStreamProcessorTestBase {
         }
     }
 
-    protected void injectWorkSuccessListener(WorkManager<String, String> wm, List<WorkContainer<String, String>> customSuccessfulWork) {
+    protected List<WorkContainer<String, String>> successfulWork = Collections.synchronizedList(new ArrayList<>());
+
+    private void setupWorkManager(WorkManager<String, String> wm) {
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Test work listener heard some successful work: {}", work);
-            synchronized (customSuccessfulWork) {
-                customSuccessfulWork.add(work);
-            }
+            successfulWork.add(work);
         });
     }
 
@@ -206,6 +193,8 @@ public class ParallelEoSStreamProcessorTestBase {
         verificationWaitDelay = parallelConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
 
         loopCountRef = attachLoopCounter(parallelConsumer);
+
+        setupWorkManager(parallelConsumer.getWm());
     }
 
     protected ParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {

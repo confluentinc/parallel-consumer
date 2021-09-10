@@ -13,6 +13,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.OffsetMetadataTooLarge;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
@@ -27,7 +28,7 @@ import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-//@Isolated
+@Isolated
 @Slf4j
 public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
 
@@ -66,8 +67,7 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
      * Test our understanding of the offset metadata payload system - is the DefaultMaxMetadataSize available for each
      * partition, or to the total of all partitions in the commit?
      */
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = ResourceAccessMode.READ)
-    // depends on OffsetMapCodecManager#DefaultMaxMetadataSize
+    @ResourceLock(value = "OffsetMapCodecManager", mode = ResourceAccessMode.READ_WRITE)
     // todo remove static dependencies
     @Test
     void offsetMetadataSpaceAvailable() {
@@ -75,9 +75,7 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
         setupTopic();
 
         int maxCapacity = OffsetMapCodecManager.DefaultMaxMetadataSize;
-        assertThat(maxCapacity)
-                .as("approximate sanity - ensure start state settings (shared static state :`( )")
-                .isGreaterThan(3000);
+        assertThat(maxCapacity).isGreaterThan(3000); // approximate sanity
 
         KafkaConsumer<String, String> consumer = kcu.consumer;
         TopicPartition tpOne = new TopicPartition(topic, 0);

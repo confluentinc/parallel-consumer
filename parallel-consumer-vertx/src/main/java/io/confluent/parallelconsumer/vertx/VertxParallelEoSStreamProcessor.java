@@ -176,7 +176,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
                 addToMailbox(wc);
             });
             futureWebResponse.onFailure(h -> {
-                log.error("Vert.x Vertical fail", h);
+                log.error("Vert.x Vertical fail: {}", h.getMessage());
                 wc.onUserFunctionFailure();
                 addToMailbox(wc);
             });
