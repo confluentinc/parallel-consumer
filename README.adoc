@@ -206,8 +206,7 @@ without operational burden or harming the clusters performance
 ** Efficient individual message acknowledgement system (without local or third party external system state storage) to massively reduce (and usually completely eliminate) message replay upon failure - see <<offset_map>> section for more details
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
-* Vert.x non-blocking library integration (HTTP and any Vert.x future support)
-* Reactor non-blocking library integration
+* Vert.x non-blocking library integration (HTTP currently)
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility

@@ -7,21 +7,6 @@
 
 toc::[]
 
-== v0.4.0.0
-
-=== Features
-
-* https://projectreactor.io/[Project Reactor] non-blocking threading adapter module
-* Generic Vert.x Future support - i.e. FileSystem, db etc...
-
-=== Fixes and Improvements
-
-* Vert.x concurrency control via WebClient host limits fixed - see #maxCurrency
-* Vert.x API cleanup of invalid usage
-* Out of bounds for empty collections
-* Use ConcurrentSkipListMap instead of TreeMap to prevent concurrency issues under high pressure
-* log: Show record topic in slow-work warning message
-
 == v0.3.2.0
 
 === Fixes and Improvements
