@@ -24,7 +24,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
+import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
 
 @Slf4j
 public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelEoSStreamProcessor<K, V>

@@ -5,9 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.WallClock;
-import io.confluent.parallelconsumer.internal.*;
-import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -39,8 +36,8 @@ import java.util.regex.Pattern;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.internal.State.*;
-import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessor.State.*;
+import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -152,6 +149,27 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
     /**
      * The run state of the controller.
      *
+     * @see #state
+     */
+    enum State {
+        unused,
+        running,
+        /**
+         * When draining, the system will stop polling for more records, but will attempt to process all already
+         * downloaded records. Note that if you choose to close without draining, records already processed will still
+         * be committed first before closing.
+         *
+         * @see #closeDrainFirst()
+         * @see #close()
+         */
+        draining,
+        closing,
+        closed
+    }
+
+    /**
+     * The run state of the controller.
+     *
      * @see State
      */
     private State state = State.unused;
@@ -195,7 +213,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
 
         workerPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor);
+        this.wm = new WorkManager<>(newOptions, consumer, dynamicExtraLoadFactor);
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
@@ -597,8 +615,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * Optioanl ID of this instance. Useful for testing.
      */
     @Setter
-    @Getter
-    private Optional<String> myId = Optional.empty();
+    Optional<String> myId = Optional.empty();
 
     protected <R> void supervisorLoop(Function<ConsumerRecord<K, V>, List<R>> userFunction,
                                       Consumer<R> callback) {
@@ -1023,7 +1040,7 @@ public class ParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor
      * @see #processWorkCompleteMailBox
      * @see #blockableControlThread
      */
-    public void notifyNewWorkRegistered() {
+    void notifyNewWorkRegistered() {
         if (currentlyPollingWorkCompleteMailBox.get()) {
             boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
             if (noTransactionInProgress) {

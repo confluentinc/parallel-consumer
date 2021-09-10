@@ -1,11 +1,10 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

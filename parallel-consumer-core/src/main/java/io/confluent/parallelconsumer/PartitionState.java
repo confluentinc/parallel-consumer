@@ -1,10 +1,9 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.OffsetMapCodecManager;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;

@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import lombok.Data;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -14,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 // tag::javadoc[]
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
