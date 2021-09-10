@@ -106,7 +106,7 @@
         <!-- tests -->
         <junit.version>5.7.0</junit.version>
         <junit.platform.version>1.7.0</junit.platform.version>
-        <testcontainers.version>1.15.3</testcontainers.version>
+        <testcontainers.version>1.15.2</testcontainers.version>
     </properties>
 
     <profiles>
@@ -504,7 +504,6 @@
                     <jvm>${jvm.location}/bin/java</jvm>
                     <skipTests>${skipTests}</skipTests>
                     <skipITs>${skipITs}</skipITs>
-                    <parallel>methods</parallel>
                 </configuration>
             </plugin>
             <plugin>

@@ -1,8 +1,9 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020 Confluent, Inc.
  */
+
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -10,12 +11,10 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.SubscriptionState;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniMaps;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -29,9 +28,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
-    // thread safe for easy parallel tests - no need for performance considerations as is test harness
     @Getter
-    private final CopyOnWriteArrayList<Map<TopicPartition, OffsetAndMetadata>> commitHistoryInt = new CopyOnWriteArrayList<>();
+    private final List<Map<TopicPartition, OffsetAndMetadata>> commitHistoryInt = new ArrayList<>();
 
     public LongPollingMockConsumer(OffsetResetStrategy offsetResetStrategy) {
         super(offsetResetStrategy);
@@ -78,19 +76,23 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
      */
     private List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> injectConsumerGroupId(final List<Map<TopicPartition, OffsetAndMetadata>> commitHistory) {
         String groupId = this.groupMetadata().groupId();
-        return commitHistory.stream()
-                .map(x -> UniMaps.of(groupId, x))
+        ArrayList<Map<TopicPartition, OffsetAndMetadata>> copy = new ArrayList<>(commitHistory);
+        return copy.stream()
+                .map(x -> {
+                    HashMap<String, Map<TopicPartition, OffsetAndMetadata>> stringMapHashMap = new HashMap<>();
+                    stringMapHashMap.put(groupId, x);
+                    return stringMapHashMap;
+                })
                 .collect(Collectors.toList());
     }
 
-    /*
+    /**
      * Makes the commit history look like the {@link MockProducer}s one so we can use the same assert method.
      *
      * @see KafkaTestUtils#assertCommitLists(List, List, Optional)
      */
     public List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> getCommitHistoryWithGropuId() {
-        var commitHistoryInt = getCommitHistoryInt();
-        return injectConsumerGroupId(commitHistoryInt);
+        return injectConsumerGroupId(getCommitHistoryInt());
     }
 
     @Override

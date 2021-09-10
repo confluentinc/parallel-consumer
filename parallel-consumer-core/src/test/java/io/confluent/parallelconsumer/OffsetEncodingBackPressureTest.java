@@ -12,9 +12,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.Isolated;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
 
 import java.time.Duration;
 import java.util.List;
@@ -35,7 +32,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.waitAtMost;
 
-@Isolated
 @Slf4j
 public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -45,8 +41,6 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
      */
     @SneakyThrows
     @Test
-    // needed due to static accessors in parallel tests
-    @ResourceLock(value = "OffsetMapCodecManager", mode = ResourceAccessMode.READ_WRITE)
     void backPressureShouldPreventTooManyMessagesBeingQueuedForProcessing() {
         // mock messages downloaded for processing > MAX_TO_QUEUE
         // make sure work manager doesn't queue more than MAX_TO_QUEUE
@@ -58,7 +52,6 @@ public class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTe
         // todo - very smelly - store for restoring
         var realMax = OffsetMapCodecManager.DefaultMaxMetadataSize;
 
-        // todo don't use static public accessors to change things - makes parallel testing harder and is smelly
         OffsetMapCodecManager.DefaultMaxMetadataSize = 40; // reduce available to make testing easier
         OffsetMapCodecManager.forcedCodec = Optional.of(OffsetEncoding.BitSetV2); // force one that takes a predictable large amount of space
 

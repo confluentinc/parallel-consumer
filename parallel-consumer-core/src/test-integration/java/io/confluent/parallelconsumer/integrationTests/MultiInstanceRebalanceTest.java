@@ -28,7 +28,6 @@ import org.assertj.core.internal.StandardComparisonStrategy;
 import org.assertj.core.util.IterableUtil;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
-import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -51,7 +50,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * Test running with multiple instances of parallel-consumer consuming from topic with two partitions.
  */
 @Slf4j
-@Isolated
 public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     static final int DEFAULT_MAX_POLL = 500;
