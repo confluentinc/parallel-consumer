@@ -97,16 +97,6 @@
             <artifactId>truth-java8-extension</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.google.flogger</groupId>
-            <artifactId>flogger</artifactId>
-            <version>0.6</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.flogger</groupId>
-            <artifactId>flogger-slf4j-backend</artifactId>
-            <version>0.6</version>
-        </dependency>
     </dependencies>
 
 </project>

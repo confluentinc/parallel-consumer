@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.util.Comparator.comparing;
@@ -182,18 +183,17 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         int numOfKeysToCompare = 20; // needs to be small enough that there's a significant difference between unordered and key of x
         Duration keyOrderHalfDefaultKeySize = keyOrderingSizeToResults.get(numOfKeysToCompare);
 
-        // too brittle to have in CI
-//        if (commitMode.equals(PERIODIC_CONSUMER_SYNC)) {
-//            assertThat(unorderedDuration)
-//                    .as("Committing synchronously from the controller causes a large overhead, making UNORDERED " +
-//                            "very close in speed to KEY order, keySize of: " + numOfKeysToCompare)
-//                    .isCloseTo(keyOrderHalfDefaultKeySize,
-//                            keyOrderHalfDefaultKeySize.plus(keyOrderHalfDefaultKeySize.dividedBy(5))); // within 20%
-//        } else {
-//            assertThat(unorderedDuration)
-//                    .as("UNORDERED should be faster than KEY order, keySize of: " + numOfKeysToCompare)
-//                    .isLessThan(keyOrderHalfDefaultKeySize);
-//        }
+        if (commitMode.equals(PERIODIC_CONSUMER_SYNC)) {
+            assertThat(unorderedDuration)
+                    .as("Committing synchronously from the controller causes a large overhead, making UNORDERED " +
+                            "very close in speed to KEY order, keySize of: " + numOfKeysToCompare)
+                    .isCloseTo(keyOrderHalfDefaultKeySize,
+                            keyOrderHalfDefaultKeySize.plus(keyOrderHalfDefaultKeySize.dividedBy(5))); // within 20%
+        } else {
+            assertThat(unorderedDuration)
+                    .as("UNORDERED should be faster than KEY order, keySize of: " + numOfKeysToCompare)
+                    .isLessThan(keyOrderHalfDefaultKeySize);
+        }
 
         assertThat(keyOrderHalfDefaultKeySize)
                 .as("KEY order should be faster than PARTITION order")
