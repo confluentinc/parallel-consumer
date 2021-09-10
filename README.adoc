@@ -41,9 +41,8 @@ endif::[]
 
 image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
-// Github actions disabled since codecov
-//image:https://github.com/confluentinc/parallel-consumer/actions/workflows/maven.yml/badge.svg[Java 8 Unit Test GitHub] +
-//^(^^full^ ^test^ ^suite^ ^currently^ ^running^ ^only^ ^on^ ^Confluent^ ^internal^ ^CI^ ^server^^)^
+image:https://github.com/confluentinc/parallel-consumer/actions/workflows/maven.yml/badge.svg[Java 8 Unit Test GitHub] +
+^(^^full^ ^test^ ^suite^ ^currently^ ^running^ ^only^ ^on^ ^Confluent^ ^internal^ ^CI^ ^server^^)^
 
 // travis badges temporarily disabled as travis isn't running CI currently
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"] image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
@@ -415,6 +414,7 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 
 [source,java]
 ----
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
