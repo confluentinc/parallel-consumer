@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -49,7 +48,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
-    public static class MyAction implements Function<ConsumerRecord<String, String>, String> {
+    static class MyAction implements Function<ConsumerRecord<String, String>, String> {
 
         @Override
         public String apply(ConsumerRecord<String, String> record) {
@@ -265,7 +264,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         Assumptions.assumeThat(parallelConsumer)
                 .as("Should only test on core PC - this test is very complicated to get to work with vert.x " +
                         "thread system, as the event and locking system needed is quite different")
-                .isExactlyInstanceOf(AbstractParallelEoSStreamProcessor.class);
+                .isExactlyInstanceOf(ParentParallelEoSStreamProcessor.class);
 
         setupParallelConsumerInstance(getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)
@@ -451,7 +450,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         primeFirstRecord();
 
         // sanity check
-        assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(KEY);
+        assertThat(parallelConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
 
         sendSecondRecord(consumerSpy);
 
@@ -607,7 +606,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         sendSecondRecord(consumerSpy);
 
         // sanity check
-        assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(KEY);
+        assertThat(parallelConsumer.wm.getOptions().getOrdering()).isEqualTo(KEY);
 
         // 0,1 previously sent to partition 0
         // send one more, with same key of 1

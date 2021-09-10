@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,7 +19,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 
 /**
- * The options for the {@link AbstractParallelEoSStreamProcessor} system.
+ * The options for the {@link ParentParallelEoSStreamProcessor} system.
  *
  * @see #builder()
  * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder

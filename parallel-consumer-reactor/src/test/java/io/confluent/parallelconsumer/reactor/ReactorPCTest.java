@@ -8,7 +8,7 @@ import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ParentParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
@@ -38,7 +38,7 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
     ReactorProcessor<String, String> rp;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParentParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         var build = parallelConsumerOptions.toBuilder()
                 .commitMode(PERIODIC_CONSUMER_SYNC)
                 .maxConcurrency(MAX_CONCURRENCY)

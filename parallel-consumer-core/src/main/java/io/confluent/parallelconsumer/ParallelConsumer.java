@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import lombok.Data;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -14,16 +13,15 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 // tag::javadoc[]
-
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
  * Currently there is no direct implementation, only the {@link ParallelStreamProcessor} version (see {@link
- * AbstractParallelEoSStreamProcessor}), but there may be in the future.
+ * ParentParallelEoSStreamProcessor}), but there may be in the future.
  *
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
- * @see AbstractParallelEoSStreamProcessor
+ * @see ParentParallelEoSStreamProcessor
  * @see #poll(Consumer)
  */
 // end::javadoc[]
