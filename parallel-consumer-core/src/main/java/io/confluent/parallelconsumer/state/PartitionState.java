@@ -125,7 +125,6 @@ public class PartitionState<K, V> {
 
     public boolean isRecordPreviouslyProcessed(final ConsumerRecord<K, V> rec) {
         Set<Long> incompleteOffsets = this.incompleteOffsets;
-        //Set<Long> incompleteOffsets = this.partitionIncompleteOffsets.getOrDefault(tp, new TreeSet<>());
         boolean previouslyProcessed;
         long offset = rec.offset();
         if (incompleteOffsets.contains(offset)) {
@@ -152,7 +151,7 @@ public class PartitionState<K, V> {
      * Update highest Succeeded seen so far
      */
     public void updateHighestSucceededOffsetSoFar(WorkContainer<K, V> work) {
-        Long highestSucceeded = getOffsetHighestSucceeded();
+        long highestSucceeded = getOffsetHighestSucceeded();
         long thisOffset = work.offset();
         if (thisOffset > highestSucceeded) {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);

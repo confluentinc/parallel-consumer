@@ -87,8 +87,9 @@ public class OffsetSimultaneousEncoder {
         this.incompleteOffsets = incompleteOffsets;
 
         //
-        if (highestSucceededOffset == -1)// nothing succeeded yet
+        if (highestSucceededOffset == -1) { // nothing succeeded yet
             highestSucceededOffset = lowWaterMark;
+        }
 
         long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
         if (bitsetLengthL < 0) {

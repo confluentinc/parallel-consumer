@@ -82,6 +82,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         parallelConsumer.poll((rec) -> {
 
             // block the partition to create bigger and bigger offset encoding blocks
+            // don't let offset 0 finish
             if (rec.offset() == offsetToBlock) {
                 int attemptNumber = attempts.incrementAndGet();
                 if (attemptNumber == 1) {
@@ -144,41 +145,23 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 assertThat(partitionBlocked).isFalse();
             }
 
-            // feed more messages in order to threshold block
+            // feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's gauranteed to block
             int extraRecordsToBlockWithThresholdBlocks = numRecords / 2;
-            int expectedMsgsProcessedUponThresholdBlock = numRecords + (extraRecordsToBlockWithThresholdBlocks / 2);
             {
+                assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue(); // should initially be not blocked
+
                 ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
                 waitForOneLoopCycle();
-                assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue(); // should initially be not blocked
-                await().untilAsserted(() ->
-                        assertThat(processedCount.get()).isGreaterThan(expectedMsgsProcessedUponThresholdBlock) // some new message processed
-                );
-                waitForOneLoopCycle();
-            }
 
-            // assert partition now blocked from threshold
-            int expectedMsgsProcessedBeforePartitionBlocks = numRecords + numRecords / 4;
-            {
+                // assert partition now blocked from threshold
+                waitAtMost(ofSeconds(30)).untilAsserted(() -> assertThat(wm.getPm().isBlocked(topicPartition))
+                        .as("Partition SHOULD be blocked due to back pressure")
+                        .isTrue()); // blocked
 
-                // todo WIP fix for race condition to force the test be consistent, regardless of race - change to event based / awaitility
-                sleepQuietly(1000);
-                ktu.send(consumerSpy, ktu.generateRecords(20));
-                waitForOneLoopCycle();
-                waitForOneLoopCycle();
-                sleepQuietly(500);
-                //
-
-                //
                 Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
-                        .isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks); // high watermark is beyond our expected processed count upon blocking
+                        .isGreaterThan(numRecords); // high watermark is beyond our initial processed count upon blocking
 
-                assertThat(wm.getPm().isBlocked(topicPartition))
-                        .as("Partition SHOULD be blocked due to back pressure")
-                        .isTrue(); // blocked
-
-                waitAtMost(ofSeconds(30)).untilAsserted(() -> Truth.assertThat(processedCount.get()).isEqualTo(numRecords + (numRecords / 2 - 1)));
                 parallelConsumer.requestCommitAsap();
                 waitForOneLoopCycle();
 
@@ -201,16 +184,18 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             }
 
             // test max payload exceeded, payload dropped
+            int processedBeforePartitionBlock = processedCount.get();
+            int extraMessages = numRecords + extraRecordsToBlockWithThresholdBlocks / 2;
             {
                 // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
                 wm.getPm().setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
 
                 //
-                ktu.send(consumerSpy, ktu.generateRecords(expectedMsgsProcessedBeforePartitionBlocks));
+                ktu.send(consumerSpy, ktu.generateRecords(extraMessages));
 
                 //
                 await().atMost(ofSeconds(5)).untilAsserted(() ->
-                        assertThat(processedCount.get()).isGreaterThan(expectedMsgsProcessedBeforePartitionBlocks) // some new message processed
+                        assertThat(processedCount.get()).isEqualTo(processedBeforePartitionBlock + extraMessages) // some new message processed
                 );
                 // assert payload missing from commit now
                 await().untilAsserted(() -> {
@@ -248,9 +233,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
             }
 
-            // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent (numRecords*2)
+            // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
             {
-                int nextExpectedOffsetAfterSubmittedWork = numRecords * 2;
                 await().untilAsserted(() -> {
                     List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
                     assertThat(offsets).contains(processedCount.get());
