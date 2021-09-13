@@ -284,14 +284,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 // check we have capacity in offset storage to process more messages
                 TopicPartition topicPartition = workContainer.getTopicPartition();
                 boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
-                // If the record has been previously attempted, it is already represented in the current offset encoding,
-                // and may in fact be the message holding up the partition so must be retried, in which case we don't want to skip it
-                boolean recordNeverAttempted = !workContainer.hasPreviouslyFailed();
-                if (notAllowedMoreRecords && recordNeverAttempted && workContainer.isNotInFlight()) {
-                    log.debug("Not allowed more records ({}) for the partition ({}) as set from previous encode run, that this " +
-                                    "record ({}) belongs to due to offset encoding back pressure, has never been attempted before ({}), " +
+                // If the record is below the highest succeeded offset, it is already represented in the current offset encoding,
+                // and may in fact be the message holding up the partition so must be retried, in which case we don't want to skip it.
+                // Generally speaking, completing more offsets below the highest succeeded (and thus the set represented in the encoded payload),
+                // should usually reduce the payload size requirements
+                boolean representedInEncodedPayloadAlready = workContainer.offset() < pm.getState(topicPartition).getOffsetHighestSucceeded();
+                if (notAllowedMoreRecords && !representedInEncodedPayloadAlready && workContainer.isNotInFlight()) {
+                    log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
+                                    "record ({}) belongs to due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
                                     "not in flight ({}), continuing on to next container in shard.",
-                            notAllowedMoreRecords, topicPartition, workContainer.offset(), recordNeverAttempted, workContainer.isNotInFlight());
+                            topicPartition, workContainer.offset(), workContainer.isNotInFlight());
                     continue;
                 }
 
