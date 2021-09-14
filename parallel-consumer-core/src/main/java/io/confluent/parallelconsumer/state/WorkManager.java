@@ -29,8 +29,6 @@ import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.KafkaUtils.toTP;
-import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static lombok.AccessLevel.PACKAGE;
 import static lombok.AccessLevel.PUBLIC;
@@ -372,21 +370,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         wc.succeed();
 
         // update as we go
-        pm.getState(wc.getTopicPartition()).updateHighestSucceededOffsetSoFar(wc);
-
-        Object key = sm.computeShardKey(cr);
-        // remove from processing queues
-        var shard = sm.getShard(key);
-        if (shard == null)
-            throw new NullPointerException(msg("Shard is missing for key {}", key));
-        long offset = cr.offset();
-        shard.remove(offset);
-        // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
-        boolean keyOrdering = options.getOrdering().equals(KEY);
-        if (keyOrdering && shard.isEmpty()) {
-            log.trace("Removing empty shard (key: {})", key);
-            sm.removeShard(key);
-        }
+        pm.onSuccess(wc);
+        sm.onSuccess(cr);
 
         // notify listeners
         successfulWorkListeners.forEach((c) -> c.accept(wc));

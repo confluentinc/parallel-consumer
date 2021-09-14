@@ -147,10 +147,14 @@ public class PartitionState<K, V> {
         return commitQueues.size();
     }
 
+    public void onSuccess(WorkContainer<K, V> work) {
+        updateHighestSucceededOffsetSoFar(work);
+    }
+
     /**
      * Update highest Succeeded seen so far
      */
-    public void updateHighestSucceededOffsetSoFar(WorkContainer<K, V> work) {
+    private void updateHighestSucceededOffsetSoFar(WorkContainer<K, V> work) {
         long highestSucceeded = getOffsetHighestSucceeded();
         long thisOffset = work.offset();
         if (thisOffset > highestSucceeded) {

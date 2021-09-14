@@ -15,6 +15,9 @@ import org.apache.kafka.common.TopicPartition;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+
 @Slf4j
 @RequiredArgsConstructor
 public class ShardManager<K, V> {
@@ -104,13 +107,30 @@ public class ShardManager<K, V> {
     public void addWorkContainer(final WorkContainer<K, V> wc) {
         Object shardKey = computeShardKey(wc.getCr());
         processingShards.computeIfAbsent(shardKey,
-                // uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some
-                // concurrency errors (missing WorkContainers)
-                (ignore) -> new ConcurrentSkipListMap<>())
+                        // uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some
+                        // concurrency errors (missing WorkContainers)
+                        (ignore) -> new ConcurrentSkipListMap<>())
                 .put(wc.offset(), wc);
     }
 
     void removeShard(final Object key) {
         getShards().remove(key);
     }
+
+    public void onSuccess(ConsumerRecord<K, V> cr) {
+        Object key = computeShardKey(cr);
+        // remove from processing queues
+        var shard = getShard(key);
+        if (shard == null)
+            throw new NullPointerException(msg("Shard is missing for key {}", key));
+        long offset = cr.offset();
+        shard.remove(offset);
+        // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
+        boolean keyOrdering = options.getOrdering().equals(KEY);
+        if (keyOrdering && shard.isEmpty()) {
+            log.trace("Removing empty shard (key: {})", key);
+            removeShard(key);
+        }
+    }
+
 }
