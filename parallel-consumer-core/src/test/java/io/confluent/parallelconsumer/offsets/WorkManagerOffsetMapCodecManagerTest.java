@@ -68,7 +68,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     {
         WorkContainer mock = Mockito.mock(WorkContainer.class);
         Mockito.doReturn(partitionHighWaterMark).when(mock).offset();
-        state.updateHighestSucceededOffsetSoFar(mock); // in this case the highest seen is also the highest succeeded
+        state.onSuccess(mock); // in this case the highest seen is also the highest succeeded
     }
 
     /**
