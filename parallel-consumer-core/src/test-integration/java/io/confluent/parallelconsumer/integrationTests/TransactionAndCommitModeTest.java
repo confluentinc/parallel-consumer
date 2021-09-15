@@ -156,7 +156,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(true, consumerProps);
 
-        int numThreads = 16;
+        // increased PC concurrency - improves test stability and performance.
+        int numThreads = 64;
 //        int numThreads = 1000;
         var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
