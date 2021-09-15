@@ -194,7 +194,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 ktu.send(consumerSpy, ktu.generateRecords(extraMessages));
 
                 //
-                await().atMost(ofSeconds(5)).untilAsserted(() ->
+                await().atMost(ofSeconds(60)).untilAsserted(() ->
                         assertThat(processedCount.get()).isEqualTo(processedBeforePartitionBlock + extraMessages) // some new message processed
                 );
                 // assert payload missing from commit now

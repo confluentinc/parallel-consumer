@@ -125,7 +125,8 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         // assert committed offset
         var newConsumer = kcu.createNewConsumer(false);
         newConsumer.subscribe(UniSets.of(topicNameForTest));
-        newConsumer.poll(ofSeconds(1));
+        // increased poll timeout to allow for delay under load during parallel test execution
+        newConsumer.poll(ofSeconds(5));
         Set<TopicPartition> assignment = newConsumer.assignment();
         Truth.assertWithMessage("Should be assigned some partitions").that(assignment).isNotEmpty();
 
