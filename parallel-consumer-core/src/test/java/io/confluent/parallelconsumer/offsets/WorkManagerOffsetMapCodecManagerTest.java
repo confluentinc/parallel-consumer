@@ -330,7 +330,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @SneakyThrows
     @Test
-    void deserialiseBitset() {
+    void deserialiseBitSet() {
         var input = "oxxooooooo";
         long highestSucceeded = input.length() - 1;
 

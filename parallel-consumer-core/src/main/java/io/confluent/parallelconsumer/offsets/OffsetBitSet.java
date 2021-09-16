@@ -15,11 +15,11 @@ import java.util.Set;
 import static io.confluent.csid.utils.Range.range;
 
 /**
- * Deserialisation tools for {@link BitsetEncoder}.
+ * Deserialisation tools for {@link BitSetEncoder}.
  * <p>
- * todo unify or refactor with {@link BitsetEncoder}. Why was it ever seperate?
+ * todo unify or refactor with {@link BitSetEncoder}. Why was it ever seperate?
  *
- * @see BitsetEncoder
+ * @see BitSetEncoder
  */
 @Slf4j
 public class OffsetBitSet {

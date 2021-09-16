@@ -93,7 +93,7 @@ public class OffsetSimultaneousEncoder {
 
         long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
         if (bitsetLengthL < 0) {
-            throw new IllegalStateException("Cannot have negative length Bitset");
+            throw new IllegalStateException("Cannot have negative length BitSet");
         }
 
         // BitSet only support Integer.MAX_VALUE bits
@@ -110,15 +110,15 @@ public class OffsetSimultaneousEncoder {
         }
 
         try {
-            encoders.add(new BitsetEncoder(length, this, v1));
+            encoders.add(new BitSetEncoder(length, this, v1));
         } catch (BitSetEncodingNotSupportedException a) {
-            log.debug("Cannot use {} encoder ({})", BitsetEncoder.class.getSimpleName(), a.getMessage());
+            log.debug("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
         try {
-            encoders.add(new BitsetEncoder(length, this, v2));
+            encoders.add(new BitSetEncoder(length, this, v2));
         } catch (BitSetEncodingNotSupportedException a) {
-            log.warn("Cannot use {} encoder ({})", BitsetEncoder.class.getSimpleName(), a.getMessage());
+            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
         encoders.add(new RunLengthEncoder(this, v1));

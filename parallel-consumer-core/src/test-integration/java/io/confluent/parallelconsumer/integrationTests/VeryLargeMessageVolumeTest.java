@@ -69,7 +69,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
      * https://github.com/confluentinc/parallel-consumer/issues/35
      */
     @Test
-    public void shouldNotThrowBitsetTooLongException() {
+    public void shouldNotThrowBitSetTooLongException() {
         runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
     }
 

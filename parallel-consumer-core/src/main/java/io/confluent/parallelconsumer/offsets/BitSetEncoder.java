@@ -37,7 +37,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * @see OffsetBitSet
  */
 @Slf4j
-public class BitsetEncoder extends OffsetEncoder {
+public class BitSetEncoder extends OffsetEncoder {
 
     private final Version version; // default to new version
 
@@ -52,14 +52,14 @@ public class BitsetEncoder extends OffsetEncoder {
 
     private Optional<byte[]> encodedBytes = Optional.empty();
 
-    public BitsetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) throws BitSetEncodingNotSupportedException {
+    public BitSetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) throws BitSetEncodingNotSupportedException {
         this(length, offsetSimultaneousEncoder, DEFAULT_VERSION);
     }
 
     /**
      * @param length the difference between the highest and lowest offset to be encoded
      */
-    public BitsetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) throws BitSetEncodingNotSupportedException {
+    public BitSetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) throws BitSetEncodingNotSupportedException {
         super(offsetSimultaneousEncoder);
 
         this.version = newVersion;
@@ -85,19 +85,19 @@ public class BitsetEncoder extends OffsetEncoder {
     private ByteBuffer initV2(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > MAX_LENGTH_ENCODABLE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
-            throw new BitSetEncodingNotSupportedException(StringUtils.msg("Bitset V2 too long to encode, as length overflows Integer.MAX_VALUE. Length: {}. (max: {})", bitsetEntriesRequired, MAX_LENGTH_ENCODABLE));
+            throw new BitSetEncodingNotSupportedException(StringUtils.msg("BitSet V2 too long to encode, as length overflows Integer.MAX_VALUE. Length: {}. (max: {})", bitsetEntriesRequired, MAX_LENGTH_ENCODABLE));
         }
 
         // prep bit set buffer
         int bytesRequiredForEntries = (int) (Math.ceil((double) bitsetEntriesRequired / Byte.SIZE));
         int lengthEntryWidth = Integer.BYTES;
         int wrappedBufferLength = lengthEntryWidth + bytesRequiredForEntries + 1;
-        final ByteBuffer wrappedBitsetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
+        final ByteBuffer wrappedBitSetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
 
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-        wrappedBitsetBytesBuffer.putInt(bitsetEntriesRequired);
+        wrappedBitSetBytesBuffer.putInt(bitsetEntriesRequired);
 
-        return wrappedBitsetBytesBuffer;
+        return wrappedBitSetBytesBuffer;
     }
 
     /**
@@ -108,19 +108,19 @@ public class BitsetEncoder extends OffsetEncoder {
     private ByteBuffer initV1(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > Short.MAX_VALUE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
-            throw new BitSetEncodingNotSupportedException("Bitset V1 too long to encode, bitset length overflows Short.MAX_VALUE: " + bitsetEntriesRequired + ". (max: " + Short.MAX_VALUE + ")");
+            throw new BitSetEncodingNotSupportedException("BitSet V1 too long to encode, bitset length overflows Short.MAX_VALUE: " + bitsetEntriesRequired + ". (max: " + Short.MAX_VALUE + ")");
         }
 
         // prep bit set buffer
         int bytesRequiredForEntries = (int) (Math.ceil((double) bitsetEntriesRequired / Byte.SIZE));
         int lengthEntryWidth = Short.BYTES;
         int wrappedBufferLength = lengthEntryWidth + bytesRequiredForEntries + 1;
-        final ByteBuffer wrappedBitsetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
+        final ByteBuffer wrappedBitSetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
 
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-        wrappedBitsetBytesBuffer.putShort((short) bitsetEntriesRequired);
+        wrappedBitSetBytesBuffer.putShort((short) bitsetEntriesRequired);
 
-        return wrappedBitsetBytesBuffer;
+        return wrappedBitSetBytesBuffer;
     }
 
     @Override
@@ -152,18 +152,18 @@ public class BitsetEncoder extends OffsetEncoder {
     @Override
     public byte[] serialise() throws BitSetEncodingNotSupportedException {
         final byte[] bitSetArray = this.bitSet.toByteArray();
-        ByteBuffer wrappedBitsetBytesBuffer = constructWrappedByteBuffer(originalLength, version);
+        ByteBuffer wrappedBitSetBytesBuffer = constructWrappedByteBuffer(originalLength, version);
 
-        if (wrappedBitsetBytesBuffer.remaining() < bitSetArray.length)
+        if (wrappedBitSetBytesBuffer.remaining() < bitSetArray.length)
             throw new InternalRuntimeError("Not enough space in byte array");
 
         try {
-            wrappedBitsetBytesBuffer.put(bitSetArray);
+            wrappedBitSetBytesBuffer.put(bitSetArray);
         } catch (BufferOverflowException e) {
             throw new InternalRuntimeError("Error copying bitset into byte wrapper", e);
         }
 
-        final byte[] array = wrappedBitsetBytesBuffer.array();
+        final byte[] array = wrappedBitSetBytesBuffer.array();
         this.encodedBytes = Optional.of(array);
         return array;
     }
