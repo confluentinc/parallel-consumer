@@ -15,7 +15,6 @@
     </patterns>
     <method v="2">
       <option name="Make" enabled="true" />
-      <option name="Maven.BeforeRunTask" enabled="true" file="$PROJECT_DIR$/pom.xml" goal="license:format" />
     </method>
   </configuration>
 </component>
