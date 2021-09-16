@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 import static org.assertj.core.api.Assertions.assertThat;
 
-class BitsetEncodingTest {
+class BitSetEncodingTest {
 
     @SneakyThrows
     @Test
@@ -26,7 +26,7 @@ class BitsetEncodingTest {
         List<Long> completes = UniLists.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(Collectors.toList()); // lol - DRY!
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
         int length = 11;
-        BitsetEncoder bs = new BitsetEncoder(length, offsetSimultaneousEncoder, v2);
+        BitSetEncoder bs = new BitSetEncoder(length, offsetSimultaneousEncoder, v2);
 
         bs.encodeIncompleteOffset(0);
         bs.encodeCompletedOffset(1);
