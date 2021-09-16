@@ -771,6 +771,11 @@ git bisect start good bad
 git bisect run ./bisect.sh
 ----
 
+Note::
+`mvn compile` - Due to a bug in Maven's handling of test-jar dependencies - running `mvn compile` fails, use `mvn test-compile` instead.
+See https://github.com/confluentinc/parallel-consumer/issues/162[issue #162]
+and this https://stackoverflow.com/questions/4786881/why-is-test-jar-dependency-required-for-mvn-compile[Stack Overflow question].
+
 === Testing
 
 The project has good automated test coverage, of all features.
