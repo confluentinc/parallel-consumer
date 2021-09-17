@@ -197,13 +197,14 @@ We can break out as described below into the tool for processing that step, then
 
 == Feature List
 
-* Have massively parallel consumption processing without running hundreds or thousands of
-** Kafka consumer clients
-** topic partitions
+* Have massively parallel consumption processing without running hundreds or thousands of:
+** Kafka consumer clients,
+** topic partitions,
 +
-without operational burden or harming the clusters performance
+without operational burden or harming the cluster's performance
 * Client side queueing system on top of Apache Kafka consumer
 ** Efficient individual message acknowledgement system (without local or third party external system state storage) to massively reduce (and usually completely eliminate) message replay upon failure - see <<offset_map>> section for more details
+* Solution for the https://en.wikipedia.org/wiki/Head-of-line_blocking["head of line"] blocking problem where continued failure of a single message, prevents progress for messages behind it in the queue
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
 * Vert.x non-blocking library integration (HTTP and any Vert.x future support)
