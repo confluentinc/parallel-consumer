@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.truth;
 import com.google.common.truth.extension.generator.SourceClassSets;
 import com.google.common.truth.extension.generator.TruthGeneratorAPI;
 import com.google.common.truth.extension.generator.internal.MyStringSubject;
-import io.confluent.csid.utils.InstanceUtils;
+import io.confluent.csid.utils.PodamUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.confluent.parallelconsumer.model.ManagedTruth;
@@ -45,17 +45,17 @@ class TruthGeneratorTests {
 
     tg.generate(ss);
 
-    ConsumerRecord actual = InstanceUtils.createInstance(ConsumerRecord.class, String.class, String.class);
+    ConsumerRecord actual = PodamUtils.createInstance(ConsumerRecord.class, String.class, String.class);
     ConsumerRecordChildSubject.assertTruth(actual).hasTopic();
-    ManagedTruth.assertTruth(InstanceUtils.createInstance(ConsumerRecords.class)).hasPartitions();
+    ManagedTruth.assertTruth(PodamUtils.createInstance(ConsumerRecords.class)).hasPartitions();
 
-    ManagedTruth.assertTruth(InstanceUtils.createInstance(OffsetAndMetadata.class));
+    ManagedTruth.assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class));
 
-    ManagedTruth.assertTruth(InstanceUtils.createInstance(TopicPartition.class));
+    ManagedTruth.assertTruth(PodamUtils.createInstance(TopicPartition.class));
 
-    ManagedTruth.assertTruth(InstanceUtils.createInstance(RecordMetadata.class));
+    ManagedTruth.assertTruth(PodamUtils.createInstance(RecordMetadata.class));
 
-    ManagedTruth.assertTruth(InstanceUtils.createInstance(ProducerRecord.class));
+    ManagedTruth.assertTruth(PodamUtils.createInstance(ProducerRecord.class));
 
   }
 

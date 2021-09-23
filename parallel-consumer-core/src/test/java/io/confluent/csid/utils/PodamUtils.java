@@ -4,7 +4,7 @@ import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.lang.reflect.Type;
 
-public class InstanceUtils {
+public class PodamUtils {
 
   public static final PodamFactoryImpl PODAM_FACTORY = new PodamFactoryImpl();
 
