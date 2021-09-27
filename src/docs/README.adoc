@@ -369,6 +369,7 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 [source,xml,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/pom.xml[tag=exampleDep]
 
+[[common_preparation]]
 === Common Preparation
 
 .Setup the client
@@ -465,6 +466,21 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-str
 <2> For the slow consumer part of your Topology, drop down into the parallel consumer, and use massive concurrency
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/parallelconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
+
+[[confluent-cloud]]
+=== Confluent Cloud
+
+. Provision your fully managed Kafka cluster in Confluent Cloud
+.. Sign up for https://www.confluent.io/confluent-cloud/tryfree/[Confluent Cloud], a fully-managed Apache Kafka service.
+.. After you log in to Confluent Cloud, click on `Add cloud environment` and name the environment `learn-kafka`.
+Using a new environment keeps your learning resources separate from your other Confluent Cloud resources.
+.. Click on https://confluent.cloud/learn[LEARN] and follow the instructions to launch a Kafka cluster and to enable Schema Registry.
+. Access the client configuration settings
+.. From the Confluent Cloud Console, navigate to your Kafka cluster.
+From the `Clients` view, get the connection information customized to your cluster (select `Java`).
+.. Create new credentials for your Kafka cluster, and then Confluent Cloud will show a configuration block with your new credentials automatically populated (make sure `show API keys` is checked).
+.. Use these settings presented to https://docs.confluent.io/clients-kafka-java/current/overview.html[configure your clients].
+. Use these clients for steps outlined in the <<common_preparation>> section.
 
 [[ordering-guarantees]]
 == Ordering Guarantees
