@@ -73,12 +73,14 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
 
-[demo]
+[[demo]]
 .Relative speed demonstration
 --
 .Click on the animated SVG image to open the https://asciinema.org/a/404299[Asciinema.org player].
 image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/0e2a444a9ade392aab92918c48bc0bc3b7e5599c/demo.svg[link="https://asciinema.org/a/404299"]
 --
+
+link to <<demo,DEMO>>
 
 '''
 
