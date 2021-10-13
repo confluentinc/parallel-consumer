@@ -52,10 +52,10 @@ Parallel Apache Kafka client wrapper with client side queueing, a simpler consum
 
 Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
 
-WARNING: This is not a Confluent supported product.
+CAUTION: This is not a Confluent supported product.
 See the <<Support and Issues>> section for more information.
 
-NOTE: This project has been stable and reached it's MVP feature set in Q1 2021.
+IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
 It is actively maintained by the CSID team at Confluent.
 
 [[intro]]
@@ -74,7 +74,10 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
 
 .Relative speed demonstration
+--
+.Click on the animated SVG image to open the https://asciinema.org/a/404299[Asciinema.org player].
 image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/0e2a444a9ade392aab92918c48bc0bc3b7e5599c/demo.svg[link="https://asciinema.org/a/404299"]
+--
 
 toc::[]
 
