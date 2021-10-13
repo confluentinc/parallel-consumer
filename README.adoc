@@ -80,8 +80,6 @@ An overview article to the library can also be found on Confluent's https://www.
 image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/0e2a444a9ade392aab92918c48bc0bc3b7e5599c/demo.svg[link="https://asciinema.org/a/404299"]
 --
 
-link to <<demo,DEMO>>
-
 '''
 
 toc::[]
