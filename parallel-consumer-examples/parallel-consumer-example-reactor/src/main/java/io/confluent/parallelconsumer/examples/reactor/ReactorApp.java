@@ -25,20 +25,19 @@ public class ReactorApp {
 
     static String inputTopic = "input-topic-" + RandomUtils.nextInt();
 
-    Consumer<String, String> getKafkaConsumer() {
+    Consumer<String, String> createKafkaConsumer() {
         return new KafkaConsumer<>(new Properties());
     }
 
-    Producer<String, String> getKafkaProducer() {
+    Producer<String, String> createKafkaProducer() {
         return new KafkaProducer<>(new Properties());
     }
 
     ReactorProcessor<String, String> parallelConsumer;
 
-
     void run() {
-        Consumer<String, String> kafkaConsumer = getKafkaConsumer();
-        Producer<String, String> kafkaProducer = getKafkaProducer();
+        Consumer<String, String> kafkaConsumer = createKafkaConsumer();
+        Producer<String, String> kafkaProducer = createKafkaProducer();
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .consumer(kafkaConsumer)

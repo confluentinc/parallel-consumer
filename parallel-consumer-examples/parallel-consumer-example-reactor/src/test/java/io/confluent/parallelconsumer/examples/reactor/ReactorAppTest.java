@@ -8,6 +8,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.csid.utils.WireMockUtils;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +32,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 class ReactorAppTest {
 
-    TopicPartition tp = new TopicPartition(ReactorApp.inputTopic, 0);
+    static TopicPartition tp = new TopicPartition(ReactorApp.inputTopic, 0);
 
     @Timeout(20)
     @SneakyThrows
@@ -57,14 +58,15 @@ class ReactorAppTest {
     }
 
     @RequiredArgsConstructor
-    class ReactorAppAppUnderTest extends ReactorApp {
+    static class ReactorAppAppUnderTest extends ReactorApp {
 
         private final int port;
 
+        @Getter
         LongPollingMockConsumer<String, String> mockConsumer = Mockito.spy(new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         @Override
-        Consumer<String, String> getKafkaConsumer() {
+        Consumer<String, String> createKafkaConsumer() {
             HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
             beginningOffsets.put(tp, 0L);
             mockConsumer.updateBeginningOffsets(beginningOffsets);
@@ -73,7 +75,7 @@ class ReactorAppTest {
         }
 
         @Override
-        Producer<String, String> getKafkaProducer() {
+        Producer<String, String> createKafkaProducer() {
             return new MockProducer<>(true, null, null);
         }
 

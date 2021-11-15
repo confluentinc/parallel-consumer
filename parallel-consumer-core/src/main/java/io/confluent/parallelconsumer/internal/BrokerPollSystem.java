@@ -78,7 +78,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         try {
             executorService = InitialContext.doLookup(managedExecutorService);
         } catch (NamingException e) {
-            log.debug("Using Java SE Thread",e);
+            log.debug("Using Java SE Thread", e);
             executorService = Executors.newSingleThreadExecutor();
         }
         Future<Boolean> submit = executorService.submit(this::controlLoop);
@@ -140,7 +140,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             log.debug("Broker poll thread finished, returning true to future");
             return true;
         } catch (Exception e) {
-            log.error("Unknown error", e);
+            log.error("Unexpected error:", e);
             throw e;
         }
     }

@@ -17,6 +17,11 @@
     <name>Confluent Parallel Consumer Example - Project Reactor.io</name>
 
     <dependencies>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-http</artifactId>
+            <version>1.0.13</version>
+        </dependency>
         <!-- tag::exampleDep[] -->
         <dependency>
             <groupId>io.confluent.parallelconsumer</groupId>
