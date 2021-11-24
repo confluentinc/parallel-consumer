@@ -159,6 +159,11 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     @Override
+    public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
+        this.vertxHttpRequest(webClientRequestFunction, httpResponseFuture -> {}, httpResponseAsyncResult -> {});
+    }
+
+    @Override
     public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                                    Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
@@ -178,6 +183,11 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         }; // don't need it, we attach to vertx futures for callback
 
         super.supervisorLoop(userFuncWrapper, noOp);
+    }
+
+    @Override
+    public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
+        this.vertxHttpWebClient(webClientRequestFunction, httpResponseFuture -> {});
     }
 
     private void addVertxHooks(final ConsumerRecord<K, V> record, final Future<?> send) {

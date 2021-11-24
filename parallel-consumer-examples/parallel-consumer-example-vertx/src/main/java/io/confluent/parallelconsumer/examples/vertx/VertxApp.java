@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.examples.vertx;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.vertx.JStreamVertxParallelStreamProcessor;
 import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
+import io.confluent.parallelconsumer.vertx.VertxParallelStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -64,6 +65,14 @@ public class VertxApp {
             log.info("From result stream: {}", x);
         });
 
+    }
+
+    void webClientExample(VertxParallelStreamProcessor<String, String> parallelConsumer) {
+        parallelConsumer.vertxHttpRequest((wc, rec) -> wc.post("some uri"));
+    }
+
+    void httpRequestExample(VertxParallelStreamProcessor<String, String> parallelConsumer) {
+        parallelConsumer.vertxHttpWebClient((wc, rec) -> wc.post("some uri").send());
     }
 
     protected int getPort() {

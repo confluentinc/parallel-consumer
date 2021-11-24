@@ -54,12 +54,17 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      *
      * @param webClientRequestFunction Given the {@link WebClient} and a {@link ConsumerRecord}, return us the {@link
      *                                 HttpRequest}
-     * @param onSend
-     * @param onWebRequestComplete
+     * @param onSend               function executed after the request has been sent
+     * @param onWebRequestComplete function executed when response received for request
      */
     void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                           Consumer<Future<HttpResponse<Buffer>>> onSend,
                           Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
+
+    /**
+     * @see #vertxHttpRequest(BiFunction, Consumer, Consumer)
+     */
+    void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction);
 
     /**
      * Consume from the broker concurrently, initiating your own {@link HttpRequest#send()} call, give us the {@link
@@ -76,8 +81,14 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
                             Consumer<Future<HttpResponse<Buffer>>> onSend);
 
     /**
+     * @see #vertxHttpWebClient(BiFunction, Consumer)
+     */
+    void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction);
+
+    /**
      * Consumer from the Broker concurrently - use the various Vert.x systems to return us a vert.x Future based on this
      * record.
      */
     void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result);
+
 }
