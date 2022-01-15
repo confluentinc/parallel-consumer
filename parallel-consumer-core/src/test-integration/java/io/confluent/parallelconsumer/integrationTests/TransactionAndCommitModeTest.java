@@ -1,10 +1,10 @@
 package io.confluent.parallelconsumer.integrationTests;
-
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.EnumCartesianProductTestSets;
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.ProgressTracker;
 import io.confluent.csid.utils.TrimListRepresentation;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -16,6 +16,7 @@ import io.confluent.parallelconsumer.internal.OffsetCommitter;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import me.tongfei.progressbar.ProgressBar;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
@@ -48,11 +50,10 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Originally created to reproduce bug #25 https://github.com/confluentinc/parallel-consumer/issues/25 which was a known
- * issue with multi threaded use of the {@link org.apache.kafka.clients.producer.KafkaProducer}.
+ * issue with multithreaded use of the {@link KafkaProducer}.
  * <p>
- * After fixing multi threading issue, using Producer transactions was made optional, and this test grew to uncover
- * several issues with the new implementation of committing offsets through the {@link
- * org.apache.kafka.clients.consumer.KafkaConsumer}.
+ * After fixing multi threading issues, using Producer transactions was made optional, and this test grew to uncover
+ * several issues with the new implementation of committing offsets through the {@link KafkaConsumer}.
  *
  * @see OffsetCommitter
  * @see ConsumerOffsetCommitter
@@ -124,6 +125,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
         int expectedMessageCount = expectedCount;
 
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
+
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
         log.info("Producing {} messages before starting test", expectedMessageCount);
@@ -171,6 +174,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
                 .build());
         pc.subscribe(of(inputName));
 
+        pc.setTimeBetweenCommits(ofSeconds(1));
+
         // sanity
         TopicPartition tp = new TopicPartition(inputName, 0);
         Map<TopicPartition, Long> beginOffsets = newConsumer.beginningOffsets(of(tp));
@@ -185,13 +190,15 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         AtomicInteger producedCount = new AtomicInteger(0);
 
         pc.pollAndProduce(record -> {
-                    log.trace("Still going {}", record.offset());
-                    consumedKeys.add(record.key());
+            log.debug("Polled {}", record.offset());
+            consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
                 }, consumeProduceResult -> {
-                    producedCount.incrementAndGet();
-                    producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
+                    log.debug("Produced {}", consumeProduceResult.getOut());
+            producedCount.incrementAndGet();
+            producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
+            bar.step();
                 }
         );
 
@@ -208,11 +215,11 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 ////            roundsAllowed = 12; // sync consumer commits can take time // // works with no logging
 //        }
 
-        ProgressTracker pt = new ProgressTracker(processedCount, roundsAllowed);
+        ProgressTracker progressTracker = new ProgressTracker(processedCount, null, defaultTimeout);
         var failureMessage = msg("All keys sent to input-topic should be processed and produced, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(2000))
+            waitAtMost(defaultTimeout)
                     // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
                     .failFast("PC died, check logs.",
                             () -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
@@ -228,10 +235,14 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
                     .untilAsserted(() -> {
                         log.trace("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
                         int delta = producedCount.get() - processedCount.get();
-                        if (delta == numThreads && pt.getRounds().get() > 1) {
+                        if (delta == numThreads && progressTracker.getRounds().get() > 1) {
                             log.error("Here we go fishy...");
                         }
-                        pt.checkForProgressExceptionally();
+
+                        //
+                        progressTracker.checkForProgressExceptionally();
+
+                        //
                         SoftAssertions all = new SoftAssertions();
                         all.assertThat(new ArrayList<>(consumedKeys)).as("all expected are consumed").hasSameSizeAs(expectedKeys);
                         all.assertThat(new ArrayList<>(producedKeysAcknowledged)).as("all consumed are produced ok ").hasSameSizeAs(expectedKeys);
@@ -256,7 +267,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
         assertThat(producedKeysAcknowledged).hasSameSizeAs(expectedKeys);
         // todo performance: tighten up progress check (<2)
-        assertThat(pt.getHighestRoundCountSeen()).isLessThan(30); // 3 seconds
+        assertThat(progressTracker.getHighestRoundCountSeen()).isLessThan(30); // 3 seconds
+        bar.close();
     }
 
     @Test

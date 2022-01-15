@@ -3,16 +3,19 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -124,6 +127,10 @@ public class ParallelConsumerOptions<K, V> {
      * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
      * maximum to prevent overloading them or to a degree, using up quotas.
      * <p>
+     * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a {@link
+     * #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15} records being
+     * processed at once.
+     * <p>
      * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
      * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
      * this to be properly addressed: https://github.com/confluentinc/parallel-consumer/issues/24 Add distributed rate
@@ -137,10 +144,12 @@ public class ParallelConsumerOptions<K, V> {
      * congestion control theory #21.
      */
     @Builder.Default
-    private final int maxConcurrency = 16;
+    private final int maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+    public static final int DEFAULT_MAX_CONCURRENCY = 16;
 
     /**
-     * When a message fails, how long the system should wait before trying that message again.
+     * When a message fails, how long the system should wait before trying that message again. Note that this will not
+     * be exact, and is just a target.
      */
     @Builder.Default
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
@@ -161,11 +170,11 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
-     * returned from the user-function. Only relevant if using one of the produce-flows and providing a
-     * {@link ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
-     *
-     * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary re-processing
-     * and duplicates on slow {@link Producer#send} calls.
+     * returned from the user-function. Only relevant if using one of the produce-flows and providing a {@link
+     * ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
+     * <p>
+     * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary
+     * re-processing and duplicates on slow {@link Producer#send} calls.
      *
      * @see org.apache.kafka.clients.producer.ProducerConfig#DELIVERY_TIMEOUT_MS_CONFIG
      */
@@ -173,11 +182,46 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration sendTimeout = Duration.ofSeconds(10);
 
     /**
-     * Controls how long to block while waiting for offsets to be committed.
-     * Only relevant if using {@link CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
+     * Controls how long to block while waiting for offsets to be committed. Only relevant if using {@link
+     * CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
      */
     @Builder.Default
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
+
+    /**
+     * The maximum number of messages to attempt to pass into the {@code batch} versions of the user function. Batch
+     * sizes may sometimes be less than this size, but will never be more.
+     * <p>
+     * Note that there is no relationship between the {@link ConsumerConfig} setting of {@link
+     * ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large layer
+     * of indirection between the managed consumer, and the managed queues we use.
+     * <p>
+     * This indirection effectively disconnects the processing of messages from "polling" them from the managed client,
+     * as we do not wait to process them before calling poll again. We simply call poll as much as we need to, in order
+     * to keep our queues full of enough work to satisfy demand.
+     * <p>
+     * If we have enough, then we actively manage pausing our subscription so that we can continue calling {@code poll}
+     * without pulling in even more messages.
+     */
+    private final Integer batchSize;
+
+    /**
+     * @see #batchSize
+     */
+    public Optional<Integer> getBatchSize() {
+        return Optional.ofNullable(batchSize);
+    }
+
+    public boolean isUsingBatching() {
+        return this.getBatchSize().isPresent();
+    }
+
+    /**
+     * @return the combined target of the desired concurrency by the configured batch size
+     */
+    public int getTargetAmountOfRecordsInFlight() {
+        return getMaxConcurrency() * getBatchSize().orElse(1);
+    }
 
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");

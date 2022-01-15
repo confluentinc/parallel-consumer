@@ -98,10 +98,10 @@ public class PartitionState<K, V> {
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
-    private final NavigableMap<Long, WorkContainer<K, V>> commitQueues = new ConcurrentSkipListMap<>();
+    private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
-    NavigableMap<Long, WorkContainer<K, V>> getCommitQueues() {
-        return Collections.unmodifiableNavigableMap(commitQueues);
+    NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
+        return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
@@ -114,26 +114,24 @@ public class PartitionState<K, V> {
         // rise the high water mark
         Long oldHighestSeen = this.offsetHighestSeen;
         if (oldHighestSeen == null || highestSeen >= oldHighestSeen) {
+            log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, highestSeen);
             offsetHighestSeen = highestSeen;
         }
     }
 
     /**
      * Removes all offsets that fall below the new low water mark.
-     *
-     * @param newLowWaterMark // todo rename variable from newLowWaterMark
      */
-    public void truncateOffsets(final long newLowWaterMark) {
-        incompleteOffsets.removeIf(offset -> offset < newLowWaterMark);
+    public void truncateOffsets(final long nextExpectedOffset) {
+        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
     }
 
-    public void onOffsetCommitSuccess(final OffsetAndMetadata meta) {
-        long newLowWaterMark = meta.offset();
-        truncateOffsets(newLowWaterMark);
+    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
+        long nextExpectedOffset = committed.offset();
+        truncateOffsets(nextExpectedOffset);
     }
 
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
-        Set<Long> incompleteOffsets = this.incompleteOffsets;
         boolean previouslyProcessed;
         long offset = rec.offset();
         if (incompleteOffsets.contains(offset)) {
@@ -149,11 +147,15 @@ public class PartitionState<K, V> {
     }
 
     public boolean hasWorkInCommitQueue() {
-        return !commitQueues.isEmpty();
+        return !commitQueue.isEmpty();
+    }
+
+    public boolean hasWorkThatNeedsCommitting() {
+        return commitQueue.values().parallelStream().anyMatch(x -> x.isUserFunctionSucceeded());
     }
 
     public int getCommitQueueSize() {
-        return commitQueues.size();
+        return commitQueue.size();
     }
 
     public void onSuccess(WorkContainer<K, V> work) {
@@ -174,14 +176,14 @@ public class PartitionState<K, V> {
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
-        NavigableMap<Long, WorkContainer<K, V>> queue = this.commitQueues;
+        NavigableMap<Long, WorkContainer<K, V>> queue = this.commitQueue;
         queue.put(wc.offset(), wc);
     }
 
     public void remove(LinkedList<WorkContainer<K, V>> workToRemove) {
         for (var workContainer : workToRemove) {
             var offset = workContainer.getCr().offset();
-            this.commitQueues.remove(offset);
+            this.commitQueue.remove(offset);
         }
     }
 
@@ -193,4 +195,5 @@ public class PartitionState<K, V> {
     public boolean isRemoved() {
         return false;
     }
+
 }

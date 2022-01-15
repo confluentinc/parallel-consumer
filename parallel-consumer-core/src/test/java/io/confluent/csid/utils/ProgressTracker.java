@@ -1,21 +1,22 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.Temporal;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
 
 /**
  * Used to check that progress has been made in some activity.
  */
-@RequiredArgsConstructor
 public class ProgressTracker {
 
     public static final int WARMED_UP_AFTER_X_MESSAGES = 50;
@@ -33,16 +34,27 @@ public class ProgressTracker {
     @Getter
     private final AtomicInteger rounds = new AtomicInteger(0);
 
-    private int roundsAllowed = 10;
+    @Getter
+    private Duration timeout = defaultTimeout;
+
+    private Integer roundsAllowed = 10;
 
     private final int coldRoundsAllowed = 20;
 
     @Getter
     private int highestRoundCountSeen = 0;
+    private final Instant startTime = Instant.now();
 
-    public ProgressTracker(final AtomicInteger processedCount, int roundsAllowed) {
+    public ProgressTracker(final AtomicInteger processedCount, Integer roundsAllowed, Duration timeout) {
         this.processedCount = processedCount;
+        if (roundsAllowed != null && timeout != null)
+            throw new IllegalArgumentException("Can't provide both a timeout and a number of rounds");
         this.roundsAllowed = roundsAllowed;
+        this.timeout = timeout;
+    }
+
+    public ProgressTracker(final AtomicInteger processedCount) {
+        this.processedCount = processedCount;
     }
 
     /**
@@ -53,10 +65,10 @@ public class ProgressTracker {
     public boolean hasProgressNotBeenMade() {
         boolean progress = processedCount.get() > lastSeen.get();
         boolean warmedUp = processedCount.get() > WARMED_UP_AFTER_X_MESSAGES;
-        boolean enoughAttempts = rounds.get() > roundsAllowed;
+        boolean enoughAttempts = hasTimeoutPassed();
         if (warmedUp && !progress && enoughAttempts) {
             return true;
-        } else if (!warmedUp && rounds.get() > coldRoundsAllowed) {
+        } else if (!warmedUp && this.roundsAllowed != null && rounds.get() > coldRoundsAllowed) {
             return true;
         } else if (progress) {
             reset();
@@ -64,6 +76,20 @@ public class ProgressTracker {
         lastSeen.set(processedCount.get());
         rounds.incrementAndGet();
         return false;
+    }
+
+    private boolean hasTimeoutPassed() {
+        // in the case both are present, prefer rounds to duration (legacy)
+        if (roundsAllowed != null) {
+            return rounds.get() > roundsAllowed;
+        } else {
+            Duration remainingTime = Duration.between(Instant.now(), getDeadline());
+            return remainingTime.isNegative();
+        }
+    }
+
+    private Temporal getDeadline() {
+        return startTime.plus(timeout);
     }
 
     private void reset() {
@@ -76,8 +102,8 @@ public class ProgressTracker {
      * @throws Exception If no progress is made
      */
     public void checkForProgressExceptionally() throws Exception {
-        boolean progress = hasProgressNotBeenMade();
-        if (progress)
+        boolean noProgress = hasProgressNotBeenMade();
+        if (noProgress)
             throw constructError();
     }
 

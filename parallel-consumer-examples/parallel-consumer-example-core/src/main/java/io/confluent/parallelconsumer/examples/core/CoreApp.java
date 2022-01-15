@@ -17,9 +17,11 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -190,6 +192,34 @@ public class CoreApp {
 
     private String extractServerId(final ConsumerRecord<String, String> consumerRecord) {
         // no-op
+        return null;
+    }
+
+
+    void batching() {
+        // tag::batching[]
+        ParallelStreamProcessor.createEosStreamProcessor(ParallelConsumerOptions.<String, String>builder()
+                .consumer(getKafkaConsumer())
+                .producer(getKafkaProducer())
+                .maxConcurrency(100)
+                .batchSize(5) // <1>
+                .build());
+        parallelConsumer.pollBatch(batchOfRecords -> {
+            // convert the batch into the payload for our processing
+            List<String> payload = batchOfRecords.stream()
+                    .map(this::pareparePayload)
+                    .collect(Collectors.toList());
+            // process the entire batch payload at once
+            processBatchPayload(payload);
+        });
+        // end::batching[]
+    }
+
+    private void processBatchPayload(List<String> payload) {
+
+    }
+
+    private String pareparePayload(ConsumerRecord<String, String> x) {
         return null;
     }
 

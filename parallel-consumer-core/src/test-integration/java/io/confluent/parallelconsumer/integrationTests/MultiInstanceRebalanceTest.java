@@ -57,6 +57,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 /**
  * Test running with multiple instances of parallel-consumer consuming from topic with two partitions.
  */
+//@Isolated // performance sensitive
 @Slf4j
 class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
@@ -81,7 +82,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     @ParameterizedTest
     @EnumSource(ProcessingOrder.class)
-    void consumeWithMultipleInstancesPeriodicConsumerAsync(ProcessingOrder order) {
+    void consumeWithMultipleInstancesPeriodicConsumerAsynchronous(ProcessingOrder order) {
         numPartitions = 2;
         int expectedMessageCount = (order == PARTITION) ? 100 : 1000;
         runTest(DEFAULT_MAX_POLL, CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, order, expectedMessageCount,
@@ -293,7 +294,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         Collection<?> duplicates = toCollection(StandardComparisonStrategy.instance()
                 .duplicatesFrom(getAllConsumedKeys(parallelConsumerRunnablesArray)));
         log.info("Duplicate consumed keys (at least one is expected due to the rebalance): {}", duplicates);
-        double percentageDuplicateTolerance = 0.05;
+        double percentageDuplicateTolerance = 0.1;
         assertThat(duplicates)
                 .as("There should be few duplicate keys")
                 .hasSizeLessThan((int) (expectedMessageCount * percentageDuplicateTolerance)); // in some env, there are a lot more. i.e. Jenkins running parallel suits
@@ -373,6 +374,11 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
                     .commitMode(commitMode)
                     .maxConcurrency(10)
                     .build());
+
+
+            // test was written with 1-second cycles in mind - in terms of expected progression
+            this.parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
+
 
             parallelConsumer.setMyId(Optional.of("PC-" + instanceId));
 

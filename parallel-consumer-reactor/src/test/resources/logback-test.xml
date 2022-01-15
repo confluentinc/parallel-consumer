@@ -28,34 +28,17 @@
 
     <!-- primary -->
     <logger name="io.confluent.parallelconsumer" level="info"/>
-<!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
-    <logger name="io.confluent.csid" level="info"/>
-    <!--    <logger name="io.confluent.csid" level="debug"/>-->
-
-    <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid" level="debug"/>-->
 
     <!-- Key classes -->
     <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionMonitor" level="trace"/>-->
-    <!--        <logger name="io.confluent.parallelconsumer.state" level="trace"/>-->
-
-    <!-- Offset committing-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractOffsetCommitter" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.offsets" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder" level="debug"/>-->
-
-    <!-- Broker polling -->
-    <!--        <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
-    <!--            <logger name="io.confluent.parallelconsumer.internal" level="debug"/>-->
-    <!--        <logger name="io.confluent.parallelconsumer.state.WorkManager" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.internal.ConsumerManager" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="info"/>-->
+        <logger name="io.confluent.parallelconsumer.internal.ExternalEngine" level="info"/>
 
 
-    <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="trace"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.RemovedPartitionState" level="trace"/>-->
-
+    <!--    <logger name="io.confluent.parallelconsumer.vertx.VertxBatchTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="debug"/>-->
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
@@ -70,19 +53,14 @@
     <!--            <logger name="io.confluent.parallelconsumer" level="trace" />-->
 
     <!-- notable specifics -->
-    <!--    <logger name="io.confluent.parallelconsumer.offsets.OffsetMapCodecManager" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.offsets.OffsetRunLength" level="trace"/>-->
-
-    <!-- Tests    -->
-    <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="debug"/>-->
-    <!--            <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests.LargeVolumeInMemoryTests" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumerTestBase" level="trace"/>-->
-
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumer" level="info" />-->
+    <!--    <logger name="io.confluent.parallelconsumer.offsets.OffsetMapCodecManager" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.offsets.WorkManagerOffsetMapCodecManagerTest" level="debug"/>-->
-
+    <!--    <logger name="io.confluent.parallelconsumer.offsets.OffsetRunLength" level="trace"/>-->
 
     <!-- containers -->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug"/>-->
@@ -93,15 +71,11 @@
     <!--    <logger name="org.apache.kafka.clients" level="warn"/>-->
     <!--    <logger name="org.apache.kafka.clients" level="debug"/>-->
 
-    <!-- Kafka External -->
-    <logger name="org.apache.kafka.common.config.AbstractConfig" level="error"/>
+    <logger name="org.postgresql" level="info"/>
 
     <!-- external -->
-    <logger name="org.postgresql" level="info"/>
     <!--    <logger name="io.vertx" level="debug"/>-->
     <logger name="io.netty" level="info"/>
-    <logger name="pl.tlinkowski" level="warn"/>
-
 
     <!-- kafka internal -->
     <!--    <logger name="org.apache.kafka.clients.consumer.internals.ConsumerCoordinator" level="debug"/>-->

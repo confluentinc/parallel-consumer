@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import com.google.common.flogger.FluentLogger;
@@ -11,8 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 
 /**
  * Overrides key aspects required in common for other threading engines like Vert.x and Reactor
@@ -26,24 +24,17 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
         super(newOptions);
     }
 
-    /**
-     * @return the number of records to try to get, based on the current count of records outstanding
-     */
-    @Override
-    protected int calculateQuantityToRequest() {
-        int numberRecordsOutForProcessing = wm.getNumberRecordsOutForProcessing();
-        int maxConcurrency = getOptions().getMaxConcurrency();
-        int rawDelta = maxConcurrency - numberRecordsOutForProcessing;
 
-        //
-        int delta = Math.max(0, rawDelta);
-        flog.at(Level.FINE).atMostEvery(1, TimeUnit.SECONDS)
-                .log("Target: %s. Out currently: %s. Will request extra: %s", maxConcurrency, numberRecordsOutForProcessing, delta);
-        return delta;
+    /**
+     * @return the number of records to try to get, based on the current count of records outstanding - but unlike core,
+     * we don't pipeline messages into the executor pool for processing.
+     */
+    protected int getTargetOutForProcessing() {
+        return getOptions().getTargetAmountOfRecordsInFlight();
     }
 
     @Override
-    protected void checkPressure() {
+    protected void checkPipelinePressure() {
         // no-op - as calculateQuantityToRequest does not use a pressure system, unlike the core module
     }
 

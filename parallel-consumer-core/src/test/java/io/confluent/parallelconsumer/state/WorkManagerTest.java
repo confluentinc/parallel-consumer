@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -216,13 +217,13 @@ class WorkManagerTest {
         wc = works.get(0);
         wm.onFailure(wc);
 
-        advanceClock(wc.getRetryDelay().minus(ofSeconds(1)));
+        advanceClock(wc.getRetryDelayConfig().minus(ofSeconds(1)));
 
         works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of());
 
         // increased advance to allow for bigger delay under high load during parallel test execution.
-        advanceClock(wc.getRetryDelay().plus(ofSeconds(1)));
+        advanceClock(wc.getRetryDelayConfig().plus(ofSeconds(1)));
 
         works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(0));
@@ -476,7 +477,7 @@ class WorkManagerTest {
         var build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
-        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         List<Integer> keys = range(uniqueKeys).list();
 
@@ -500,7 +501,7 @@ class WorkManagerTest {
 
     @Test
     void treeMapOrderingCorrect() {
-        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         int i = 10;
         var records = ktu.generateRecords(i);
@@ -539,7 +540,7 @@ class WorkManagerTest {
         }
 
         //
-        assertThat(wm.getSm().getWorkQueuedInShardsCount()).isZero();
+        assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(3);
 
         // drain commit queue

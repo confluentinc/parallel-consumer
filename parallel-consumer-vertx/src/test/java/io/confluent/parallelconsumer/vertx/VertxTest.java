@@ -1,19 +1,14 @@
 package io.confluent.parallelconsumer.vertx;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.confluent.csid.utils.WireMockUtils;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
@@ -41,7 +36,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -50,9 +45,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Isolated
 @Slf4j
 @ExtendWith(VertxExtension.class)
-class VertxTest extends ParallelEoSStreamProcessorTestBase {
-
-    JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
+class VertxTest extends VertxBaseUnitTest {
 
     WireMockServer stubServer;
 
@@ -75,25 +68,6 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
     @AfterEach
     void closeWireMock() {
         stubServer.stop();
-    }
-
-    @Override
-    protected AbstractParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        VertxOptions vertxOptions = new VertxOptions();
-        Vertx vertx = Vertx.vertx(vertxOptions);
-        WebClient wc = WebClient.create(vertx);
-        var build = parallelConsumerOptions.toBuilder()
-                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER) // force tx
-                .maxConcurrency(10)
-                .build();
-        vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(vertx, wc, build);
-
-        return vertxAsync;
-    }
-
-    @BeforeEach
-    public void setupData() {
-        super.primeFirstRecord();
     }
 
     @SneakyThrows
@@ -164,8 +138,7 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     @Test
     void testHttpMinimal() {
-        var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOnCompleteHook(latch::countDown);
+        vertxAsync.setTimeBetweenCommits(ofSeconds(1));
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
@@ -177,18 +150,12 @@ class VertxTest extends ParallelEoSStreamProcessorTestBase {
                     return goodHost;
                 });
 
-        // wait
-        awaitLatch(latch);
-
         //
-        waitForOneLoopCycle();
+        awaitForCommitExact(1);
 
         // verify
-        var res = getResults(futureStream);
-
-        ktu.assertCommits(producerSpy, of(1));
-
         // test results are successes
+        var res = getResults(futureStream);
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
         assertThat(res).extracting(x -> x.result().bodyAsString()).contains(WireMockUtils.stubResponse);
     }

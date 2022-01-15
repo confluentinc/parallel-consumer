@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -55,7 +54,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         awaitLatch(latch);
 
-        waitForSomeLoopCycles(2);
+        awaitForSomeLoopCycles(2);
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
@@ -84,7 +83,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         resumeControlLoop();
 
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
@@ -119,7 +118,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         awaitLatch(latch);
 
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
 
         verify(myRecordProcessingAction, times(2)).apply(any());
 

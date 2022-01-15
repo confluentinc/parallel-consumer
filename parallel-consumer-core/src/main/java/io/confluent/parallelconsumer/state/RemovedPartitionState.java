@@ -102,7 +102,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    NavigableMap<Long, WorkContainer<K, V>> getCommitQueues() {
+    NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
         //noinspection unchecked - by using unsave generics, we are able to share one static instance
         return READ_ONLY_EMPTY_MAP;
     }
@@ -123,12 +123,12 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public void truncateOffsets(final long newLowWaterMark) {
+    public void truncateOffsets(final long nextExpectedOffset) {
         log.debug(NO_OP);
     }
 
     @Override
-    public void onOffsetCommitSuccess(final OffsetAndMetadata meta) {
+    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
         log.debug(NO_OP);
     }
 

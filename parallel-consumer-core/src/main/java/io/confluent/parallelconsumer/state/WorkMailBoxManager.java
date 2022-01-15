@@ -29,12 +29,12 @@ public class WorkMailBoxManager<K, V> {
     private int sharedBoxNestedRecordCount;
 
     /**
-     * The shared mail box. Doesn't need to be thread safe as we already need synchronize on it.
+     * The shared mailbox. Doesn't need to be thread safe as we already need synchronize on it.
      */
     private final LinkedBlockingQueue<ConsumerRecords<K, V>> workInbox = new LinkedBlockingQueue<>();
 
     /**
-     * Mail box where mail is transferred to immediately.
+     * Mailbox where mail is transferred to immediately.
      */
     private final CountingCRLinkedList<K, V> internalBatchMailQueue = new CountingCRLinkedList<>();
 
@@ -51,7 +51,7 @@ public class WorkMailBoxManager<K, V> {
     /**
      * @return amount of work queued in the mail box, awaiting processing into shards, not exact
      */
-    Integer getWorkQueuedInMailboxCount() {
+    Integer getAmountOfWorkQueuedWaitingIngestion() {
         return sharedBoxNestedRecordCount +
                 internalBatchMailQueue.getNestedCount() +
                 internalFlattenedMailQueue.size();

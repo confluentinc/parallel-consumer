@@ -1,15 +1,14 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import java.io.Closeable;
 import java.time.Duration;
 
 public interface DrainingCloseable extends Closeable {
 
-    Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10); // can increase if debugging
+    Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30); // can increase if debugging
 
     enum DrainingMode {
         /**
