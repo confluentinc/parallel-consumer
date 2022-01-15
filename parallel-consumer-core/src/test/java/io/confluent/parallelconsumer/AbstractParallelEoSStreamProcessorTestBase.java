@@ -1,15 +1,17 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -55,8 +57,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     /**
      * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
-     * lower value shouldn't affect test speed much unless many different batches of messages are "published" as test
-     * messages are queued up at the beginning and the polled.
+     * lower value shouldn't affect test speed much unless many batches of messages are "published" as test messages are
+     * queued up at the beginning and the polled.
      *
      * @see LongPollingMockConsumer#poll(Duration)
      */
@@ -77,7 +79,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
-    public static int defaultTimeoutSeconds = 10;
+    public static int defaultTimeoutSeconds = 30;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
@@ -138,6 +140,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - we
         // don't want to bubble up an error here that we expect from here.
         if (!parentParallelConsumer.isClosedOrFailed()) {
+            if (parentParallelConsumer.getFailureCause() != null) {
+                log.error("PC has error - test failed");
+            }
             log.debug("Test finished, closing pc...");
             parentParallelConsumer.close();
         } else {
@@ -259,17 +264,17 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         controlLoopPauseLatch.countDown();
     }
 
-    protected void waitForOneLoopCycle() {
-        waitForSomeLoopCycles(1);
+    protected void awaitForOneLoopCycle() {
+        awaitForSomeLoopCycles(1);
     }
 
-    protected void waitForSomeLoopCycles(int thisManyMore) {
+    protected void awaitForSomeLoopCycles(int thisManyMore) {
         log.debug("Waiting for {} more iterations of the control loop.", thisManyMore);
         blockingLoopLatchTrigger(thisManyMore);
         log.debug("Completed waiting on {} loop(s)", thisManyMore);
     }
 
-    protected void waitUntilTrue(Callable<Boolean> booleanCallable) {
+    protected void awaitUntilTrue(Callable<Boolean> booleanCallable) {
         waitAtMost(defaultTimeout).until(booleanCallable);
     }
 
@@ -278,33 +283,61 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      */
     @SneakyThrows
     private void blockingLoopLatchTrigger(int waitForCount) {
-        log.debug("Waiting on {} cycles on loop latch...", waitForCount);
+        log.debug("Waiting on {} cycles on loop latch for {}...", waitForCount, defaultTimeout);
         loopLatchV = new CountDownLatch(waitForCount);
-        boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
-        if (timeout)
-            throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeoutSeconds, waitForCount, loopLatchV.getCount()));
+        try {
+            boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
+            if (timeout)
+                throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeout, waitForCount, loopLatchV.getCount()));
+        } catch (InterruptedException e) {
+            log.error("Interrupted while waiting for loop latch - timeout was {}", defaultTimeout);
+            throw e;
+        }
     }
 
     @SneakyThrows
-    private void waitForLoopCount(int waitForCount) {
+    private void awaitForLoopCount(int waitForCount) {
         log.debug("Waiting on {} cycles on loop latch...", waitForCount);
         waitAtMost(defaultTimeout.multipliedBy(100)).until(() -> loopCount.get() > waitForCount);
     }
 
-    protected void waitForCommitExact(int offset) {
+    protected void awaitForCommit(int offset) {
         log.debug("Waiting for commit offset {}", offset);
-        await().untilAsserted(() -> assertCommits(of(offset)));
+        await().timeout(defaultTimeout)
+                .untilAsserted(() -> assertCommitsContains(of(offset)));
     }
 
+    protected void awaitForCommitExact(int offset) {
+        log.debug("Waiting for EXACTLY commit offset {}", offset);
+        await().timeout(defaultTimeout)
+                .failFast(msg("Commit was not exact - contained offsets that weren't {}", offset), () -> {
+                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
+                    return offsets.size() > 1 && !offsets.contains(offset);
+                })
+                .untilAsserted(() -> assertCommits(of(offset)));
+    }
 
-    protected void waitForCommitExact(int partition, int offset) {
-        log.debug("Waiting for commit offset {} on partition {}", offset, partition);
+    protected void awaitForCommitExact(int partition, int offset) {
+        log.debug("Waiting for EXACTLY commit offset {} on partition {}", offset, partition);
         var expectedOffset = new OffsetAndMetadata(offset, "");
         TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
         var expectedOffsetMap = UniMaps.of(partitionNumber, expectedOffset);
-        verify(producerSpy, timeout(defaultTimeoutMs).times(1)).sendOffsetsToTransaction(argThat(
-                (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
-                any(ConsumerGroupMetadata.class));
+        verify(producerSpy, timeout(defaultTimeoutMs)
+                .times(1))
+                .sendOffsetsToTransaction(
+                        argThat((offsetMap) -> offsetMap.equals(expectedOffsetMap)),
+                        any(ConsumerGroupMetadata.class));
+    }
+
+    public void assertCommitsContains(List<Integer> offsets) {
+        List<Integer> commits = getCommitHistoryFlattened();
+        assertThat(commits).containsAll(offsets);
+    }
+
+    private List<Integer> getCommitHistoryFlattened() {
+        return (isUsingTransactionalProducer())
+                ? ktu.getProducerCommits(producerSpy)
+                : extractAllPartitionsOffsetsSequentially();
     }
 
     public void assertCommits(List<Integer> offsets, String description) {
@@ -312,7 +345,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     /**
-     * Flattens the offsets of all partitions into a single sequential list
+     * Flattens the offsets of all partitions into a single sequential list. Removing the genesis commit (0) if it
+     * exists, unless it's contained in the assertion.
      */
     public void assertCommits(List<Integer> offsets, Optional<String> description) {
         if (isUsingTransactionalProducer()) {
@@ -320,7 +354,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
             assertThat(extractAllPartitionsOffsetsSequentially()).isEmpty();
         } else {
             List<Integer> collect = extractAllPartitionsOffsetsSequentially();
-            collect = trimAllGeneisOffset(collect);
+            if (!offsets.contains(0)) {
+                collect = trimAllGeneisOffset(collect);
+            }
             // duplicates are ok
             // is there a nicer optional way?
             // {@link Optional#ifPresentOrElse} only @since 9
@@ -342,14 +378,13 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      * Flattens the offsets of all partitions into a single sequential list
      */
     protected List<Integer> extractAllPartitionsOffsetsSequentially() {
-        var result = new ArrayList<Integer>();
         // copy the list for safe concurrent access
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
         return history.stream()
                 .flatMap(commits ->
                         {
-                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values());
-                            return values.stream().map(meta -> (int) meta.offset());
+                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values()); // 4 debugging
+                            return values.stream().map(meta -> (int) meta.offset()); // int cast a luxury in test context - no big offsets
                         }
                 ).collect(Collectors.toList());
     }
@@ -406,20 +441,28 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
             log.debug("Releasing {}...", i);
             locks.get(i).countDown();
         }
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
     }
 
     protected void releaseAndWait(List<CountDownLatch> locks, int lockIndex) {
         log.debug("Releasing {}...", lockIndex);
         locks.get(lockIndex).countDown();
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
     }
 
     protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
         pauseControlLoop();
         awaitLatch(latch);
         resumeControlLoop();
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
     }
 
+    /**
+     * Assert {@link com.google.common.truth.Truth} on the test {@link Consumer} ({@link LongPollingMockConsumer}).
+     */
+    protected LongPollingMockConsumerSubject<String, String> assertThatConsumer(String msg) {
+        return Truth.assertWithMessage(msg)
+                .about(LongPollingMockConsumerSubject.<String, String>mockConsumers())
+                .that(consumerSpy);
+    }
 }

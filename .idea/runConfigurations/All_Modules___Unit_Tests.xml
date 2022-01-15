@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="All Modules - Unit Tests" type="Multirun" singleton="false" separateTabs="true" reuseTabsWithFailures="false" startOneByOne="true" markFailedProcess="true" hideSuccessProcess="false" delayTime="0.0">
+    <runConfiguration name="All Core Unit Tests" type="JUnit" />
+    <runConfiguration name="All Vertx Unit Tests" type="JUnit" />
+    <runConfiguration name="All Reactor Unit Tests" type="JUnit" />
+    <method v="2" />
+  </configuration>
+</component>

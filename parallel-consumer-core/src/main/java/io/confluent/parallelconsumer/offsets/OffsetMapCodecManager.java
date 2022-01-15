@@ -146,7 +146,7 @@ public class OffsetMapCodecManager<K, V> {
         return states;
     }
 
-    static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long committedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
+    public static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long committedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
         byte[] decodedBytes;
         try {
             decodedBytes = OffsetSimpleSerialisation.decodeBase64(base64EncodedOffsetPayload);

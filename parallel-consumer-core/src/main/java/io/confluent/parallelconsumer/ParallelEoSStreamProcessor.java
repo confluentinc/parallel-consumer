@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.internal.Documentation.getLinkHtmlToDocSection;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
@@ -36,7 +38,13 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
-        Function<ConsumerRecord<K, V>, List<Object>> wrappedUserFunc = (record) -> {
+        validateNonBatch();
+
+        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
+            if (recordList.size() != 1) {
+                throw new IllegalArgumentException("Bug: Function only takes a single element");
+            }
+            var record = recordList.get(0); // will always only have one
             log.trace("asyncPoll - Consumed a record ({}), executing void function...", record.offset());
 
             carefullyRun(usersVoidConsumptionFunction, record);
@@ -48,18 +56,34 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
+
+    private void validateBatch() {
+        //noinspection SimplifyOptionalCallChains - only in 11
+        if (!options.getBatchSize().isPresent()) {
+            throw new IllegalArgumentException(msg("Using batching version of the API, but no batch size specified in the `options`. See {}", getLinkHtmlToDocSection("#batching")));
+        }
+    }
+
+    private void validateNonBatch() {
+        if (options.getBatchSize().isPresent()) {
+            throw new IllegalArgumentException(msg("A 'batch size' has been specified in `options`, so you must use the `batch` versions of the polling methods. See {}", getLinkHtmlToDocSection("#batching")));
+        }
+    }
+
     @Override
     @SneakyThrows
     public void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+        validateNonBatch();
+
         // todo refactor out the producer system to a sub class
         if (!getOptions().isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
         }
 
         // wrap user func to add produce function
-        Function<ConsumerRecord<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecord) -> {
-
+        Function<List<ConsumerRecord<K, V>>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecordList) -> {
+            var consumedRecord = consumedRecordList.get(0); // will always only have one
             List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, consumedRecord);
 
             if (recordListToProduce.isEmpty()) {
@@ -104,6 +128,19 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     public void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction,
                                Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         pollAndProduceMany((record) -> UniLists.of(userFunction.apply(record)), callback);
+    }
+
+    @Override
+    public void pollBatch(Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction) {
+        validateBatch();
+
+        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
+            log.trace("asyncPoll - Consumed set of records ({}), executing void function...", recordList.size());
+            usersVoidConsumptionFunction.accept(recordList);
+            return UniLists.of(); // user function returns no produce records, so we satisfy our api
+        };
+        Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
+        supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
 }

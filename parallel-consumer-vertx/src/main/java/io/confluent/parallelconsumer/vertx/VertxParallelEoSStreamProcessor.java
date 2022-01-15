@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.vertx;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -162,14 +161,20 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                                    Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
-        Function<ConsumerRecord<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (record) -> {
+        // wrap single record function in batch function
+        Function<List<ConsumerRecord<K, V>>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (recordList) -> {
+            if (recordList.size() != 1) {
+                throw new IllegalArgumentException("Bug: Function only takes a single element");
+            }
+            var consumerRecord = recordList.get(0); // will always only have one
+            log.trace("Consumed a record ({}), executing void function...", consumerRecord.offset());
 
-            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, record);
+            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, consumerRecord);
 
             // execute user's onSend callback
             onWebRequestSentCallback.accept(futureWebResponse);
 
-            addVertxHooks(record, futureWebResponse);
+            addVertxHooks(consumerRecord, futureWebResponse);
 
             return UniLists.of(futureWebResponse);
         };
@@ -180,34 +185,63 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         super.supervisorLoop(userFuncWrapper, noOp);
     }
 
-    private void addVertxHooks(final ConsumerRecord<K, V> record, final Future<?> send) {
-        // attach internal handler
-        WorkContainer<K, V> wc = wm.getSm().getWorkContainerForRecord(record);
-        wc.setWorkType(VERTX_TYPE);
+    private void addVertxHooks(ConsumerRecord<K, V> consumerRecord, Future<?> send) {
+        addVertxHooks(UniLists.of(consumerRecord), send);
+    }
 
-        send.onSuccess(h -> {
-            log.debug("Vert.x Vertical success");
-//            log.trace("Response body: {}", h.bodyAsString());
-            wc.onUserFunctionSuccess();
-            addToMailbox(wc);
-        });
-        send.onFailure(h -> {
-            log.error("Vert.x Vertical fail: {}", h.getMessage());
-            wc.onUserFunctionFailure();
-            addToMailbox(wc);
-        });
+    private void addVertxHooks(final List<ConsumerRecord<K, V>> recordList, final Future<?> send) {
+        for (var consumerRecord : recordList) {
+            // attach internal handler
+            WorkContainer<K, V> wc = wm.getSm().getWorkContainerForRecord(consumerRecord);
+            wc.setWorkType(VERTX_TYPE);
 
-        // add plugin callback hook
-        send.onComplete(ar -> {
-            log.trace("Running plugin hook");
-            this.onVertxCompleteHook.ifPresent(Runnable::run);
-        });
+            send.onSuccess(h -> {
+                log.debug("Vert.x Vertical success");
+                wc.onUserFunctionSuccess();
+                addToMailbox(wc);
+            });
+            send.onFailure(h -> {
+                log.error("Vert.x Vertical fail: {}", h.getMessage());
+                wc.onUserFunctionFailure();
+                addToMailbox(wc);
+            });
+
+            // add plugin callback hook
+            send.onComplete(ar -> {
+                log.trace("Running plugin hook");
+                this.onVertxCompleteHook.ifPresent(Runnable::run);
+            });
+        }
     }
 
     @Override
     public void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result) {
 
-        Function<ConsumerRecord<K, V>, List<Future<?>>> userFuncWrapper = record -> {
+        // wrap single record function in batch function
+        Function<List<ConsumerRecord<K, V>>, List<Future<?>>> userFuncWrapper = recordList -> {
+            if (recordList.size() != 1) {
+                throw new IllegalArgumentException("Bug: Function only takes a single element");
+            }
+            var consumerRecord = recordList.get(0); // will always only have one
+            log.trace("Consumed a record ({}), executing void function...", consumerRecord.offset());
+
+            Future<?> send = carefullyRun(result, consumerRecord);
+
+            addVertxHooks(consumerRecord, send);
+
+            return UniLists.of(send);
+        };
+
+        Consumer<Future<?>> noOp = ignore -> {
+        }; // don't need it, we attach to vertx futures for callback
+
+        super.supervisorLoop(userFuncWrapper, noOp);
+    }
+
+    @Override
+    public void batchVertxFuture(final Function<List<ConsumerRecord<K, V>>, Future<?>> result) {
+
+        Function<List<ConsumerRecord<K, V>>, List<Future<?>>> userFuncWrapper = record -> {
 
             Future<?> send = carefullyRun(result, record);
 

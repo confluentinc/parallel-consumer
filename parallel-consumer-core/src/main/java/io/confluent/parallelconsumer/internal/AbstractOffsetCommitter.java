@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,18 +28,18 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // todo shouldn't be removed until commit succeeds (there's no harm in committing the same offset twice)
         preAcquireWork();
         try {
-            Map<TopicPartition, OffsetAndMetadata> offsetsToSend = wm.findCompletedEligibleOffsetsAndRemove();
-            if (offsetsToSend.isEmpty()) {
-                log.trace("No offsets ready");
+            Map<TopicPartition, OffsetAndMetadata> offsetsToCommit = wm.findCompletedEligibleOffsetsAndRemove();
+            if (offsetsToCommit.isEmpty()) {
+                log.debug("No offsets ready");
             } else {
-                log.debug("Will commit offsets for {} partition(s): {}", offsetsToSend.size(), offsetsToSend);
+                log.debug("Will commit offsets for {} partition(s): {}", offsetsToCommit.size(), offsetsToCommit);
                 ConsumerGroupMetadata groupMetadata = consumerMgr.groupMetadata();
 
                 log.debug("Begin commit");
-                commitOffsets(offsetsToSend, groupMetadata);
+                commitOffsets(offsetsToCommit, groupMetadata);
 
                 log.debug("On commit success");
-                onOffsetCommitSuccess(offsetsToSend);
+                onOffsetCommitSuccess(offsetsToCommit);
             }
         } finally {
             postCommit();
@@ -55,8 +54,8 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    private void onOffsetCommitSuccess(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        wm.onOffsetCommitSuccess(offsetsToSend);
+    private void onOffsetCommitSuccess(final Map<TopicPartition, OffsetAndMetadata> committed) {
+        wm.onOffsetCommitSuccess(committed);
     }
 
     protected abstract void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata);

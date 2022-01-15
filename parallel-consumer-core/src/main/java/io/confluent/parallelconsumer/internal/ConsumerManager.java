@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -51,9 +50,10 @@ public class ConsumerManager<K, V> {
             }
             pollingBroker.set(true);
             metaCache = consumer.groupMetadata();
+            log.debug("Poll starting with timeout: {}", timeoutToUse);
             records = consumer.poll(timeoutToUse);
+            log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
             metaCache = consumer.groupMetadata();
-            log.debug("Poll completed normally and returned {}...", records.count());
         } catch (WakeupException w) {
             correctPollWakeups++;
             log.debug("Awoken from broker poll");
@@ -68,7 +68,7 @@ public class ConsumerManager<K, V> {
     /**
      * Wakes up the consumer, but only if it's polling.
      * <p>
-     * Otherwise we can interrupt other operations like {@link KafkaConsumer#commitSync()}.
+     * Otherwise, we can interrupt other operations like {@link KafkaConsumer#commitSync()}.
      */
     public void wakeup() {
         // boolean reduces the chances of a mis-timed call to wakeup, but doesn't prevent all spurious wake up calls to other methods like #commit

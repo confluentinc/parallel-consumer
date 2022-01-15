@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.truth;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
 import io.confluent.csid.utils.LongPollingMockConsumer;
@@ -19,23 +20,25 @@ import static com.google.common.truth.Truth.assertAbout;
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
 public class LongPollingMockConsumerSubject<K, V> extends Subject {
+
     private final LongPollingMockConsumer<K, V> actual;
 
-    protected LongPollingMockConsumerSubject(FailureMetadata metadata, LongPollingMockConsumer actual) {
+    protected LongPollingMockConsumerSubject(FailureMetadata metadata, LongPollingMockConsumer<K, V> actual) {
         super(metadata, actual);
         this.actual = actual;
     }
 
-    public static Factory<LongPollingMockConsumerSubject, LongPollingMockConsumer> mockConsumers() {
+    public static <K, V> Factory<LongPollingMockConsumerSubject<K, V>, LongPollingMockConsumer<K, V>> mockConsumers() {
         return LongPollingMockConsumerSubject::new;
     }
 
-    public static LongPollingMockConsumerSubject assertTruth(final LongPollingMockConsumer actual) {
+    public static <K, V> LongPollingMockConsumerSubject<K, V> assertTruth(final LongPollingMockConsumer<K, V> actual) {
         return assertThat(actual);
     }
 
-    public static LongPollingMockConsumerSubject assertThat(final LongPollingMockConsumer actual) {
-        return assertAbout(mockConsumers()).that(actual);
+    public static <K, V> LongPollingMockConsumerSubject<K, V> assertThat(final LongPollingMockConsumer<K, V> actual) {
+        Factory<LongPollingMockConsumerSubject<K, V>, LongPollingMockConsumer<K, V>> factory = LongPollingMockConsumerSubject.<K, V>mockConsumers();
+        return assertAbout(factory).that(actual);
     }
 
     public CommitHistorySubject hasCommittedToPartition(TopicPartition tp) {
@@ -49,5 +52,14 @@ public class LongPollingMockConsumerSubject<K, V> extends Subject {
         return check("getCommitHistory(%s)", tp).about(commitHistories()).that(commitHistory);
     }
 
+    public CommitHistorySubject hasCommittedToAnyPartition() {
+        isNotNull();
+        CopyOnWriteArrayList<Map<TopicPartition, OffsetAndMetadata>> allCommits = actual.getCommitHistoryInt();
+        List<OffsetAndMetadata> historyForCommitsToPartition = allCommits.stream()
+                .flatMap(aCommitInstance -> aCommitInstance.values().stream())
+                .collect(Collectors.toList());
+        CommitHistory commitHistory = new CommitHistory(historyForCommitsToPartition);
+        return check("getCommitHistory()").about(commitHistories()).that(commitHistory);
+    }
 
 }

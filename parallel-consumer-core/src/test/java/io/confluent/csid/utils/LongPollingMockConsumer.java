@@ -1,12 +1,12 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.SubscriptionState;
@@ -16,9 +16,11 @@ import pl.tlinkowski.unij.api.UniMaps;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
  * @param <K>
  * @param <V>
  */
+@ToString
 @Slf4j
 public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
@@ -39,31 +42,71 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         super(offsetResetStrategy);
     }
 
+    private final AtomicBoolean statePretendingToLongPoll = new AtomicBoolean(false);
+
     @Override
     public synchronized ConsumerRecords<K, V> poll(Duration timeout) {
         var records = super.poll(timeout);
 
         if (records.isEmpty()) {
             log.debug("No records returned, simulating long poll with sleep for requested long poll timeout of {}...", timeout);
-            try {
-                synchronized (this) {
-                    this.wait(timeout.toMillis());
+            synchronized (this) {
+                var sleepUntil = Instant.now().plus(timeout);
+                statePretendingToLongPoll.set(true);
+                while (statePretendingToLongPoll.get() && !timeoutReached(sleepUntil)) {
+                    Duration left = Duration.between(Instant.now(), sleepUntil);
+                    log.debug("Time remaining: {}", left);
+                    try {
+                        // a sleep of 0 ms causes an indefinite sleep
+                        long msLeft = left.toMillis();
+                        if (msLeft > 0) {
+                            this.wait(msLeft);
+                        }
+                    } catch (InterruptedException e) {
+                        log.warn("Interrupted, ending this long poll early", e);
+                        statePretendingToLongPoll.set(false);
+                    }
                 }
-            } catch (InterruptedException e) {
-                log.warn("Interrupted", e);
+                if (statePretendingToLongPoll.get() && !timeoutReached(sleepUntil)) {
+                    log.debug("Don't know why I was notified to wake up");
+                } else if (statePretendingToLongPoll.get() && timeoutReached(sleepUntil)) {
+                    log.debug("Simulated long poll of ({}) finished. Now: {} vs sleep until: {}", timeout, Instant.now(), sleepUntil);
+                } else if (!statePretendingToLongPoll.get()) {
+                    log.debug("Simulated long poll was interrupted by by WAKEUP command...");
+                }
+                statePretendingToLongPoll.set(false);
             }
-            log.debug("Simulated long poll of ({}) finished.", timeout);
         } else {
             log.debug("Polled and found {} records...", records.count());
         }
         return records;
     }
 
+    /**
+     * Restricted to ms precision to match {@link #wait()} semantics
+     */
+    private boolean timeoutReached(Instant sleepUntil) {
+        long now = Instant.now().toEpochMilli();
+        long until = sleepUntil.toEpochMilli();
+        // plus one due to truncation/rounding semantics
+        return now + 1 >= until;
+    }
+
+    @Override
+    public synchronized void addRecord(ConsumerRecord<K, V> record) {
+        super.addRecord(record);
+        // wake me up if I'm pretending to long poll
+        wakeup();
+    }
+
     @Override
     public synchronized void wakeup() {
-        log.debug("Interrupting mock long poll...");
-        synchronized (this) {
-            this.notifyAll();
+        if (statePretendingToLongPoll.get()) {
+            statePretendingToLongPoll.set(false);
+            log.debug("Interrupting mock long poll...");
+            synchronized (this) {
+                this.notifyAll();
+            }
         }
     }
 
