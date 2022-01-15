@@ -155,8 +155,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * Moves the requested amount of work from initial queues into work queues, if available.
      *
      * @param requestedMaxWorkToRetrieve try to move at least this many messages into the inbound queues
+     * @return the number of extra records ingested due to request
      */
-    private void ingestPolledRecordsIntoQueues(final int requestedMaxWorkToRetrieve) {
+    private int ingestPolledRecordsIntoQueues(long requestedMaxWorkToRetrieve) {
         log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
                 requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
 
@@ -175,6 +176,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         } while (continueIngesting);
 
         log.debug("{} new records were registered.", takenWorkCount);
+
+        return takenWorkCount;
     }
 
     /**
@@ -196,10 +199,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             return UniLists.of();
         }
 
-        tryToEnsureQuantityOfWorkQueuedAvailable(requestedMaxWorkToRetrieve);
+        int ingested = tryToEnsureQuantityOfWorkQueuedAvailable(requestedMaxWorkToRetrieve);
 
         //
-        List<WorkContainer<K, V>> work = new ArrayList<>();
+        List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
 
         //
         LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> shardQueueIterator =
@@ -211,19 +214,19 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         //
         for (var shardQueueEntry : shardQueueIterator) {
             log.trace("Looking for work on shardQueueEntry: {}", shardQueueEntry.getKey());
-            if (work.size() >= workToGetDelta) {
+            if (workFromAllShards.size() >= workToGetDelta) {
                 this.iterationResumePoint = Optional.of(shardQueueEntry.getKey());
                 log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
                 break;
             }
 
-            ArrayList<WorkContainer<K, V>> shardWork = new ArrayList<>();
+            ArrayList<WorkContainer<K, V>> shardWorkToTake = new ArrayList<>();
             SortedMap<Long, WorkContainer<K, V>> shard = shardQueueEntry.getValue();
 
             // then iterate over shardQueueEntry queue
             Set<Map.Entry<Long, WorkContainer<K, V>>> shardEntries = shard.entrySet();
             for (var shardEntry : shardEntries) {
-                int taken = work.size() + shardWork.size();
+                int taken = workFromAllShards.size() + shardWorkToTake.size();
                 if (taken >= workToGetDelta) {
                     log.trace("Work taken ({}) exceeds max ({})", taken, workToGetDelta);
                     break;
@@ -264,8 +267,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 boolean delayHasPassed = workContainer.hasDelayPassed(clock);
                 if (delayHasPassed && workContainer.isNotInFlight() && hasNotSucceededAlready) {
                     log.trace("Taking {} as work", workContainer);
-                    workContainer.queueingForExecution();
-                    shardWork.add(workContainer);
+                    workContainer.onQueueingForExecution();
+                    shardWorkToTake.add(workContainer);
                 } else {
                     Duration timeInFlight = workContainer.getTimeInFlight();
                     String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
@@ -291,7 +294,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     break;
                 }
             }
-            work.addAll(shardWork);
+            workFromAllShards.addAll(shardWorkToTake);
         }
 
         if (slowWorkCount > 0) {
@@ -301,55 +304,60 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                     finalSlowWorkCount, toSeconds(thresholdForTimeSpentInQueueWarning), slowWorkTopics));
         }
 
-        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit queues: {}", work.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
-        numberRecordsOutForProcessing += work.size();
+        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit (partition) queues: {}", workFromAllShards.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        numberRecordsOutForProcessing += workFromAllShards.size();
 
-        return work;
+        return workFromAllShards;
     }
 
     /**
      * Tries to ensure there are at least this many records available in the queues
+     *
+     * @return the number of extra records ingested due to request
      */
     // todo rename - shunt messages from internal buffer into queues
-    private void tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
+    private int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
-        int available = sm.getWorkQueuedInShardsCount();
-        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
+        long available = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
         log.debug("Requested: {}, available in shards: {}, will try to process from mailbox the delta of: {}",
                 requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
 
-        ingestPolledRecordsIntoQueues(extraNeededFromInboxToSatisfy);
+        int ingested = ingestPolledRecordsIntoQueues(extraNeededFromInboxToSatisfy);
+        log.debug("Ingested an extra {} records", ingested);
+
+        long ingestionOffBy = extraNeededFromInboxToSatisfy - ingested;
+
+        return ingested;
     }
 
     // todo move PM or SM?
     public void onSuccess(WorkContainer<K, V> wc) {
-        log.trace("Processing success...");
-        pm.setDirty();
-        ConsumerRecord<K, V> cr = wc.getCr();
         log.trace("Work success ({}), removing from processing shard queue", wc);
+
         wc.succeed();
 
         // update as we go
         pm.onSuccess(wc);
-        sm.onSuccess(cr);
+        sm.onSuccess(wc);
 
         // notify listeners
-        successfulWorkListeners.forEach((c) -> c.accept(wc));
+        successfulWorkListeners.forEach(c -> c.accept(wc));
 
         numberRecordsOutForProcessing--;
     }
 
     /**
+     * Can run from controller or poller thread, depending on which is responsible for committing
+     *
      * @see PartitionMonitor#onOffsetCommitSuccess(Map)
      */
-    // todo remove?
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        pm.onOffsetCommitSuccess(offsetsToSend);
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+        pm.onOffsetCommitSuccess(committed);
     }
 
     public void onFailure(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        // if not explicitly retriable, put it back in with an try counter so it can be later given up on
         wc.fail(clock);
         sm.onFailure(wc);
         numberRecordsOutForProcessing--;
@@ -359,8 +367,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    public Integer getWorkQueuedInMailboxCount() {
-        return wmbm.getWorkQueuedInMailboxCount();
+    public Integer getAmountOfWorkQueuedWaitingIngestion() {
+        return wmbm.getAmountOfWorkQueuedWaitingIngestion();
     }
 
     // todo rename
@@ -368,8 +376,17 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.findCompletedEligibleOffsetsAndRemove();
     }
 
-    public boolean hasCommittableOffsets() {
-        return pm.isDirty();
+    /**
+     * Have our partitions been revoked? Can a batch contain messages of different epochs?
+     *
+     * @return true if any epoch is stale, false if not
+     * @see #checkIfWorkIsStale(WorkContainer)
+     */
+    public boolean checkIfWorkIsStale(final List<WorkContainer<K, V>> workContainers) {
+        for (final WorkContainer<K, V> workContainer : workContainers) {
+            if (checkIfWorkIsStale(workContainer)) return true;
+        }
+        return false;
     }
 
     /**
@@ -387,10 +404,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
-     *         should be downloaded (or pipelined in the Consumer)
+     * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
+        return getAmountOfWorkQueuedWaitingIngestion() > options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -405,25 +422,21 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() != 0;
     }
 
-    public boolean isClean() {
-        return pm.isClean();
-    }
-
-    private boolean isDirty() {
-        return pm.isDirty();
+    public boolean isWorkInFlightMeetingTarget() {
+        return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
     /**
      * @return Work count in mailbox plus work added to the processing shards
      */
-    public int getTotalWorkWaitingProcessing() {
-        int workQueuedInShardsCount = sm.getWorkQueuedInShardsCount();
-        Integer workQueuedInMailboxCount = getWorkQueuedInMailboxCount();
+    public long getTotalWorkAwaitingIngestion() {
+        long workQueuedInShardsCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        Integer workQueuedInMailboxCount = getAmountOfWorkQueuedWaitingIngestion();
         return workQueuedInShardsCount + workQueuedInMailboxCount;
     }
 
-    public boolean hasWorkInMailboxes() {
-        return getWorkQueuedInMailboxCount() > 0;
+    public boolean hasWorkAwaitingIngestionToShards() {
+        return getAmountOfWorkQueuedWaitingIngestion() > 0;
     }
 
     public boolean hasWorkInCommitQueues() {
@@ -431,8 +444,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        int partitionWorkRemainingCount = sm.getWorkQueuedInShardsCount();
-        boolean internalQueuesNotEmpty = hasWorkInMailboxes();
+        long partitionWorkRemainingCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        boolean internalQueuesNotEmpty = hasWorkAwaitingIngestionToShards();
         return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
     }
 
@@ -460,7 +473,26 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public boolean isSystemIdle() {
+    public boolean isNoRecordsOutForProcessing() {
         return getNumberRecordsOutForProcessing() == 0;
+    }
+
+    // todo replace raw ConsumerRecord with read only context object wrapper #216
+    public Optional<WorkContainer<K, V>> getWorkContainerFor(ConsumerRecord<K, V> rec) {
+        ShardManager<K, V> shard = getSm();
+        return Optional.ofNullable(shard.getWorkContainerForRecord(rec));
+    }
+
+    public Optional<Duration> getLowestRetryTime() {
+        return sm.getLowestRetryTime();
+    }
+
+    /**
+     * @return true if more records are needed to be sent out for processing (not enough in queues to satisfy
+     * concurrency target)
+     */
+    public boolean isStarvedForNewWork() {
+        long queued = getTotalWorkAwaitingIngestion();
+        return queued < options.getTargetAmountOfRecordsInFlight();
     }
 }

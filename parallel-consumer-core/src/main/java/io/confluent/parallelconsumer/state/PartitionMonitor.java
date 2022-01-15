@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
@@ -69,7 +68,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
     /**
-     * Get's set to true whenever work is returned completed, so that we know when a commit needs to be made.
+     * Gets set to true whenever work is returned completed, so that we know when a commit needs to be made.
      * <p>
      * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
      * chances no work has completed in the last second.
@@ -167,9 +166,9 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
      * offset.
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
-        offsetsToSend.forEach((tp, meta) -> {
+        committed.forEach((tp, meta) -> {
             var partition = getPartitionState(tp);
             partition.onOffsetCommitSuccess(meta);
         });
@@ -198,7 +197,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             partitionStates.put(removedPartition, RemovedPartitionState.getSingleton());
 
             //
-            NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition = partition.getCommitQueues();
+            NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition = partition.getCommitQueue();
             sm.removeAnyShardsReferencedBy(workFromRemovedPartition);
         }
     }
@@ -321,8 +320,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                            TopicPartition topicPartitionKey,
                            LinkedHashSet<Long> incompleteOffsets) {
         // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
-        boolean offsetEncodingNeeded = !incompleteOffsets.isEmpty();
-        if (offsetEncodingNeeded) {
+        boolean incompleteOffsetsNeedingEncoding = !incompleteOffsets.isEmpty();
+        if (incompleteOffsetsNeedingEncoding) {
             // todo offsetOfNextExpectedMessage should be an attribute of State - consider deriving it from the state class
             long offsetOfNextExpectedMessage;
             OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
@@ -435,13 +434,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      */
     // todo remove completely as state of offsets should be tracked live, no need to scan for them - see #201
     // https://github.com/confluentinc/parallel-consumer/issues/201 Refactor: Live tracking of offsets as they change, so we don't need to scan for them
-    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
-
-        //
-        if (!isDirty()) {
-            // nothing to commit
-            return UniMaps.of();
-        }
+    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
 
         //
         Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
@@ -452,7 +445,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         //
         for (var partitionStateEntry : getAssignedPartitions().entrySet()) {
             var partitionState = partitionStateEntry.getValue();
-            Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getCommitQueues();
+            Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getCommitQueue();
             TopicPartition topicPartitionKey = partitionStateEntry.getKey();
             log.trace("Starting scan of partition: {}", topicPartitionKey);
 
@@ -498,7 +491,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 } else {
                     lowWaterMark = container.offset();
                     beyondSuccessiveSucceededOffsets = true;
-                    log.trace("Offset ({}) is incomplete, holding up the queue ({}) of size {}.",
+                    log.trace("Offset (:{}) is incomplete, holding up the queue ({}) of size {}.",
                             container.getCr().offset(),
                             topicPartitionKey,
                             partitionQueue.size());
@@ -514,6 +507,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             }
         }
 
+
+        List<Long> collect = offsetsToSend.values().stream().map(x -> x.offset()).collect(Collectors.toList());
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
                 count, removed, offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;
@@ -523,18 +518,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return Collections.unmodifiableMap(this.partitionStates.entrySet().stream()
                 .filter(e -> !e.getValue().isRemoved())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-    }
-
-    public void setDirty() {
-        workStateIsDirtyNeedsCommitting.set(true);
-    }
-
-    boolean isDirty() {
-        return workStateIsDirtyNeedsCommitting.get();
-    }
-
-    public boolean isClean() {
-        return !isDirty();
     }
 
 }

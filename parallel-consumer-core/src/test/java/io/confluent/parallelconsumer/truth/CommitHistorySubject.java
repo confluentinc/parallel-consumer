@@ -48,4 +48,8 @@ public class CommitHistorySubject extends Subject {
     public void offset(long quantity) {
         check("atLeastOffset()").that(actual.getOffsetHistory()).contains(quantity);
     }
+
+    public void anything() {
+        check("commits()").that(actual.getOffsetHistory()).isNotEmpty();
+    }
 }

@@ -3,6 +3,8 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
+import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -36,7 +38,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
-import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
@@ -44,7 +46,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 10, unit = SECONDS)
+@Timeout(value = 1, unit = MINUTES)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -73,7 +75,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         // let it process
-        waitForSomeLoopCycles(3);
+        awaitForSomeLoopCycles(3);
 
         parallelConsumer.close();
 
@@ -86,54 +88,61 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
      */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    @SneakyThrows
     void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
         var options = getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)
                 .build();
         setupParallelConsumerInstance(options);
+        parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
         primeFirstRecord();
         sendSecondRecord(consumerSpy);
 
+        // sanity
         assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(UNORDERED);
 
+        // setup
         var locks = constructLatches(2);
-
         var processedStates = new LinkedHashMap<Integer, Boolean>();
-
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
         parallelConsumer.poll((ignore) -> {
+            log.error("msg: {}", ignore);
             startBarrierLatch.countDown();
             int offset = (int) ignore.offset();
             LatchTestUtils.awaitLatch(locks, offset);
             processedStates.put(offset, true);
         });
 
+        //
         awaitLatch(startBarrierLatch);
 
-        assertThat(parallelConsumer.getWm().getTotalWorkWaitingProcessing()).isEqualTo(2);
-
+        // zero records waiting, 2 out for processing
+        assertThat(parallelConsumer.getWm().getTotalWorkAwaitingIngestion()).isZero();
         assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1
         releaseAndWait(locks, 1);
 
+        // make sure offset 0 is committed (next expected), while the rest are not
         parallelConsumer.requestCommitAsap();
+        awaitForCommitExact(0);
 
         // make sure no offsets are committed
         assertCommits(of(), "Partition is blocked");
 
-        // So it's data is setup can be used in other tests, finish 0
+        // test complete
+
+        // So it's data is setup can be used in other tests, finish offset 0 as well
         releaseAndWait(locks, 0);
 
         parallelConsumer.requestCommitAsap();
-        waitForSomeLoopCycles(5);
+
+        awaitForCommitExact(2);
 
         log.debug("Closing...");
-        parallelConsumer.close();
+        parallelConsumer.closeDrainFirst();
 
         assertThat(processedStates)
                 .as("sanity - all expected messages are processed")
@@ -155,10 +164,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     }
 
     /**
-     * {@link #offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode)} doesnt check the final offsets -
+     * {@link #offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode)} doesn't check the final offsets -
      * that's what this test does.
-     *
-     * @param commitMode
      */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
@@ -206,7 +213,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish processing 1
         releaseAndWait(locks, 1);
 
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
 
         // make sure no offsets are committed
         verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction();
@@ -215,14 +222,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         releaseAndWait(locks, 2);
 
         //
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
 
         // make sure no offsets are committed
         verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction();
 
         // finish 0
         releaseAndWait(locks, 0);
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         // make sure offset 2, not 0 or 1 is committed
         verify(producerSpy, after(verificationWaitDelay).times(1)).commitTransaction();
@@ -299,7 +306,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         parallelConsumer.requestCommitAsap();
 
-        waitForSomeLoopCycles(50); // async commit can be slow - todo change this to event based
+        awaitForSomeLoopCycles(50); // async commit can be slow - todo change this to event based
 
         // make sure only base offsets are committed for partition (next expected = 0 and 2 respectively)
 //        assertCommits(of(2));
@@ -319,9 +326,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         parallelConsumer.requestCommitAsap();
 
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
         if (isUsingAsyncCommits())
-            waitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
+            awaitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
 
         // make sure offset 0 and 1 is committed
         assertCommitLists(of(of(2), of(2, 3)));
@@ -331,7 +338,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // async consumer is slower to execute the commit. We could just wait, or we could add an event to the async consumer commit cycle
         if (isUsingAsyncCommits())
-            waitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
+            awaitForSomeLoopCycles(3); // async commit can be slow - todo change this to event based
 
         //
         await().untilAsserted(() ->
@@ -377,7 +384,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void testVoid(CommitMode commitMode) {
+    public void testVoidPollMethod(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
         int expected = 1;
@@ -389,7 +396,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(msgCompleteBarrier);
 
-        waitForSomeLoopCycles(1);
+        awaitForOneLoopCycle();
 
         parallelConsumer.close();
 
@@ -518,7 +525,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         msg1Lock.countDown();
 
         // wait cycles to make sure
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         //
         assertThat(polled).as("sanity check input data").hasSameSizeAs(locks);
@@ -534,13 +541,13 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // finish 2 process clear, but commit blocked by 0
         log.debug("Unlocking 2...");
         msg2Lock.countDown();
-        waitForSomeLoopCycles(2);
+        awaitForSomeLoopCycles(2);
         assertThat(processedState.get(2)).isTrue();
 
 
         // still nothing - 0 blocks 1 and 2 (partition 0)
         verify(producerSpy, after(verificationWaitDelay).never()).commitTransaction(); // todo remove all wait nevers in favour of triggers as it slows down test
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
         assertCommits(of());
 
         // finish 0 - releases pending (1,2)
@@ -548,10 +555,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         msg0Lock.countDown();
 
         // 0 gets comitted by itself
-        waitForCommitExact(0, 0);
+        awaitForCommitExact(0, 0);
 
         // make sure offset 0 is committed. 1 is now free to be processed (same key as 0), which as 2 was processed previously, frees up offset 2 to commit
-        waitForCommitExact(0, 2);
+        awaitForCommitExact(0, 2);
         assertCommits(of(0, 2));
 
         // unlock 3 - should get committed
@@ -561,10 +568,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // unlock 5 - commit blocked by 4, but should finish processing and clear 6 and then 7 (in 2 loops) for processing
         log.debug("Unlocking 5...");
         msg5Lock.countDown();
-        waitUntilTrue(() -> processedState.get(5));
+        awaitUntilTrue(() -> processedState.get(5));
         assertThat(processedState.get(5)).as("5 should processed").isTrue();
 
-        waitForCommitExact(0, 3);
+        awaitForCommitExact(0, 3);
         assertCommits(of(0, 2, 3));
 
         // unlock 4 - clears 5 for offset commit - 7 not processed yet (5,6,7 same key), 8 was never locked
@@ -572,12 +579,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         msg4Lock.countDown();
 
         // 6 should have been processed, unblocked by 5 (same key)
-        waitUntilTrue(() -> processedState.get(6));
+        awaitUntilTrue(() -> processedState.get(6));
         assertThat(processedState.get(6)).as("6 should processed").isTrue();
 
         // 5 and 6 finished, same key, coalesced commit to 6
-        waitForSomeLoopCycles(1);
-        waitForCommitExact(1, 6);
+        awaitForSomeLoopCycles(1);
+        awaitForCommitExact(1, 6);
         assertCommits(of(0, 2, 3, 6));
 
         // unlock 7 (same key as 6), unblocks 8 for commit
@@ -585,7 +592,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertThat(processedState.get(8)).isTrue();
         //
         releaseAndWait(locks, 7);
-        waitForCommitExact(1, 8);
+        awaitForCommitExact(1, 8);
         assertCommits(of(0, 2, 3, 6, 8));
     }
 
@@ -652,7 +659,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         //
         awaitLatch(twoLoopLatch);
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         //
         await().untilAsserted(() -> {
@@ -673,7 +680,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         awaitLatch(fourLoopLatch); // wait for some loops
 
         // one more step
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         await().untilAsserted(() -> {
             //
@@ -690,6 +697,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void closeAfterSingleMessageShouldBeEventBasedFast(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
+        Duration timeBetweenCommits = parallelConsumer.getTimeBetweenCommits();
+
         var msgCompleteBarrier = new CountDownLatch(1);
 
         parallelConsumer.poll((ignore) -> {
@@ -700,23 +709,23 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         awaitLatch(msgCompleteBarrier);
 
         // allow for offset to be committed
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         parallelConsumer.requestCommitAsap();
 
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         await().untilAsserted(() ->
                 assertCommits(of(1)));
 
         // close
-        Duration time = time(() -> {
+        Duration durationOfCloseOperation = time(() -> {
             parallelConsumer.close();
         });
 
         //
-        assertThat(time).as("Should not be blocked for any reason")
-                .isLessThan(ofSeconds(1));
+        Duration expectedDurationOfClose = JavaUtils.max(timeBetweenCommits, ofSeconds(1)); // wait at least 1 second
+        assertThat(durationOfCloseOperation).as("Should be fast").isLessThan(expectedDurationOfClose);
     }
 
     @ParameterizedTest()
@@ -764,7 +773,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
             //
             parallelConsumer.requestCommitAsap();
-            waitForCommitExact(1);
+            awaitForCommitExact(1);
 
             parallelConsumer.closeDrainFirst();
 
@@ -862,7 +871,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         parallelConsumer.pollAndProduce((ignore) -> new ProducerRecord<>("Hello", "there"));
 
         // let it process
-        waitForSomeLoopCycles(2);
+        awaitForSomeLoopCycles(2);
 
         parallelConsumer.requestCommitAsap();
 

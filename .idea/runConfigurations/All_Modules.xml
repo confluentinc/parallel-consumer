@@ -4,7 +4,6 @@
     <runConfiguration name="All Vertx" type="JUnit" />
     <runConfiguration name="All example-core" type="JUnit" />
     <runConfiguration name="All example-vertx" type="JUnit" />
-    <runConfiguration name="All example-streams" type="JUnit" />
     <method v="2" />
   </configuration>
 </component>

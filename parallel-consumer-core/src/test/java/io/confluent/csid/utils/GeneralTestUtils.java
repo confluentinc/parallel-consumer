@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import ch.qos.logback.classic.Level;
@@ -26,10 +26,10 @@ public class GeneralTestUtils {
     }
 
     @SneakyThrows
-    public static Duration time(Runnable c) {
+    public static Duration time(Runnable task) {
         Instant start = Instant.now();
-//        log.debug("Starting at: {}", start);
-        c.run();
+        log.debug("Timed function starting at: {}", start);
+        task.run();
         Instant end = Instant.now();
         Duration between = Duration.between(start, end);
         log.debug("Finished, took {}", between);

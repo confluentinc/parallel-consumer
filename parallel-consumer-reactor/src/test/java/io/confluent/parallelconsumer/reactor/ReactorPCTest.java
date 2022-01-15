@@ -3,51 +3,28 @@ package io.confluent.parallelconsumer.reactor;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.BaseStream;
 
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @Slf4j
-class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
-
-    public static final int MAX_CONCURRENCY = 1000;
-    ReactorProcessor<String, String> rp;
-
-    @Override
-    protected AbstractParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        var build = parallelConsumerOptions.toBuilder()
-                .commitMode(PERIODIC_CONSUMER_SYNC)
-                .maxConcurrency(MAX_CONCURRENCY)
-//                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
-                .build();
-
-        rp = new ReactorProcessor<>(build);
-
-        return rp;
-    }
+class ReactorPCTest extends ReactorUnitTestBase {
 
     @BeforeEach
     public void setupData() {
@@ -62,7 +39,7 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
 
         ConcurrentLinkedQueue<Object> msgs = new ConcurrentLinkedQueue<>();
 
-        rp.react((rec) -> {
+        reactorPC.react((rec) -> {
             log.info("Reactor user poll function: {}", rec);
             msgs.add(rec);
             Mono<String> result = Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()));
@@ -71,7 +48,7 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
         });
 
         await()
-                .atMost(Duration.ofSeconds(1))
+                .atMost(defaultTimeout)
                 .untilAsserted(() -> {
                     assertWithMessage("Processed records collection so far")
                             .that(msgs.size())
@@ -81,13 +58,6 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
                             .hasCommittedToPartition(topicPartition)
                             .atLeastOffset(4);
                 });
-    }
-
-    private static Flux<String> fromPath(Path path) {
-        return Flux.using(() -> Files.lines(path),
-                Flux::fromStream,
-                BaseStream::close
-        );
     }
 
     @SneakyThrows
@@ -110,7 +80,7 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
         var completeOrProblem = new CountDownLatch(1);
         var maxConcurrency = MAX_CONCURRENCY;
 
-        rp.react((rec) -> {
+        reactorPC.react((rec) -> {
             Mono<String> result = Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()))
                     .doOnNext(ignore -> {
                         // add that our mono processing has started
@@ -137,8 +107,8 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
 
                         //
                         int numberOfFinishedRecords = finishedCount.incrementAndGet();
-                        boolean allExpectedRecordsPareProcessed = numberOfFinishedRecords > quantity - 1;
-                        if (allExpectedRecordsPareProcessed) {
+                        boolean allExpectedRecordsAreProcessed = numberOfFinishedRecords > quantity - 1;
+                        if (allExpectedRecordsAreProcessed) {
                             // release the latch to indicate processing complete
                             completeOrProblem.countDown();
                         }
@@ -149,18 +119,21 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
             return result;
         });
 
+        // block here until all messages processed
+        LatchTestUtils.awaitLatch(completeOrProblem, defaultTimeoutSeconds);
+
         //
-        LatchTestUtils.awaitLatch(completeOrProblem, 450);
+        int maxConcurrencyAllowedThreshold = (int) (maxConcurrency * 1.1);
         assertWithMessage("Max concurrency should never be exceeded")
-                .that(maxConcurrentRecordsSeen.get()).isLessThan(maxConcurrency);
+                .that(maxConcurrentRecordsSeen.get()).isLessThan(maxConcurrencyAllowedThreshold);
         log.info("Max concurrency was {}", maxConcurrentRecordsSeen.get());
 
         //
         await()
                 // perform testing for at least some time - see fail fast
-                .atMost(Duration.ofSeconds(2))
+                .atMost(defaultTimeout)
                 // make sure out for processing recs never exceeds max concurrency
-                .failFast("Max concurrency exceeded", () -> msgs.size() > maxConcurrency)
+                .failFast("Max concurrency exceeded", () -> msgs.size() > maxConcurrencyAllowedThreshold)
                 .untilAsserted(() -> {
                     assertWithMessage("Number of completed messages")
                             .that(finishedCount.get()).isEqualTo(quantity);
@@ -169,5 +142,6 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
                 });
 
         bar.close();
+        log.info("Max concurrency was {}", maxConcurrentRecordsSeen.get());
     }
 }

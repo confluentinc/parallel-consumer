@@ -1,9 +1,8 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,6 +25,7 @@ public class LatchTestUtils {
     public static void awaitLatch(List<CountDownLatch> latches, int latchIndex) {
         log.trace("Waiting on latch {}", latchIndex);
         awaitLatch(latches.get(latchIndex));
+        log.trace("Wait on latch {} finished.", latchIndex);
     }
 
     @SneakyThrows

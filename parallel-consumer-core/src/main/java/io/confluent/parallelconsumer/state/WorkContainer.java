@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.state;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.AccessLevel;
@@ -28,6 +29,8 @@ import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private final String DEFAULT_TYPE = "DEFAULT";
+
+    final static WallClock normalClock = new WallClock();
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -57,11 +60,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private Optional<Boolean> userFunctionSucceeded = Optional.empty();
 
     /**
-     * Wait this long before trying again
-     */
-    private Duration retryDelay;
-
-    /**
      * @see ParallelConsumerOptions#getDefaultMessageRetryDelay()
      */
     @Setter
@@ -87,6 +85,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public void fail(WallClock clock) {
+        // If not explicitly retriable, put it back in with a retry counter, so it can be later given up on
         log.trace("Failing {}", this);
         numberOfFailedAttempts++;
         failedAt = Optional.of(clock.getNow());
@@ -103,12 +102,22 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
             // if never failed, there is no artificial delay, so "delay" has always passed
             return true;
         }
-        Duration delay = getDelay(clock);
+        Duration delay = getDelayUntilRetryDue(clock);
         boolean negative = delay.isNegative() || delay.isZero();
         return negative;
     }
 
-    public Duration getDelay(WallClock clock) {
+    /**
+     * @return time until it should be retried
+     */
+    public Duration getDelayUntilRetryDue() {
+        return getDelayUntilRetryDue(normalClock);
+    }
+
+    /**
+     * @return time until it should be retried
+     */
+    public Duration getDelayUntilRetryDue(WallClock clock) {
         Instant now = clock.getNow();
         Temporal nextAttemptAt = tryAgainAt(clock);
         return Duration.between(now, nextAttemptAt);
@@ -117,23 +126,23 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private Temporal tryAgainAt(WallClock clock) {
         if (failedAt.isPresent()) {
             // previously failed, so add the delay to the last failed time
-            Duration retryDelay = getRetryDelay();
+            Duration retryDelay = getRetryDelayConfig();
             return failedAt.get().plus(retryDelay);
         } else {
-            // never failed, no try again delay
-            return Instant.MIN;
+            // never failed, so no try again delay
+            return Instant.now();
         }
     }
 
-    public Duration getRetryDelay() {
+    /**
+     * @return the delay between retries e.g. retry after 1 second
+     */
+    public Duration getRetryDelayConfig() {
         var retryDelayProvider = ParallelConsumerOptions.retryDelayProviderStatic;
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(this);
         } else {
-            if (retryDelay == null)
-                return defaultRetryDelay;
-            else
-                return retryDelay;
+            return defaultRetryDelay;
         }
     }
 
@@ -153,7 +162,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return inFlight;
     }
 
-    public void queueingForExecution() {
+    public void onQueueingForExecution() {
         log.trace("Queueing for execution: {}", this);
         inFlight = true;
         timeTakenAsWorkMs = Optional.of(System.currentTimeMillis());
@@ -199,5 +208,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     public boolean hasPreviouslyFailed() {
         return getNumberOfFailedAttempts() > 0;
+    }
+
+    public boolean isAvailableToTakeAsWork() {
+        // todo missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
+        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed(normalClock);
     }
 }
