@@ -62,7 +62,11 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
                           Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
 
     /**
-     * @see #vertxHttpRequest(BiFunction, Consumer, Consumer)
+     * Consume from the broker concurrently, give us the {@link HttpRequest}, we'll do the rest.
+     * <p>
+     * This version uses a default {@code no-op} {@code onSend} and {@code onComplete} function.
+     *
+     * @see #vertxHttpRequest(BiFunction, Consumer, Consumer) for further info
      */
     void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction);
 
@@ -81,7 +85,12 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
                             Consumer<Future<HttpResponse<Buffer>>> onSend);
 
     /**
-     * @see #vertxHttpWebClient(BiFunction, Consumer)
+     * Consume from the broker concurrently, initiating your own {@link HttpRequest#send()} call, give us the {@link
+     * Future}.
+     * <p>
+     * This version uses a default {@code no-op} {@code onSend} function.
+     *
+     * @see #vertxHttpWebClient(BiFunction, Consumer) for further info
      */
     void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction);
 
