@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.truth;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
 import io.confluent.csid.utils.LongPollingMockConsumer;
@@ -41,13 +40,13 @@ public class LongPollingMockConsumerSubject<K, V> extends Subject {
 
     public CommitHistorySubject hasCommittedToPartition(TopicPartition tp) {
         isNotNull();
-        CopyOnWriteArrayList<Map<TopicPartition, OffsetAndMetadata>> commits = actual.getCommitHistoryInt();
-        List<OffsetAndMetadata> collect = commits.stream()
-                .filter(x -> x.containsKey(tp))
-                .map(x -> x.get(tp))
+        CopyOnWriteArrayList<Map<TopicPartition, OffsetAndMetadata>> allCommits = actual.getCommitHistoryInt();
+        List<OffsetAndMetadata> historyForCommitsToPartition = allCommits.stream()
+                .filter(aCommitInstance -> aCommitInstance.containsKey(tp))
+                .map(aCommitInstance -> aCommitInstance.get(tp))
                 .collect(Collectors.toList());
-        CommitHistory commitHistory = new CommitHistory(collect);
-        return check("hasCommittedToPartition(%s)", tp).about(commitHistories()).that(commitHistory);
+        CommitHistory commitHistory = new CommitHistory(historyForCommitsToPartition);
+        return check("getCommitHistory(%s)", tp).about(commitHistories()).that(commitHistory);
     }
 
 

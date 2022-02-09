@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -106,13 +105,13 @@ class WorkManagerTest {
         registerSomeWork();
 
         int max = 1;
-        var gottenWork = wm.maybeGetWork(max);
+        var gottenWork = wm.maybeGetWorkIfAvailable(max);
         assertThat(gottenWork).hasSize(1);
         assertOffsets(gottenWork, of(0));
 
         wm.onSuccess(gottenWork.get(0));
 
-        gottenWork = wm.maybeGetWork(max);
+        gottenWork = wm.maybeGetWorkIfAvailable(max);
         assertThat(gottenWork).hasSize(1);
         assertOffsets(gottenWork, of(1));
     }
@@ -124,29 +123,29 @@ class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.maybeGetWork(max);
+        var works = wm.maybeGetWorkIfAvailable(max);
         assertThat(works).hasSize(2);
         assertOffsets(works, of(0, 1));
 
         wm.onSuccess(works.get(0));
         wm.onFailure(works.get(1));
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(2));
 
         wm.onSuccess(works.get(0));
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of());
 
         advanceClockBySlightlyLessThanDelay();
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of());
 
         advanceClockByDelay();
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(1));
         wm.onSuccess(works.get(0));
 
@@ -177,16 +176,16 @@ class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.maybeGetWork(max);
+        var works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(0));
         var w = works.get(0);
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of()); // should be blocked by in flight
 
         wm.onSuccess(w);
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(1));
     }
 
@@ -201,17 +200,17 @@ class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.maybeGetWork(max);
+        var works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(0));
         var wc = works.get(0);
         wm.onFailure(wc);
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of());
 
         advanceClockByDelay();
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(0));
 
         wc = works.get(0);
@@ -219,23 +218,23 @@ class WorkManagerTest {
 
         advanceClock(wc.getRetryDelay().minus(ofSeconds(1)));
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of());
 
         // increased advance to allow for bigger delay under high load during parallel test execution.
         advanceClock(wc.getRetryDelay().plus(ofSeconds(1)));
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(0));
         wm.onSuccess(works.get(0));
 
         assertOffsets(successfulWork, of(0));
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(1));
         wm.onSuccess(works.get(0));
 
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(2));
         wm.onSuccess(works.get(0));
 
@@ -294,7 +293,7 @@ class WorkManagerTest {
 
         int max = 10;
 
-        var works = wm.maybeGetWork(4);
+        var works = wm.maybeGetWorkIfAvailable(4);
         assertOffsets(works, of(0, 1, 2, 6));
 
         // fail some
@@ -302,14 +301,14 @@ class WorkManagerTest {
         wm.onFailure(works.get(3));
 
         //
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(8, 10));
 
         //
         advanceClockByDelay();
 
         //
-        works = wm.maybeGetWork(max);
+        works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(1, 6));
     }
 
@@ -333,8 +332,8 @@ class WorkManagerTest {
         registerSomeWork();
 
         //
-        assertThat(wm.maybeGetWork()).hasSize(1);
-        assertThat(wm.maybeGetWork()).isEmpty();
+        assertThat(wm.maybeGetWorkIfAvailable()).hasSize(1);
+        assertThat(wm.maybeGetWorkIfAvailable()).isEmpty();
     }
 
     static class FluentQueue<T> implements Iterable<T> {
@@ -395,17 +394,17 @@ class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        var works = wm.maybeGetWork();
+        var works = wm.maybeGetWorkIfAvailable();
         assertOffsets(works, of(0, 6));
         successAll(works);
 
         //
-        works = wm.maybeGetWork();
+        works = wm.maybeGetWorkIfAvailable();
         assertOffsets(works, of(1, 8));
         successAll(works);
 
         //
-        works = wm.maybeGetWork();
+        works = wm.maybeGetWorkIfAvailable();
         assertOffsets(works, of(2, 10));
         successAll(works);
     }
@@ -441,25 +440,25 @@ class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        var works = wm.maybeGetWork();
+        var works = wm.maybeGetWorkIfAvailable();
         works.sort(Comparator.naturalOrder()); // we actually don't care about the order
         // one record per key
         assertOffsets(works, of(0, 6, 8, 12));
         successAll(works);
 
         //
-        works = wm.maybeGetWork();
+        works = wm.maybeGetWorkIfAvailable();
         works.sort(Comparator.naturalOrder());
         assertOffsets(works, of(1, 10, 20));
         successAll(works);
 
         //
-        works = wm.maybeGetWork();
+        works = wm.maybeGetWorkIfAvailable();
         works.sort(Comparator.naturalOrder());
         assertOffsets(works, of(2, 15));
         successAll(works);
 
-        works = wm.maybeGetWork();
+        works = wm.maybeGetWorkIfAvailable();
         assertOffsets(works, of());
     }
 
@@ -493,7 +492,7 @@ class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        List<WorkContainer<String, String>> work = wm.maybeGetWork();
+        List<WorkContainer<String, String>> work = wm.maybeGetWorkIfAvailable();
 
         //
         assertThat(work).hasSameSizeAs(records.keySet());
@@ -530,7 +529,7 @@ class WorkManagerTest {
         registerSomeWork();
 
         //
-        var work = wm.maybeGetWork();
+        var work = wm.maybeGetWorkIfAvailable();
         assertThat(work).hasSize(3);
 
         //
