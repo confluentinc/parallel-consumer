@@ -1,23 +1,38 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 
+/**
+ * Shards are local queues of work to be processed.
+ * <p>
+ * Generally they are keyed by one of the corresponding {@link ProcessingOrder} modes - key, partition etc...
+ * <p>
+ * This state is shared between the {@link BrokerPollSystem} thread (write - adding and removing shards and work)  and
+ * the {@link AbstractParallelEoSStreamProcessor} Controller thread (read - how many records are in the shards?), so
+ * must be thread safe.
+ */
 @Slf4j
 @RequiredArgsConstructor
 public class ShardManager<K, V> {
@@ -33,21 +48,22 @@ public class ShardManager<K, V> {
      * Used to collate together a queue of work units for each unique key consumed
      *
      * @see K
-     * @see WorkManager#maybeGetWork()
+     * @see WorkManager#maybeGetWorkIfAvailable()
      */
     // todo performance: disable/remove if using partition order
-    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new HashMap<>();
+    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
-    private Map<Object, NavigableMap<Long, WorkContainer<K, V>>> getShards() {
-        return processingShards;
-    }
-
-    NavigableMap<Long, WorkContainer<K, V>> getShard(Object key) {
-        return processingShards.get(key);
+    /**
+     * The shard belonging to the given key
+     *
+     * @return may return empty if the shard has since been removed
+     */
+    Optional<NavigableMap<Long, WorkContainer<K, V>>> getShard(Object key) {
+        return Optional.ofNullable(processingShards.get(key));
     }
 
     LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> getIterator(final Optional<Object> iterationResumePoint) {
-        return new LoopingResumingIterator<>(iterationResumePoint, getShards());
+        return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
     }
 
     Object computeShardKey(ConsumerRecord<K, V> rec) {
@@ -69,11 +85,9 @@ public class ShardManager<K, V> {
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public int getWorkQueuedInShardsCount() {
-        int count = 0;
-        for (var e : this.processingShards.entrySet()) {
-            count += e.getValue().size();
-        }
-        return count;
+        return this.processingShards.values().stream()
+                .mapToInt(Map::size)
+                .sum();
     }
 
     public boolean workIsWaitingToBeProcessed() {
@@ -86,21 +100,19 @@ public class ShardManager<K, V> {
     }
 
     /**
-     * Remove only the work shards which are referenced from revoked partitions
+     * Remove only the work shards which are referenced from work from revoked partitions
      *
-     * @param oldWorkPartitionQueue partition set to scan for unique keys to be removed from our shard queue
+     * @param workFromRemovedPartition collection of work to scan to get keys of shards to remove
      */
-    void removeShardsFoundIn(NavigableMap<Long, WorkContainer<K, V>> oldWorkPartitionQueue) {
-        // this all scanning loop could be avoided if we also store a map of unique keys found referenced when a
-        // partition is assigned, but that could worst case grow forever
-        for (WorkContainer<K, V> work : oldWorkPartitionQueue.values()) {
-            removeWorkFromShard(work);
+    void removeAnyShardsReferencedBy(NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition) {
+        for (WorkContainer<K, V> work : workFromRemovedPartition.values()) {
+            removeShardFor(work);
         }
     }
 
-    void removeWorkFromShard(final WorkContainer<K, V> work) {
+    private void removeShardFor(final WorkContainer<K, V> work) {
         Object shardKey = computeShardKey(work.getCr());
-        log.debug("Removing expired work {} for shard key: {}", work, shardKey);
+        log.debug("Removing shard referenced by WC: {} for shard key: {}", work, shardKey);
         this.processingShards.remove(shardKey);
     }
 
@@ -114,23 +126,33 @@ public class ShardManager<K, V> {
     }
 
     void removeShard(final Object key) {
-        getShards().remove(key);
+        this.processingShards.remove(key);
     }
 
     public void onSuccess(ConsumerRecord<K, V> cr) {
         Object key = computeShardKey(cr);
         // remove from processing queues
-        var shard = getShard(key);
-        if (shard == null)
-            throw new NullPointerException(msg("Shard is missing for key {}", key));
-        long offset = cr.offset();
-        shard.remove(offset);
-        // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
-        boolean keyOrdering = options.getOrdering().equals(KEY);
-        if (keyOrdering && shard.isEmpty()) {
-            log.trace("Removing empty shard (key: {})", key);
-            removeShard(key);
+        var shardOptional = getShard(key);
+        if (shardOptional.isPresent()) {
+            long offset = cr.offset();
+            var shard = shardOptional.get();
+            shard.remove(offset);
+            // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
+            boolean keyOrdering = options.getOrdering().equals(KEY);
+            if (keyOrdering && shard.isEmpty()) {
+                log.trace("Removing empty shard (key: {})", key);
+                removeShard(key);
+            }
+        } else {
+            log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, cr);
         }
     }
 
+    /**
+     * Idempotent - work may have not been removed, either way it's put back
+     */
+    public void onFailure(WorkContainer<K, V> wc) {
+        log.debug("Work FAILED, returning to shard");
+        addWorkContainer(wc);
+    }
 }

@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.reactor;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
@@ -78,7 +77,9 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
                             .that(msgs.size())
                             .isEqualTo(4);
 
-                    assertThat(consumerSpy).hasCommittedToPartition(topicPartition).atLeastOffset(4);
+                    assertThat(consumerSpy)
+                            .hasCommittedToPartition(topicPartition)
+                            .atLeastOffset(4);
                 });
     }
 

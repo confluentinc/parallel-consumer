@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
@@ -175,7 +174,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(crs);
 
-            List<WorkContainer<String, String>> work = wmm.maybeGetWork();
+            List<WorkContainer<String, String>> work = wmm.maybeGetWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
 
             KafkaTestUtils.completeWork(wmm, work, 0);
@@ -192,7 +191,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             // check for graceful fall back to the smallest available encoder
             OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
             OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
-            var state = wmm.getPm().getState(tp);
+            var state = wmm.getPm().getPartitionState(tp);
             String bestPayload = om.makeOffsetMetadataPayload(1, state);
             assertThat(bestPayload).isNotEmpty();
 
@@ -207,7 +206,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             WorkManager<String, String> newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(crs);
-            List<WorkContainer<String, String>> workRetrieved = newWm.maybeGetWork();
+            List<WorkContainer<String, String>> workRetrieved = newWm.maybeGetWorkIfAvailable();
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
                         BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
