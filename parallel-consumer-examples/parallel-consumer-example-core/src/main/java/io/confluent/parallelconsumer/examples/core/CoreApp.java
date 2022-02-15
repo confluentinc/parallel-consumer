@@ -51,10 +51,8 @@ public class CoreApp {
         postSetup();
 
         // tag::example[]
-        parallelConsumer.poll(record -> {
-                    log.info("Concurrently processing a record: {}", record);
-
-                }
+        parallelConsumer.poll(record ->
+                log.info("Concurrently processing a record: {}", record)
         );
         // end::example[]
     }
@@ -118,13 +116,13 @@ public class CoreApp {
 
     void customRetryDelay() {
         // tag::customRetryDelay[]
+        final double multiplier = 0.5;
+        final int baseDelaySecond = 1;
         ParallelConsumerOptions.<String, String>builder()
                 .retryDelayProvider(workContainer -> {
                     int numberOfFailedAttempts = workContainer.getNumberOfFailedAttempts();
-                    final double multiplier = 0.5;
-                    final int baseDelaySecond = 1;
-                    long delaySeconds = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts));
-                    return Duration.ofSeconds(delaySeconds);
+                    long delayMillis = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts) * 1000);
+                    return Duration.ofMillis(delayMillis);
                 });
         // end::customRetryDelay[]
     }
@@ -133,7 +131,7 @@ public class CoreApp {
     void maxRetries() {
         ParallelStreamProcessor<String, String> pc = ParallelStreamProcessor.createEosStreamProcessor(null);
         // tag::maxRetries[]
-        final int maxRetries = 0;
+        final int maxRetries = 10;
         final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
 
         pc.poll(consumerRecord -> {
