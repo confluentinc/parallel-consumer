@@ -570,10 +570,31 @@ Even during retries, offsets will always be committed only after successful proc
 If processing of a record fails, the record will be placed back into it's queue and retried after a time which can be configured (see the `Options` class).
 Ordering guarantees will always be adhered to, regardless of failure.
 
+When a user function throws an error, this is currently taken as a retriable error.
+The message will be placed back into the queue, and after a certain delay, a retry will be triggered.
+
 A failure is denoted by *any* exception being thrown from the user's processing function.
 The system catches these exceptions, logs them and replaces the record in the queue for processing later.
 
 If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the sytem will treat the same way.
+
+To configure the retry delay, see `ParallelConsumerOptions#defaultRetryDelay`.
+
+At the moment there is no terminal error support, so messages will continue to be retried forever, but will not hold up the queues in `KEY` or `UNORDERED` modes, however `PARTITION` mode it *will* block progress.
+Offsets will also continue to be committed (see <<_commit_mode>> and <<Offset Map>>).
+
+=== Retry Delay Function
+
+As part of the https://github.com/confluentinc/parallel-consumer/issues/65[enhanced retry epic], the ability to dynamically determine the retry delay was added.
+This can be used to program and custom retry delay such as exponential back off etc.
+
+You can access the retry count of a record through it's wrapped `WorkContainer` class, which is the input variable to the retry delay function.
+
+.Example retry delay function implementing exponential backoff
+[source,java]
+----
+include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=customRetryDelay]
+----
 
 === Skipping Records
 
@@ -582,12 +603,26 @@ The system will treat this as a record processing success, mark the record as co
 
 A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
 
+.Example of skipping a record after a maximum number of retries is reached
+[source,java]
+----
+include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=maxRetries]
+----
+
 === Head of Line Blocking
 
 In order to have a failing record not block progress of a partition, one of the ordering modes other than `PARTITION` must be used, so that the system is allowed to process other messages that are perhaps in `KEY` order or in the case of `UNORDERED` processing - any message.
 This is because in `PARTITION` ordering mode, records are always processed in order of partition, and so the Head of Line blocking feature is effectively disabled.
 
 === Future Work
+
+Improvements to this system are planned.
+
+See the following issues:
+
+* https://github.com/confluentinc/parallel-consumer/issues/65[Enhanced retry epic #65]
+* https://github.com/confluentinc/parallel-consumer/issues/48[Support scheduled message processing (scheduled retry)]
+* https://github.com/confluentinc/parallel-consumer/issues/34[Monitor for progress and optionally shutdown (leave consumer group), skip message or send to DLQ #34]
 
 == Result Models
 

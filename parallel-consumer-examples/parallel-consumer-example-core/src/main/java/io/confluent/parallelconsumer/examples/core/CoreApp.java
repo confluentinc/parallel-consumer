@@ -16,7 +16,10 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
+import java.time.Duration;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -48,8 +51,10 @@ public class CoreApp {
         postSetup();
 
         // tag::example[]
-        parallelConsumer.poll(record ->
-                log.info("Concurrently processing a record: {}", record)
+        parallelConsumer.poll(record -> {
+                    log.info("Concurrently processing a record: {}", record);
+
+                }
         );
         // end::example[]
     }
@@ -109,6 +114,45 @@ public class CoreApp {
     @Value
     static class Result {
         String payload;
+    }
+
+    void customRetryDelay() {
+        // tag::customRetryDelay[]
+        ParallelConsumerOptions.<String, String>builder()
+                .retryDelayProvider(workContainer -> {
+                    int numberOfFailedAttempts = workContainer.getNumberOfFailedAttempts();
+                    final double multiplier = 0.5;
+                    final int baseDelaySecond = 1;
+                    long delaySeconds = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts));
+                    return Duration.ofSeconds(delaySeconds);
+                });
+        // end::customRetryDelay[]
+    }
+
+
+    void maxRetries() {
+        ParallelStreamProcessor<String, String> pc = ParallelStreamProcessor.createEosStreamProcessor(null);
+        // tag::maxRetries[]
+        final int maxRetries = 0;
+        final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
+
+        pc.poll(consumerRecord -> {
+            Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
+            if (retryCount < maxRetries) {
+                processRecord(consumerRecord);
+                // no exception, so completed - remove from map
+                retriesCount.remove(consumerRecord);
+            } else {
+                log.warn("Retry count {} exceed manx of {} for record {}", retryCount, maxRetries, consumerRecord);
+                // giving up, remove from map
+                retriesCount.remove(consumerRecord);
+            }
+        });
+        // tag::maxRetries[]
+    }
+
+    private void processRecord(final ConsumerRecord<String, String> record) {
+        // no-op
     }
 
 }

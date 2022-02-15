@@ -147,13 +147,14 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
 
     /**
-     * When present, use this to generate the retry delay, instad of {@link #getDefaultMessageRetryDelay()}.
+     * When present, use this to generate the retry delay, instead of {@link #getDefaultMessageRetryDelay()}.
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
     @Builder.Default
     private final Function<WorkContainer, Duration> retryDelayProvider;
 
+    // TODO docs
     public static Function<WorkContainer, Duration> retryDelayProviderStatic;
 
     /**
