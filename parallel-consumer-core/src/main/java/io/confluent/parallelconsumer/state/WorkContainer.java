@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.WallClock;
@@ -13,7 +13,10 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.header.internals.RecordHeader;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
@@ -28,6 +31,7 @@ import static io.confluent.csid.utils.KafkaUtils.toTP;
 @EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
+    public static final String FAILED_COUNT_HEADER = "X-Confluent-failed-count";
     private final String DEFAULT_TYPE = "DEFAULT";
 
     /**
@@ -89,9 +93,21 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     public void fail(WallClock clock) {
         log.trace("Failing {}", this);
-        numberOfFailedAttempts++;
+        updateFailedCount();
         failedAt = Optional.of(clock.getNow());
         inFlight = false;
+    }
+
+    private void updateFailedCount() {
+        numberOfFailedAttempts++;
+
+        byte[] encodedRetries = ByteBuffer.allocate(Integer.BYTES)
+                .putInt(getNumberOfFailedAttempts())
+                .array();
+        Headers headers = this.getCr().headers();
+        // replace
+        headers.remove(FAILED_COUNT_HEADER);
+        headers.add(new RecordHeader(FAILED_COUNT_HEADER, encodedRetries));
     }
 
     public void succeed() {

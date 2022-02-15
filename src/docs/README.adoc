@@ -604,6 +604,8 @@ The system will treat this as a record processing success, mark the record as co
 
 A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
 
+The number of failed attempts for a message can be retrevied through the API, see below for an example.
+
 Implementing a https://github.com/confluentinc/parallel-consumer/issues/196[max retries feature] as a part of the system is planned.
 
 .Example of skipping a record after a maximum number of retries is reached

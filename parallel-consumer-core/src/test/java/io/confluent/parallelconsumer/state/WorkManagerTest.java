@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -245,7 +244,7 @@ class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, null);
+        var wc = new WorkContainer<String, String>(0, new ConsumerRecord<>("", 0, 0, "", ""));
         assertThat(wc.hasDelayPassed(clock)).isTrue(); // when new, there's no delay
         wc.fail(clock);
         assertThat(wc.hasDelayPassed(clock)).isFalse();

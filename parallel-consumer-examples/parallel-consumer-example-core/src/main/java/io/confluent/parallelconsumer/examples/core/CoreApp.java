@@ -3,7 +3,9 @@ package io.confluent.parallelconsumer.examples.core;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerRecord;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -95,7 +97,7 @@ public class CoreApp {
 
         // tag::exampleProduce[]
         parallelConsumer.pollAndProduce(record -> {
-                    var result = processBrokerRecord(record);
+            var result = processBrokerRecord(record);
                     return new ProducerRecord<>(outputTopic, record.key(), result.payload);
                 }, consumeProduceResult -> {
                     log.debug("Message {} saved to broker at offset {}",
@@ -134,18 +136,13 @@ public class CoreApp {
         ParallelStreamProcessor<String, String> pc = ParallelStreamProcessor.createEosStreamProcessor(null);
         // tag::maxRetries[]
         final int maxRetries = 10;
-        final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
 
         pc.poll(consumerRecord -> {
-            Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
+            int retryCount = ParallelConsumerRecord.getFailedCount(consumerRecord);
             if (retryCount < maxRetries) {
                 processRecord(consumerRecord);
-                // no exception, so completed - remove from map
-                retriesCount.remove(consumerRecord);
             } else {
-                log.warn("Retry count {} exceeded max of {} for record {}", retryCount, maxRetries, consumerRecord);
-                // giving up, remove from map
-                retriesCount.remove(consumerRecord);
+                log.warn("Retry count {} exceeded max of {} for record, skipping. {}", retryCount, maxRetries, consumerRecord);
             }
         });
         // end::maxRetries[]

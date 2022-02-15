@@ -499,6 +499,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire.version}</version>
                 <configuration>
+                    <trimStackTrace>false</trimStackTrace>
                     <excludes>
                         <!-- <exclude>**/*integration*/**/*.java</exclude> too aggressive? -->
                         <exclude>**/integrationTest*/**/*.java</exclude>

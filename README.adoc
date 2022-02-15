@@ -474,7 +474,7 @@ You can also optionally provide a callback function to be run after the message(
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
         parallelConsumer.pollAndProduce(record -> {
-                    var result = processBrokerRecord(record);
+            var result = processBrokerRecord(record);
                     return new ProducerRecord<>(outputTopic, record.key(), result.payload);
                 }, consumeProduceResult -> {
                     log.debug("Message {} saved to broker at offset {}",
@@ -691,24 +691,21 @@ The system will treat this as a record processing success, mark the record as co
 
 A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
 
+The number of failed attempts for a message can be retrevied through the API, see below for an example.
+
 Implementing a https://github.com/confluentinc/parallel-consumer/issues/196[max retries feature] as a part of the system is planned.
 
 .Example of skipping a record after a maximum number of retries is reached
 [source,java,indent=0]
 ----
         final int maxRetries = 10;
-        final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
 
         pc.poll(consumerRecord -> {
-            Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
+            int retryCount = ParallelConsumerRecord.getFailedCount(consumerRecord);
             if (retryCount < maxRetries) {
                 processRecord(consumerRecord);
-                // no exception, so completed - remove from map
-                retriesCount.remove(consumerRecord);
             } else {
-                log.warn("Retry count {} exceeded max of {} for record {}", retryCount, maxRetries, consumerRecord);
-                // giving up, remove from map
-                retriesCount.remove(consumerRecord);
+                log.warn("Retry count {} exceeded max of {} for record, skipping. {}", retryCount, maxRetries, consumerRecord);
             }
         });
 ----
