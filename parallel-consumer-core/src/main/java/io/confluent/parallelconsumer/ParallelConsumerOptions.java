@@ -153,7 +153,10 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Function<WorkContainer, Duration> retryDelayProvider;
 
-    // TODO docs
+    /**
+     * Dirty global access to the {@link #retryDelayProvider}.
+     */
+    // TODO remove need for writeable global access
     public static Function<WorkContainer, Duration> retryDelayProviderStatic;
 
     /**
