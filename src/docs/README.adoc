@@ -567,7 +567,7 @@ Even during retries, offsets will always be committed only after successful proc
 
 == Retries
 
-If processing of a record fails, the record will be placed back into it's queue and retried after a time which can be configured (see the `ParallelConsumerOptions` class).
+If processing of a record fails, the record will be placed back into it's queue and retried with a configurable delay (see the `ParallelConsumerOptions` class).
 Ordering guarantees will always be adhered to, regardless of failure.
 
 A failure is denoted by *any* exception being thrown from the user's processing function.
@@ -580,7 +580,7 @@ If for some reason you want to proactively fail a record, without relying on som
 To configure the retry delay, see `ParallelConsumerOptions#defaultRetryDelay`.
 
 At the moment there is no terminal error support, so messages will continue to be retried forever as long as an exception continues to be thrown from the user function (see <<skipping-records>>).
-But still this will not hold up the queues in `KEY` or `UNORDERED` modes, however `PARTITION` mode it *will* block progress.
+But still this will not hold up the queues in `KEY` or `UNORDERED` modes, however in `PARTITION` mode it *will* block progress.
 Offsets will also continue to be committed (see <<commit-mode>> and <<Offset Map>>).
 
 === Retry Delay Function
@@ -600,7 +600,7 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 === Skipping Records
 
 If for whatever reason you want to skip a record, simply do not throw an exception, or catch any exception being thrown, log and swallow it and return from the user function normally.
-The system will treat this as a record processing success, mark the record as completed and move on as though it were normal operation.
+The system will treat this as a record processing success, mark the record as completed and move on as though it was a normal operation.
 
 A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
 
@@ -614,7 +614,7 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 
 === Circuit Breaker Pattern
 
-Althought the system doesn't have an https://github.com/confluentinc/parallel-consumer/issues/110[explicit circuit breaker pattern feature], one can be created by conbining the custom retry delay function and proactive failure.
+Although the system doesn't have an https://github.com/confluentinc/parallel-consumer/issues/110[explicit circuit breaker pattern feature], one can be created by combining the custom retry delay function and proactive failure.
 For example, the retry delay can be calculated based upon the status of an external system - i.e. if the external system is currently out of action, use a higher retry.
 Then in the processing function, again check the status of the external system first, and if it's still offline, throw an exception proactively without attempting to process the message.
 This will put the message back in the queue.

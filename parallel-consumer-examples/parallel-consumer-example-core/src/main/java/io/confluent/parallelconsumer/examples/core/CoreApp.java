@@ -142,7 +142,7 @@ public class CoreApp {
                 // no exception, so completed - remove from map
                 retriesCount.remove(consumerRecord);
             } else {
-                log.warn("Retry count {} exceed manx of {} for record {}", retryCount, maxRetries, consumerRecord);
+                log.warn("Retry count {} exceeded max of {} for record {}", retryCount, maxRetries, consumerRecord);
                 // giving up, remove from map
                 retriesCount.remove(consumerRecord);
             }
