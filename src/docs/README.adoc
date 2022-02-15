@@ -565,6 +565,30 @@ image::https://lucid.app/publicSegments/view/f7a05e99-24e6-4ea3-b3d0-978e306aa56
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
+== Retries
+
+If processing of a record fails, the record will be placed back into it's queue and retried after a time which can be configured (see the `Options` class).
+Ordering guarantees will always be adhered to, regardless of failure.
+
+A failure is denoted by *any* exception being thrown from the user's processing function.
+The system catches these exceptions, logs them and replaces the record in the queue for processing later.
+
+If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the sytem will treat the same way.
+
+=== Skipping Records
+
+If for whatever reason you want to skip a record, simply do not throw an exception, or catch any exception being thrown, log and swallow it and return from the user function normally.
+The system will treat this as a record processing success, mark the record as completed and move on as though it were normal operation.
+
+A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
+
+=== Head of Line Blocking
+
+In order to have a failing record not block progress of a partition, one of the ordering modes other than `PARTITION` must be used, so that the system is allowed to process other messages that are perhaps in `KEY` order or in the case of `UNORDERED` processing - any message.
+This is because in `PARTITION` ordering mode, records are always processed in order of partition, and so the Head of Line blocking feature is effectively disabled.
+
+=== Future Work
+
 == Result Models
 
 * Void
