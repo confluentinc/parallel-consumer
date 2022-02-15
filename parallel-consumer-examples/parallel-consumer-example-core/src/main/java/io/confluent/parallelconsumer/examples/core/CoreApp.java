@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.concurrent.CircuitBreakingException;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -146,11 +147,49 @@ public class CoreApp {
                 retriesCount.remove(consumerRecord);
             }
         });
-        // tag::maxRetries[]
+        // end::maxRetries[]
     }
 
     private void processRecord(final ConsumerRecord<String, String> record) {
         // no-op
+    }
+
+    void circuitBreaker() {
+        ParallelStreamProcessor<String, String> pc = ParallelStreamProcessor.createEosStreamProcessor(null);
+        // tag::circuitBreaker[]
+        final Map<String, Boolean> upMap = new ConcurrentHashMap<>();
+
+        pc.poll(consumerRecord -> {
+            String serverId = extractServerId(consumerRecord);
+            boolean up = upMap.computeIfAbsent(serverId, ignore -> true);
+
+            if (!up) {
+                updateStatusOfSever(serverId);
+            }
+
+            if (up) {
+                try {
+                    processRecord(consumerRecord);
+                } catch (CircuitBreakingException e) {
+                    log.warn("Server {} is circuitBroken, will retry message when server is up. Record: {}", serverId, consumerRecord);
+                    upMap.put(serverId, false);
+                }
+                // no exception, so set server status UP
+                upMap.put(serverId, true);
+            } else {
+                log.warn("Server {} currently down, will retry record latter {}", up, consumerRecord);
+            }
+        });
+        // end::circuitBreaker[]
+    }
+
+    private void updateStatusOfSever(final String serverId) {
+
+    }
+
+    private String extractServerId(final ConsumerRecord<String, String> consumerRecord) {
+        // no-op
+        return null;
     }
 
 }
