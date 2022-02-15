@@ -567,21 +567,21 @@ Even during retries, offsets will always be committed only after successful proc
 
 == Retries
 
-If processing of a record fails, the record will be placed back into it's queue and retried after a time which can be configured (see the `Options` class).
+If processing of a record fails, the record will be placed back into it's queue and retried after a time which can be configured (see the `ParallelConsumerOptions` class).
 Ordering guarantees will always be adhered to, regardless of failure.
-
-When a user function throws an error, this is currently taken as a retriable error.
-The message will be placed back into the queue, and after a certain delay, a retry will be triggered.
 
 A failure is denoted by *any* exception being thrown from the user's processing function.
 The system catches these exceptions, logs them and replaces the record in the queue for processing later.
+All types of Exceptions thrown are considered retriable.
+To not retry a record, do not throw an exception from your processing fuction.
 
-If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the sytem will treat the same way.
+If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the system will treat the same way.
 
 To configure the retry delay, see `ParallelConsumerOptions#defaultRetryDelay`.
 
-At the moment there is no terminal error support, so messages will continue to be retried forever, but will not hold up the queues in `KEY` or `UNORDERED` modes, however `PARTITION` mode it *will* block progress.
-Offsets will also continue to be committed (see <<_commit_mode>> and <<Offset Map>>).
+At the moment there is no terminal error support, so messages will continue to be retried forever as long as an exception continues to be thrown from the user function (see <<skipping-records>>).
+But still this will not hold up the queues in `KEY` or `UNORDERED` modes, however `PARTITION` mode it *will* block progress.
+Offsets will also continue to be committed (see <<commit-mode>> and <<Offset Map>>).
 
 === Retry Delay Function
 
@@ -596,6 +596,7 @@ You can access the retry count of a record through it's wrapped `WorkContainer` 
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=customRetryDelay]
 ----
 
+[[skipping-records]]
 === Skipping Records
 
 If for whatever reason you want to skip a record, simply do not throw an exception, or catch any exception being thrown, log and swallow it and return from the user function normally.
@@ -653,6 +654,7 @@ When your function is actually run, a result object will be streamed back to you
 After your operation completes, you can also choose to publish a result message back to Kafka.
 The message publishing metadata can be streamed back to your client code.
 
+[[commit-mode]]
 == Commit Mode
 
 The system gives you three choices for how to do offset commits.
@@ -662,7 +664,7 @@ The `transactional` mode is explained in the next section.
 
 `Asynchronous` mode is faster, as it doesn't block the control loop.
 
-`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `Options` class.
+`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `ParallelConsumerOptions` class.
 
 If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.

@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.examples.core;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.Value;
@@ -119,6 +118,7 @@ public class CoreApp {
         // tag::customRetryDelay[]
         final double multiplier = 0.5;
         final int baseDelaySecond = 1;
+
         ParallelConsumerOptions.<String, String>builder()
                 .retryDelayProvider(workContainer -> {
                     int numberOfFailedAttempts = workContainer.getNumberOfFailedAttempts();
