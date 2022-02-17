@@ -658,7 +658,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
-        if (state == running) {
+        if (state == running || state == paused) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
             commitOffsetsMaybe();
@@ -1047,7 +1047,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
-        if (state == running || state == draining) {
+        if (state == running || state == draining || state == paused) {
             Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
@@ -1211,6 +1211,28 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.debug("Command to commit asap received, clearing");
                 this.commitCommand.set(false);
             }
+        }
+    }
+
+    @Override
+    public void pauseIfRunning() {
+        if (this.state == State.running) {
+            log.debug("Transitioning to state paused.");
+            this.state = State.paused;
+            brokerPollSubsystem.pausePollingAndWorkRegistrationIfRunning();
+        } else {
+            log.debug("Skipping transition to state paused. Current state is {}.", this.state);
+        }
+    }
+
+    @Override
+    public void resumeIfPaused() {
+        if (this.state == State.paused) {
+            log.debug("Transitioning to state running.");
+            brokerPollSubsystem.resumePollingAndWorkRegistrationIfPaused();
+            this.state = State.running;
+        } else {
+            log.debug("Skipping transition to state running. Current state is {}.", this.state);
         }
     }
 
