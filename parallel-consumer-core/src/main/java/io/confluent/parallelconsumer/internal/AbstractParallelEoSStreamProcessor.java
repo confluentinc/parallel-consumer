@@ -1217,22 +1217,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void pauseIfRunning() {
         if (this.state == State.running) {
-            log.debug("Transitioning to state paused.");
+            log.info("Transitioning parallel consumer to state paused.");
             this.state = State.paused;
             brokerPollSubsystem.pausePollingAndWorkRegistrationIfRunning();
         } else {
-            log.debug("Skipping transition to state paused. Current state is {}.", this.state);
+            log.info("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
         }
     }
 
     @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
-            log.debug("Transitioning to state running.");
+            log.info("Transitioning paarallel consumer to state running.");
             brokerPollSubsystem.resumePollingAndWorkRegistrationIfPaused();
             this.state = State.running;
         } else {
-            log.debug("Skipping transition to state running. Current state is {}.", this.state);
+            log.info("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
     }
 

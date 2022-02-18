@@ -133,11 +133,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
 
                 if (state == State.paused) {
                     // as long as the state is paused, this loop doesn't do any I/O work
-                    // therefor we sleep for 100 ms to reduce CPU load
+                    // therefore we sleep for 50 ms to reduce CPU load
                     try {
-                        Thread.sleep(100);
+                        Thread.sleep(50L);
                     } catch (InterruptedException e) {
-                        log.debug("Loop: Sleep in state paused was interrupted.");
+                        log.debug("Loop: Sleep in state paused was interrupted.", e);
                         // swallow the exception and just go back to business, keeping the interrupt state set
                         Thread.currentThread().interrupt();
                     }
@@ -390,10 +390,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
      */
     public void pausePollingAndWorkRegistrationIfRunning() {
         if (this.state == State.running) {
-            log.debug("Transitioning broker poll system to state paused.");
+            log.info("Transitioning broker poll system to state paused.");
             this.state = State.paused;
         } else {
-            log.debug("Skipping transition of broker poll system to state paused. Current state is {}.", this.state);
+            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.state);
         }
     }
 
@@ -406,10 +406,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
      */
     public void resumePollingAndWorkRegistrationIfPaused() {
         if (this.state == State.paused) {
-            log.debug("Transitioning broker poll system to state running.");
+            log.info("Transitioning broker poll system to state running.");
             this.state = State.running;
         } else {
-            log.debug("Skipping transition of broker poll system to state running. Current state is {}.", this.state);
+            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.state);
         }
     }
 }
