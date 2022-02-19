@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.util.Optional;
