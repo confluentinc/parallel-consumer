@@ -1,4 +1,8 @@
 #!/bin/bash                                                                                                                                                                                                                                    
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 
 COMMITS=$(git log --oneline HEAD...182d13c43dec581a84c7edad962dfbd456744a64^ | cut -d " " -f 1)
 

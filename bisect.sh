@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 set -x
 
 # It may be useful to make a copy of this file to run the bisect against a script outside the repository
