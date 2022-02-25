@@ -10,7 +10,7 @@
 //
 
 
-= parallel-consumer (beta)
+= parallel-consumer
 :icons:
 :toc: macro
 :toclevels: 3
@@ -52,9 +52,11 @@ Parallel Apache Kafka client wrapper with client side queueing, a simpler consum
 
 Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
 
-WARNING: This is not a Confluent supported product.
-It is an experimental alpha stage accelerator.
+CAUTION: This is not a Confluent supported product.
 See the <<Support and Issues>> section for more information.
+
+IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
+It is actively maintained by the CSID team at Confluent.
 
 [[intro]]
 This library lets you process messages in parallel via a single Kafka Consumer meaning you can increase consumer parallelism without increasing the number of partitions in the topic you intend to process.
@@ -68,6 +70,15 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 ----
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
+
+[[demo]]
+.Relative speed demonstration
+--
+.Click on the animated SVG image to open the https://asciinema.org/a/404299[Asciinema.org player].
+image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/cbf558b38b0aa624bd7637406579d2a8f00f51db/demo.svg[link="https://asciinema.org/a/404299"]
+--
+
+'''
 
 toc::[]
 
@@ -195,7 +206,7 @@ The end-to-end latency of the responses to these answers needs to be as low as t
 We can break out as described below into the tool for processing that step, then return to the Kafka Streams context.
 * Provisioning extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
-== Feature List
+== Features List
 
 * Have massively parallel consumption processing without running hundreds or thousands of:
 ** Kafka consumer clients,
@@ -207,7 +218,10 @@ without operational burden or harming the cluster's performance
 * Solution for the https://en.wikipedia.org/wiki/Head-of-line_blocking["head of line"] blocking problem where continued failure of a single message, prevents progress for messages behind it in the queue
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
-* Vert.x non-blocking library integration (HTTP and any Vert.x future support)
+* Vert.x and Reactor.io non-blocking library integration
+** Non-blocking I/O work management
+** Vert.x's WebClient and general Vert.x Future support
+** Reactor.io Publisher (Mono/Flux) and Java's CompletableFuture (through `Mono#fromFuture`)
 * Reactor non-blocking library integration
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
@@ -551,6 +565,80 @@ image::https://lucid.app/publicSegments/view/f7a05e99-24e6-4ea3-b3d0-978e306aa56
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
+== Retries
+
+If processing of a record fails, the record will be placed back into it's queue and retried with a configurable delay (see the `ParallelConsumerOptions` class).
+Ordering guarantees will always be adhered to, regardless of failure.
+
+A failure is denoted by *any* exception being thrown from the user's processing function.
+The system catches these exceptions, logs them and replaces the record in the queue for processing later.
+All types of Exceptions thrown are considered retriable.
+To not retry a record, do not throw an exception from your processing fuction.
+
+If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the system will treat the same way.
+
+To configure the retry delay, see `ParallelConsumerOptions#defaultRetryDelay`.
+
+At the moment there is no terminal error support, so messages will continue to be retried forever as long as an exception continues to be thrown from the user function (see <<skipping-records>>).
+But still this will not hold up the queues in `KEY` or `UNORDERED` modes, however in `PARTITION` mode it *will* block progress.
+Offsets will also continue to be committed (see <<commit-mode>> and <<Offset Map>>).
+
+=== Retry Delay Function
+
+As part of the https://github.com/confluentinc/parallel-consumer/issues/65[enhanced retry epic], the ability to https://github.com/confluentinc/parallel-consumer/issues/82[dynamically determine the retry delay] was added.
+This can be used to customise retry delay for a record, such as exponential back off or have different delays for different types of records, or have the delay determined by the status of a system etc.
+
+You can access the retry count of a record through it's wrapped `WorkContainer` class, which is the input variable to the retry delay function.
+
+.Example retry delay function implementing exponential backoff
+[source,java,indent=0]
+----
+include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=customRetryDelay]
+----
+
+[[skipping-records]]
+=== Skipping Records
+
+If for whatever reason you want to skip a record, simply do not throw an exception, or catch any exception being thrown, log and swallow it and return from the user function normally.
+The system will treat this as a record processing success, mark the record as completed and move on as though it was a normal operation.
+
+A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
+
+Implementing a https://github.com/confluentinc/parallel-consumer/issues/196[max retries feature] as a part of the system is planned.
+
+.Example of skipping a record after a maximum number of retries is reached
+[source,java,indent=0]
+----
+include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=maxRetries]
+----
+
+=== Circuit Breaker Pattern
+
+Although the system doesn't have an https://github.com/confluentinc/parallel-consumer/issues/110[explicit circuit breaker pattern feature], one can be created by combining the custom retry delay function and proactive failure.
+For example, the retry delay can be calculated based upon the status of an external system - i.e. if the external system is currently out of action, use a higher retry.
+Then in the processing function, again check the status of the external system first, and if it's still offline, throw an exception proactively without attempting to process the message.
+This will put the message back in the queue.
+
+.Example of circuit break implementation
+[source,java,indent=0]
+----
+include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=circuitBreaker]
+----
+
+=== Head of Line Blocking
+
+In order to have a failing record not block progress of a partition, one of the ordering modes other than `PARTITION` must be used, so that the system is allowed to process other messages that are perhaps in `KEY` order or in the case of `UNORDERED` processing - any message.
+This is because in `PARTITION` ordering mode, records are always processed in order of partition, and so the Head of Line blocking feature is effectively disabled.
+
+=== Future Work
+
+Improvements to this system are planned, see the following issues:
+
+* https://github.com/confluentinc/parallel-consumer/issues/65[Enhanced retry epic #65]
+* https://github.com/confluentinc/parallel-consumer/issues/48[Support scheduled message processing (scheduled retry)]
+* https://github.com/confluentinc/parallel-consumer/issues/196[Provide option for max retires, and a call back when reached (potential DLQ) #196]
+* https://github.com/confluentinc/parallel-consumer/issues/34[Monitor for progress and optionally shutdown (leave consumer group), skip message or send to DLQ #34]
+
 == Result Models
 
 * Void
@@ -566,6 +654,7 @@ When your function is actually run, a result object will be streamed back to you
 After your operation completes, you can also choose to publish a result message back to Kafka.
 The message publishing metadata can be streamed back to your client code.
 
+[[commit-mode]]
 == Commit Mode
 
 The system gives you three choices for how to do offset commits.
@@ -575,7 +664,7 @@ The `transactional` mode is explained in the next section.
 
 `Asynchronous` mode is faster, as it doesn't block the control loop.
 
-`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `Options` class.
+`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `ParallelConsumerOptions` class.
 
 If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.
@@ -610,28 +699,21 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 == Roadmap
 
 For released changes, see the link:CHANGELOG.adoc[CHANGELOG].
-
-=== Short Term - What we're working on nowish ⏰
-
-* Depth~ first or breadth first partition traversal
-* JavaRX and other streaming modules
+For features in development, have a look at the https://github.com/confluentinc/parallel-consumer/issues[GitHub issues].
 
 === Medium Term - What's up next ⏲
 
-* https://github.com/confluentinc/parallel-consumer/issues/21[Automatic fanout] (automatic selection of concurrency level based on downstream back pressure) (https://github.com/confluentinc/parallel-consumer/pull/22[draft PR])
-* Support for general Vert.x Verticles (non-blocking libraries)
-* Dead Letter Queue (DLQ) handling
-* Non-blocking I/O work management
-** More customisable handling of HTTP interactions
-** Chance to batch multiple consumer records into a single or multiple http request objects
 * https://github.com/confluentinc/parallel-consumer/issues/28[Distributed tracing integration]
 * https://github.com/confluentinc/parallel-consumer/issues/24[Distributed rate limiting]
 * https://github.com/confluentinc/parallel-consumer/issues/27[Metrics]
+* More customisable handling[https://github.com/confluentinc/parallel-consumer/issues/65] of HTTP interactions
+* Chance to https://github.com/confluentinc/parallel-consumer/issues/18[batch multiple consumer records] into a single or multiple http request objects
 
 === Long Term - The future ☁️
 
-* Apache Kafka KIP?
-* Call backs only offset has been committed
+* https://github.com/confluentinc/parallel-consumer/issues/21[Automatic fanout] (automatic selection of concurrency level based on downstream back pressure) (https://github.com/confluentinc/parallel-consumer/pull/22[draft PR])
+* Dead Letter Queue (DLQ) handling
+* Call backs only once offset has been committed
 
 == Usage Requirements
 

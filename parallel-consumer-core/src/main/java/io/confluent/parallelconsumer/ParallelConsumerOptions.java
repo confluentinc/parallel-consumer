@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
@@ -147,13 +146,17 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
 
     /**
-     * When present, use this to generate the retry delay, instad of {@link #getDefaultMessageRetryDelay()}.
+     * When present, use this to generate the retry delay, instead of {@link #getDefaultMessageRetryDelay()}.
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
     @Builder.Default
     private final Function<WorkContainer, Duration> retryDelayProvider;
 
+    /**
+     * Dirty global access to the {@link #retryDelayProvider}.
+     */
+    // TODO remove need for writeable global access
     public static Function<WorkContainer, Duration> retryDelayProviderStatic;
 
     /**

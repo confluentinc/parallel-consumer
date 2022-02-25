@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -29,7 +28,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
-import static io.confluent.csid.utils.KafkaUtils.toTP;
+import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
 import static io.confluent.csid.utils.Range.range;
@@ -229,7 +228,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         verify(producerSpy, after(verificationWaitDelay).times(1)).commitTransaction();
         var maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSize(1);
-        OffsetAndMetadata offsets = maps.get(0).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
+        OffsetAndMetadata offsets = maps.get(0).get(CONSUMER_GROUP_ID).get(toTopicPartition(firstRecord));
         assertThat(offsets.offset()).isEqualTo(2);
 
         // finish 3
@@ -239,7 +238,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         verify(producerSpy, after(verificationWaitDelay).times(2)).commitTransaction();
         maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSize(2);
-        offsets = maps.get(1).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
+        offsets = maps.get(1).get(CONSUMER_GROUP_ID).get(toTopicPartition(firstRecord));
         assertThat(offsets.offset()).isEqualTo(3);
 
         // finish 4,5
@@ -249,7 +248,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         verify(producerSpy, after(verificationWaitDelay).atLeast(3)).commitTransaction();
         maps = producerSpy.consumerGroupOffsetsHistory();
         assertThat(maps).hasSizeGreaterThanOrEqualTo(3);
-        offsets = maps.get(2).get(CONSUMER_GROUP_ID).get(toTP(firstRecord));
+        offsets = maps.get(2).get(CONSUMER_GROUP_ID).get(toTopicPartition(firstRecord));
         assertThat(offsets.offset()).isEqualTo(5);
         assertCommits(of(2, 3, 5));
 

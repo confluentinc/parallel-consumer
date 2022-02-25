@@ -1,14 +1,14 @@
 package io.confluent.parallelconsumer.examples.core;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.concurrent.CircuitBreakingException;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -16,8 +16,12 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
+import java.time.Duration;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -109,6 +113,84 @@ public class CoreApp {
     @Value
     static class Result {
         String payload;
+    }
+
+    void customRetryDelay() {
+        // tag::customRetryDelay[]
+        final double multiplier = 0.5;
+        final int baseDelaySecond = 1;
+
+        ParallelConsumerOptions.<String, String>builder()
+                .retryDelayProvider(workContainer -> {
+                    int numberOfFailedAttempts = workContainer.getNumberOfFailedAttempts();
+                    long delayMillis = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts) * 1000);
+                    return Duration.ofMillis(delayMillis);
+                });
+        // end::customRetryDelay[]
+    }
+
+
+    void maxRetries() {
+        ParallelStreamProcessor<String, String> pc = ParallelStreamProcessor.createEosStreamProcessor(null);
+        // tag::maxRetries[]
+        final int maxRetries = 10;
+        final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
+
+        pc.poll(consumerRecord -> {
+            Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
+            if (retryCount < maxRetries) {
+                processRecord(consumerRecord);
+                // no exception, so completed - remove from map
+                retriesCount.remove(consumerRecord);
+            } else {
+                log.warn("Retry count {} exceeded max of {} for record {}", retryCount, maxRetries, consumerRecord);
+                // giving up, remove from map
+                retriesCount.remove(consumerRecord);
+            }
+        });
+        // end::maxRetries[]
+    }
+
+    private void processRecord(final ConsumerRecord<String, String> record) {
+        // no-op
+    }
+
+    void circuitBreaker() {
+        ParallelStreamProcessor<String, String> pc = ParallelStreamProcessor.createEosStreamProcessor(null);
+        // tag::circuitBreaker[]
+        final Map<String, Boolean> upMap = new ConcurrentHashMap<>();
+
+        pc.poll(consumerRecord -> {
+            String serverId = extractServerId(consumerRecord);
+            boolean up = upMap.computeIfAbsent(serverId, ignore -> true);
+
+            if (!up) {
+                up = updateStatusOfSever(serverId);
+            }
+
+            if (up) {
+                try {
+                    processRecord(consumerRecord);
+                } catch (CircuitBreakingException e) {
+                    log.warn("Server {} is circuitBroken, will retry message when server is up. Record: {}", serverId, consumerRecord);
+                    upMap.put(serverId, false);
+                }
+                // no exception, so set server status UP
+                upMap.put(serverId, true);
+            } else {
+                throw new RuntimeException(msg("Server {} currently down, will retry record latter {}", up, consumerRecord));
+            }
+        });
+        // end::circuitBreaker[]
+    }
+
+    private boolean updateStatusOfSever(final String serverId) {
+        return false;
+    }
+
+    private String extractServerId(final ConsumerRecord<String, String> consumerRecord) {
+        // no-op
+        return null;
     }
 
 }

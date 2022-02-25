@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -13,6 +13,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
+import java.util.Collections;
+import java.util.LinkedList;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -43,9 +45,13 @@ public class PartitionState<K, V> {
     // visible for testing
     // todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
     // this is derived from partitionCommitQueues WorkContainer states
-    @Getter
-    @Setter // todo remove setter - leaky abstraction, shouldn't be needed
+    // todo remove setter - leaky abstraction, shouldn't be needed
+    @Setter
     private Set<Long> incompleteOffsets;
+
+    public Set<Long> getIncompleteOffsets() {
+        return Collections.unmodifiableSet(incompleteOffsets);
+    }
 
     /**
      * The highest seen offset for a partition.
@@ -92,8 +98,11 @@ public class PartitionState<K, V> {
      *
      * @see #findCompletedEligibleOffsetsAndRemove
      */
-    @Getter(PACKAGE)
     private final NavigableMap<Long, WorkContainer<K, V>> commitQueues = new ConcurrentSkipListMap<>();
+
+    NavigableMap<Long, WorkContainer<K, V>> getCommitQueues() {
+        return Collections.unmodifiableNavigableMap(commitQueues);
+    }
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
         this.tp = tp;
@@ -123,12 +132,12 @@ public class PartitionState<K, V> {
         truncateOffsets(newLowWaterMark);
     }
 
-    public boolean isRecordPreviouslyProcessed(final ConsumerRecord<K, V> rec) {
+    public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         Set<Long> incompleteOffsets = this.incompleteOffsets;
         boolean previouslyProcessed;
         long offset = rec.offset();
         if (incompleteOffsets.contains(offset)) {
-            // record previously saved as having not been processed, can exit early
+            // record previously saved as not being completed, can exit early
             previouslyProcessed = false;
         } else {
             Long offsetHighWaterMark = offsetHighestSeen;
@@ -163,4 +172,25 @@ public class PartitionState<K, V> {
         }
     }
 
+    public void addWorkContainer(WorkContainer<K, V> wc) {
+        maybeRaiseHighestSeenOffset(wc.offset());
+        NavigableMap<Long, WorkContainer<K, V>> queue = this.commitQueues;
+        queue.put(wc.offset(), wc);
+    }
+
+    public void remove(LinkedList<WorkContainer<K, V>> workToRemove) {
+        for (var workContainer : workToRemove) {
+            var offset = workContainer.getCr().offset();
+            this.commitQueues.remove(offset);
+        }
+    }
+
+    /**
+     * Has this partition been removed? No.
+     *
+     * @return by definition false in this implementation
+     */
+    public boolean isRemoved() {
+        return false;
+    }
 }
