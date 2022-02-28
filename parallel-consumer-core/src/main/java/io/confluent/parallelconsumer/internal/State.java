@@ -11,11 +11,10 @@ public enum State {
     unused,
     running,
     /**
-     * When paused, the system will stop polling for new records from the broker and also stop submitting work that has already
-     * been polled to the processing pool.
-     *  Committing offsets however
-     * Already submitted in flight work however will be finished (i.e. ).
-     * Parallel stream processor handleWork
+     * When paused, the system will stop submitting work to the processing pool. Polling for new work however may
+     * continue until internal buffers have been filled sufficiently and the auto-throttling takes effect.
+     * In flight work will not be affected by transitioning to this state (i.e. processing will finish without any
+     * interrupts being sent).
      */
     paused,
     /**

@@ -130,18 +130,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
                         doClose();
                     }
                 }
-
-                if (state == State.paused) {
-                    // as long as the state is paused, this loop doesn't do any I/O work
-                    // therefore we sleep for 50 ms to reduce CPU load
-                    try {
-                        Thread.sleep(50L);
-                    } catch (InterruptedException e) {
-                        log.debug("Loop: Sleep in state paused was interrupted.", e);
-                        // swallow the exception and just go back to business, keeping the interrupt state set
-                        Thread.currentThread().interrupt();
-                    }
-                }
             }
             log.debug("Broker poller thread finished normally, returning OK (true) to future...");
             return true;
