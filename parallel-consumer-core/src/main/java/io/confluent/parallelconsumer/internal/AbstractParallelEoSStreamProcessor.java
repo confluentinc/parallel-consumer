@@ -53,7 +53,12 @@ import static lombok.AccessLevel.PROTECTED;
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
-    public static final String MDC_OFFSET_MARKER = "offset";
+
+    /**
+     * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
+     * user function.
+     */
+    public static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions options;
@@ -942,9 +947,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.registerWork(action.getConsumerRecords());
             } else {
                 WorkContainer<K, V> work = action.getWorkContainer();
-                MDC.put(MDC_OFFSET_MARKER, work.toString());
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
                 wm.handleFutureResult(work);
-                MDC.remove(MDC_OFFSET_MARKER);
+                MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
             }
         }
     }
@@ -1088,7 +1093,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
-                MDC.put("offset", workContainerBatch.get(0).offset() + "");
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
             }
             log.trace("Pool received: {}", workContainerBatch);
 
