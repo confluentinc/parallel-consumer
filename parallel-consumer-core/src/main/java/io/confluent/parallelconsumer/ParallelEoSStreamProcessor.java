@@ -34,7 +34,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     public void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction) {
-        Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = (context) -> {
+        Function<PollContextInternal<K, V>, List<?>> wrappedUserFunc = context -> {
             log.trace("asyncPoll - Consumed a consumerRecord ({}), executing void function...", context);
 
             carefullyRun(usersVoidConsumptionFunction, context.getPollContext());
@@ -56,7 +56,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         }
 
         // wrap user func to add produce function
-        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = context -> {
+        Function<PollContextInternal<K, V>, List<?>> wrappedUserFunc = context -> {
             List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
 
             if (recordListToProduce.isEmpty()) {

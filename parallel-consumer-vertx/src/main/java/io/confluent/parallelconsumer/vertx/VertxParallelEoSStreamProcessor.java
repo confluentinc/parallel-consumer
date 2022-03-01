@@ -8,12 +8,14 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
+import io.confluent.parallelconsumer.state.ShardManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
+import io.vertx.core.*;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.eventbus.DeliveryOptions;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.Message;
+import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
@@ -28,16 +30,18 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
+import static java.time.Duration.ofMinutes;
 
 
 @Slf4j
@@ -110,15 +114,161 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         if (webClient == null)
             webClient = WebClient.create(vertx, webClientOptions);
         this.webClient = webClient;
+
+        deployVertical(vertx);
+    }
+
+    public static final String PC_VERTX_BATCH_RECORD_LIST = "pc.vertx.batch.recordList";
+
+    private void deployVertical(Vertx vertx) {
+        DeploymentOptions options = new DeploymentOptions();
+        options.setInstances(Runtime.getRuntime().availableProcessors());
+        options.setWorkerPoolName(getMyId().orElse("pc-vertical"));
+
+        vertx.exceptionHandler(event -> {
+            RuntimeException runtimeException = new RuntimeException(msg("PC Vert.x system failure: {}", event.getMessage()));
+            log.error(runtimeException.getMessage());
+            super.failureReason = runtimeException;
+        });
+
+        vertx.deployVerticle(() -> new Verticle() {
+            @Override
+            public Vertx getVertx() {
+                return vertx;
+            }
+
+            @Override
+            public void init(Vertx vertx, Context context) {
+                EventBus eventBus = vertx.eventBus();
+                eventBus.registerDefaultCodec(BatchWrapper.class, new BatchWrapperCodec());
+                eventBus.registerDefaultCodec(ArrayList.class, new ArrayListCodec());
+                eventBus.registerDefaultCodec(RuntimeException.class, new ExceptionCodec());
+                MessageConsumer<BatchWrapper<K, V>> consumer = eventBus.consumer(PC_VERTX_BATCH_RECORD_LIST);
+                consumer.handler(this::handle);
+            }
+
+            private void handle(Message<BatchWrapper<K, V>> batchWrapperEvent) {
+                addInstanceMDC();
+                log.debug("Vertical handling {}", batchWrapperEvent);
+                BatchWrapper<K, V> recordList = batchWrapperEvent.body();
+                List<WorkContainer<K, V>> batch = recordList.getBatch();
+                List<Tuple<ConsumerRecord<K, V>, ?>> result = null;
+                try {
+                    result = runUserFunction(userFunction,
+                            recordEntry -> {
+                                log.debug("Callback for {}", recordEntry);
+                            },
+                            batch);
+                } catch (Exception e) {
+                    String msg = msg("Vertx level error handling running user function: {}", e);
+                    log.error(msg, e);
+                    batchWrapperEvent.fail(0, msg + Arrays.toString(e.getStackTrace()));
+                }
+
+                // encode results?
+//                batchWrapperEvent.reply("it worked");
+
+
+                ShardManager<K, V> sm = wm.getSm();
+                List<Future> collect = batchWrapperEvent.body().getBatch().stream().map(x -> {
+                    Future extensionPayload = (Future) x.getExtensionPayload();
+                    return extensionPayload;
+                }).collect(Collectors.toList());
+
+                CompositeFuture composite = CompositeFuture.all(collect);
+                composite.onFailure(throwable -> {
+                    // handle failure of any of the user functions
+                    log.error("failed", throwable);
+                    RuntimeException error = new RuntimeException(throwable);
+                    batchWrapperEvent.reply(error);
+                    log.error("failed", throwable);
+                });
+
+//                composite.onComplete(event -> {
+//                    log.error("complete {}", event.succeeded());
+//                    boolean succeeded1 = event.succeeded();
+//                    boolean failed1 = event.failed();
+//                    Throwable cause = event.cause();
+//                    CompositeFuture compositeFuture = event.result();
+//                    List<Throwable> causes1 = compositeFuture.causes();
+//                    List<Object> list = compositeFuture.list();
+//                    CompositeFuture result1 = compositeFuture.result();
+//                    boolean succeeded = compositeFuture.succeeded();
+//                    int size = compositeFuture.size();
+//                    boolean failed = event.failed();
+//                    log.error("complete {}", event.succeeded());
+//                });
+
+//                batchWrapperEvent.reply(wcs);
+
+//                batchWrapperEvent.reply(result);
+
+                batchWrapperEvent.reply(batchWrapperEvent.body());
+            }
+
+            @Override
+            public void start(Promise<Void> startPromise) throws Exception {
+
+            }
+
+            @Override
+            public void stop(Promise<Void> stopPromise) throws Exception {
+
+            }
+        }, options);
+    }
+
+    /**
+     * Sends the message to the Vert.x PC Vertical for processing
+     */
+    @Override
+    protected void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<?>> usersFunction,
+                                         final Consumer<?> callback,
+                                         final List<WorkContainer<K, V>> batch) {
+        // convert from Vert.x Future to Java Future
+        Promise<Object> promise = Promise.promise();
+        Context context = vertx.getOrCreateContext();
+        CompletableFuture<Object> objectCompletableFuture = new CompletableFuture<>();
+        objectCompletableFuture.handleAsync((unused, throwable) -> {
+            context.runOnContext(unused1 -> {
+                if (throwable == null) {
+                    promise.handle(Future.succeededFuture());
+                } else {
+                    promise.handle(Future.failedFuture(throwable));
+                }
+            });
+            return null;
+        });
+
+        // isn't really used by vertx, as it only represents successful submission of the job to the vertical
+        setWorkersFuture(batch, objectCompletableFuture);
+
+        // send the records
+        EventBus bus = vertx.eventBus();
+        DeliveryOptions options = new DeliveryOptions();
+        options.setSendTimeout(ofMinutes(5).toMillis());
+
+        bus.request(PC_VERTX_BATCH_RECORD_LIST, new BatchWrapper<>(batch), options, event -> {
+            // reply
+            Message<Object> result = event.result();
+            Object body = result.body();
+            log.debug("Response from PC Vertical: {}", body);
+            boolean failed = event.failed();
+            Throwable cause = event.cause();
+            if (cause != null) {
+                RuntimeException error = new RuntimeException("Error response from Vertical", cause);
+                log.error(error.getMessage());
+                super.failureReason = error;
+            }
+            promise.complete();
+        });
     }
 
     /**
      * The vert.x module doesn't use any thread pool for dispatching work, as the work is all done by the vert.x engine.
      * This thread is only used to dispatch the work to vert.x.
-     * <p>
-     * TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to
-     * vert.x.
      */
+    // TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to vert.x. - submit to the vertical isntead?
     @Override
     protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
         return super.setupWorkerPool(1);
@@ -151,9 +301,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             Future<HttpResponse<Buffer>> send = call.send(); // dispatches the work to vertx
 
             // hook in the users' call back for when the web request gets a response
-            send.onComplete(ar ->
-                    onWebRequestComplete.accept(ar)
-            );
+            send.onComplete(onWebRequestComplete::accept);
 
             return send;
         }, onSend);
@@ -164,7 +312,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
                                    Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
         // wrap single record function in batch function
-        Function<PollContextInternal<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
+        Function<PollContextInternal<K, V>, List<?>> userFuncWrapper = (context) -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
             Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context.getPollContext());
@@ -187,6 +335,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         context.streamWorkContainers().forEach(wc -> {
             // attach internal handler
             wc.setWorkType(VERTX_TYPE);
+            wc.setExtensionPayload(send);
 
             send.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
@@ -211,7 +360,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     public void vertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
 
         // wrap single record function in batch function
-        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
+        Function<PollContextInternal<K, V>, List<?>> userFuncWrapper = context -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
             Future<?> send = carefullyRun(result, context.getPollContext());
@@ -230,7 +379,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     @Override
     public void batchVertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
 
-        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
+        Function<PollContextInternal<K, V>, List<?>> userFuncWrapper = context -> {
 
             Future<?> send = carefullyRun(result, context.getPollContext());
 

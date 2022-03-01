@@ -80,7 +80,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
      */
     public void react(Function<PollContext<K, V>, Publisher<?>> reactorFunction) {
 
-        Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = pollContext -> {
+        Function<PollContextInternal<K, V>, List<?>> wrappedUserFunc = pollContext -> {
 
             if (log.isTraceEnabled()) {
                 log.trace("Record list ({}), executing void function...",

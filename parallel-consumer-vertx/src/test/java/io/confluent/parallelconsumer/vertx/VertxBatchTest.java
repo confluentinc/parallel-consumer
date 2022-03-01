@@ -78,12 +78,15 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
             @Override
             public void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived) {
                 vertxAsync.batchVertxFuture(recordList -> {
-                    return vertx.executeBlocking(event -> {
-                        log.debug("Saw batch or records: {}", recordList.getOffsetsFlattened());
-                        batchesReceived.add(recordList);
-
-                        event.complete(msg("Saw batch or records: {}", recordList.getOffsetsFlattened()));
-                    });
+//                    return vertx.executeBlocking(event -> {
+                    String msg = msg("Saw batch or records: {}", recordList.getOffsetsFlattened());
+                    log.debug(msg);
+                    batchesReceived.add(recordList);
+//                    return Future.succeededFuture(msg);
+                    return Future.failedFuture(new RuntimeException("testing failure"));
+                    //event.complete(msg("Saw batch or records: {}", recordList.getOffsetsFlattened()));
+//
+//                    });
                 });
             }
 

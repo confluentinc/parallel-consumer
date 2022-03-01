@@ -8,12 +8,14 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
+import io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -96,6 +98,12 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         baseTest.awaitForCommit(numRecsExpected);
         var duration = System.currentTimeMillis() - start;
         log.info("Processed {} records in {} ms. Average batch size was: {}. {} records per second.", numRecsExpected, duration, averageBatchSize, numRecsExpected / (duration / 1000.0));
+
+        assertThat(getPC().isClosedOrFailed()).isFalse();
+
+        LongPollingMockConsumerSubject.assertThat(getKtu().getConsumerSpy())
+                .hasCommittedToAnyPartition()
+                .atLeastOffset(numRecsExpected);
     }
 
     /**
@@ -159,6 +167,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
                     assertThat(batchesReceived).hasSize(expectedNumOfBatches);
+                    assertThat(batchesReceived.stream().mapToLong(Collection::size).sum()).isEqualTo(numRecsExpected);
                 });
 
         assertThat(batchesReceived)
