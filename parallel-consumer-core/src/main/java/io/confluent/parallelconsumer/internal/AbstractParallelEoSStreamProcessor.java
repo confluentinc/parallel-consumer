@@ -663,7 +663,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
-        if (state == running || state == paused) {
+        if (isIdlingOrRunning()) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
             commitOffsetsMaybe();
@@ -991,6 +991,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return effectiveCommitAttemptDelay;
     }
 
+    private boolean isIdlingOrRunning() {
+        return state == running || state == draining || state == paused;
+    }
+
+
     /**
      * Conditionally commit offsets to broker
      */
@@ -1052,7 +1057,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
-        if (state == running || state == draining || state == paused) {
+        if (isIdlingOrRunning()) {
             Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
@@ -1072,6 +1077,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void commitOffsetsThatAreReady() {
         log.debug("Committing offsets that are ready...");
         synchronized (commitCommand) {
+            log.debug("Committing offsets that are ready...");
             committer.retrieveOffsetsAndCommit();
             clearCommitCommand();
             this.lastCommitTime = Instant.now();
@@ -1234,6 +1240,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (this.state == State.paused) {
             log.info("Transitioning paarallel consumer to state running.");
             this.state = State.running;
+            notifySomethingToDo();
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
