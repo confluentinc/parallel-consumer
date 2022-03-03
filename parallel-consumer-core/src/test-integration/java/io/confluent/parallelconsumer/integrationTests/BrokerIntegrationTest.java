@@ -1,3 +1,7 @@
+
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
 package io.confluent.parallelconsumer.integrationTests;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
@@ -37,7 +41,7 @@ public abstract class BrokerIntegrationTest<K, V> {
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
-    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.0.2"))
+    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.0.1"))
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
