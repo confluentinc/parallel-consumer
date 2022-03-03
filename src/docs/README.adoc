@@ -71,6 +71,8 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
 
+A video presentation overview can be found https://www.confluent.io/en-gb/events/kafka-summit-europe-2021/introducing-confluent-labs-parallel-consumer-client/[here], which is from Kafka Summit Europe 2021.
+
 [[demo]]
 .Relative speed demonstration
 --
