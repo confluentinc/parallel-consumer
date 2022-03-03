@@ -30,6 +30,7 @@ import org.awaitility.core.TerminalFailureException;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.MDC;
@@ -48,6 +49,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static java.time.Duration.ofMinutes;
 import static java.time.Duration.ofSeconds;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.util.IterableUtil.toCollection;
@@ -59,6 +61,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 //@Isolated // performance sensitive
 @Slf4j
+@Timeout(value = 1, unit = MINUTES)
 class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     static final int DEFAULT_MAX_POLL = 500;

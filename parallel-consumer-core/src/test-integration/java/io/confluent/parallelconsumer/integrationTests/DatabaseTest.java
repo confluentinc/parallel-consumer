@@ -6,11 +6,14 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -22,16 +25,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Simulate real forward pressure, back pressure and error conditions by testing against a real database
  */
 @Slf4j
-public class DbTest extends BrokerIntegrationTest<String, String> {
+@Testcontainers
+public class DatabaseTest extends BrokerIntegrationTest<String, String> {
 
+    @Container
     protected static final PostgreSQLContainer dbc;
 
-    /**
+    private static final String CONTAINER_PREFIX = "csid-pc-postgres-";
+
+    /*
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
     static {
         dbc = new PostgreSQLContainer<>()
+                .withCreateContainerCmdModifier(cmd -> cmd.withName(CONTAINER_PREFIX + RandomUtils.nextInt()))
                 .withReuse(true);
         dbc.start();
     }

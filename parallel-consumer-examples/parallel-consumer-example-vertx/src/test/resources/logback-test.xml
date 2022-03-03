@@ -23,7 +23,7 @@
     <!--    <logger name="io.confluent.csid.asyncconsumer.ParallelConsumer" level="info" />-->
 
     <!-- containers -->
-    <logger name="io.confluent.parallelconsumer.integrationTests.DbTest" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.integrationTests.DatabaseTest" level="debug"/>
     <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="debug"/>
 
     <!-- related -->
