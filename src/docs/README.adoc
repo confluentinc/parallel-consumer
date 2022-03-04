@@ -72,12 +72,13 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
 
 :talk_link: https://www.confluent.io/en-gb/events/kafka-summit-europe-2021/introducing-confluent-labs-parallel-consumer-client/
+:talk_preview_image: https://play.vidyard.com/5MLb1Xh7joEQ7phxPxiyPK.jpg
 
 [#talk]
 = Kafka Summit Europe 2021 Presentation
 .A video presentation overview can be found {talk_link}[from the Kafka Summit Europe 2021] page for the presentatoin, along with slides.
 [link = {talk_link}]
-image::https://play.vidyard.com/5MLb1Xh7joEQ7phxPxiyPK.jpg[Talk]
+image::{talk_preview_image}[Talk]
 
 [[demo]]
 = Demo
