@@ -10,7 +10,7 @@
 //
 
 
-= parallel-consumer
+= Confluent Parallel Consumer
 :icons:
 :toc: macro
 :toclevels: 3
