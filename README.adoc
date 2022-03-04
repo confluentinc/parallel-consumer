@@ -74,14 +74,21 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
 
 :talk_link: https://www.confluent.io/en-gb/events/kafka-summit-europe-2021/introducing-confluent-labs-parallel-consumer-client/
-image::https://play.vidyard.com/5MLb1Xh7joEQ7phxPxiyPK.jpg[link = {talk_link}]
-A video presentation overview can be found {talk_link}[from the Kafka Summit Europe 2021] page for the presentatoin, along with slides.
+
+[#talk]
+= Kafka Summit Europe 2021 Presentation
+.A video presentation overview can be found {talk_link}[from the Kafka Summit Europe 2021] page for the presentatoin, along with slides.
+[link = {talk_link}]
+image::https://play.vidyard.com/5MLb1Xh7joEQ7phxPxiyPK.jpg[Talk]
 
 [[demo]]
+= Demo
+
 .Relative speed demonstration
 --
 .Click on the animated SVG image to open the https://asciinema.org/a/404299[Asciinema.org player].
 image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/cbf558b38b0aa624bd7637406579d2a8f00f51db/demo.svg[link="https://asciinema.org/a/404299"]
+
 --
 
 '''
