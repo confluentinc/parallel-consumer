@@ -10,7 +10,7 @@
 //
 
 
-= parallel-consumer
+= Confluent Parallel Consumer
 :icons:
 :toc: macro
 :toclevels: 3
@@ -71,11 +71,26 @@ include::{project_root}/parallel-consumer-examples/parallel-consumer-example-cor
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
 
-[[demo]]
+[#demo]
+== Demo
+
 .Relative speed demonstration
 --
 .Click on the animated SVG image to open the https://asciinema.org/a/404299[Asciinema.org player].
 image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/cbf558b38b0aa624bd7637406579d2a8f00f51db/demo.svg[link="https://asciinema.org/a/404299"]
+--
+
+:talk_link: https://www.confluent.io/en-gb/events/kafka-summit-europe-2021/introducing-confluent-labs-parallel-consumer-client/
+:talk_preview_image: https://play.vidyard.com/5MLb1Xh7joEQ7phxPxiyPK.jpg
+
+[#talk]
+== Video Overview
+
+.Kafka Summit Europe 2021 Presentation
+--
+.A video presentation overview can be found {talk_link}[from the Kafka Summit Europe 2021] page for the presentatoin, along with slides.
+[link = {talk_link}]
+image::{talk_preview_image}[Talk]
 --
 
 '''
