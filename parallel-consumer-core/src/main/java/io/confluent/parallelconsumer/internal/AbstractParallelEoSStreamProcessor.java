@@ -10,15 +10,9 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
@@ -99,7 +93,21 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Collection of work waiting to be
      */
     @Getter(PROTECTED)
-    private final BlockingQueue<WorkContainer<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
+    private final BlockingQueue<ActionItem> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
+
+    @Value
+    private class ActionItem {
+        WorkContainer<K, V> workContainer;
+        ConsumerRecords<K, V> consumerRecords;
+
+//        public static <K, V> ActionItem ofRecords(ConsumerRecords<K, V> polledRecords) {
+//            return new ActionItem(null, polledRecords);
+//        }
+//
+//        public static <K, V> ActionItem ofWork(WorkContainer<K, V> work) {
+//            new ActionItem(work, null);
+//        }
+    }
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
@@ -880,7 +888,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
-        Set<WorkContainer<K, V>> results = new HashSet<>();
+        Set<ActionItem> results = new HashSet<>();
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
@@ -893,7 +901,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
             try {
-                WorkContainer<K, V> firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
+                ActionItem firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
                     log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
                 } else {
@@ -915,10 +923,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         workMailBox.drainTo(results, size);
 
         log.trace("Processing drained work {}...", results.size());
-        for (var work : results) {
-            MDC.put("offset", work.toString());
-            wm.handleFutureResult(work);
-            MDC.clear();
+        for (var action : results) {
+            WorkContainer<K, V> work = action.getWorkContainer();
+            if (work == null) {
+                ConsumerRecords<K, V> consumerRecords = action.getConsumerRecords();
+                wm.registerWork(consumerRecords);
+            } else {
+                MDC.put("offset", work.toString());
+                wm.handleFutureResult(work);
+                MDC.clear();
+            }
         }
     }
 
@@ -1118,7 +1132,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected void addToMailbox(WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
         log.debug("Adding {} {} to mailbox...", state, wc);
-        workMailBox.add(wc);
+        workMailBox.add(new ActionItem(wc, null));
+    }
+
+    public void registerWork(ConsumerRecords<K, V> polledRecords) {
+        log.debug("Adding {} to mailbox...", polledRecords);
+        workMailBox.add(new ActionItem(null, polledRecords));
     }
 
     /**

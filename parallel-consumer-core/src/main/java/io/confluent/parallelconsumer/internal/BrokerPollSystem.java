@@ -107,22 +107,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         committer.ifPresent(x -> x.claim());
         try {
             while (state != closed) {
-                log.trace("Loop: Broker poller: ({})", state);
-                if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
-                    ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
-                    log.debug("Got {} records in poll result", polledRecords.count());
-
-                    if (!polledRecords.isEmpty()) {
-                        log.trace("Loop: Register work");
-                        wm.registerWork(polledRecords);
-
-                        // notify control work has been registered, in case it's sleeping waiting for work that will never come
-                        if (wm.isStarvedForNewWork()) {
-                            log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
-                            pc.notifySomethingToDo();
-                        }
-                    }
-                }
+                handlePoll();
 
                 maybeDoCommit();
 
@@ -140,6 +125,41 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         } catch (Exception e) {
             log.error("Unknown error", e);
             throw e;
+        }
+    }
+
+    private void handlePoll() {
+        log.trace("Loop: Broker poller: ({})", state);
+        if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
+            ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
+            log.debug("Got {} records in poll result", polledRecords.count());
+
+            if (!polledRecords.isEmpty()) {
+                log.trace("Loop: Register work");
+                pc.registerWork(polledRecords);
+//                wm.registerWork(polledRecords);
+
+                // notify control work has been registered, in case it's sleeping waiting for work that will never come
+                if (wm.isStarvedForNewWork()) {
+                    log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
+                    pc.notifySomethingToDo();
+                }
+            }
+        }
+    }
+
+    private void transitionToCloseMaybe() {
+        // make sure everything is committed
+        if (isResponsibleForCommits() && !wm.isRecordsAwaitingToBeCommitted()) {
+            // transition to closing
+            state = State.closing;
+        } else {
+            log.trace("Draining, but work still needs to be committed. Yielding thread to avoid busy wait.");
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
