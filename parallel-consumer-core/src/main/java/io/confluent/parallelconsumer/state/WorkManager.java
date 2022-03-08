@@ -13,7 +13,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
@@ -129,7 +128,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        wmbm.onPartitionsRemoved(partitions);
     }
 
-    public void registerWork(ConsumerRecords<K, V> records) {
+    public void registerWork(BrokerPollSystem.EpochAndRecords records) {
 //        wmbm.registerWork(records);
         pm.maybeRegisterNewRecordAsWork(records);
     }

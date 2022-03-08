@@ -332,7 +332,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if the record was taken, false if it was skipped (previously successful)
      */
-    boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec) {
+    boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec, final long epoch) {
         if (rec == null) return false;
 
         synchronized (partitionStates) {
@@ -361,9 +361,11 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #maybeRegisterNewRecordAsWork(ConsumerRecord)
      */
-    public void maybeRegisterNewRecordAsWork(ConsumerRecords<K, V> records) {
-        for (ConsumerRecord<K, V> consumerRec : records) {
-            maybeRegisterNewRecordAsWork(consumerRec);
+    public void maybeRegisterNewRecordAsWork(BrokerPollSystem.EpochAndRecords records) {
+        // todo unchecked
+        ConsumerRecords<K, V> poll = records.getPoll();
+        for (ConsumerRecord<K, V> consumerRec : poll) {
+            maybeRegisterNewRecordAsWork(consumerRec, records.getMyEpoch());
         }
     }
 

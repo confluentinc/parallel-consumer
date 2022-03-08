@@ -12,7 +12,10 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
@@ -98,7 +101,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Value
     private class ActionItem {
         WorkContainer<K, V> workContainer;
-        ConsumerRecords<K, V> consumerRecords;
+        BrokerPollSystem.EpochAndRecords consumerRecords;
 
 //        public static <K, V> ActionItem ofRecords(ConsumerRecords<K, V> polledRecords) {
 //            return new ActionItem(null, polledRecords);
@@ -332,6 +335,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
+        brokerPollSubsystem.onPartitionsAssigned(partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifySomethingToDo();
@@ -345,6 +349,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void onPartitionsLost(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
+        brokerPollSubsystem.onPartitionsLost(partitions);
         wm.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }
@@ -922,7 +927,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         for (var action : results) {
             WorkContainer<K, V> work = action.getWorkContainer();
             if (work == null) {
-                ConsumerRecords<K, V> consumerRecords = action.getConsumerRecords();
+                BrokerPollSystem.EpochAndRecords consumerRecords = action.getConsumerRecords();
                 wm.registerWork(consumerRecords);
             } else {
                 MDC.put("offset", work.toString());
@@ -1124,7 +1129,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         workMailBox.add(new ActionItem(wc, null));
     }
 
-    public void registerWork(ConsumerRecords<K, V> polledRecords) {
+    public void registerWork(BrokerPollSystem.EpochAndRecords polledRecords) {
         log.debug("Adding {} to mailbox...", polledRecords);
         workMailBox.add(new ActionItem(null, polledRecords));
     }

@@ -10,7 +10,9 @@ import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
@@ -18,6 +20,7 @@ import org.slf4j.MDC;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -34,7 +37,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter {
+public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanceListener {
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -59,11 +62,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
+    private long epoch = 0L;
+
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions options) {
         this.wm = wm;
         this.pc = pc;
 
         this.consumerManager = consumerMgr;
+
         switch (options.getCommitMode()) {
             case PERIODIC_CONSUMER_SYNC, PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
@@ -131,10 +137,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private void handlePoll() {
         log.trace("Loop: Broker poller: ({})", state);
         if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
-            ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
-            log.debug("Got {} records in poll result", polledRecords.count());
+            EpochAndRecords polledRecords = pollBrokerForRecords();
+            log.debug("Got {} records in poll result", polledRecords.getPoll().count());
 
-            if (!polledRecords.isEmpty()) {
+            if (!polledRecords.getPoll().isEmpty()) {
                 log.trace("Loop: Register work");
                 pc.registerWork(polledRecords);
 //                wm.registerWork(polledRecords);
@@ -186,7 +192,33 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         return committer.isPresent();
     }
 
-    private ConsumerRecords<K, V> pollBrokerForRecords() {
+    @Override
+    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+        epoch++;
+    }
+
+    @Override
+    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        epoch++;
+    }
+
+    @Value
+    public
+    class EpochAndRecords {
+        ConsumerRecords<K, V> poll;
+        long myEpoch;
+
+        public EpochAndRecords(ConsumerRecords<K, V> poll) {
+            this.poll = poll;
+            this.myEpoch = getEpoch();
+        }
+    }
+
+    private long getEpoch() {
+        return epoch;
+    }
+
+    private EpochAndRecords pollBrokerForRecords() {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
 
@@ -196,8 +228,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
         log.debug("Long polling broker with timeout {}, might appear to sleep here if subs are paused, or no data available on broker. Run state: {}", thisLongPollTimeout, state);
         ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
+
         log.debug("Poll completed");
-        return poll;
+        return new EpochAndRecords(poll);
     }
 
     /**
