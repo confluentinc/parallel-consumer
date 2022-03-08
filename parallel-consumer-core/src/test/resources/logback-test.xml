@@ -32,23 +32,23 @@
     <logger name="io.confluent.csid" level="info"/>
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
 
-    <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
-    <!--    <logger name="io.confluent.csid" level="debug"/>-->
+    <logger name="io.confluent.parallelconsumer" level="debug"/>
+    <logger name="io.confluent.csid" level="debug"/>
 
     <!-- Key classes -->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionMonitor" level="trace"/>-->
+    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionMonitor" level="trace"/>
     <!--        <logger name="io.confluent.parallelconsumer.state" level="trace"/>-->
 
     <!-- Offset committing-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractOffsetCommitter" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.offsets" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder" level="debug"/>-->
+    <logger name="io.confluent.parallelconsumer.internal.AbstractOffsetCommitter" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.offsets" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder" level="debug"/>
 
     <!-- Broker polling -->
     <!--        <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
+    <!--        <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
     <!--            <logger name="io.confluent.parallelconsumer.internal" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.state.WorkManager" level="trace"/>-->
 

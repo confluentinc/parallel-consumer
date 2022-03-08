@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.state.PartitionState.OffsetPair;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -49,7 +50,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      */
     @Getter
     @Setter
-    private double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
+    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
 
     private final Consumer<K, V> consumer;
 
@@ -172,7 +173,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
      * offset.
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetPair> committed) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         committed.forEach((tp, meta) -> {
             var partition = getPartitionState(tp);
@@ -408,6 +409,11 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         partitionState.onSuccess(wc);
     }
 
+    public void onFailure(WorkContainer<K, V> wc) {
+        PartitionState<K, V> partitionState = getPartitionState(wc.getTopicPartition());
+        partitionState.onFailure(wc);
+    }
+
     /**
      * Takes a record as work and puts it into internal queues, unless it's been previously recorded as completed as per
      * loaded records.
@@ -445,16 +451,47 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
+    public Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemove() {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
+
+    private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemove(boolean remove) {
+
+        var newone = findCompletedEligibleOffsetsAndRemoveNew();
+
+        var oldone = findCompletedEligibleOffsetsAndRemoveOld(remove);
+
+        return newone;
+    }
+
+    private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemoveNew() {
+        Map<TopicPartition, OffsetPair> offsetsToSend = new HashMap<>();
+
+        for (var e : getAssignedPartitions().entrySet()) {
+            Optional<OffsetPair> completedEligibleOffsetsAndRemoveNew = e.getValue().getCompletedEligibleOffsetsAndRemoveNew();
+            completedEligibleOffsetsAndRemoveNew.ifPresent(offsetAndMetadata ->
+                    offsetsToSend.put(e.getKey(), offsetAndMetadata)
+            );
+        }
+
+//        Map<TopicPartition, OffsetAndMetadata> collect = getAssignedPartitions().entrySet().stream()
+//                .map(x -> x.getValue().getCompletedEligibleOffsetsAndRemoveNew(remove))
+//                .filter(Optional::isPresent)
+//                .map(Optional::get)
+//                .collect(Collectors.toMap(Map.Entry::getKey,
+//                        o -> o.getValue().getCompletedEligibleOffsetsAndRemoveNew()));
+
+        log.debug("Scan finished, {} were in flight, offset(s) ({}) to be committed", offsetsToSend.size(), offsetsToSend);
+        return offsetsToSend;
+    }
+
 
     /**
      * Finds eligible offset positions to commit in each assigned partition
      */
     // todo remove completely as state of offsets should be tracked live, no need to scan for them - see #201
     // https://github.com/confluentinc/parallel-consumer/issues/201 Refactor: Live tracking of offsets as they change, so we don't need to scan for them
-    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
+    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemoveOld(boolean remove) {
 
         //
         Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
@@ -470,7 +507,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             log.trace("Starting scan of partition: {}", topicPartitionKey);
 
             count += partitionQueue.size();
-            var workToRemove = new LinkedList<WorkContainer<K, V>>();
+            var workToRemove = new LinkedList<WorkContainer<?, ?>>();
             var incompleteOffsets = new LinkedHashSet<Long>();
             long lowWaterMark = -1;
             var highestSucceeded = partitionState.getOffsetHighestSucceeded();
@@ -537,6 +574,14 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return Collections.unmodifiableMap(this.partitionStates.entrySet().stream()
                 .filter(e -> !e.getValue().isRemoved())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+    }
+
+    boolean isDirty() {
+        return this.partitionStates.values().parallelStream().anyMatch(PartitionState::isDirty);
+    }
+
+    public boolean isClean() {
+        return !isDirty();
     }
 
     public boolean couldBeTakenAsWork(WorkContainer<?, ?> workContainer) {

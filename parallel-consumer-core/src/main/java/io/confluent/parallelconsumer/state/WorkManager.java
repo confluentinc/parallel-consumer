@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -231,13 +230,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see PartitionMonitor#onOffsetCommitSuccess(Map)
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    public void onOffsetCommitSuccess(Map<TopicPartition, PartitionState.OffsetPair> committed) {
         pm.onOffsetCommitSuccess(committed);
     }
 
     public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
         wc.endFlight();
+        pm.onFailure(wc);
         sm.onFailure(wc);
         numberRecordsOutForProcessing--;
     }
@@ -251,7 +251,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     // todo rename
-    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
+    public Map<TopicPartition, PartitionState.OffsetPair> findCompletedEligibleOffsetsAndRemove() {
         return pm.findCompletedEligibleOffsetsAndRemove();
     }
 
@@ -303,6 +303,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isWorkInFlightMeetingTarget() {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
+    }
+
+    public boolean isClean() {
+        return pm.isClean();
+    }
+
+    public boolean isDirty() {
+        return pm.isDirty();
     }
 
     /**

@@ -21,7 +21,6 @@ import org.apache.kafka.common.TopicPartition;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.time.temporal.TemporalUnit;
 import java.util.ConcurrentModificationException;
 import java.util.Map;
 import java.util.concurrent.Future;

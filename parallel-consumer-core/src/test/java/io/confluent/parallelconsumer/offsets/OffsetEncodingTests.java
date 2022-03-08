@@ -197,7 +197,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             assertThat(bestPayload).isNotEmpty();
 
             //
-            consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
+            /// todo need to remove all
+//            consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
         }
 
         // simulate a rebalance or some sort of reset, by instantiating a new WM with the state from the last

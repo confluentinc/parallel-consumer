@@ -4,21 +4,23 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.NavigableMap;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static lombok.AccessLevel.*;
 
 @Slf4j
@@ -40,17 +42,16 @@ public class PartitionState<K, V> {
      * @see #findCompletedEligibleOffsetsAndRemove(boolean)
      * @see #encodeWorkResult(boolean, WorkContainer)
      * @see #onSuccess(WorkContainer)
-     * @see #onFailure(WorkContainer)
      */
     // visible for testing
     // todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
     // this is derived from partitionCommitQueues WorkContainer states
-    // todo remove setter - leaky abstraction, shouldn't be needed
-    @Setter
-    private Set<Long> incompleteOffsets;
+    private Set<WorkContainer<?, ?>> incompleteOffsets = new ConcurrentSkipListSet<>();
+
+    private final Set<WorkContainer<?, ?>> completedEligibleWork = new ConcurrentSkipListSet<>();
 
     public Set<Long> getIncompleteOffsets() {
-        return Collections.unmodifiableSet(incompleteOffsets);
+        return incompleteOffsets.parallelStream().map(WorkContainer::offset).collect(Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -69,6 +70,13 @@ public class PartitionState<K, V> {
     @Getter(PUBLIC)
     @Setter(PRIVATE)
     private long offsetHighestSucceeded = -1L;
+
+    /**
+     * Highest continuous succeeded offset
+     */
+    @Getter(PUBLIC)
+    @Setter(PRIVATE)
+    private long offsetHighestSequentialSucceeded = -1L;
 
     /**
      * If true, more messages are allowed to process for this partition.
@@ -106,7 +114,7 @@ public class PartitionState<K, V> {
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
         this.tp = tp;
-        this.incompleteOffsets = incompletes.getIncompleteOffsets();
+//        this.incompleteOffsets = incompletes.getIncompleteOffsets();
         this.offsetHighestSeen = incompletes.getHighestSeenOffset();
     }
 
@@ -123,12 +131,25 @@ public class PartitionState<K, V> {
      * Removes all offsets that fall below the new low water mark.
      */
     public void truncateOffsets(final long nextExpectedOffset) {
-        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
+        incompleteOffsets.removeIf(offset -> offset.offset() < nextExpectedOffset);
     }
 
-    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
-        long nextExpectedOffset = committed.offset();
+    public void onOffsetCommitSuccess(final OffsetPair committed) {
+        long nextExpectedOffset = committed.getSync().offset();
         truncateOffsets(nextExpectedOffset);
+
+        // todo possibility this is run a different thread than controller?
+        updateIncompletes(committed);
+    }
+
+    private void updateIncompletes(OffsetPair committed) {
+        // todo - track dirty state here
+    }
+
+
+    boolean isDirty() {
+        // todo return is dirty ?
+        return true;
     }
 
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
@@ -160,6 +181,12 @@ public class PartitionState<K, V> {
 
     public void onSuccess(WorkContainer<K, V> work) {
         updateHighestSucceededOffsetSoFar(work);
+        this.incompleteOffsets.remove(work);
+        this.completedEligibleWork.add(work);
+    }
+
+    public void onFailure(WorkContainer<K, V> work) {
+        this.completedEligibleWork.remove(work);
     }
 
     /**
@@ -176,11 +203,11 @@ public class PartitionState<K, V> {
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
-        NavigableMap<Long, WorkContainer<K, V>> queue = this.commitQueue;
-        queue.put(wc.offset(), wc);
+        commitQueue.put(wc.offset(), wc);
+        incompleteOffsets.add(wc);
     }
 
-    public void remove(LinkedList<WorkContainer<K, V>> workToRemove) {
+    public void remove(Iterable<WorkContainer<?, ?>> workToRemove) {
         for (var workContainer : workToRemove) {
             var offset = workContainer.getCr().offset();
             this.commitQueue.remove(offset);
@@ -194,6 +221,184 @@ public class PartitionState<K, V> {
      */
     public boolean isRemoved() {
         return false;
+    }
+
+    public void setIncompleteOffsets(LinkedHashSet<Long> incompleteOffsets) {
+        //noop delete
+    }
+
+    // todo maybe not needed in end
+    @Value
+    public static class OffsetPair {
+        OffsetAndMetadata sync;
+        Set<Long> incompletes;
+    }
+
+    public Optional<OffsetPair> getCompletedEligibleOffsetsAndRemoveNew() {
+
+//        Set<WorkContainer<?, ?>> completedEligibleOffsetsAndRemoveNewNewNEEEEEW = getCompletedEligibleOffsetsAndRemoveNewNewNEEEEEW(remove);
+
+        return createOffsetMeta().map(x -> new OffsetPair(x, getIncompleteOffsets()));
+
+//        Optional<Long> nextExpectedOffset = getCompletedEligibleOffsetsAndRemoveNewNew(remove);
+//
+//        return nextExpectedOffset.flatMap(nextOffset ->
+//                createOffsetMeta(nextOffset)
+//                        .map(x -> new OffsetPair(x, incompleteOffsets)));
+    }
+
+    private Optional<OffsetAndMetadata> createOffsetMeta() {
+        // try to encode
+        Long nextOffset = getNextExpectedPolledOffset();
+        Optional<String> payloadOpt = tryToEncodOffsetsStartingAt(nextOffset);
+        return payloadOpt.map(payload -> new OffsetAndMetadata(nextOffset, payload))
+                .or(() -> Optional.of(new OffsetAndMetadata(nextOffset)));
+    }
+
+    private long getNextExpectedPolledOffset() {
+        return getOffsetHighestSequentialSucceeded() + 1;
+    }
+
+//    private Set<WorkContainer<?, ?>> getCompletedEligibleOffsetsAndRemoveNewNewNEEEEEW(boolean remove) {
+//        if (remove) {
+//            remove(this.completedEligibleWork);
+//        }
+//        return completedEligibleWork;
+//    }
+
+
+//    // todo remove parameter remove
+//    private Optional<Long> getCompletedEligibleOffsetsAndRemoveNewNew(boolean remove) {
+//        //        int count = 0;
+////        int removed = 0;
+//
+//        Map<Long, WorkContainer<K, V>> partitionQueue = getCommitQueue();
+//        TopicPartition topicPartitionKey = this.getTp();
+//        log.trace("Starting scan of partition: {}", topicPartitionKey);
+//
+////        count += partitionQueue.size();
+//        var workToRemove = new LinkedList<WorkContainer<?, ?>>();
+//        var incompleteOffsets = new LinkedHashSet<Long>();
+//        long lowWaterMark = -1;
+//        var highestSucceeded = getOffsetHighestSucceeded();
+//        // can't commit this offset or beyond, as this is the latest offset that is incomplete
+//        // i.e. only commit offsets that come before the current one, and stop looking for more
+//        boolean beyondSuccessiveSucceededOffsets = false;
+//
+//        Long nextOffset = null;
+//
+//        for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
+//            // ordered iteration via offset keys thanks to the tree-map
+//            WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
+//
+//            //
+//            long offset = container.getCr().offset();
+//            if (offset > highestSucceeded) {
+//                break; // no more to encode
+//            }
+//
+//            //
+//            boolean userFuncComplete = container.isUserFunctionComplete();
+//            if (userFuncComplete) {
+//                Boolean userFuncSuccess = container.getUserFunctionSucceeded().get();
+//                if (userFuncSuccess) {
+//                    if (beyondSuccessiveSucceededOffsets) {
+//                        // todo lookup the low water mark and include here
+//                        log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset ({}). Will mark as complete in the offset map.",
+//                                container.getCr().offset(), lowWaterMark);
+//                        // no-op - offset map is only for not succeeded or completed offsets
+//                    } else {
+//                        log.trace("Found offset candidate ({}) to add to offset commit map", container);
+//                        workToRemove.add(container);
+//                        // as in flights are processed in order, this will keep getting overwritten with the highest offset available
+//                        // current offset is the highest successful offset, so commit +1 - offset to be committed is defined as the offset of the next expected message to be read
+//                        nextOffset = offset + 1;
+//                    }
+//                } else {
+//                    log.trace("Offset {} is complete, but failed processing. Will track in offset map as failed. Can't do normal offset commit past this point.", container.getCr().offset());
+//                    beyondSuccessiveSucceededOffsets = true;
+//                    incompleteOffsets.add(offset);
+//                }
+//            } else {
+//                lowWaterMark = container.offset();
+//                beyondSuccessiveSucceededOffsets = true;
+//                log.trace("Offset (:{}) is incomplete, holding up the queue ({}) of size {}.",
+//                        container.getCr().offset(),
+//                        topicPartitionKey,
+//                        partitionQueue.size());
+//                incompleteOffsets.add(offset);
+//            }
+//
+//
+//            if (remove) {
+////                removed += workToRemove.size();
+//                // todo so if work is never put bach???
+//                remove(workToRemove);
+//            }
+//        }
+//
+//        //
+//        // todo smelly - update the partition state with the new found incomplete offsets. This field is used by nested classes accessing the state
+//        this.incompleteOffsets = incompleteOffsets;
+//
+//        return Optional.ofNullable(nextOffset);
+//    }
+
+
+    /**
+     * @return the String encoded offset map, if possible
+     */
+    // todo refactor
+    // todo rename TRY to add... or maybe add
+    Optional<String> tryToEncodOffsetsStartingAt(Long offsetOfNextExpectedMessage) {
+        // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
+
+        if (incompleteOffsets.isEmpty()) {
+            setAllowedMoreRecords(true);
+            return Optional.empty();
+        }
+
+        OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null); // refactor use of null shouldn't be needed
+        String offsetMapPayload;
+        try {
+
+            // encode
+            offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
+
+        } catch (EncodingNotSupportedException e) {
+            setAllowedMoreRecords(false);
+            log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
+            return Optional.empty();
+        }
+
+        //
+        int metaPayloadLength = offsetMapPayload.length();
+        boolean moreMessagesAllowed;
+
+        // todo move - move what?
+        double pressureThresholdValue = DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+
+        if (metaPayloadLength > DefaultMaxMetadataSize) {
+            // exceeded maximum API allowed, strip the payload
+            moreMessagesAllowed = false;
+            log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
+                            "Warning: messages might be replayed on rebalance. " +
+                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
+                    metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+        } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
+            // try to turn on back pressure before max size is reached
+            moreMessagesAllowed = false;
+            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
+                            "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
+                    metaPayloadLength, pressureThresholdValue, DefaultMaxMetadataSize);
+
+        } else { // and thus (metaPayloadLength <= pressureThresholdValue)
+            moreMessagesAllowed = true;
+            log.debug("Payload size {} within threshold {}", metaPayloadLength, pressureThresholdValue);
+        }
+
+        setAllowedMoreRecords(moreMessagesAllowed);
+        return Optional.of(offsetMapPayload);
     }
 
 }
