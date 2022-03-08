@@ -14,10 +14,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
@@ -357,6 +354,16 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
                 return true;
             }
+        }
+    }
+
+
+    /**
+     * @see #maybeRegisterNewRecordAsWork(ConsumerRecord)
+     */
+    public void maybeRegisterNewRecordAsWork(ConsumerRecords<K, V> records) {
+        for (ConsumerRecord<K, V> consumerRec : records) {
+            maybeRegisterNewRecordAsWork(consumerRec);
         }
     }
 

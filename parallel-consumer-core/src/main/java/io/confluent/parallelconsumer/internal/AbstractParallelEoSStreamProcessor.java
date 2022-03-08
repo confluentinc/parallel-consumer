@@ -627,15 +627,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         //
         int newWork = handleWork(userFunction, callback);
 
-        if (state == running) {
-            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
-                // can occur
-                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getAmountOfWorkQueuedWaitingIngestion(),
-                        options.getTargetAmountOfRecordsInFlight());
-                brokerPollSubsystem.wakeupIfPaused();
-            }
-        }
+//        if (state == running) {
+//            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
+        // can occur
+//                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
+////                        wm.getAmountOfWorkQueuedWaitingIngestion(),
+//                        options.getTargetAmountOfRecordsInFlight());
+//                brokerPollSubsystem.wakeupIfPaused();
+//            }
+//        }
 
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
@@ -820,20 +820,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
      */
     protected void checkPipelinePressure() {
-        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getAmountOfWorkQueuedWaitingIngestion() > options.getTargetAmountOfRecordsInFlight();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
-                            "if (isPoolQueueLow() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {} && lastWorkRequestWasFulfilled {}))",
+                            "if (isPoolQueueLow() {} && lastWorkRequestWasFulfilled {}))",
                     getNumberOfUserFunctionsQueued(),
                     getQueueTargetLoaded(),
                     dynamicExtraLoadFactor.getCurrentFactor(),
                     isPoolQueueLow(),
-                    moreWorkInQueuesAvailableThatHaveNotBeenPulled,
                     lastWorkRequestWasFulfilled);
 
-        if (isPoolQueueLow()
-                && moreWorkInQueuesAvailableThatHaveNotBeenPulled
-                && lastWorkRequestWasFulfilled) {
+        if (isPoolQueueLow() && lastWorkRequestWasFulfilled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
@@ -855,10 +851,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int queueSize = getNumberOfUserFunctionsQueued();
         int queueTarget = getPoolLoadTarget();
         boolean workAmountBelowTarget = queueSize <= queueTarget;
-        boolean hasWorkInMailboxes = wm.hasWorkAwaitingIngestionToShards();
-        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
-                workAmountBelowTarget, queueSize, queueTarget, hasWorkInMailboxes);
-        return workAmountBelowTarget && hasWorkInMailboxes;
+//        boolean hasWorkInMailboxes = wm.hasWorkAwaitingIngestionToShards();
+        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
+                workAmountBelowTarget, queueSize, queueTarget);
+        return workAmountBelowTarget;
     }
 
     private void drain() {
@@ -939,18 +935,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The amount of time to block poll in this cycle
      *
-     * @return either the duration until next commit, or next work retry
-     * @see WorkManager#isStarvedForNewWork()
+     * @return either the duration until next commit, or next work retry //     * @see WorkManager#isStarvedForNewWork()
      * @see WorkManager#getTotalWorkAwaitingIngestion()
      * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
     private Duration getTimeToBlockFor() {
-        // should not block as not enough work is being done, and there's more work to ingest
-        boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
-        if (ingestionWorkAndStarved) {
-            log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
-            return Duration.ofMillis(0);
-        }
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
         else if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry

@@ -139,11 +139,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 pc.registerWork(polledRecords);
 //                wm.registerWork(polledRecords);
 
-                // notify control work has been registered, in case it's sleeping waiting for work that will never come
-                if (wm.isStarvedForNewWork()) {
-                    log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
-                    pc.notifySomethingToDo();
-                }
+//                // notify control work has been registered, in case it's sleeping waiting for work that will never come
+//                if (wm.isStarvedForNewWork()) {
+//                    log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
+//                    pc.notifySomethingToDo();
+//                }
             }
         }
     }
@@ -225,10 +225,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 });
             } else {
                 if (log.isDebugEnabled()) {
-                    log.debug("Should pause but pause rate limit exceeded {} vs {}. Queued: {}",
+                    log.debug("Should pause but pause rate limit exceeded {} vs {}.",
                             pauseLimiter.getElapsedDuration(),
-                            pauseLimiter.getRate(),
-                            wm.getAmountOfWorkQueuedWaitingIngestion());
+                            pauseLimiter.getRate());
                 }
             }
         }
