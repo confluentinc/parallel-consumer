@@ -152,7 +152,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             await().alias("check all except 2 and 4 are processed").atMost(normalTimeout).untilAsserted(() -> {
                         ArrayList<ConsumerRecord<String, String>> copy = new ArrayList<>(successfullInOne);
                         assertThat(copy.stream()
-                                .map(x -> x.value()).collect(Collectors.toList()))
+                                .map(ConsumerRecord::value).collect(Collectors.toList()))
                                 .containsOnly("0", "1", "3", "5");
                     }
             );

@@ -222,10 +222,13 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     /**
      * Have our partitions been revoked?
+     * <p>
+     * This state is rare, as shards or work get removed upon partition revocation, although under busy load it might
+     * occur we don't synchronize over PartitionState here so it's a bit racey, but is handled and eventually settles.
      *
      * @return true if epoch doesn't match, false if ok
      */
-    boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
+    boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
         var topicPartitionKey = workContainer.getTopicPartition();
 
         Integer currentPartitionEpoch = partitionsAssignmentEpochs.get(topicPartitionKey);
@@ -256,9 +259,19 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return previouslyCompleted;
     }
 
+    /**
+     * Check we have capacity in offset storage to process more messages
+     */
     public boolean isAllowedMoreRecords(TopicPartition tp) {
         PartitionState<K, V> partitionState = getPartitionState(tp);
         return partitionState.isAllowedMoreRecords();
+    }
+
+    /**
+     * @see #isAllowedMoreRecords(TopicPartition)
+     */
+    public boolean isAllowedMoreRecords(WorkContainer<?, ?> wc) {
+        return isAllowedMoreRecords(wc.getTopicPartition());
     }
 
     public boolean hasWorkInCommitQueues() {
@@ -377,9 +390,9 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
 
-    public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<K, V> rec) {
+    public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
         TopicPartition topicPartition = toTopicPartition(rec);
-        PartitionState<K, V> partitionState = getPartitionState(topicPartition);
+        var partitionState = getPartitionState(topicPartition);
         boolean hasNeverBeenAssigned = partitionState == null;
         return hasNeverBeenAssigned || partitionState.isRemoved();
     }
@@ -508,7 +521,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
 
 
-        List<Long> collect = offsetsToSend.values().stream().map(x -> x.offset()).collect(Collectors.toList());
         log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
                 count, removed, offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;
@@ -518,6 +530,40 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return Collections.unmodifiableMap(this.partitionStates.entrySet().stream()
                 .filter(e -> !e.getValue().isRemoved())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+    }
+
+    public boolean couldBeTakenAsWork(WorkContainer<?, ?> workContainer) {
+        if (checkIfWorkIsStale(workContainer)) {
+            log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
+            return false;
+        } else if (isAllowedMoreRecords(workContainer)) {
+            return true;
+        } else if (isBlockingProgress(workContainer)) {
+            // allow record to be taken, even if partition is blocked, as this record completion may reduce payload size requirement
+            return true;
+        } else {
+            log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
+                            "record ({}) belongs to, due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
+                            "not in flight ({}), continuing on to next container in shardEntry.",
+                    workContainer.getTopicPartition(), workContainer.offset(), workContainer.isNotInFlight());
+            return false;
+        }
+    }
+
+    /**
+     * If the record is below the highest succeeded offset, then it is or will be represented in the current offset
+     * encoding.
+     * <p>
+     * This may in fact be THE message holding up the partition - so must be retried.
+     * <p>
+     * In which case - don't want to skip it.
+     * <p>
+     * Generally speaking, completing more offsets below the highest succeeded (and thus the set represented in the
+     * encoded payload), should usually reduce the payload size requirements.
+     */
+    private boolean isBlockingProgress(WorkContainer<?, ?> workContainer) {
+        var partitionState = getPartitionState(workContainer.getTopicPartition());
+        return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
     }
 
 }
