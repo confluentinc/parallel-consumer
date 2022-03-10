@@ -26,6 +26,7 @@ import static java.time.Duration.ofSeconds;
 public class KafkaClientUtils {
 
     public static final int MAX_POLL_RECORDS = 10_000;
+    public static final String GROUP_ID_PREFIX = "group-1-";
 
     private final KafkaContainer kContainer;
 
@@ -37,6 +38,8 @@ public class KafkaClientUtils {
 
     @Getter
     private AdminClient admin;
+    private final String groupId = GROUP_ID_PREFIX + RandomUtils.nextInt();
+
 
     public KafkaClientUtils(KafkaContainer kafkaContainer) {
         kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
@@ -65,7 +68,7 @@ public class KafkaClientUtils {
         var consumerProps = setupCommonProps();
 
         //
-        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt());
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
         consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
@@ -116,7 +119,7 @@ public class KafkaClientUtils {
         Properties properties = setupConsumerProps();
 
         if (newConsumerGroup) {
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt()); // new group
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + RandomUtils.nextInt()); // new group
         }
 
         // override with custom

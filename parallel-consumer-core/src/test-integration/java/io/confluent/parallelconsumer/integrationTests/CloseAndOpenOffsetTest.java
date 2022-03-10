@@ -244,7 +244,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         setupTopic();
 
         // send a single message
-        kcu.getProducer().send(new ProducerRecord<>(topic, "0", "0"));
+        String expectedPayload = "0";
+        kcu.getProducer().send(new ProducerRecord<>(topic, expectedPayload, expectedPayload));
 
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
@@ -268,7 +269,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             // the single message is processed
             await().untilAsserted(() -> assertThat(readByOne)
                     .extracting(ConsumerRecord::value)
-                    .containsExactly("0"));
+                    .containsExactly(expectedPayload));
 
         } finally {
             log.debug("asyncOne closed");
