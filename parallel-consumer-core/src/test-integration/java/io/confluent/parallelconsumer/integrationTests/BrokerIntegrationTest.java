@@ -1,7 +1,6 @@
 package io.confluent.parallelconsumer.integrationTests;
-
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
@@ -87,7 +86,7 @@ public abstract class BrokerIntegrationTest<K, V> {
 
     protected void ensureTopic(String topic, int numPartitions) {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
-        CreateTopicsResult topics = kcu.admin.createTopics(UniLists.of(e1));
+        CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
             Void all = topics.all().get();
         } catch (ExecutionException e) {
