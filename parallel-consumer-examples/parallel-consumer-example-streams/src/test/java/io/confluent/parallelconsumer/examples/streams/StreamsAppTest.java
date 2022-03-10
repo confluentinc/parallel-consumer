@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.examples.streams;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +46,7 @@ public class StreamsAppTest extends BrokerIntegrationTest<String, String> {
 
         @Override
         Consumer<String, String> getKafkaConsumer() {
-            return kcu.consumer;
+            return kcu.getConsumer();
         }
 
         @Override
