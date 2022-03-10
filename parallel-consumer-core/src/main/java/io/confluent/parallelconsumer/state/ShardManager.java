@@ -93,13 +93,6 @@ public class ShardManager<K, V> {
         return computeShardKey(wc.getCr());
     }
 
-    public Optional<WorkContainer<K, V>> getWorkContainerForRecord(ConsumerRecord<K, V> rec) {
-        Object key = computeShardKey(rec);
-        var shard = this.processingShards.get(key);
-        long offset = rec.offset();
-        return shard.getWorkForOffset(offset);
-    }
-
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
      */

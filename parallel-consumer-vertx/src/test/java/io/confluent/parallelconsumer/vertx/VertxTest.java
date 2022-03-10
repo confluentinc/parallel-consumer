@@ -3,8 +3,10 @@ package io.confluent.parallelconsumer.vertx;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.confluent.csid.utils.WireMockUtils;
+import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -18,7 +20,6 @@ import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,7 +88,7 @@ class VertxTest extends VertxBaseUnitTest {
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var tupleStream =
-                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> getBadRequest());
+                vertxAsync.vertxHttpReqInfoStream((PollContext<String, String> rec) -> getBadRequest());
 
         //
         awaitLatch(latch);

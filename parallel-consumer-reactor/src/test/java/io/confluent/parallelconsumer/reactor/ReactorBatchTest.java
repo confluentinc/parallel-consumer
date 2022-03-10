@@ -8,11 +8,11 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.BatchTestBase;
 import io.confluent.parallelconsumer.BatchTestMethods;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,16 +41,16 @@ public class ReactorBatchTest extends ReactorUnitTestBase implements BatchTestBa
 
             @SneakyThrows
             @Override
-            protected Mono<String> averageBatchSizeTestPollStep(List<ConsumerRecord<String, String>> recordList) {
-                return Mono.just(msg("Saw batch or records: {}", toOffsets(recordList)))
+            protected Mono<String> averageBatchSizeTestPollStep(PollContext<String, String> recordList) {
+                return Mono.just(msg("Saw batch or records: {}", recordList.getOffsets()))
                         .delayElement(Duration.ofMillis(30));
             }
 
             @Override
             protected void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger) {
-                reactorPC.reactBatch(recordList -> {
-                    return averageBatchSizeTestPollInner(numBatches, numRecords, statusLogger, recordList);
-                });
+                reactorPC.react(recordList ->
+                        averageBatchSizeTestPollInner(numBatches, numRecords, statusLogger, recordList)
+                );
             }
 
             @Override
@@ -59,20 +59,21 @@ public class ReactorBatchTest extends ReactorUnitTestBase implements BatchTestBa
             }
 
             @Override
-            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> batchesReceived) {
-                reactorPC.reactBatch(recordList -> {
-                    log.debug("Batch of messages: {}", toOffsets(recordList));
+            public void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived) {
+                reactorPC.react(recordList -> {
+                    String msg = msg("Saw batch or records: {}", recordList.getOffsets());
+                    log.debug(msg);
                     batchesReceived.add(recordList);
-                    return Mono.just(msg("Saw batch or records: {}", toOffsets(recordList)));
+                    return Mono.just(msg);
                 });
             }
 
             @Override
-            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> batchesReceived) {
-                reactorPC.reactBatch(recordList -> {
+            protected void batchFailPoll(List<PollContext<String, String>> batchesReceived) {
+                reactorPC.react(recordList -> {
                     batchFailPollInner(recordList);
                     batchesReceived.add(recordList);
-                    return Mono.just(msg("Saw batch or records: {}", toOffsets(recordList)));
+                    return Mono.just(msg("Saw batch or records: {}", recordList.getOffsets()));
                 });
             }
         };

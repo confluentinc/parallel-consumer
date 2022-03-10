@@ -107,10 +107,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
-        parallelConsumer.poll((ignore) -> {
-            log.error("msg: {}", ignore);
+        parallelConsumer.poll((context) -> {
+            log.error("msg: {}", context);
             startBarrierLatch.countDown();
-            int offset = (int) ignore.offset();
+            int offset = (int) context.offset();
             LatchTestUtils.awaitLatch(locks, offset);
             processedStates.put(offset, true);
         });
@@ -197,8 +197,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         CountDownLatch startLatch = new CountDownLatch(1);
 
-        parallelConsumer.poll((ignore) -> {
-            int offset = (int) ignore.offset();
+        parallelConsumer.poll((context) -> {
+            int offset = (int) context.offset();
             CountDownLatch latchForMsg = locks.get(offset);
             try {
                 startLatch.countDown();
@@ -390,7 +390,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
         parallelConsumer.poll((record) -> {
-            myRecordProcessingAction.apply(record);
+            myRecordProcessingAction.apply(record.getSingleConsumerRecord());
             msgCompleteBarrier.countDown();
         });
 

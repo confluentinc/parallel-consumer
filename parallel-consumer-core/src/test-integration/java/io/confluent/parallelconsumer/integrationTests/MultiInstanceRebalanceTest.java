@@ -27,7 +27,6 @@ import org.assertj.core.api.SoftAssertions;
 import org.assertj.core.internal.StandardComparisonStrategy;
 import org.awaitility.Awaitility;
 import org.awaitility.core.TerminalFailureException;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,10 +34,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.MDC;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -107,7 +103,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
     }
 
     ProgressBar overallProgress;
-    Set<String> overallConsumedKeys = new ConcurrentHashSet<>();
+    Set<String> overallConsumedKeys = new ConcurrentSkipListSet<>();
 
     @SneakyThrows
     private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order, int expectedMessageCount,
@@ -121,7 +117,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         var sendingProgress = ProgressBarUtils.getNewMessagesBar("sending", log, expectedMessageCount);
 
         // pre-produce messages to input-topic
-        Set<String> expectedKeys = new ConcurrentHashSet<>();
+        Set<String> expectedKeys = new ConcurrentSkipListSet<>();
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         int preProduceCount = (int) (expectedMessageCount * fractionOfMessagesToPreProduce);

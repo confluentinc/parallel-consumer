@@ -8,6 +8,7 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.BatchTestBase;
 import io.confluent.parallelconsumer.BatchTestMethods;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import io.vertx.core.Future;
@@ -17,7 +18,6 @@ import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,13 +49,13 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
 
             @SneakyThrows
             @Override
-            protected Future<String> averageBatchSizeTestPollStep(List<ConsumerRecord<String, String>> recordList) {
+            protected Future<String> averageBatchSizeTestPollStep(PollContext<String, String> recordList) {
                 int delayInMs = 30;
 
                 Promise<String> promise = Promise.promise();
 
                 vertx.setTimer(delayInMs, event -> {
-                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
+                    String msg = msg("Saw batch or records: {}", recordList.getOffsets());
                     log.debug(msg);
                     promise.complete(msg);
                 });
@@ -76,23 +76,23 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
             }
 
             @Override
-            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> batchesReceived) {
+            public void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived) {
                 vertxAsync.batchVertxFuture(recordList -> {
                     return vertx.executeBlocking(event -> {
-                        log.debug("Saw batch or records: {}", toOffsets(recordList));
+                        log.debug("Saw batch or records: {}", recordList.getOffsets());
                         batchesReceived.add(recordList);
 
-                        event.complete(msg("Saw batch or records: {}", toOffsets(recordList)));
+                        event.complete(msg("Saw batch or records: {}", recordList.getOffsets()));
                     });
                 });
             }
 
             @Override
-            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> receivedBatches) {
+            protected void batchFailPoll(List<PollContext<String, String>> receivedBatches) {
                 vertxAsync.batchVertxFuture(pollBatch -> {
                     receivedBatches.add(pollBatch);
                     batchFailPollInner(pollBatch);
-                    return Future.succeededFuture(msg("Saw batch or records: {}", toOffsets(pollBatch)));
+                    return Future.succeededFuture(msg("Saw batch or records: {}", pollBatch.getOffsets()));
                 });
             }
         };

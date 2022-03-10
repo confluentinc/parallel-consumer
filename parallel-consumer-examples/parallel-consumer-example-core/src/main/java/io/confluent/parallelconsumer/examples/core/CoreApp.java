@@ -3,8 +3,10 @@ package io.confluent.parallelconsumer.examples.core;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import io.confluent.parallelconsumer.RecordContext;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -96,9 +98,10 @@ public class CoreApp {
         postSetup();
 
         // tag::exampleProduce[]
-        parallelConsumer.pollAndProduce(record -> {
-                    var result = processBrokerRecord(record);
-                    return new ProducerRecord<>(outputTopic, record.key(), result.payload);
+        parallelConsumer.pollAndProduce(context -> {
+                    var consumerRecord = context.getSingleRecord().getConsumerRecord();
+                    var result = processBrokerRecord(consumerRecord);
+                    return new ProducerRecord<>(outputTopic, consumerRecord.key(), result.payload);
                 }, consumeProduceResult -> {
                     log.debug("Message {} saved to broker at offset {}",
                             consumeProduceResult.getOut(),
@@ -108,8 +111,8 @@ public class CoreApp {
         // end::exampleProduce[]
     }
 
-    private Result processBrokerRecord(ConsumerRecord<String, String> record) {
-        return new Result("Some payload from " + record.value());
+    private Result processBrokerRecord(ConsumerRecord<String, String> consumerRecord) {
+        return new Result("Some payload from " + consumerRecord.value());
     }
 
     @Value
@@ -138,7 +141,8 @@ public class CoreApp {
         final int maxRetries = 10;
         final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
 
-        pc.poll(consumerRecord -> {
+        pc.poll(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
             Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
             if (retryCount < maxRetries) {
                 processRecord(consumerRecord);
@@ -162,7 +166,8 @@ public class CoreApp {
         // tag::circuitBreaker[]
         final Map<String, Boolean> upMap = new ConcurrentHashMap<>();
 
-        pc.poll(consumerRecord -> {
+        pc.poll(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
             String serverId = extractServerId(consumerRecord);
             boolean up = upMap.computeIfAbsent(serverId, ignore -> true);
 
@@ -204,10 +209,10 @@ public class CoreApp {
                 .maxConcurrency(100)
                 .batchSize(5) // <1>
                 .build());
-        parallelConsumer.pollBatch(batchOfRecords -> {
+        parallelConsumer.poll(context -> {
             // convert the batch into the payload for our processing
-            List<String> payload = batchOfRecords.stream()
-                    .map(this::pareparePayload)
+            List<String> payload = context.stream()
+                    .map(this::preparePayload)
                     .collect(Collectors.toList());
             // process the entire batch payload at once
             processBatchPayload(payload);
@@ -215,12 +220,14 @@ public class CoreApp {
         // end::batching[]
     }
 
-    private void processBatchPayload(List<String> payload) {
-
+    private void processBatchPayload(List<String> batchPayload) {
+        // example
     }
 
-    private String pareparePayload(ConsumerRecord<String, String> x) {
-        return null;
+    private String preparePayload(RecordContext<String, String> rc) {
+        ConsumerRecord<String, String> consumerRecords = rc.getConsumerRecord();
+        int failureCount = rc.getFailureCount();
+        return msg("{}, {}", consumerRecords, failureCount);
     }
 
 }

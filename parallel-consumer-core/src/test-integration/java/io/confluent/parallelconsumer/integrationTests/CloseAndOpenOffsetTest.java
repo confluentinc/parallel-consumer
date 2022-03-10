@@ -134,7 +134,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                     log.info("Throwing fake error for message 2");
                     throw new FakeRuntimeError("Fake error - Message 2");
                 }
-                successfullInOne.add(x);
+                successfullInOne.add(x.getSingleConsumerRecord());
             });
 
             // wait for initial 0 commit
@@ -193,7 +193,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 var processedByThree = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
                 asyncThree.poll(x -> {
                     log.info("Read by consumer THREE: {}", x.value());
-                    processedByThree.add(x);
+                    processedByThree.add(x.getSingleConsumerRecord());
                 });
 
                 //
@@ -263,7 +263,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             var readByOne = new ArrayList<ConsumerRecord<String, String>>();
             asyncOne.poll(msg -> {
                 log.debug("Reading {}", msg);
-                readByOne.add(msg);
+                readByOne.add(msg.getSingleConsumerRecord());
             });
 
             // the single message is processed
@@ -290,7 +290,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             var readByThree = new ArrayList<ConsumerRecord<String, String>>();
             asyncThree.poll(x -> {
                 log.info("Three read: {}", x.value());
-                readByThree.add(x);
+                readByThree.add(x.getSingleConsumerRecord());
             });
 
             // for at least normalTimeout, nothing should be read back (will be long enough to be sure it never is)

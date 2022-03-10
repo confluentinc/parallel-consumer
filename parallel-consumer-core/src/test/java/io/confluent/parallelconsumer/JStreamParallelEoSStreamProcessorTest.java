@@ -47,7 +47,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
         Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
             ProducerRecord mock = mock(ProducerRecord.class);
             log.info("Consumed and produced record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
-            myRecordProcessingAction.apply(record);
+            myRecordProcessingAction.apply(record.getSingleConsumerRecord());
             latch.countDown();
             return Lists.list(mock);
         });
@@ -71,7 +71,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     void testConsumeAndProduce() {
         var latch = new CountDownLatch(1);
         var stream = streaming.pollProduceAndStream((record) -> {
-            String apply = myRecordProcessingAction.apply(record);
+            String apply = myRecordProcessingAction.apply(record.getSingleConsumerRecord());
             ProducerRecord<String, String> result = new ProducerRecord<>(OUTPUT_TOPIC, "akey", apply);
             log.info("Consumed a record ({}), and returning a derivative result record to be produced: {}", record, result);
             List<ProducerRecord<String, String>> result1 = Lists.list(result);
@@ -89,7 +89,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         var myResultStream = stream.peek(x -> {
             if (x != null) {
-                ConsumerRecord<String, String> left = x.getIn();
+                ConsumerRecord<String, String> left = x.getIn().getSingleConsumerRecord();
                 log.info("{}:{}:{}:{}", left.key(), left.value(), x.getOut(), x.getMeta());
             } else {
                 log.info("null");
@@ -105,8 +105,8 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     void testFlatMapProduce() {
         var latch = new CountDownLatch(1);
         var myResultStream = streaming.pollProduceAndStream((record) -> {
-            String apply1 = myRecordProcessingAction.apply(record);
-            String apply2 = myRecordProcessingAction.apply(record);
+            String apply1 = myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+            String apply2 = myRecordProcessingAction.apply(record.getSingleConsumerRecord());
 
             var list = Lists.list(
                     new ProducerRecord<>(OUTPUT_TOPIC, "key", apply1),

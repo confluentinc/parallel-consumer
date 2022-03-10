@@ -359,12 +359,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() == 0;
     }
 
-    // todo replace raw ConsumerRecord with read only context object wrapper #216
-    public Optional<WorkContainer<K, V>> getWorkContainerFor(ConsumerRecord<K, V> rec) {
-        ShardManager<K, V> shard = getSm();
-        return shard.getWorkContainerForRecord(rec);
-    }
-
     public Optional<Duration> getLowestRetryTime() {
         return sm.getLowestRetryTime();
     }

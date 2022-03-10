@@ -159,7 +159,6 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
-    @Builder.Default
     private final Function<WorkContainer, Duration> retryDelayProvider;
 
     /**

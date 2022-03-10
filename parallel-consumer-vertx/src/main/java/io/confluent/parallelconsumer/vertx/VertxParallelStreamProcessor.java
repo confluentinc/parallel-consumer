@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.vertx;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -16,7 +17,6 @@ import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
-import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -47,7 +47,7 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      * @param onSend               function executed after the request has been sent
      * @param onWebRequestComplete function executed when response received for request
      */
-    void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction,
+    void vertxHttpReqInfo(Function<PollContext<K, V>, VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction,
                           Consumer<Future<HttpResponse<Buffer>>> onSend,
                           Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
 
@@ -59,7 +59,7 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      * @param onSend
      * @param onWebRequestComplete
      */
-    void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
+    void vertxHttpRequest(BiFunction<WebClient, PollContext<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                           Consumer<Future<HttpResponse<Buffer>>> onSend,
                           Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete);
 
@@ -74,14 +74,14 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      * @see #vertxHttpReqInfo
      * @see #vertxHttpRequest
      */
-    void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
+    void vertxHttpWebClient(BiFunction<WebClient, PollContext<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                             Consumer<Future<HttpResponse<Buffer>>> onSend);
 
     /**
      * Consumer from the Broker concurrently - use the various Vert.x systems to return us a vert.x Future based on this
      * record.
      */
-    void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result);
+    void vertxFuture(final Function<PollContext<K, V>, Future<?>> result);
 
     /**
      * Like {@link ParallelStreamProcessor#pollBatch} but for Vert.x.
@@ -98,5 +98,5 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
      * @see ParallelStreamProcessor#pollBatch
      * @see ParallelConsumerOptions#getBatchSize()
      */
-    void batchVertxFuture(Function<List<ConsumerRecord<K, V>>, Future<?>> result);
+    void batchVertxFuture(Function<PollContext<K, V>, Future<?>> result);
 }
