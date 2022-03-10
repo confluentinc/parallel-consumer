@@ -4,10 +4,6 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
-
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.extern.slf4j.Slf4j;

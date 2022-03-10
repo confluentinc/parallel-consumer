@@ -4,10 +4,6 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
-
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
