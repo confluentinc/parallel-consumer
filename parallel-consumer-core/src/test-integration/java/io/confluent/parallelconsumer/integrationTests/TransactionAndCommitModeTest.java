@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.EnumCartesianProductTestSets;
@@ -226,7 +226,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 //                            })
                     .alias(failureMessage)
                     .untilAsserted(() -> {
-                        log.info("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
+                        log.trace("Processed-count: {}, Produced-count: {}", processedCount.get(), producedCount.get());
                         int delta = producedCount.get() - processedCount.get();
                         if (delta == numThreads && pt.getRounds().get() > 1) {
                             log.error("Here we go fishy...");
