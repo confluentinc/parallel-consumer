@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
+import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -18,11 +19,11 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Shards are local queues of work to be processed.
@@ -40,21 +41,32 @@ public class ShardManager<K, V> {
     @Getter
     private final ParallelConsumerOptions options;
 
+    private final WorkManager<K, V> wm;
+
+    @Getter(PRIVATE)
+    private final WallClock clock;
+
     /**
-     * Map of Object keys to Map of offset to WorkUnits
+     * Map of Object keys to Shard
      * <p>
-     * Object is either the K key type, or it is a {@link TopicPartition}
+     * Object Type is either the K key type, or it is a {@link TopicPartition}
      * <p>
      * Used to collate together a queue of work units for each unique key consumed
      *
+     * @see ProcessingShard
      * @see K
-     * @see WorkManager#maybeGetWorkIfAvailable()
+     * @see WorkManager#getWorkIfAvailable()
      */
     // todo performance: disable/remove if using partition order
-    // todo introduce an actual Shard object to store the map, will make things clearer
-    private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+    private final Map<Object, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(WorkContainer::getDelayUntilRetryDue));
+    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue(getClock())));
+
+    /**
+     * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
+     * shard.
+     */
+    private Optional<Object> iterationResumePoint = Optional.empty();
 
     /**
      * The shard belonging to the given key
@@ -62,11 +74,11 @@ public class ShardManager<K, V> {
      * @return may return empty if the shard has since been removed
      */
     // todo don't expose inner data structures - wrap instead
-    Optional<NavigableMap<Long, WorkContainer<K, V>>> getShard(Object key) {
+    Optional<ProcessingShard<K, V>> getShard(Object key) {
         return Optional.ofNullable(processingShards.get(key));
     }
 
-    LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> getIterator(final Optional<Object> iterationResumePoint) {
+    private LoopingResumingIterator<Object, ProcessingShard<K, V>> getIterator(final Optional<Object> iterationResumePoint) {
         return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
     }
 
@@ -81,34 +93,26 @@ public class ShardManager<K, V> {
         return computeShardKey(wc.getCr());
     }
 
-    public WorkContainer<K, V> getWorkContainerForRecord(ConsumerRecord<K, V> rec) {
+    public Optional<WorkContainer<K, V>> getWorkContainerForRecord(ConsumerRecord<K, V> rec) {
         Object key = computeShardKey(rec);
         var shard = this.processingShards.get(key);
         long offset = rec.offset();
-        WorkContainer<K, V> wc = shard.get(offset);
-        return wc;
+        return shard.getWorkForOffset(offset);
     }
 
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
-        long count = this.processingShards.values().parallelStream()
-                .flatMap(x -> x.values().stream())
-                // todo missing pm.isBlocked(topicPartition) ?
-                .filter(WorkContainer::isAvailableToTakeAsWork)
-                .count();
-        return count;
+        return processingShards.values().stream()
+                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
+                .sum();
     }
 
     public boolean workIsWaitingToBeProcessed() {
-        Collection<NavigableMap<Long, WorkContainer<K, V>>> allShards = processingShards.values();
-        for (NavigableMap<Long, WorkContainer<K, V>> oneShard : allShards) {
-            if (oneShard.values().parallelStream()
-                    .anyMatch(WorkContainer::isAvailableToTakeAsWork))
-                return true;
-        }
-        return false;
+        Collection<ProcessingShard<K, V>> allShards = processingShards.values();
+        return allShards.parallelStream()
+                .anyMatch(ProcessingShard::workIsWaitingToBeProcessed);
     }
 
     /**
@@ -126,12 +130,9 @@ public class ShardManager<K, V> {
         Object shardKey = computeShardKey(work.getCr());
 
         if (processingShards.containsKey(shardKey)) {
-            NavigableMap<Long, WorkContainer<K, V>> shard = processingShards.get(shardKey);
+            ProcessingShard<K, V> shard = processingShards.get(shardKey);
             shard.remove(work.offset());
-            if (shard.isEmpty()) {
-                log.debug("Removing shard referenced by WC: {} for shard key: {}", work, shardKey);
-                removeShardIfEmpty(shardKey);
-            }
+            removeShardIfEmpty(shardKey);
         } else {
             log.trace("Shard referenced by WC: {} with shard key: {} already removed", work, shardKey);
         }
@@ -143,19 +144,12 @@ public class ShardManager<K, V> {
     public void addWorkContainer(final WorkContainer<K, V> wc) {
         Object shardKey = computeShardKey(wc.getCr());
         var shard = processingShards.computeIfAbsent(shardKey,
-                // uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some
-                // concurrency errors (missing WorkContainers)
-                (ignore) -> new ConcurrentSkipListMap<>());
-        long key = wc.offset();
-        if (shard.containsKey(key)) {
-            log.debug("Entry for {} already exists in shard queue", wc);
-        } else {
-            shard.put(key, wc);
-        }
+                (ignore) -> new ProcessingShard<>(shardKey, options, wm.getPm(), clock));
+        shard.addWorkContainer(wc);
     }
 
     void removeShardIfEmpty(final Object key) {
-        Optional<NavigableMap<Long, WorkContainer<K, V>>> shardOpt = getShard(key);
+        Optional<ProcessingShard<K, V>> shardOpt = getShard(key);
 
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
         boolean keyOrdering = options.getOrdering().equals(KEY);
@@ -173,9 +167,8 @@ public class ShardManager<K, V> {
         Object key = computeShardKey(wc);
         var shardOptional = getShard(key);
         if (shardOptional.isPresent()) {
-            var shard = shardOptional.get();
-            // remove work from shard's queue
-            shard.remove(wc.offset());
+            //
+            shardOptional.get().onSuccess(wc);
 
             removeShardIfEmpty(key);
         } else {
@@ -199,9 +192,45 @@ public class ShardManager<K, V> {
         // could potentially remove from queue when in flight but that's messy and performance gain would be trivial
         for (WorkContainer<?, ?> workContainer : this.retryQueue) {
             if (workContainer.isNotInFlight())
-                return of(workContainer.getDelayUntilRetryDue());
+                return of(workContainer.getDelayUntilRetryDue(clock));
         }
         return empty();
+    }
+
+    public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
+        LoopingResumingIterator<Object, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
+
+        //
+        List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
+
+        //
+        while (workFromAllShards.size() < requestedMaxWorkToRetrieve && shardQueueIterator.hasNext()) {
+            var shardEntry = shardQueueIterator.next();
+            ProcessingShard<K, V> shard = shardEntry.getValue();
+
+            //
+            int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
+            var work = shard.getWorkIfAvailable(remainingToGet);
+            workFromAllShards.addAll(work);
+        }
+
+        // log
+        if (workFromAllShards.size() >= requestedMaxWorkToRetrieve) {
+            log.debug("Work taken is now over max (iteration resume point is {})", iterationResumePoint);
+        }
+
+        //
+        updateResumePoint(shardQueueIterator);
+
+        return workFromAllShards;
+    }
+
+    private void updateResumePoint(LoopingResumingIterator<Object, ProcessingShard<K, V>> shardQueueIterator) {
+        if (shardQueueIterator.hasNext()) {
+            var shardEntry = shardQueueIterator.next();
+            this.iterationResumePoint = Optional.of(shardEntry.getKey());
+            log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
+        }
     }
 
 }

@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import java.io.EOFException;
@@ -14,7 +14,7 @@ import java.util.Optional;
 public class BackportUtils {
 
     /**
-     * @see Duration#toSeconds() intro'd in Java 9
+     * @see Duration#toSeconds() intro'd in Java 9 (isn't in 8)
      */
     public static long toSeconds(Duration duration) {
         return duration.toMillis() / 1000;

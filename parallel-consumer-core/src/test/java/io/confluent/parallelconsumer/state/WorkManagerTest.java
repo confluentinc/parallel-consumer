@@ -3,6 +3,8 @@ package io.confluent.parallelconsumer.state;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
+import com.google.common.truth.Truth;
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
@@ -15,10 +17,12 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
 import org.assertj.core.api.ObjectAssert;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -48,7 +52,7 @@ class WorkManagerTest {
 
     Instant time = Instant.now();
 
-    AdvancingWallClockProvider clock = new AdvancingWallClockProvider() {
+    AdvancingWallClockProvider testClock = new AdvancingWallClockProvider() {
         @Override
         public Instant getNow() {
             return time;
@@ -65,8 +69,7 @@ class WorkManagerTest {
     private void setupWorkManager(ParallelConsumerOptions build) {
         offset = 0;
 
-        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
-        wm.setClock(clock);
+        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), testClock);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
@@ -106,13 +109,13 @@ class WorkManagerTest {
         registerSomeWork();
 
         int max = 1;
-        var gottenWork = wm.maybeGetWorkIfAvailable(max);
+        var gottenWork = wm.getWorkIfAvailable(max);
         assertThat(gottenWork).hasSize(1);
         assertOffsets(gottenWork, of(0));
 
         wm.onSuccess(gottenWork.get(0));
 
-        gottenWork = wm.maybeGetWorkIfAvailable(max);
+        gottenWork = wm.getWorkIfAvailable(max);
         assertThat(gottenWork).hasSize(1);
         assertOffsets(gottenWork, of(1));
     }
@@ -124,29 +127,29 @@ class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.maybeGetWorkIfAvailable(max);
+        var works = wm.getWorkIfAvailable(max);
         assertThat(works).hasSize(2);
         assertOffsets(works, of(0, 1));
 
         wm.onSuccess(works.get(0));
         wm.onFailure(works.get(1));
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(2));
 
         wm.onSuccess(works.get(0));
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of());
 
         advanceClockBySlightlyLessThanDelay();
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of());
 
         advanceClockByDelay();
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1));
         wm.onSuccess(works.get(0));
 
@@ -177,41 +180,51 @@ class WorkManagerTest {
 
         int max = 2;
 
-        var works = wm.maybeGetWorkIfAvailable(max);
+        var works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(0));
         var w = works.get(0);
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of()); // should be blocked by in flight
 
         wm.onSuccess(w);
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1));
     }
 
+    /**
+     * Tests failed work delay
+     */
     @Test
     void testOrderedAndDelayed() {
-        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
+        ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
 
+        // sanity
         assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
 
         registerSomeWork();
 
-        int max = 2;
+        int maxWorkToGet = 2;
 
-        var works = wm.maybeGetWorkIfAvailable(max);
+        var works = wm.getWorkIfAvailable(maxWorkToGet);
+
         assertOffsets(works, of(0));
+
+        // fail the work
         var wc = works.get(0);
         wm.onFailure(wc);
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        // nothing available to get
+        works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of());
 
+        // advance clock to make delay pass
         advanceClockByDelay();
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        // work should now be ready to take
+        works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(0));
 
         wc = works.get(0);
@@ -219,23 +232,23 @@ class WorkManagerTest {
 
         advanceClock(wc.getRetryDelayConfig().minus(ofSeconds(1)));
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of());
 
         // increased advance to allow for bigger delay under high load during parallel test execution.
         advanceClock(wc.getRetryDelayConfig().plus(ofSeconds(1)));
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(0));
         wm.onSuccess(works.get(0));
 
         assertOffsets(successfulWork, of(0));
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(1));
         wm.onSuccess(works.get(0));
 
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(2));
         wm.onSuccess(works.get(0));
 
@@ -246,13 +259,14 @@ class WorkManagerTest {
     @Test
     void containerDelay() {
         var wc = new WorkContainer<String, String>(0, null);
-        assertThat(wc.hasDelayPassed(clock)).isTrue(); // when new, there's no delay
-        wc.fail(clock);
-        assertThat(wc.hasDelayPassed(clock)).isFalse();
+        assertThat(wc.hasDelayPassed(testClock)).isTrue(); // when new, there's no delay
+        wc.fail(testClock);
+        assertThat(wc.hasDelayPassed(testClock)).isFalse();
         advanceClockBySlightlyLessThanDelay();
-        assertThat(wc.hasDelayPassed(clock)).isFalse();
+        assertThat(wc.hasDelayPassed(testClock)).isFalse();
         advanceClockByDelay();
-        assertThat(wc.hasDelayPassed(clock)).isTrue();
+        boolean actual = wc.hasDelayPassed(testClock);
+        assertThat(actual).isTrue();
     }
 
     private void advanceClockBySlightlyLessThanDelay() {
@@ -270,8 +284,8 @@ class WorkManagerTest {
     }
 
     @Test
-    public void insertWrongOrderPreservesOffsetOrdering() {
-        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(UNORDERED).build();
+    void insertWrongOrderPreservesOffsetOrdering() {
+        ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder().ordering(UNORDERED).build();
         setupWorkManager(build);
 
         assertThat(wm.getOptions().getOrdering()).isEqualTo(UNORDERED);
@@ -294,7 +308,7 @@ class WorkManagerTest {
 
         int max = 10;
 
-        var works = wm.maybeGetWorkIfAvailable(4);
+        var works = wm.getWorkIfAvailable(4);
         assertOffsets(works, of(0, 1, 2, 6));
 
         // fail some
@@ -302,14 +316,14 @@ class WorkManagerTest {
         wm.onFailure(works.get(3));
 
         //
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(8, 10));
 
         //
         advanceClockByDelay();
 
         //
-        works = wm.maybeGetWorkIfAvailable(max);
+        works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1, 6));
     }
 
@@ -333,8 +347,8 @@ class WorkManagerTest {
         registerSomeWork();
 
         //
-        assertThat(wm.maybeGetWorkIfAvailable()).hasSize(1);
-        assertThat(wm.maybeGetWorkIfAvailable()).isEmpty();
+        assertThat(wm.getWorkIfAvailable()).hasSize(1);
+        assertThat(wm.getWorkIfAvailable()).isEmpty();
     }
 
     static class FluentQueue<T> implements Iterable<T> {
@@ -376,8 +390,10 @@ class WorkManagerTest {
     }
 
     @Test
-    public void orderedByPartitionsParallel() {
-        ParallelConsumerOptions build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
+    void orderedByPartitionsParallel() {
+        ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder()
+                .ordering(PARTITION)
+                .build();
         setupWorkManager(build);
 
         registerSomeWork();
@@ -395,17 +411,17 @@ class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        var works = wm.maybeGetWorkIfAvailable();
+        var works = wm.getWorkIfAvailable();
         assertOffsets(works, of(0, 6));
         successAll(works);
 
         //
-        works = wm.maybeGetWorkIfAvailable();
+        works = wm.getWorkIfAvailable();
         assertOffsets(works, of(1, 8));
         successAll(works);
 
         //
-        works = wm.maybeGetWorkIfAvailable();
+        works = wm.getWorkIfAvailable();
         assertOffsets(works, of(2, 10));
         successAll(works);
     }
@@ -441,25 +457,25 @@ class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        var works = wm.maybeGetWorkIfAvailable();
+        var works = wm.getWorkIfAvailable();
         works.sort(Comparator.naturalOrder()); // we actually don't care about the order
         // one record per key
         assertOffsets(works, of(0, 6, 8, 12));
         successAll(works);
 
         //
-        works = wm.maybeGetWorkIfAvailable();
+        works = wm.getWorkIfAvailable();
         works.sort(Comparator.naturalOrder());
         assertOffsets(works, of(1, 10, 20));
         successAll(works);
 
         //
-        works = wm.maybeGetWorkIfAvailable();
+        works = wm.getWorkIfAvailable();
         works.sort(Comparator.naturalOrder());
         assertOffsets(works, of(2, 15));
         successAll(works);
 
-        works = wm.maybeGetWorkIfAvailable();
+        works = wm.getWorkIfAvailable();
         assertOffsets(works, of());
     }
 
@@ -493,7 +509,7 @@ class WorkManagerTest {
         wm.registerWork(recs);
 
         //
-        List<WorkContainer<String, String>> work = wm.maybeGetWorkIfAvailable();
+        List<WorkContainer<String, String>> work = wm.getWorkIfAvailable();
 
         //
         assertThat(work).hasSameSizeAs(records.keySet());
@@ -530,7 +546,7 @@ class WorkManagerTest {
         registerSomeWork();
 
         //
-        var work = wm.maybeGetWorkIfAvailable();
+        var work = wm.getWorkIfAvailable();
         assertThat(work).hasSize(3);
 
         //
@@ -547,6 +563,57 @@ class WorkManagerTest {
         var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
         assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(0);
+    }
+
+    /**
+     * Tests that the resuming iterator is used correctly
+     */
+    @ParameterizedTest
+    @EnumSource
+    void resumesFromNextShard(ParallelConsumerOptions.ProcessingOrder order) {
+        Assumptions.assumeFalse(order == KEY); // just want to test ordered vs unordered
+
+        ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder()
+                .ordering(order)
+                .build();
+        setupWorkManager(build);
+
+        registerSomeWork();
+
+        assignPartition(1);
+        assignPartition(2);
+        Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
+        var rec = new ConsumerRecord<>(INPUT_TOPIC, 1, 11, "11", "value");
+        m.put(new TopicPartition(INPUT_TOPIC, 1), of(rec));
+        var rec2 = new ConsumerRecord<>(INPUT_TOPIC, 2, 21, "21", "value");
+        m.put(new TopicPartition(INPUT_TOPIC, 2), of(rec2));
+        var recs = new ConsumerRecords<>(m);
+        wm.registerWork(recs);
+
+        // force ingestion of records - see refactor: Queue unification #219
+        wm.tryToEnsureQuantityOfWorkQueuedAvailable(100);
+
+        var workContainersOne = wm.getWorkIfAvailable(1);
+        var workContainersTwo = wm.getWorkIfAvailable(1);
+        var workContainersThree = wm.getWorkIfAvailable(1);
+        var workContainersFour = wm.getWorkIfAvailable(1);
+
+        Truth.assertThat(workContainersOne).hasSize(1);
+        Truth.assertThat(workContainersOne.stream().findFirst().get().getTopicPartition().partition()).isEqualTo(0);
+        Truth.assertThat(workContainersTwo).hasSize(1);
+        Truth.assertThat(workContainersTwo.stream().findFirst().get().getTopicPartition().partition()).isEqualTo(1);
+        Truth.assertThat(workContainersThree).hasSize(1);
+        Truth.assertThat(workContainersThree.stream().findFirst().get().getTopicPartition().partition()).isEqualTo(2);
+
+        if (order == PARTITION) {
+            Truth.assertThat(workContainersFour).isEmpty();
+        } else {
+            Truth.assertThat(workContainersFour).hasSize(1);
+            Optional<WorkContainer<String, String>> work = workContainersFour.stream().findFirst();
+            Truth.assertThat(work.get().getTopicPartition().partition()).isEqualTo(0);
+            Truth.assertThat(work.get().offset()).isEqualTo(1);
+            Truth.assertThat(work.get().getCr().value()).isEqualTo("1");
+        }
     }
 
 }

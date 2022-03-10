@@ -4,16 +4,12 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
-import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -26,10 +22,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
 
-import static io.confluent.csid.utils.BackportUtils.toSeconds;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.lang.Boolean.TRUE;
-import static lombok.AccessLevel.PACKAGE;
 import static lombok.AccessLevel.PUBLIC;
 
 /**
@@ -72,12 +65,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private final WorkMailBoxManager<K, V> wmbm;
 
-    /**
-     * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
-     * shard.
-     */
-    private Optional<Object> iterationResumePoint = Optional.empty();
-
     @Getter
     private int numberRecordsOutForProcessing = 0;
 
@@ -87,30 +74,26 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    @Setter(PACKAGE)
-    private WallClock clock = new WallClock();
+    private final WallClock clock;
 
-    org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
-
-    // too aggressive for some situations? make configurable?
-    private final Duration thresholdForTimeSpentInQueueWarning = Duration.ofSeconds(10);
-
-    private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
+    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        this(options, consumer, new DynamicLoadFactor(), new WallClock());
+    }
 
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this(options, consumer, new DynamicLoadFactor());
+    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, WallClock clock) {
+        this(options, consumer, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor) {
+    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor, WallClock clock) {
         this.options = newOptions;
-        this.consumer = consumer;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.wmbm = new WorkMailBoxManager<>();
-        this.sm = new ShardManager<K, V>(options);
+        this.sm = new ShardManager<>(options, this, clock);
         this.pm = new PartitionMonitor<>(consumer, sm);
+        this.clock = clock;
     }
 
     /**
@@ -183,131 +166,30 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Get work with no limit on quantity, useful for testing.
      */
-    public <R> List<WorkContainer<K, V>> maybeGetWorkIfAvailable() {
-        return maybeGetWorkIfAvailable(Integer.MAX_VALUE);
+    public <R> List<WorkContainer<K, V>> getWorkIfAvailable() {
+        return getWorkIfAvailable(Integer.MAX_VALUE);
     }
 
     /**
      * Depth first work retrieval.
      */
     // todo refactor - move into it's own class perhaps
-    public List<WorkContainer<K, V>> maybeGetWorkIfAvailable(int requestedMaxWorkToRetrieve) {
-        int workToGetDelta = requestedMaxWorkToRetrieve;
-
+    public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
         // optimise early
-        if (workToGetDelta < 1) {
+        if (requestedMaxWorkToRetrieve < 1) {
             return UniLists.of();
         }
 
         int ingested = tryToEnsureQuantityOfWorkQueuedAvailable(requestedMaxWorkToRetrieve);
 
         //
-        List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
+        var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
 
         //
-        LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> shardQueueIterator =
-                sm.getIterator(iterationResumePoint);
+        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit (partition) queues: {}", work.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        numberRecordsOutForProcessing += work.size();
 
-        var slowWorkCount = 0;
-        var slowWorkTopics = new HashSet<String>();
-
-        //
-        for (var shardQueueEntry : shardQueueIterator) {
-            log.trace("Looking for work on shardQueueEntry: {}", shardQueueEntry.getKey());
-            if (workFromAllShards.size() >= workToGetDelta) {
-                this.iterationResumePoint = Optional.of(shardQueueEntry.getKey());
-                log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
-                break;
-            }
-
-            ArrayList<WorkContainer<K, V>> shardWorkToTake = new ArrayList<>();
-            SortedMap<Long, WorkContainer<K, V>> shard = shardQueueEntry.getValue();
-
-            // then iterate over shardQueueEntry queue
-            Set<Map.Entry<Long, WorkContainer<K, V>>> shardEntries = shard.entrySet();
-            for (var shardEntry : shardEntries) {
-                int taken = workFromAllShards.size() + shardWorkToTake.size();
-                if (taken >= workToGetDelta) {
-                    log.trace("Work taken ({}) exceeds max ({})", taken, workToGetDelta);
-                    break;
-                }
-
-                var workContainer = shardEntry.getValue();
-
-                {
-                    if (checkIfWorkIsStale(workContainer)) {
-                        // this state is rare, as shards or work get removed upon partition revocation, although under busy
-                        // load it might occur we don't synchronize over PartitionState here so it's a bit racey, but is
-                        // handled and eventually settles
-                        log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
-                        continue; // skip
-                    }
-                }
-
-                // TODO refactor this and the rest of the partition state monitoring code out
-                // check we have capacity in offset storage to process more messages
-                TopicPartition topicPartition = workContainer.getTopicPartition();
-                boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
-                // If the record is below the highest succeeded offset, it is already represented in the current offset encoding,
-                // and may in fact be the message holding up the partition so must be retried, in which case we don't want to skip it.
-                // Generally speaking, completing more offsets below the highest succeeded (and thus the set represented in the encoded payload),
-                // should usually reduce the payload size requirements
-                PartitionState<K, V> partitionState = pm.getPartitionState(topicPartition);
-                boolean representedInEncodedPayloadAlready = workContainer.offset() < partitionState.getOffsetHighestSucceeded();
-                if (notAllowedMoreRecords && !representedInEncodedPayloadAlready && workContainer.isNotInFlight()) {
-                    log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
-                                    "record ({}) belongs to due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
-                                    "not in flight ({}), continuing on to next container in shardEntry.",
-                            topicPartition, workContainer.offset(), workContainer.isNotInFlight());
-                    continue;
-                }
-
-                // check if work can be taken
-                boolean hasNotSucceededAlready = !workContainer.isUserFunctionSucceeded();
-                boolean delayHasPassed = workContainer.hasDelayPassed(clock);
-                if (delayHasPassed && workContainer.isNotInFlight() && hasNotSucceededAlready) {
-                    log.trace("Taking {} as work", workContainer);
-                    workContainer.onQueueingForExecution();
-                    shardWorkToTake.add(workContainer);
-                } else {
-                    Duration timeInFlight = workContainer.getTimeInFlight();
-                    String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
-                    if (toSeconds(timeInFlight) > toSeconds(thresholdForTimeSpentInQueueWarning)) {
-                        slowWorkCount++;
-                        slowWorkTopics.add(workContainer.getCr().topic());
-                        log.trace("Work has spent over " + thresholdForTimeSpentInQueueWarning + " in queue! "
-                                + msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
-                    } else {
-                        log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
-                    }
-                }
-
-                ProcessingOrder ordering = options.getOrdering();
-                if (ordering == UNORDERED) {
-                    // continue - we don't care about processing order, so check the next message
-                    // noinspection UnnecessaryContinue
-                    continue; // NOSONAR: in the name of self documenting code
-                } else {
-                    // can't take anymore from this partition until this work is finished
-                    // processing blocked on this partition, continue to next partition
-                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), shardEntry.getKey());
-                    break;
-                }
-            }
-            workFromAllShards.addAll(shardWorkToTake);
-        }
-
-        if (slowWorkCount > 0) {
-            final int finalSlowWorkCount = slowWorkCount;
-            slowWarningRateLimit.performIfNotLimited(() -> log.warn("Warning: {} records in the queue have been " +
-                            "waiting longer than {}s for following topics {}.",
-                    finalSlowWorkCount, toSeconds(thresholdForTimeSpentInQueueWarning), slowWorkTopics));
-        }
-
-        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit (partition) queues: {}", workFromAllShards.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
-        numberRecordsOutForProcessing += workFromAllShards.size();
-
-        return workFromAllShards;
+        return work;
     }
 
     /**
@@ -316,7 +198,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return the number of extra records ingested due to request
      */
     // todo rename - shunt messages from internal buffer into queues
-    private int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
+    int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
         long available = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
@@ -480,7 +362,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // todo replace raw ConsumerRecord with read only context object wrapper #216
     public Optional<WorkContainer<K, V>> getWorkContainerFor(ConsumerRecord<K, V> rec) {
         ShardManager<K, V> shard = getSm();
-        return Optional.ofNullable(shard.getWorkContainerForRecord(rec));
+        return shard.getWorkContainerForRecord(rec);
     }
 
     public Optional<Duration> getLowestRetryTime() {
