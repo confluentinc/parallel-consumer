@@ -1,5 +1,4 @@
 package io.confluent.parallelconsumer.examples.streams;
-
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */

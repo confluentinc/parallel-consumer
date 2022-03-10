@@ -1,8 +1,7 @@
-
+package io.confluent.parallelconsumer.integrationTests.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests.utils;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
