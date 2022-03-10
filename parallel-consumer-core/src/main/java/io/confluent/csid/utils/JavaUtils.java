@@ -35,4 +35,8 @@ public class JavaUtils {
         return ofMillis(expectedDurationOfClose);
     }
 
+    public static boolean isGreaterThan(Duration compare, Duration to) {
+        return compare.compareTo(to) > 0;
+    }
+
 }
