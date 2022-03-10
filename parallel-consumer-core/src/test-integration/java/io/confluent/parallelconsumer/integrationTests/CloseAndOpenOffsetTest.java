@@ -1,7 +1,6 @@
 package io.confluent.parallelconsumer.integrationTests;
-
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.Range;
@@ -33,6 +32,7 @@ import pl.tlinkowski.unij.api.UniSets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofMillis;
@@ -112,7 +113,6 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 .consumer(newConsumerOne)
                 .producer(producerOne)
                 .build();
-        kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "ONE-my-client");
 
         // first client
         {
@@ -183,8 +183,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         // second client
         {
             //
-            kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
-            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
+            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
             KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
             var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
             try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
@@ -210,8 +209,14 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         OffsetSimultaneousEncoder.compressionForced = false;
     }
 
+    private Properties customClientId(final String id) {
+        Properties properties = new Properties();
+        properties.put(ConsumerConfig.CLIENT_ID_CONFIG, id);
+        return properties;
+    }
+
     private void send(String topic, int partition, Integer value) throws InterruptedException, ExecutionException {
-        RecordMetadata recordMetadata = kcu.producer.send(new ProducerRecord<>(topic, partition, value.toString(), value.toString())).get();
+        RecordMetadata recordMetadata = kcu.getProducer().send(new ProducerRecord<>(topic, partition, value.toString(), value.toString())).get();
     }
 
     private void send(int quantity, String topic, int partition) throws InterruptedException, ExecutionException {
@@ -219,7 +224,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         var futures = new ArrayList<Future<RecordMetadata>>();
         // async
         for (Integer index : Range.range(quantity)) {
-            Future<RecordMetadata> send = kcu.producer.send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
+            Future<RecordMetadata> send = kcu.getProducer().send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
             futures.add(send);
         }
         // block until finished
@@ -239,7 +244,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         setupTopic();
 
         // send a single message
-        kcu.producer.send(new ProducerRecord<>(topic, "0", "0"));
+        String expectedPayload = "0";
+        kcu.getProducer().send(new ProducerRecord<>(topic, expectedPayload, expectedPayload));
 
         KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
         KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
@@ -263,7 +269,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             // the single message is processed
             await().untilAsserted(() -> assertThat(readByOne)
                     .extracting(ConsumerRecord::value)
-                    .containsExactly("0"));
+                    .containsExactly(expectedPayload));
 
         } finally {
             log.debug("asyncOne closed");
@@ -271,8 +277,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
         //
         log.debug("Starting up new client");
-        kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
-        KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
+        KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
         KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
         ParallelConsumerOptions<String, String> optionsThree = options.toBuilder()
                 .consumer(newConsumerThree)
@@ -345,7 +350,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             });
 
             // the single message is not processed
-            await().atMost(ofSeconds(10)).untilAsserted(() -> assertThat(readByOne.size())
+            await().atMost(defaultTimeout).untilAsserted(() -> assertThat(readByOne.size())
                     .isEqualTo(quantity - numberOfFailingMessages));
 
             //
@@ -359,8 +364,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         // step 2
         {
             //
-            kcu.props.put(ConsumerConfig.CLIENT_ID_CONFIG, "THREE-my-client");
-            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer();
+            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
             KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
             var optionsThree = baseOptions.toBuilder()
                     .consumer(newConsumerThree)
