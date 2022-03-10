@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofMillis;
@@ -348,7 +349,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             });
 
             // the single message is not processed
-            await().atMost(ofSeconds(10)).untilAsserted(() -> assertThat(readByOne.size())
+            await().atMost(defaultTimeout).untilAsserted(() -> assertThat(readByOne.size())
                     .isEqualTo(quantity - numberOfFailingMessages));
 
             //
