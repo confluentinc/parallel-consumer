@@ -17,7 +17,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <properties>
-        <vertx.version>4.0.0.CR1</vertx.version>
+        <vertx.version>4.2.5</vertx.version>
     </properties>
 
     <dependencies>
@@ -50,12 +50,16 @@
         <dependency>
             <groupId>com.github.tomakehurst</groupId>
             <artifactId>wiremock</artifactId>
-            <version>2.27.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>me.tongfei</groupId>
             <artifactId>progressbar</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

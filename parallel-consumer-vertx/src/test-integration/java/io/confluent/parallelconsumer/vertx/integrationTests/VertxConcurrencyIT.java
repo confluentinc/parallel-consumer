@@ -1,8 +1,8 @@
+package io.confluent.parallelconsumer.vertx.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.vertx.integrationTests;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
@@ -29,7 +29,6 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.Assertions;
 import org.awaitility.core.ConditionTimeoutException;
-import org.eclipse.jetty.util.ConcurrentArrayQueue;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -38,6 +37,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,7 +83,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 
     static CountDownLatch responseLock = new CountDownLatch(1);
 
-    static Queue<Request> requestsReceivedOnServer = new ConcurrentArrayQueue<>();
+    static Queue<Request> requestsReceivedOnServer = new ConcurrentLinkedQueue<>();
 
     VertxConcurrencyIT() {
         bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
