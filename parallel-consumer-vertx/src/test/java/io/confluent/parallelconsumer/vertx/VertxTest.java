@@ -100,7 +100,7 @@ class VertxTest extends VertxBaseUnitTest {
         assertThat(res).doesNotContainNull();
         assertThat(res).extracting(AsyncResult::failed).containsOnly(true);
         assertThat(res).flatExtracting(x ->
-                Arrays.asList(x.cause().getMessage().split(" ")))
+                        Arrays.asList(x.cause().getMessage().toLowerCase().split(" ")))
                 .contains("failed", "resolve");
     }
 
@@ -129,7 +129,7 @@ class VertxTest extends VertxBaseUnitTest {
         assertThat(actual).isNotNull();
 
         actual.onComplete(tc.failing(ar -> tc.verify(() -> {
-            assertThat(ar).hasMessageContainingAll("failed", "resolve");
+            assertThat(ar).hasMessageContainingAll("Failed", "resolve");
             tc.completeNow();
         })));
 
