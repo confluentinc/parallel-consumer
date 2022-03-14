@@ -52,4 +52,13 @@ public class CommitHistorySubject extends Subject {
     public void anything() {
         check("commits()").that(actual.getOffsetHistory()).isNotEmpty();
     }
+
+    public void nothing() {
+        check("commits()").that(actual.getOffsetHistory()).isEmpty();
+    }
+
+    public void isEmpty() {
+        nothing();
+    }
+
 }

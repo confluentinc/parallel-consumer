@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;

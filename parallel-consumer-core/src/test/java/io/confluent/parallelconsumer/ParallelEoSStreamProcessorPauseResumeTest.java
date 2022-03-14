@@ -8,19 +8,14 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -32,13 +27,13 @@ import static com.google.common.truth.Truth.assertThat;
 @Slf4j
 class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcessorTestBase {
 
-    private static final AtomicLong MY_ID_GENERATOR = new AtomicLong();
+    private static final AtomicInteger MY_ID_GENERATOR = new AtomicInteger();
 
-    private static final AtomicLong RECORD_BATCH_KEY_GENERATOR = new AtomicLong();
+    private static final AtomicInteger RECORD_SET_KEY_GENERATOR = new AtomicInteger();
 
     private static class TestUserFunction implements Consumer<ConsumerRecord<String, String>> {
 
-        private final AtomicLong numProcessedRecords = new AtomicLong();
+        private final AtomicInteger numProcessedRecords = new AtomicInteger();
 
         /**
          * The number of in flight records. Note that this may not exactly match the real number of in flight records as
@@ -71,7 +66,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         }
 
         public void reset() {
-            numProcessedRecords.set(0L);
+            numProcessedRecords.set(0);
         }
     }
 
@@ -83,16 +78,16 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
                 .build();
     }
 
-    private void addRecords(final int numRecords) {
-        long recordBatchKey = RECORD_BATCH_KEY_GENERATOR.incrementAndGet();
-        log.debug("Producing {} records with batch key {}.", numRecords, recordBatchKey);
+    private void addRecordsWithSetKey(final int numRecords) {
+        long recordSetKey = RECORD_SET_KEY_GENERATOR.incrementAndGet();
+        log.debug("Producing {} records with set key {}.", numRecords, recordSetKey);
         for (int i = 0; i < numRecords; ++i) {
-            consumerSpy.addRecord(ktu.makeRecord("key-" + recordBatchKey + i, "v0-test-" + i));
+            consumerSpy.addRecord(ktu.makeRecord("key-" + recordSetKey + i, "v0-test-" + i));
         }
-        log.debug("Finished producing {} records with batch key {}.", numRecords, recordBatchKey);
+        log.debug("Finished producing {} records with set key {}.", numRecords, recordSetKey);
     }
 
-    private void setupParallelConsumerInstanceAndLogCapture(final CommitMode commitMode, final int maxConcurrency) {
+    private void setupParallelConsumerInstance(final CommitMode commitMode, final int maxConcurrency) {
         setupParallelConsumerInstance(getBaseOptions(commitMode, maxConcurrency));
 
         // register unique ID on the parallel consumer
@@ -100,41 +95,10 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         parallelConsumer.setMyId(Optional.of(myId));
     }
 
-    // todo delete
-    private long getOverallCommittedOffset() {
-        return getCommittedOffsetsByPartitions().values().stream().collect(Collectors.summingLong(Long::longValue));
-    }
-
-    // todo delete
-    private Map<TopicPartition, Long> getCommittedOffsetsByPartitions() {
-        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistory = getCommitHistory();
-        if (commitHistory.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        Set<String> consumerGroups = commitHistory.stream().flatMap(c -> c.keySet().stream())
-                .collect(Collectors.toSet());
-        // verify that test setup is correct (this method only supports a single consumer group for now)
-        assertThat(consumerGroups).hasSize(1);
-        String consumerGroupName = consumerGroups.iterator().next();
-
-        // get the last committed offse for each partitions
-        Map<TopicPartition, Long> result = new HashMap<>();
-        for (Map<String, Map<TopicPartition, OffsetAndMetadata>> commit : getCommitHistory()) {
-            commit.getOrDefault(consumerGroupName, Collections.emptyMap())
-                    .forEach((partition, offsetAndMetadata) -> result.put(partition, offsetAndMetadata.offset()));
-        }
-        return result;
-    }
-
     private TestUserFunction createTestSetup(final CommitMode commitMode, final int maxConcurrency) {
-        // setup parallel consumer with custom processing function
-        setupParallelConsumerInstanceAndLogCapture(commitMode, maxConcurrency);
+        setupParallelConsumerInstance(commitMode, maxConcurrency);
         TestUserFunction testUserFunction = new TestUserFunction();
         parallelConsumer.poll(testUserFunction);
-
-        // ensure that commit offset start at 0 -> otherwise there is a bug in the test setup
-        awaitForCommit(0);
 
         return testUserFunction;
     }
@@ -148,48 +112,41 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
     @EnumSource(CommitMode.class)
     @SneakyThrows
     void pausingAndResumingProcessingShouldWork(final CommitMode commitMode) {
-        int numTestRecordsPerBatch = 1_000;
-        long totalRecordsExpected = 2L * numTestRecordsPerBatch;
+        int numTestRecordsPerSet = 1_000;
+        int totalRecordsExpected = 2 * numTestRecordsPerSet;
 
         TestUserFunction testUserFunction = createTestSetup(commitMode, 3);
 
         // produce some messages
-        addRecords(numTestRecordsPerBatch);
-//        ktu.sendRecords(numTestRecordsPerBatch);
+        addRecordsWithSetKey(numTestRecordsPerSet);
 
         // wait for processing to finish
         Awaitility
                 .waitAtMost(defaultTimeout)
-                .pollDelay(50L, TimeUnit.MILLISECONDS)
-                .alias(numTestRecordsPerBatch + " records should be processed")
-                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerBatch));
-//                .until(testUserFunction.numProcessedRecords::get, numRecords -> numRecords == numTestRecordsPerBatch);
+                .alias(numTestRecordsPerSet + " records should be processed")
+                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerSet));
+
         // overall committed offset should reach the same value
-        Awaitility
-                .waitAtMost(defaultTimeout)
-                .alias("sum of consumer offsets should reach " + numTestRecordsPerBatch)
-                .untilAsserted(() -> assertThat(getOverallCommittedOffset()).isEqualTo(numTestRecordsPerBatch));
-        //                .until(this::getOverallCommittedOffset, numRecords -> numTestRecordsPerBatch == numRecords);
+        awaitForCommit(numTestRecordsPerSet);
+
+        //
         testUserFunction.reset();
 
         // pause parallel consumer and wait for control loops to catch up
         parallelConsumer.pauseIfRunning();
-//
-//        controlLoopTracker.waitForSomeParallelStreamProcessorControlLoopCycles(1, defaultTimeout);
-//        controlLoopTracker.waitForSomeBrokerPollSystemControlLoopCycles(1, defaultTimeout);
 
         awaitForOneLoopCycle();
 
         // produce more messages -> nothing should be processed
-        addRecords(numTestRecordsPerBatch);
-//        controlLoopTracker.waitForSomeControlLoopCycles(5, defaultTimeout);
+        addRecordsWithSetKey(numTestRecordsPerSet);
+
         awaitForSomeLoopCycles(2);
 
         // shouldn't have produced any records
         assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(0L);
 
         // overall committed offset should stay at old value
-        assertThat(getOverallCommittedOffset()).isEqualTo(numTestRecordsPerBatch);
+        awaitForCommit(numTestRecordsPerSet);
 
         // resume parallel consumer ->
         parallelConsumer.resumeIfPaused();
@@ -197,15 +154,11 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         // messages should be processed now
         Awaitility
                 .waitAtMost(defaultTimeout)
-                .alias(numTestRecordsPerBatch + " records should be processed")
-                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerBatch));
-//            .until(testUserFunction.numProcessedRecords::get, numRecords -> numTestRecordsPerBatch == numRecords);
+                .alias(numTestRecordsPerSet + " records should be processed")
+                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerSet));
+
         // overall committed offset should reach the total of two batches that were processed
-        Awaitility
-                .waitAtMost(defaultTimeout)
-                .alias("sum of consumer offsets should reach " + totalRecordsExpected)
-//            .until(this::getOverallCommittedOffset, numRecords -> totalRecordsExpected == numRecords);
-                .untilAsserted(() -> assertThat(getOverallCommittedOffset()).isEqualTo(totalRecordsExpected));
+        awaitForCommit(totalRecordsExpected);
     }
 
     /**
@@ -228,23 +181,20 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         testUserFunction.lockProcessing();
 
         // produce some messages
-        addRecords(numTestRecordsPerBatch);
+        addRecordsWithSetKey(numTestRecordsPerBatch);
 
         // wait until we have enough records in flight
         Awaitility
                 .waitAtMost(defaultTimeout)
-                .pollDelay(50L, TimeUnit.MILLISECONDS)
                 .alias(degreeOfParallelism + " records should be in flight processed")
-                .until(testUserFunction.numInFlightRecords::get, numInFlightRecords -> degreeOfParallelism == numInFlightRecords);
+                .untilAsserted(() -> assertThat(testUserFunction.numInFlightRecords.get()).isEqualTo(degreeOfParallelism));
 
-        // overall committed consumer offset should still be at 0
-        assertThat(getOverallCommittedOffset()).isEqualTo(0L);
+        //
+        assertCommits().isEmpty();
 
         // pause parallel consumer and wait for control loops to catch up
         parallelConsumer.pauseIfRunning();
         awaitForOneLoopCycle();
-//        controlLoopTracker.waitForSomeParallelStreamProcessorControlLoopCycles(1, defaultTimeout);
-//        controlLoopTracker.waitForSomeBrokerPollSystemControlLoopCycles(1, defaultTimeout);
 
         // unlock the user function
         testUserFunction.unlockProcessing();
@@ -252,15 +202,11 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         // in flight messages + buffered messages should get processed now (exact number is based on dynamic load factor)
         Awaitility
                 .waitAtMost(defaultTimeout)
-                .pollDelay(50L, TimeUnit.MILLISECONDS)
                 .alias("at least " + degreeOfParallelism + " records should be processed")
-                .until(testUserFunction.numProcessedRecords::get, numRecords -> degreeOfParallelism <= numRecords);
+                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isGreaterThan(degreeOfParallelism));
 
         // overall committed offset should reach the same value
-        Awaitility
-                .waitAtMost(defaultTimeout)
-                .alias("sum of consumer offsets should reach number of processed records")
-                .until(this::getOverallCommittedOffset, numRecords -> testUserFunction.numProcessedRecords.get() == numRecords);
+        awaitForCommit(testUserFunction.numProcessedRecords.get());
 
         // shouldn't have anymore in flight records now
         assertThat(testUserFunction.numInFlightRecords.get()).isEqualTo(0);
@@ -273,13 +219,10 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         Awaitility
                 .waitAtMost(defaultTimeout)
                 .alias(numTestRecordsPerBatch + " records should be processed")
-                .until(testUserFunction.numProcessedRecords::get, numRecords -> numTestRecordsPerBatch == numRecords);
+                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerBatch));
+
         // overall committed offset should reach the total number of processed records
-        Awaitility
-                .waitAtMost(defaultTimeout)
-                .alias("sum of consumer offsets should reach number of processed records")
-                .until(this::getOverallCommittedOffset, numRecords -> testUserFunction.numProcessedRecords.get() == numRecords);
-        testUserFunction.reset();
+        awaitForCommit(testUserFunction.numProcessedRecords.get());
     }
 
 }
