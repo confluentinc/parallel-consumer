@@ -93,12 +93,12 @@
         <!-- version numbers -->
         <!-- plugins -->
         <mycila.version>4.2.rc2</mycila.version>
-        <lombok.version>1.18.16</lombok.version>
-        <auto-service.version>1.0-rc7</auto-service.version>
+        <lombok.version>1.18.22</lombok.version>
+        <auto-service.version>1.0.1</auto-service.version>
         <surefire.version>3.0.0-M5</surefire.version>
 
         <!-- core -->
-        <slf4j.version>1.7.30</slf4j.version>
+        <slf4j.version>1.7.36</slf4j.version>
         <kafka.version>2.8.0</kafka.version>
         <version.unij>0.1.3</version.unij>
 
@@ -106,11 +106,11 @@
         <parallel-tests>true</parallel-tests>
 
         <!-- tests deps-->
-        <junit.version>5.7.0</junit.version>
-        <junit.platform.version>1.7.0</junit.platform.version>
+        <junit.version>5.8.2</junit.version>
+        <junit.platform.version>1.8.2</junit.platform.version>
         <testcontainers.version>1.16.3</testcontainers.version>
         <truth.version>1.1.3</truth.version>
-        <flogger.version>0.6</flogger.version>
+        <flogger.version>0.7.4</flogger.version>
     </properties>
 
     <profiles>
@@ -238,7 +238,7 @@
         <dependency>
             <groupId>com.github.bsideup.jabel</groupId>
             <artifactId>jabel-javac-plugin</artifactId>
-            <version>0.3.0</version>
+            <version>0.4.2</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -267,7 +267,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.2.3</version>
+            <version>1.3.0-alpha14</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -296,13 +296,13 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.18.0</version>
+            <version>3.22.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>3.6.0</version>
+            <version>4.4.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -358,13 +358,13 @@
             <dependency>
                 <groupId>org.awaitility</groupId>
                 <artifactId>awaitility</artifactId>
-                <version>4.1.0</version>
+                <version>4.2.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
-                <version>3.11</version>
+                <version>3.12.0</version>
             </dependency>
             <dependency>
                 <groupId>com.google.truth</groupId>
@@ -375,7 +375,7 @@
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
-                <version>30.1.1-jre</version>
+                <version>31.1-jre</version>
             </dependency>
             <dependency>
                 <groupId>com.google.truth.extensions</groupId>
@@ -386,7 +386,7 @@
             <dependency>
                 <groupId>me.tongfei</groupId>
                 <artifactId>progressbar</artifactId>
-                <version>0.9.0</version>
+                <version>0.9.3</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
@@ -421,7 +421,13 @@
                 <groupId>org.junit-pioneer</groupId>
                 <artifactId>junit-pioneer</artifactId>
                 <scope>test</scope>
-                <version>1.0.0</version>
+                <version>1.6.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.tomakehurst</groupId>
+                <artifactId>wiremock</artifactId>
+                <version>2.32.0</version>
+                <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -769,6 +775,12 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <!-- for use in idea -->
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>2.9.0</version>
             </plugin>
         </plugins>
 
