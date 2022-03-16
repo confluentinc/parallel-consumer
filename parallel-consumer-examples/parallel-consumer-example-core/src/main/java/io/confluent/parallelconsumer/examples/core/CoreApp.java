@@ -126,8 +126,8 @@ public class CoreApp {
         final int baseDelaySecond = 1;
 
         ParallelConsumerOptions.<String, String>builder()
-                .retryDelayProvider(workContainer -> {
-                    int numberOfFailedAttempts = workContainer.getFailureCount();
+                .retryDelayProvider(recordContext -> {
+                    int numberOfFailedAttempts = recordContext.getFailureCount();
                     long delayMillis = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts) * 1000);
                     return Duration.ofMillis(delayMillis);
                 });
