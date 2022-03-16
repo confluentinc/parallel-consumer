@@ -1122,3 +1122,201 @@ Also the information density in the map (i.e. a single not yet completed message
 == Attribution
 
 http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.
+
+:toc: macro
+:toclevels: 1
+
+= Change Log
+
+// git log --pretty="* %s" 0.3.0.2..HEAD
+
+// only show TOC if this is the root document (not in the README)
+ifndef::github_name[]
+toc::[]
+endif::[]
+
+== v0.4.0.0
+// https://github.com/confluentinc/parallel-consumer/releases/tag/0.4.0.0
+
+=== Features
+
+* https://projectreactor.io/[Project Reactor] non-blocking threading adapter module
+* Generic Vert.x Future support - i.e. FileSystem, db etc...
+
+=== Fixes and Improvements
+
+* Vert.x concurrency control via WebClient host limits fixed - see #maxCurrency
+* Vert.x API cleanup of invalid usage
+* Out of bounds for empty collections
+* Use ConcurrentSkipListMap instead of TreeMap to prevent concurrency issues under high pressure
+* log: Show record topic in slow-work warning message
+
+== v0.3.2.0
+
+=== Fixes and Improvements
+
+* Major: Upgrade to Apache Kafka 2.8 (still compatible with 2.6 and 2.7 though)
+* Adds support for managed executor service (Java EE Compatibility feature)
+* #65 support for custom retry delay providers
+
+== v0.3.1.0
+
+=== Fixes and Improvements
+
+* Major refactor to code base - primarily the two large God classes
+** Partition state now tracked separately
+** Code moved into packages
+* Busy spin in some cases fixed (lower CPU usage)
+* Reduce use of static data for test assertions - remaining identified for later removal
+* Various fixes for parallel testing stability
+
+== v0.3.0.3
+
+=== Fixes and Improvements
+
+==== Overview
+
+* Tests now run in parallel
+* License fixing / updating and code formatting
+* License format runs properly now when local, check on CI
+* Fix running on Windows and Linux
+* Fix JAVA_HOME issues
+
+==== Details:
+
+* tests: Enable the fail fast feature now that it's merged upstream
+* tests: Turn on parallel test runs
+* format: Format license, fix placement
+* format: Apply Idea formatting (fix license layout)
+* format: Update mycila license-plugin
+* test: Disable redundant vert.x test - too complicated to fix for little gain
+* test: Fix thread counting test by closing PC @After
+* test: Test bug due to static state overrides when run as a suite
+* format: Apply license format and run every All Idea build
+* format: Organise imports
+* fix: Apply license format when in dev laptops - CI only checks
+* fix: javadoc command for various OS and envs when JAVA_HOME missing
+* fix: By default, correctly run time JVM as jvm.location
+
+== v0.3.0.2
+
+=== Fixes and Improvements
+
+* ci: Add CODEOWNER
+* fix: #101 Validate GroupId is configured on managed consumer
+* Use 8B1DA6120C2BF624 GPG Key For Signing
+* ci: Bump jdk8 version path
+* fix: #97 Vert.x thread and connection pools setup incorrect
+* Disable Travis and Codecov
+* ci: Apache Kafka and JDK build matrix
+* fix: Set Serdes for MockProducer for AK 2.7 partition fix KAFKA-10503 to fix new NPE
+* Only log slow message warnings periodically, once per sweep
+* Upgrade Kafka container version to 6.0.2
+* Clean up stalled message warning logs
+* Reduce log-level if no results are returned from user-function (warn -> debug)
+* Enable java 8 Github
+* Fixes #87 - Upgrade UniJ version for UnsupportedClassVersion error
+* Bump TestContainers to stable release to specifically fix #3574
+* Clarify offset management capabilities
+
+== v0.3.0.1
+
+* fixes #62: Off by one error when restoring offsets when no offsets are encoded in metadata
+* fix: Actually skip work that is found as stale
+
+== v0.3.0.0
+
+=== Features
+
+* Queueing and pressure system now self tuning, performance over default old tuning values (`softMaxNumberMessagesBeyondBaseCommitOffset` and `maxMessagesToQueue`) has doubled.
+** These options have been removed from the system.
+* Offset payload encoding back pressure system
+** If the payload begins to take more than a certain threshold amount of the maximum available, no more messages will be brought in for processing, until the space need beings to reduce back below the threshold.
+This is to try to prevent the situation where the payload is too large to fit at all, and must be dropped entirely.
+** See Proper offset encoding back pressure system so that offset payloads can't ever be too large https://github.com/confluentinc/parallel-consumer/issues/47[#47]
+** Messages that have failed to process, will always be allowed to retry, in order to reduce this pressure.
+
+=== Improvements
+
+* Default ordering mode is now `KEY` ordering (was `UNORDERED`).
+** This is a better default as it's the safest mode yet high performing mode.
+It maintains the partition ordering characteristic that all keys are processed in log order, yet for most use cases will be close to as fast as `UNORDERED` when the key space is large enough.
+* https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs 2,147,483,647) for both BitSet and run-length encoding.
+* Commit modes have been renamed to make it clearer that they are periodic, not per message.
+* Minor performance improvement, switching away from concurrent collections.
+
+=== Fixes
+
+* Maximum offset payload space increased to correctly not be inversely proportional to assigned partition quantity.
+* Run-length encoding now supports compacted topics, plus other bug fixes as well as fixes to Bitset encoding.
+
+== v0.2.0.3
+
+=== Fixes
+
+** https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)] - gracefully drop BitSet or Runlength encoding as an option if offset difference too large (short overflow)
+*** A new serialisation format will be added in next version - see https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37]
+** Gracefully drops encoding attempts if they can't be run
+** Fixes a bug in the offset drop if it can't fit in the offset metadata payload
+
+== v0.2.0.2
+
+=== Fixes
+
+** Turns back on the https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)]
+
+== v0.2.0.1 DO NOT USE - has critical bug
+
+=== Fixes
+
+** Incorrectly turns off an over-flow check in https://github.com/confluentinc/parallel-consumer/issues/35[offset serialisation system (#35)]
+
+== v0.2.0.0
+
+=== Features
+
+** Choice of commit modes: Consumer Asynchronous, Synchronous and Producer Transactions
+** Producer instance is now optional
+** Using a _transactional_ Producer is now optional
+** Use the Kafka Consumer to commit `offsets` Synchronously or Asynchronously
+
+=== Improvements
+
+** Memory performance - garbage collect empty shards when in KEY ordering mode
+** Select tests adapted to non transactional (multiple commit modes) as well
+** Adds supervision to broker poller
+** Fixes a performance issue with the async committer not being woken up
+** Make committer thread revoke partitions and commit
+** Have onPartitionsRevoked be responsible for committing on close, instead of an explicit call to commit by controller
+** Make sure Broker Poller now drains properly, committing any waiting work
+
+=== Fixes
+
+** Fixes bug in commit linger, remove genesis offset (0) from testing (avoid races), add ability to request commit
+** Fixes #25 https://github.com/confluentinc/parallel-consumer/issues/25:
+*** Sometimes a transaction error occurs - Cannot call send in state COMMITTING_TRANSACTION #25
+** ReentrantReadWrite lock protects non-thread safe transactional producer from incorrect multithreaded use
+** Wider lock to prevent transaction's containing produced messages that they shouldn't
+** Must start tx in MockProducer as well
+** Fixes example app tests - incorrectly testing wrong thing and MockProducer not configured to auto complete
+** Add missing revoke flow to MockConsumer wrapper
+** Add missing latch timeout check
+
+== v0.1
+
+=== Features:
+
+** Have massively parallel consumption processing without running hundreds or thousands of
+*** Kafka consumer clients
+*** topic partitions
++
+without operational burden or harming the clusters performance
+** Efficient individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
+** Per `key` concurrent processing, per `partition` and unordered message processing
+** `Offsets` committed correctly, in order, of only processed messages, regardless of concurrency level or retries
+** Vert.x non-blocking library integration (HTTP currently)
+** Fair partition traversal
+** Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
+** Java 8 compatibility
+** Throttle control and broker liveliness management
+** Clean draining shutdown cycle
