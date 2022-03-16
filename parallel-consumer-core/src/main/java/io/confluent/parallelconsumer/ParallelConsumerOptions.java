@@ -15,7 +15,6 @@ import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -217,22 +216,18 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration thresholdForTimeSpendInQueueWarning = Duration.ofSeconds(10);
 
-    /**
-     * @see #batchSize
-     */
-    public Optional<Integer> getBatchSize() {
-        return Optional.ofNullable(batchSize);
+    public boolean isUsingBatching() {
+        return getBatchSize() > 1;
     }
 
-    public boolean isUsingBatching() {
-        return this.getBatchSize().isPresent() && getBatchSize().get() > 1;
-    }
+    @Builder.Default
+    private final int maxFailureHistory = 10;
 
     /**
      * @return the combined target of the desired concurrency by the configured batch size
      */
     public int getTargetAmountOfRecordsInFlight() {
-        return getMaxConcurrency() * getBatchSize().orElse(1);
+        return getMaxConcurrency() * getBatchSize();
     }
 
     public void validate() {

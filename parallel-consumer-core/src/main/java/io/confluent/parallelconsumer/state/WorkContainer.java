@@ -7,10 +7,7 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
-import lombok.AccessLevel;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -18,9 +15,7 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
@@ -49,10 +44,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     @Getter
     private final ConsumerRecord<K, V> cr;
 
-    @Getter
-    private int numberOfFailedAttempts;
-
-    private Optional<Instant> failedAt = Optional.empty();
+    private final Optional<Instant> failedAt = Optional.empty();
 
     private boolean inFlight = false;
 
@@ -74,6 +66,28 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     // static instance so can't access generics - but don't need them as Options class ensures type is correct
     private static Function<Object, Duration> retryDelayProvider;
 
+    @AllArgsConstructor
+    @Value
+    public static class Failure {
+        Instant time;
+        Throwable cause;
+
+        public Failure(Throwable e) {
+            this.time = Instant.now();
+            this.cause = e;
+        }
+    }
+
+    private final LinkedList<Failure> failureHistory = new LinkedList<>();
+
+    public List<Failure> getFailureHistory() {
+        return Collections.unmodifiableList(failureHistory);
+    }
+
+    public int getNumberOfFailedAttempts() {
+        return failureHistory.size();
+    }
+
     public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider) {
         this.epoch = epoch;
         this.cr = cr;
@@ -92,16 +106,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         this.workType = workType;
     }
 
-    public void fail(WallClock clock) {
-        // If not explicitly retriable, put it back in with a retry counter, so it can be later given up on
-        log.trace("Failing {}", this);
-        numberOfFailedAttempts++;
-        failedAt = Optional.of(clock.getNow());
-        inFlight = false;
-    }
-
-    public void succeed() {
-        log.trace("Succeeded {}", this);
+    public void endFlight() {
+        log.trace("Ending flight {}", this);
         inFlight = false;
     }
 
@@ -155,7 +161,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public boolean isNotInFlight() {
-        return !inFlight;
+        return !isInFlight();
     }
 
     public boolean isInFlight() {
@@ -176,8 +182,21 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         this.userFunctionSucceeded = Optional.of(true);
     }
 
-    public void onUserFunctionFailure() {
+    public void onUserFunctionFailure(Throwable cause) {
+        log.trace("Failing {}", this);
+
+        updateFailureHistory(cause);
+
         this.userFunctionSucceeded = Optional.of(false);
+    }
+
+    private void updateFailureHistory(Throwable cause) {
+        Failure e = new Failure(cause);
+        failureHistory.addFirst(e);
+        // todo get limit from options
+        if (failureHistory.size() > 10) {
+            failureHistory.removeLast();
+        }
     }
 
     public boolean isUserFunctionComplete() {

@@ -194,7 +194,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             });
             send.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
-                wc.onUserFunctionFailure();
+                wc.onUserFunctionFailure(h);
                 addToMailbox(wc);
             });
 

@@ -260,7 +260,7 @@ class WorkManagerTest {
     void containerDelay() {
         var wc = new WorkContainer<String, String>(0, null, null);
         assertThat(wc.hasDelayPassed(testClock)).isTrue(); // when new, there's no delay
-        wc.fail(testClock);
+        wc.endFlight();
         assertThat(wc.hasDelayPassed(testClock)).isFalse();
         advanceClockBySlightlyLessThanDelay();
         assertThat(wc.hasDelayPassed(testClock)).isFalse();

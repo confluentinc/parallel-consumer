@@ -113,7 +113,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
                     .doOnError(throwable -> {
                         log.error("Reactor fail signal", throwable);
                         for (var wc : pollContext.getWorkContainers()) {
-                            wc.onUserFunctionFailure();
+                            wc.onUserFunctionFailure(throwable);
                             addToMailbox(wc);
                         }
                     })

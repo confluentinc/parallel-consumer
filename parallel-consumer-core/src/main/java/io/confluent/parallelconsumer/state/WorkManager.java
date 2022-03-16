@@ -213,11 +213,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return ingested;
     }
 
-    // todo move PM or SM?
     public void onSuccess(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
-        wc.succeed();
+        wc.endFlight();
 
         // update as we go
         pm.onSuccess(wc);
@@ -240,7 +239,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void onFailure(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        wc.fail(clock);
+        wc.endFlight();
         sm.onFailure(wc);
         numberRecordsOutForProcessing--;
     }

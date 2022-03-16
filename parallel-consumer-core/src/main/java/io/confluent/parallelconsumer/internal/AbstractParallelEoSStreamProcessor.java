@@ -713,7 +713,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             if (log.isDebugEnabled()) {
                 var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
                 log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
-                List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize().get()).collect(Collectors.toList());
+                List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize()).collect(Collectors.toList());
                 if (integerStream.size() > 1) {
                     log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
                 }
@@ -742,7 +742,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
-        int maxBatchSize = (int) options.getBatchSize().get();
+        int maxBatchSize = options.getBatchSize();
         return partition(workToProcess, maxBatchSize);
     }
 
@@ -784,7 +784,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // always round up to fill batches - get however extra are needed to fill a batch
         if (options.isUsingBatching()) {
             //noinspection OptionalGetWithoutIsPresent
-            int batchSize = (int) options.getBatchSize().get();
+            int batchSize = options.getBatchSize();
             int modulo = delta % batchSize;
             if (modulo > 0) {
                 int extraToFillBatch = target - modulo;
@@ -803,7 +803,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     protected int getQueueTargetLoaded() {
         //noinspection unchecked
-        int batch = (int) options.getBatchSize().orElse(1);
+        int batch = options.getBatchSize();
         return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
     }
 
@@ -1099,7 +1099,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // handle fail
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure();
+                wc.onUserFunctionFailure(e);
                 addToMailbox(wc); // always add on error
             }
             throw e; // trow again to make the future failed
