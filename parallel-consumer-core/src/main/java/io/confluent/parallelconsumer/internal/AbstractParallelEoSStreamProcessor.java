@@ -23,7 +23,6 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
-import pl.tlinkowski.unij.api.UniLists;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -706,26 +705,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                         List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
-            if (options.isUsingBatching()) {
-                // perf: could inline makeBatches
-                var batches = makeBatches(workToProcess);
+
+            // perf: could inline makeBatches
+            var batches = makeBatches(workToProcess);
+
+            // debugging
+            if (log.isDebugEnabled()) {
                 var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
-                if (log.isDebugEnabled()) {
-                    log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
-                    List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize().get()).collect(Collectors.toList());
-                    if (integerStream.size() > 1) {
-                        log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
-                    }
+                log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
+                List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize().get()).collect(Collectors.toList());
+                if (integerStream.size() > 1) {
+                    log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
                 }
-                for (var batch : batches) {
-                    int target = (int) options.getBatchSize().get();
-                    int size = batch.size();
-                    submitWorkToPoolInner(usersFunction, callback, batch);
-                }
-            } else {
-                for (var batch : workToProcess) {
-                    submitWorkToPoolInner(usersFunction, callback, UniLists.of(batch));
-                }
+            }
+
+            // submit
+            for (var batch : batches) {
+                submitWorkToPoolInner(usersFunction, callback, batch);
             }
         }
     }

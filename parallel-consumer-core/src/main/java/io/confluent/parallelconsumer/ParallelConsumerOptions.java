@@ -208,7 +208,8 @@ public class ParallelConsumerOptions<K, V> {
      *
      * @see ParallelConsumerOptions#getBatchSize()
      */
-    private final Integer batchSize;
+    @Builder.Default
+    private final Integer batchSize = 1;
 
     /**
      * Configure the amount of delay a record experiences, before a warning is logged.
@@ -224,7 +225,7 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     public boolean isUsingBatching() {
-        return this.getBatchSize().isPresent();
+        return this.getBatchSize().isPresent() && getBatchSize().get() > 1;
     }
 
     /**

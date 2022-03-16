@@ -78,6 +78,7 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
      * @throws IllegalArgumentException if a {@link ParallelConsumerOptions#getBatchSize()} has been set.
      */
     public RecordContext<K, V> getSingleRecord() {
+        // instead of calling Options#isUsingBatch - this way we don't need to access to the options class, and this is effectively the same thing
         if (size() != 1) {
             throw new IllegalArgumentException(msg("A 'batch size' has been specified in `options`, so you must use the `batch` versions of the polling methods. See {}", getLinkHtmlToDocSection("#batching")));
         }
