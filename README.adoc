@@ -235,7 +235,8 @@ without operational burden or harming the cluster's performance
 * Solution for the https://en.wikipedia.org/wiki/Head-of-line_blocking["head of line"] blocking problem where continued failure of a single message, prevents progress for messages behind it in the queue
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
-* Batch version fo the API to process batches of messages in parallel instead of single messages.
+* Batch support in all versions of the API to process batches of messages in parallel instead of single messages.
+** Particularly useful for when your processing function can work with more than a single record at a time - e.g. sending records to an API which has a batch version like Elasticsearch
 * Vert.x and Reactor.io non-blocking library integration
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
@@ -513,10 +514,12 @@ In future versions, we plan to look at supporting other streaming systems like h
 [[batching]]
 === Batching
 
-The library also support a batch version of the API.
-Using this, you can process batches of messages at once.
+The library also supports sending a batch or records as input to the users processing function in parallel.
+Using this, you can process several records in your function at once.
 
-To use it, use one of the `batch` versions instead.
+To use it, set a `batch size` in the options class.
+
+There are then various access methods for the batch of records - see the `PollContext` object for more information.
 
 IMPORTANT: If an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
 There is no guarantee that the messages will be retried again in the same batch.
