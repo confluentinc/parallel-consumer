@@ -9,7 +9,9 @@ import lombok.*;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 /**
- * TODO docs
+ * Context information for the wrapped {@link ConsumerRecord}.
+ *
+ * @see #getFailureCount()
  */
 @AllArgsConstructor
 @Builder(toBuilder = true)
@@ -26,10 +28,17 @@ public class RecordContext<K, V> {
         this.workContainer = wc;
     }
 
+    /**
+     * @return the offset of the wrapped record
+     * @see ConsumerRecord#offset()
+     */
     public long offset() {
         return consumerRecord.offset();
     }
 
+    /**
+     * @return the number of times this {@link ConsumerRecord} has failed processing already
+     */
     public int getFailureCount() {
         return workContainer.getNumberOfFailedAttempts();
     }

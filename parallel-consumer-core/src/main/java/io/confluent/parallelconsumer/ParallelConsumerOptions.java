@@ -145,6 +145,7 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final int maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+
     public static final int DEFAULT_MAX_CONCURRENCY = 16;
 
     /**
@@ -159,7 +160,7 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
-    private final Function<WorkContainer, Duration> retryDelayProvider;
+    private final Function<WorkContainer<K, V>, Duration> retryDelayProvider;
 
     /**
      * Dirty global access to the {@link #retryDelayProvider}.
@@ -188,8 +189,16 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
 
     /**
-     * The maximum number of messages to attempt to pass into the {@code batch} versions of the user function. Batch
-     * sizes may sometimes be less than this size, but will never be more.
+     * The maximum number of messages to attempt to pass into the user functions.
+     * <p>
+     * Batch sizes may sometimes be less than this size, but will never be more.
+     * <p>
+     * The system will treat the messages as a set, so if an error is thrown by the user code, then all messages will be
+     * marked as failed and be retried (Note that when they are retried, there is no guarantee they will all be in the
+     * same batch again). So if you're going to process messages individually, then don't set a batch size.
+     * <p>
+     * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
+     * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      * <p>
      * Note that there is no relationship between the {@link ConsumerConfig} setting of {@link
      * ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large layer
@@ -201,6 +210,9 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * If we have enough, then we actively manage pausing our subscription so that we can continue calling {@code poll}
      * without pulling in even more messages.
+     * <p>
+     *
+     * @see ParallelConsumerOptions#getBatchSize()
      */
     private final Integer batchSize;
 

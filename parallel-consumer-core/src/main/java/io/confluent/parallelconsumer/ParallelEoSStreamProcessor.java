@@ -26,10 +26,9 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
      *
-     * @param newOptions
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessor(final ParallelConsumerOptions newOptions) {
+    public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions) {
         super(newOptions);
     }
 
@@ -82,7 +81,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @Override
     @SneakyThrows
     public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction) {
-        pollAndProduceMany(userFunction, (record) -> {
+        pollAndProduceMany(userFunction, consumerRecord -> {
             // no op call back
             log.trace("No-op user callback");
         });
@@ -91,7 +90,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @Override
     @SneakyThrows
     public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction) {
-        pollAndProduce(userFunction, (record) -> {
+        pollAndProduce(userFunction, consumerRecord -> {
             // no op call back
             log.trace("No-op user callback");
         });
@@ -101,20 +100,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @SneakyThrows
     public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
                                Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
-        pollAndProduceMany((record) -> UniLists.of(userFunction.apply(record)), callback);
+        pollAndProduceMany(consumerRecord -> UniLists.of(userFunction.apply(consumerRecord)), callback);
     }
-//
-//    @Override
-//    public void pollBatch(Consumer<PollContext<K, V>> usersVoidConsumptionFunction) {
-//        validateBatch();
-//
-//        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
-//            log.trace("asyncPoll - Consumed set of records ({}), executing void function...", recordList.size());
-//            usersVoidConsumptionFunction.accept(recordList);
-//            return UniLists.of(); // user function returns no produce records, so we satisfy our api
-//        };
-//        Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
-//        supervisorLoop(wrappedUserFunc, voidCallBack);
-//    }
 
 }
