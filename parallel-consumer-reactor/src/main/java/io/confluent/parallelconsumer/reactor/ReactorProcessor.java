@@ -64,34 +64,18 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
         super.close(timeout, drainMode);
     }
 
-//    /**
-//     * Like {@link ParallelStreamProcessor#pollBatch} but for Reactor.
-//     * <p>
-//     * Register a function to be applied to a batch of messages.
-//     * <p>
-//     * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
-//     * <p>
-//     * The system will treat the messages as a set, so if an error is thrown by the user code, then all messages will be
-//     * marked as failed and be retried (Note that when they are retried, there is no guarantee they will all be in the
-//     * same batch again). So if you're going to process messages individually, then don't use this function.
-//     * <p>
-//     * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
-//     * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
-//     *
-//     * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
-//     *                        their work.
-//     * @see ParallelStreamProcessor#pollBatch
-//     * @see ParallelConsumerOptions#getBatchSize()
-//     */
-
     /**
+     * Register a function to be to polled messages.
+     * <p>
      * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
      * <p>
-     * Like {@link #react} but no batching - single message at a time.
      *
      * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
      *                        their work.
      * @see #react(Function)
+     * @see ParallelConsumerOptions
+     * @see ParallelConsumerOptions#batchSize
+     * @see io.confluent.parallelconsumer.ParallelStreamProcessor#poll
      */
     public void react(Function<PollContext<K, V>, Publisher<?>> reactorFunction) {
         Function<PollContext<K, V>, List<Object>> wrappedUserFunc = (pollContext) -> {
@@ -145,30 +129,6 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
-
-//    /**
-//     * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
-//     * <p>
-//     * Like {@link #reactBatch} but no batching - single message at a time.
-//     *
-//     * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
-//     *                        their work.
-//     * @see #reactBatch(Function)
-//     */
-//    public void react(Function<PollContext<K, V>, Publisher<?>> reactorFunction) {
-//        // wrap single record function in batch function
-//        Function<PollContext<K, V>, Publisher<?>> batchReactorFunctionWrapper = (context) -> {
-//            log.trace("Consumed a record ({}), executing void function...", context);
-//
-//            Publisher<?> publisher = carefullyRun(reactorFunction, context);
-//
-//            log.trace("asyncPoll - user function finished ok.");
-//            return publisher;
-//        };
-//
-//        //
-//        reactBatch(batchReactorFunctionWrapper);
-//    }
 
     private Scheduler getScheduler() {
         return this.schedulerSupplier.get();

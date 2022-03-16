@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.RecordContext;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
+import java.util.function.Function;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 
@@ -69,15 +71,23 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr) {
+    // static instance so can't access generics - but don't need them as Options class ensures type is correct
+    private static Function<Object, Duration> retryDelayProvider;
+
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider) {
         this.epoch = epoch;
         this.cr = cr;
         workType = DEFAULT_TYPE;
+
+        if (WorkContainer.retryDelayProvider == null) { // only set once
+            // static instance so can't access generics - but don't need them as Options class ensures type is correct
+            WorkContainer.retryDelayProvider = (Function) retryDelayProvider;
+        }
     }
 
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, String workType) {
-        this.epoch = epoch;
-        this.cr = cr;
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType) {
+        this(epoch, cr, retryDelayProvider);
+
         Objects.requireNonNull(workType);
         this.workType = workType;
     }
@@ -129,7 +139,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
      * @return the delay between retries e.g. retry after 1 second
      */
     public Duration getRetryDelayConfig() {
-        var retryDelayProvider = ParallelConsumerOptions.retryDelayProviderStatic;
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(this);
         } else {

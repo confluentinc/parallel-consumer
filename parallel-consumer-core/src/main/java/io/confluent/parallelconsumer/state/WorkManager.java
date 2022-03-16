@@ -92,7 +92,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.wmbm = new WorkMailBoxManager<>();
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionMonitor<>(consumer, sm);
+        this.pm = new PartitionMonitor<>(consumer, sm, options);
         this.clock = clock;
     }
 

@@ -61,7 +61,7 @@ public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements
             @Override
             public void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived) {
                 parallelConsumer.poll(context -> {
-                    log.debug("Batch of messages: {}", context.getOffsets());
+                    log.debug("Batch of messages: {}", context.getOffsetsFlattened());
                     batchesReceived.add(context);
                 });
             }

@@ -20,7 +20,7 @@ public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamPr
 
     private final ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
 
-    public JStreamParallelEoSStreamProcessor(ParallelConsumerOptions<?, ?> parallelConsumerOptions) {
+    public JStreamParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> parallelConsumerOptions) {
         super(parallelConsumerOptions);
 
         this.userProcessResultsStream = new ConcurrentLinkedDeque<>();

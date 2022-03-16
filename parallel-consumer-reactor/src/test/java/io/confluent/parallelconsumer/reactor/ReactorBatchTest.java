@@ -42,7 +42,7 @@ public class ReactorBatchTest extends ReactorUnitTestBase implements BatchTestBa
             @SneakyThrows
             @Override
             protected Mono<String> averageBatchSizeTestPollStep(PollContext<String, String> recordList) {
-                return Mono.just(msg("Saw batch or records: {}", recordList.getOffsets()))
+                return Mono.just(msg("Saw batch or records: {}", recordList.getOffsetsFlattened()))
                         .delayElement(Duration.ofMillis(30));
             }
 
@@ -61,7 +61,7 @@ public class ReactorBatchTest extends ReactorUnitTestBase implements BatchTestBa
             @Override
             public void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived) {
                 reactorPC.react(recordList -> {
-                    String msg = msg("Saw batch or records: {}", recordList.getOffsets());
+                    String msg = msg("Saw batch or records: {}", recordList.getOffsetsFlattened());
                     log.debug(msg);
                     batchesReceived.add(recordList);
                     return Mono.just(msg);
@@ -73,7 +73,7 @@ public class ReactorBatchTest extends ReactorUnitTestBase implements BatchTestBa
                 reactorPC.react(recordList -> {
                     batchFailPollInner(recordList);
                     batchesReceived.add(recordList);
-                    return Mono.just(msg("Saw batch or records: {}", recordList.getOffsets()));
+                    return Mono.just(msg("Saw batch or records: {}", recordList.getOffsetsFlattened()));
                 });
             }
         };

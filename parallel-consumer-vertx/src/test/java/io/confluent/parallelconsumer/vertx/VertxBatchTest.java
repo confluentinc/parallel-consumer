@@ -55,7 +55,7 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
                 Promise<String> promise = Promise.promise();
 
                 vertx.setTimer(delayInMs, event -> {
-                    String msg = msg("Saw batch or records: {}", recordList.getOffsets());
+                    String msg = msg("Saw batch or records: {}", recordList.getOffsetsFlattened());
                     log.debug(msg);
                     promise.complete(msg);
                 });
@@ -79,10 +79,10 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
             public void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived) {
                 vertxAsync.batchVertxFuture(recordList -> {
                     return vertx.executeBlocking(event -> {
-                        log.debug("Saw batch or records: {}", recordList.getOffsets());
+                        log.debug("Saw batch or records: {}", recordList.getOffsetsFlattened());
                         batchesReceived.add(recordList);
 
-                        event.complete(msg("Saw batch or records: {}", recordList.getOffsets()));
+                        event.complete(msg("Saw batch or records: {}", recordList.getOffsetsFlattened()));
                     });
                 });
             }
@@ -92,7 +92,7 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
                 vertxAsync.batchVertxFuture(pollBatch -> {
                     receivedBatches.add(pollBatch);
                     batchFailPollInner(pollBatch);
-                    return Future.succeededFuture(msg("Saw batch or records: {}", pollBatch.getOffsets()));
+                    return Future.succeededFuture(msg("Saw batch or records: {}", pollBatch.getOffsetsFlattened()));
                 });
             }
         };

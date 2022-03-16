@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
@@ -52,6 +53,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     private final Consumer<K, V> consumer;
 
     private final ShardManager<K, V> sm;
+
+    private final ParallelConsumerOptions options;
 
     /**
      * Hold the tracking state for each of our managed partitions.
@@ -427,7 +430,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 return false;
             } else {
                 int currentPartitionEpoch = getEpoch(rec);
-                var wc = new WorkContainer<>(currentPartitionEpoch, rec);
+                //noinspection unchecked - Lombok builder getter erases generics
+                var wc = new WorkContainer<K, V>(currentPartitionEpoch, rec, options.getRetryDelayProvider());
 
                 sm.addWorkContainer(wc);
 

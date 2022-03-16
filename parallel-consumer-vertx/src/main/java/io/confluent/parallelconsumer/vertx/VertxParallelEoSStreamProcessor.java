@@ -182,10 +182,6 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         super.supervisorLoop(userFuncWrapper, noOp);
     }
 
-//    private void addVertxHooks(PollContext<K, V> consumerRecord, Future<?> send) {
-//        addVertxHooks(UniLists.of(consumerRecord), send);
-//    }
-
     private void addVertxHooks(final PollContext<K, V> context, final Future<?> send) {
         for (var wc : context.getWorkContainers()) {
             // attach internal handler

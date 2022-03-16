@@ -213,7 +213,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
     protected abstract void batchFailPoll(List<PollContext<String, String>> receivedBatches);
 
     protected POLL_RETURN batchFailPollInner(PollContext<String, String> pollBatch) {
-        List<Long> offsets = pollBatch.getOffsets();
+        List<Long> offsets = pollBatch.getOffsetsFlattened();
         log.debug("Got batch {}", offsets);
 
         boolean contains = offsets.contains(FAILURE_TARGET);

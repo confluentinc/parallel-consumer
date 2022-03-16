@@ -160,13 +160,7 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
-    private final Function<WorkContainer<K, V>, Duration> retryDelayProvider;
-
-    /**
-     * Dirty global access to the {@link #retryDelayProvider}.
-     */
-    // TODO remove need for writeable global access
-    public static Function<WorkContainer, Duration> retryDelayProviderStatic;
+    private final Function<RecordContext<K, V>, Duration> retryDelayProvider;
 
     /**
      * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
@@ -250,7 +244,6 @@ public class ParallelConsumerOptions<K, V> {
 
         //
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
-        ParallelConsumerOptions.retryDelayProviderStatic = getRetryDelayProvider();
     }
 
     public boolean isUsingTransactionalProducer() {
