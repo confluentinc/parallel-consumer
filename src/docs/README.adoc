@@ -540,6 +540,14 @@ From the `Clients` view, get the connection information customized to your clust
 .. Use these settings presented to https://docs.confluent.io/clients-kafka-java/current/overview.html[configure your clients].
 . Use these clients for steps outlined in the <<common_preparation>> section.
 
+[[upgrading]]
+== Upgrading
+
+=== From 0.4 to 0.5
+
+This version has a breaking change in the API - instead of passing in `ConsumerRecord` instances, it passes in a `PollContext` object which has extra information and utility methods.
+See the `PollContext` class for more information.
+
 [[ordering-guarantees]]
 == Ordering Guarantees
 
