@@ -192,7 +192,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     private void addVertxHooks(final List<ConsumerRecord<K, V>> recordList, final Future<?> send) {
         for (var consumerRecord : recordList) {
             // attach internal handler
-            WorkContainer<K, V> wc = wm.getSm().getWorkContainerForRecord(consumerRecord);
+            // todo - refactor: Poll Context object for API #223
+            WorkContainer<K, V> wc = wm.getSm().getWorkContainerForRecord(consumerRecord).get();
             wc.setWorkType(VERTX_TYPE);
 
             send.onSuccess(h -> {

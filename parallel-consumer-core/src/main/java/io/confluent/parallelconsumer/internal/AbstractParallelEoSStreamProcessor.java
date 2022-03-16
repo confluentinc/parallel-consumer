@@ -208,7 +208,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor);
+        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, new WallClock());
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
@@ -676,7 +676,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         //
         if (state == running || state == draining) {
             int delta = calculateQuantityToRequest();
-            var records = wm.maybeGetWorkIfAvailable(delta);
+            var records = wm.getWorkIfAvailable(delta);
 
             gotWorkCount = records.size();
             lastWorkRequestWasFulfilled = gotWorkCount >= delta;
