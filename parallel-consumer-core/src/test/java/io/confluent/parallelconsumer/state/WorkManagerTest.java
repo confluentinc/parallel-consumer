@@ -528,18 +528,20 @@ public class WorkManagerTest {
 
     @Test
     @Disabled
-    public void unorderedPartitionsGreedy() {
+    void unorderedPartitionsGreedy() {
     }
 
-    //        @Test
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
     void highVolumeKeyOrder(int quantity) {
         int uniqueKeys = 100;
 
+
         var build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
+        assignPartition(0);
 
+        //
         KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         List<Integer> keys = range(uniqueKeys).list();
@@ -555,11 +557,14 @@ public class WorkManagerTest {
         //
         wm.registerWork(recs);
 
-        //
-        List<WorkContainer<String, String>> work = wm.getWorkIfAvailable();
 
-        //
-        assertThat(work).hasSameSizeAs(records.keySet());
+        // test start
+        {
+            List<WorkContainer<String, String>> work = wm.getWorkIfAvailable();
+
+            //
+            assertWithMessage("Should get all records that were registered").that(work).hasSize(records.size());
+        }
     }
 
     @Test
