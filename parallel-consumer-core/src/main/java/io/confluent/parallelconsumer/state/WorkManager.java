@@ -21,7 +21,6 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -137,14 +136,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     @SneakyThrows
-    public static Duration time(Runnable task) {
-        Instant start = Instant.now();
+    public static long time(Runnable task) {
+        long start = System.nanoTime();
+//        Instant start = Instant.now();
         log.debug("Timed function starting at: {}", start);
         task.run();
-        Instant end = Instant.now();
-        Duration between = Duration.between(start, end);
-        log.debug("Finished, took {}", between);
-        return between;
+        long nanoDuration = System.nanoTime() - start;
+//        Duration between = Duration.between(start, end);
+//        log.debug("Finished, took {}", between);
+        log.debug("Finished, took {} ns", nanoDuration);
+        return nanoDuration;
     }
 
     /**
@@ -155,7 +156,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private int ingestPolledRecordsIntoQueues(long requestedMaxWorkToRetrieve) {
         AtomicInteger restul = new AtomicInteger();
-        Duration time = time(() -> {
+        long nanos = time(() -> {
             log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
                     requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
 
@@ -178,7 +179,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         });
 
         int result = restul.get();
-        log.error("Time: {}, got: {}", time, result);
+        log.error("Time: {} ms, got: {}", nanos / 1000, result);
         return result;
     }
 
