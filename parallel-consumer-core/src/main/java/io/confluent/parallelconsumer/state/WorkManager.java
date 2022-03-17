@@ -166,14 +166,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Get work with no limit on quantity, useful for testing.
      */
-    public <R> List<WorkContainer<K, V>> getWorkIfAvailable() {
+    public List<WorkContainer<K, V>> getWorkIfAvailable() {
         return getWorkIfAvailable(Integer.MAX_VALUE);
     }
 
     /**
      * Depth first work retrieval.
      */
-    // todo refactor - move into it's own class perhaps
     public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
         // optimise early
         if (requestedMaxWorkToRetrieve < 1) {
