@@ -640,8 +640,8 @@ public class WorkManagerTest {
         var recs = new ConsumerRecords<>(m);
         wm.registerWork(recs);
 
-        // force ingestion of records - see refactor: Queue unification #219
-        wm.tryToEnsureQuantityOfWorkQueuedAvailable(100);
+//        // force ingestion of records - see refactor: Queue unification #219
+//        wm.tryToEnsureQuantityOfWorkQueuedAvailable(100);
 
         var workContainersOne = wm.getWorkIfAvailable(1);
         var workContainersTwo = wm.getWorkIfAvailable(1);
@@ -684,7 +684,7 @@ public class WorkManagerTest {
         var allWork = new ArrayList<WorkContainer<String, String>>();
 
         {
-            var work = wm.maybeGetWorkIfAvailable(2);
+            var work = wm.getWorkIfAvailable(2);
             allWork.addAll(work);
 
             assertWithMessage("Should be able to get 2 records of work, one from each partition shard")
@@ -699,7 +699,7 @@ public class WorkManagerTest {
         }
 
         {
-            var work = wm.maybeGetWorkIfAvailable(2);
+            var work = wm.getWorkIfAvailable(2);
             assertWithMessage("Should be able to get only 1 more, from the third shard")
                     .that(work).hasSize(1);
             allWork.addAll(work);
