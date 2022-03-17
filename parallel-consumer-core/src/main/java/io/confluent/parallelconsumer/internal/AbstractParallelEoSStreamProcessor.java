@@ -101,7 +101,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Value
     private class ActionItem {
         WorkContainer<K, V> workContainer;
-        BrokerPollSystem.EpochAndRecords consumerRecords;
+        EpochAndRecords consumerRecords;
 
 //        public static <K, V> ActionItem ofRecords(ConsumerRecords<K, V> polledRecords) {
 //            return new ActionItem(null, polledRecords);
@@ -927,7 +927,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         for (var action : results) {
             WorkContainer<K, V> work = action.getWorkContainer();
             if (work == null) {
-                BrokerPollSystem.EpochAndRecords consumerRecords = action.getConsumerRecords();
+                EpochAndRecords consumerRecords = action.getConsumerRecords();
                 wm.registerWork(consumerRecords);
             } else {
                 MDC.put("offset", work.toString());
@@ -946,7 +946,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Duration getTimeToBlockFor() {
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
-        else if (!wm.isWorkInFlightMeetingTarget()) {
+        if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
             var lowestScheduledOpt = wm.getLowestRetryTime();
             if (lowestScheduledOpt.isPresent()) {
@@ -1129,7 +1129,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         workMailBox.add(new ActionItem(wc, null));
     }
 
-    public void registerWork(BrokerPollSystem.EpochAndRecords polledRecords) {
+    public void registerWork(EpochAndRecords polledRecords) {
         log.debug("Adding {} to mailbox...", polledRecords);
         workMailBox.add(new ActionItem(null, polledRecords));
     }

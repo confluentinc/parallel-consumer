@@ -6,6 +6,8 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
@@ -13,6 +15,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
@@ -128,7 +131,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        wmbm.onPartitionsRemoved(partitions);
     }
 
-    public void registerWork(BrokerPollSystem.EpochAndRecords records) {
+    /**
+     * for testing only
+     */
+    public void registerWork(ConsumerRecords<K, V> records) {
+        registerWork(new EpochAndRecords(records, 0));
+    }
+
+    public void registerWork(EpochAndRecords records) {
 //        wmbm.registerWork(records);
         pm.maybeRegisterNewRecordAsWork(records);
     }

@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -202,18 +201,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         epoch++;
     }
 
-    @Value
-    public
-    class EpochAndRecords {
-        ConsumerRecords<K, V> poll;
-        long myEpoch;
-
-        public EpochAndRecords(ConsumerRecords<K, V> poll) {
-            this.poll = poll;
-            this.myEpoch = getEpoch();
-        }
-    }
-
     private long getEpoch() {
         return epoch;
     }
@@ -230,7 +217,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
 
         log.debug("Poll completed");
-        return new EpochAndRecords(poll);
+        return new EpochAndRecords(poll, getEpoch());
     }
 
     /**

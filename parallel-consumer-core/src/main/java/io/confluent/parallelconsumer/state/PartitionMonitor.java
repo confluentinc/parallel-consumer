@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.EpochAndRecords;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -361,7 +362,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #maybeRegisterNewRecordAsWork(ConsumerRecord)
      */
-    public void maybeRegisterNewRecordAsWork(BrokerPollSystem.EpochAndRecords records) {
+    public void maybeRegisterNewRecordAsWork(EpochAndRecords records) {
         // todo unchecked
         ConsumerRecords<K, V> poll = records.getPoll();
         for (ConsumerRecord<K, V> consumerRec : poll) {
