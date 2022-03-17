@@ -15,6 +15,7 @@ import org.apache.kafka.common.errors.WakeupException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -189,8 +190,13 @@ public class OffsetMapCodecManager<K, V> {
     byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
         var incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
         long highestSucceeded = partitionState.getOffsetHighestSucceeded();
-        log.debug("Encoding partition {}: highest suceeded {}, incomplete offsets {}, ", partitionState.getTp(), highestSucceeded, incompleteOffsets);
-        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
+        if (log.isDebugEnabled()) {
+            log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
+                    partitionState.getTp(),
+                    highestSucceeded,
+                    incompleteOffsets.stream().filter(x -> x < offsetHighestSucceeded).collect(Collectors.toList()));
+        }
+        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, offsetHighestSucceeded, incompleteOffsets).invoke();
 
         //
         if (forcedCodec.isPresent()) {

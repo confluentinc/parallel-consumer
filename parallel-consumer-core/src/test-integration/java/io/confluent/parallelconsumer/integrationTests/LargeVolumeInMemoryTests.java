@@ -74,7 +74,10 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         //
         allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
 //        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
+
+        // todo can remove?
         parallelConsumer.waitForProcessedNotCommitted(defaultTimeout.multipliedBy(10));
+
         parallelConsumer.close();
 
         // assert quantity of produced messages

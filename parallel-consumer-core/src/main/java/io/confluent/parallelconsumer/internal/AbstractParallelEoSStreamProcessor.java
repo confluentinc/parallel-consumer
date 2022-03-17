@@ -945,6 +945,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
     private Duration getTimeToBlockFor() {
+//        // should not block as not enough work is being done, and there's more work to ingest
+//        boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
+//        if (ingestionWorkAndStarved) {
+//            log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
+//            return Duration.ofMillis(0);
+//        }
+
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
         if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
@@ -1125,7 +1132,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     protected void addToMailbox(WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
-        log.debug("Adding {} {} to mailbox...", state, wc);
+        log.trace("Adding {} {} to mailbox...", state, wc);
         workMailBox.add(new ActionItem(wc, null));
     }
 

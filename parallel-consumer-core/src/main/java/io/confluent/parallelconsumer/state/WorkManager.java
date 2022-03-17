@@ -6,11 +6,10 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
+import io.confluent.parallelconsumer.internal.EpochAndRecords;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -217,7 +216,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
 
         //
-        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit (partition) queues: {}", work.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        log.debug("Got {} of {} requested records of work. In-flight: {}, Awaiting in commit (partition) queues: {}",
+                work.size(),
+                requestedMaxWorkToRetrieve,
+                getNumberRecordsOutForProcessing(),
+                getNumberOfEntriesInPartitionQueues());
         numberRecordsOutForProcessing += work.size();
 
         return work;
