@@ -85,7 +85,7 @@ public class ProcessingShard<K, V> {
     }
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
-        log.trace("Looking for work on shardQueueEntry: {}", getKey());
+        log.trace("Looking for work on shard: key: {}", getKey());
 
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
@@ -107,7 +107,10 @@ public class ProcessingShard<K, V> {
                 if (isOrderRestricted()) {
                     // can't take any more work from this shard, due to ordering restrictions
                     // processing blocked on this shard, continue to next shard
-                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), getKey());
+                    if (log.isTraceEnabled()) {
+                        ProcessingOrder ordering = this.options.getOrdering();
+                        log.trace("Processing by {}, so have cannot get more messages on this ({} shard key: {}) shard.", ordering, ordering, getKey());
+                    }
                     break;
                 }
             }

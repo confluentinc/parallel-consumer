@@ -178,7 +178,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             return UniLists.of();
         }
 
-        int ingested = tryToEnsureQuantityOfWorkQueuedAvailable(requestedMaxWorkToRetrieve);
+        int ingested = tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
 
         //
         var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
