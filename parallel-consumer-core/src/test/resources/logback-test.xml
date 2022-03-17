@@ -31,6 +31,8 @@
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <logger name="io.confluent.csid" level="info"/>
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
+    <logger name="io.confluent.parallelconsumer.internal.DynamicLoadFactor" level="debug"/>
+
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
