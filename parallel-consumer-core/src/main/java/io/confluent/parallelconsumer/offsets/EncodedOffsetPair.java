@@ -11,6 +11,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
+import java.util.Comparator;
 
 import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrap;
 import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrapToIncompletes;
@@ -27,6 +28,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
 @Slf4j
 public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
 
+    public static final Comparator<EncodedOffsetPair> SIZE_COMPARATOR = Comparator.comparingInt(x -> x.data.capacity());
     @Getter
     OffsetEncoding encoding;
     @Getter
@@ -42,7 +44,7 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
 
     @Override
     public int compareTo(EncodedOffsetPair o) {
-        return Integer.compare(data.capacity(), o.getData().capacity());
+        return SIZE_COMPARATOR.compare(this, o);
     }
 
     /**

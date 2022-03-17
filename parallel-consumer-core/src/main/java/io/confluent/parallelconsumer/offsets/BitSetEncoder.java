@@ -108,7 +108,7 @@ public class BitSetEncoder extends OffsetEncoder {
     private ByteBuffer initV1(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > Short.MAX_VALUE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
-            throw new BitSetEncodingNotSupportedException("BitSet V1 too long to encode, bitset length overflows Short.MAX_VALUE: " + bitsetEntriesRequired + ". (max: " + Short.MAX_VALUE + ")");
+            throw new BitSetEncodingNotSupportedException("input too long to encode for BitSet V1, length overflows Short.MAX_VALUE: " + bitsetEntriesRequired + ". (max: " + Short.MAX_VALUE + ")");
         }
 
         // prep bit set buffer
