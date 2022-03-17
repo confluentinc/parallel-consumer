@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -20,7 +21,9 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.lang.Boolean.TRUE;
@@ -133,6 +136,17 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         wmbm.registerWork(records);
     }
 
+    @SneakyThrows
+    public static Duration time(Runnable task) {
+        Instant start = Instant.now();
+        log.debug("Timed function starting at: {}", start);
+        task.run();
+        Instant end = Instant.now();
+        Duration between = Duration.between(start, end);
+        log.debug("Finished, took {}", between);
+        return between;
+    }
+
     /**
      * Moves the requested amount of work from initial queues into work queues, if available.
      *
@@ -140,26 +154,32 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return the number of extra records ingested due to request
      */
     private int ingestPolledRecordsIntoQueues(long requestedMaxWorkToRetrieve) {
-        log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
-                requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
+        AtomicInteger restul = new AtomicInteger();
+        Duration time = time(() -> {
+            log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
+                    requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
 
-        //
-        var takenWorkCount = 0;
-        boolean continueIngesting;
-        do {
-            ConsumerRecord<K, V> polledRecord = wmbm.internalFlattenedMailQueuePoll();
-            boolean recordAddedAsWork = pm.maybeRegisterNewRecordAsWork(polledRecord);
-            if (recordAddedAsWork) {
-                takenWorkCount++;
-            }
-            boolean polledQueueNotExhausted = polledRecord != null;
-            boolean ingestTargetNotSatisfied = takenWorkCount < requestedMaxWorkToRetrieve;
-            continueIngesting = ingestTargetNotSatisfied && polledQueueNotExhausted;
-        } while (continueIngesting);
+            //
+            var takenWorkCount = 0;
+            boolean continueIngesting;
+            do {
+                ConsumerRecord<K, V> polledRecord = wmbm.internalFlattenedMailQueuePoll();
+                boolean recordAddedAsWork = pm.maybeRegisterNewRecordAsWork(polledRecord);
+                if (recordAddedAsWork) {
+                    takenWorkCount++;
+                }
+                boolean polledQueueNotExhausted = polledRecord != null;
+                boolean ingestTargetNotSatisfied = takenWorkCount < requestedMaxWorkToRetrieve;
+                continueIngesting = ingestTargetNotSatisfied && polledQueueNotExhausted;
+            } while (continueIngesting);
 
-        log.debug("{} new records were registered.", takenWorkCount);
+            restul.set(takenWorkCount);
+            log.debug("{} new records were registered.", takenWorkCount);
+        });
 
-        return takenWorkCount;
+        int result = restul.get();
+        log.error("Time: {}, got: {}", time, result);
+        return result;
     }
 
     /**
@@ -178,7 +198,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             return UniLists.of();
         }
 
-        tryToEnsureQuantityOfWorkQueuedAvailable(requestedMaxWorkToRetrieve);
+        int ingested = tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
 
         //
         var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
@@ -208,6 +228,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         log.debug("Ingested an extra {} records", ingested);
 
         long ingestionOffBy = extraNeededFromInboxToSatisfy - ingested;
+        log.trace("Ingested an extra {}, short of {} by {}", ingested, ingestionOffBy, extraNeededFromInboxToSatisfy);
 
         return ingested;
     }
