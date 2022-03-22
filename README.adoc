@@ -1,7 +1,7 @@
 //
-// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
+// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
@@ -955,7 +955,7 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README_TEMPLATE.adoc[].
 
 === Maven targets
 

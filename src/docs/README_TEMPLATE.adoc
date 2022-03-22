@@ -1,13 +1,25 @@
 //
-// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
+// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
 //
 // To render the README directly, run `mvn asciidoc-template::build`
 //
+
+
+// dynamic include base for editing in IDEA
+:project_root: ./
+// for editing the template to see the includes, this will correctly render includes
+ifeval::["{docname}" == "README_TEMPLATE"]
+
+TIP:: Editing template file
+
+:project_root: ../../
+
+endif::[]
 
 
 = Confluent Parallel Consumer
@@ -22,12 +34,7 @@
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
 
-// dynamic include base for editing in IDEA
-:project_root: ./
 
-// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
-// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
-// leave it commented out when committing work)
 //:project_root: ../../
 
 

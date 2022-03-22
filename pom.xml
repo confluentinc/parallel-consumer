@@ -522,7 +522,7 @@
                 </executions>
                 <configuration>
                     <templateDirectory>./</templateDirectory>
-                    <templateFile>src/docs/README.adoc</templateFile>
+                    <templateFile>src/docs/README_TEMPLATE.adoc</templateFile>
                     <outputDirectory>./</outputDirectory>
                     <outputFile>README.adoc</outputFile>
                 </configuration>
