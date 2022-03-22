@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.reactor;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
@@ -78,7 +79,8 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
      * @see io.confluent.parallelconsumer.ParallelStreamProcessor#poll
      */
     public void react(Function<PollContext<K, V>, Publisher<?>> reactorFunction) {
-        Function<PollContext<K, V>, List<Object>> wrappedUserFunc = (pollContext) -> {
+
+        Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = pollContext -> {
 
             if (log.isTraceEnabled()) {
                 log.trace("Record list ({}), executing void function...",

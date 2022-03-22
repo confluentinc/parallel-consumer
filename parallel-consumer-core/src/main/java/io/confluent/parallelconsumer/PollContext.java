@@ -7,8 +7,9 @@ package io.confluent.parallelconsumer;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Value;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+import lombok.experimental.FieldDefaults;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
@@ -20,13 +21,14 @@ import java.util.stream.Stream;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.Documentation.getLinkHtmlToDocSection;
 
+
 /**
  * Context object used to pass messages to process to users processing functions.
  * <p>
  * Results sets can be iterated in a variety of ways. Explore the different methods available.
  * <p>
  * You can access for {@link ConsumerRecord}s directly, or you can get the {@link RecordContext} wrappers, which provide
- * extra information about the specific records, such as {@link RecordContext#getFailureCount()}.
+ * extra information about the specific records, such as {@link RecordContext#getNumberOfFailedAttempts()}.
  * <p>
  * Note that if you are not setting a {@link ParallelConsumerOptions#batchSize}, then you can use the {@link
  * #getSingleRecord()}, and it's convenience accessors ({@link #value()}, {@link #offset()}, {@link #key()} {@link
@@ -35,25 +37,27 @@ import static io.confluent.parallelconsumer.internal.Documentation.getLinkHtmlTo
  * record.
  */
 @AllArgsConstructor
-@Value(staticConstructor = "of")
-@Getter(AccessLevel.NONE)
+@FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
+@ToString
+@EqualsAndHashCode
 public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
 
-    Map<TopicPartition, Set<RecordContext<K, V>>> records = new HashMap<>();
+    protected Map<TopicPartition, Set<RecordContextInternal<K, V>>> records = new HashMap<>();
 
-    public PollContext(List<WorkContainer<K, V>> workContainers) {
+    PollContext(List<WorkContainer<K, V>> workContainers) {
         for (var wc : workContainers) {
             TopicPartition topicPartition = wc.getTopicPartition();
             var recordSet = records.computeIfAbsent(topicPartition, ignore -> new HashSet<>());
-            recordSet.add(new RecordContext<>(wc));
+            recordSet.add(new RecordContextInternal<>(wc));
         }
     }
 
     /**
-     * Not public - not part of user API
+     * @return a flat {@link Stream} of {@link RecordContext}s, which wrap the {@link ConsumerRecord}s in this result
+     * set
      */
-    Stream<WorkContainer<K, V>> streamWorkContainers() {
-        return stream().map(RecordContext::getWorkContainer);
+    public Stream<RecordContextInternal<K, V>> streamInternal() {
+        return this.records.values().stream().flatMap(Collection::stream);
     }
 
     /**
@@ -147,15 +151,6 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
     }
 
     /**
-     * @return a flat {@link List} of {@link WorkContainer}s, which wrap the {@link ConsumerRecord}s in this result set
-     */
-    // todo package private - better move to separate class
-    public List<WorkContainer<K, V>> getWorkContainers() {
-        return streamWorkContainers().collect(Collectors.toList());
-    }
-
-
-    /**
      * @return a flat {@link Iterator} of the {@link RecordContext}s, which wrap the {@link ConsumerRecord}s in this
      * result set
      */
@@ -187,7 +182,18 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
      * ConsumerRecord}s in this result set
      */
     public Map<TopicPartition, Set<RecordContext<K, V>>> getByTopicPartitionMap() {
-        return Collections.unmodifiableMap(this.records);
+        Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
+        //Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
+//        return topicPartitionSetMap;
+        // have to do this because sets are covariant
+        // https://stackoverflow.com/questions/6319163/cant-cast-generic-sets
+        return this.records.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                                set -> set.getValue().stream()
+                                        .map(y -> (RecordContext<K, V>) y)
+                                        .collect(Collectors.toSet())
+                        )
+                );
     }
 
     /**

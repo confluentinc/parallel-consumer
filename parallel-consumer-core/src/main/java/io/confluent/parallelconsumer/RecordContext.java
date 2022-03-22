@@ -19,18 +19,20 @@ import java.util.Optional;
  * <p>
  * Includes all accessors (~getters) in {@link ConsumerRecord} via delegation ({@link Delegate}).
  *
- * @see #getFailureCount()
+ * @see #getNumberOfFailedAttempts()
  */
-@AllArgsConstructor
+
 @Builder(toBuilder = true)
-@Value
+@AllArgsConstructor
+@ToString
+@EqualsAndHashCode
 public class RecordContext<K, V> {
 
+    protected final WorkContainer<K, V> workContainer;
+
+    @Getter
     @Delegate
     ConsumerRecord<K, V> consumerRecord;
-
-    @Getter(AccessLevel.PACKAGE)
-    WorkContainer<K, V> workContainer;
 
     public RecordContext(WorkContainer<K, V> wc) {
         this.consumerRecord = wc.getCr();
@@ -50,7 +52,7 @@ public class RecordContext<K, V> {
     /**
      * @return the number of times this {@link ConsumerRecord} has failed processing already
      */
-    public int getFailureCount() {
+    public int getNumberOfFailedAttempts() {
         return workContainer.getNumberOfFailedAttempts();
     }
 

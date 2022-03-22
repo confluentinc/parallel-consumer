@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.vertx;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.vertx.core.AsyncResult;
@@ -163,7 +164,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
                                    Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
         // wrap single record function in batch function
-        Function<PollContext<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
+        Function<PollContextInternal<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
             Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context);
@@ -182,7 +183,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         super.supervisorLoop(userFuncWrapper, noOp);
     }
 
-    private void addVertxHooks(final PollContext<K, V> context, final Future<?> send) {
+    private void addVertxHooks(final PollContextInternal<K, V> context, final Future<?> send) {
         for (var wc : context.getWorkContainers()) {
             // attach internal handler
             wc.setWorkType(VERTX_TYPE);
@@ -210,7 +211,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     public void vertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
 
         // wrap single record function in batch function
-        Function<PollContext<K, V>, List<Future<?>>> userFuncWrapper = context -> {
+        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
             Future<?> send = carefullyRun(result, context);
@@ -229,11 +230,11 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     @Override
     public void batchVertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
 
-        Function<PollContext<K, V>, List<Future<?>>> userFuncWrapper = record -> {
+        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
 
-            Future<?> send = carefullyRun(result, record);
+            Future<?> send = carefullyRun(result, context);
 
-            addVertxHooks(record, send);
+            addVertxHooks(context, send);
 
             return UniLists.of(send);
         };

@@ -127,7 +127,7 @@ public class CoreApp {
 
         ParallelConsumerOptions.<String, String>builder()
                 .retryDelayProvider(recordContext -> {
-                    int numberOfFailedAttempts = recordContext.getFailureCount();
+                    int numberOfFailedAttempts = recordContext.getNumberOfFailedAttempts();
                     long delayMillis = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts) * 1000);
                     return Duration.ofMillis(delayMillis);
                 });
@@ -226,7 +226,7 @@ public class CoreApp {
 
     private String preparePayload(RecordContext<String, String> rc) {
         ConsumerRecord<String, String> consumerRecords = rc.getConsumerRecord();
-        int failureCount = rc.getFailureCount();
+        int failureCount = rc.getNumberOfFailedAttempts();
         return msg("{}, {}", consumerRecords, failureCount);
     }
 

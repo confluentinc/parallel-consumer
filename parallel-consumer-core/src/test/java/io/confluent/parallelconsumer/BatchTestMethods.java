@@ -219,8 +219,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         boolean contains = offsets.contains(FAILURE_TARGET);
         if (contains) {
             var target = pollBatch.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
-            var targetWc = target.getWorkContainer();
-            int numberOfFailedAttempts = targetWc.getNumberOfFailedAttempts();
+            int numberOfFailedAttempts = target.getNumberOfFailedAttempts();
             int targetAttempts = 3;
             if (numberOfFailedAttempts < targetAttempts) {
                 log.debug("Failing batch containing target offset {}", FAILURE_TARGET);
