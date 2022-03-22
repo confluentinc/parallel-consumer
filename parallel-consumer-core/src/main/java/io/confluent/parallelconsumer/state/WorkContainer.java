@@ -30,8 +30,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private final String DEFAULT_TYPE = "DEFAULT";
 
-    final static WallClock normalClock = new WallClock();
-
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
      * in the system of in flight.
@@ -103,15 +101,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
             return true;
         }
         Duration delay = getDelayUntilRetryDue(clock);
-        boolean negative = delay.isNegative() || delay.isZero();
+        boolean negative = delay.isNegative() || delay.isZero(); // for debug
         return negative;
-    }
-
-    /**
-     * @return time until it should be retried
-     */
-    public Duration getDelayUntilRetryDue() {
-        return getDelayUntilRetryDue(normalClock);
     }
 
     /**
@@ -119,11 +110,11 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
      */
     public Duration getDelayUntilRetryDue(WallClock clock) {
         Instant now = clock.getNow();
-        Temporal nextAttemptAt = tryAgainAt(clock);
+        Temporal nextAttemptAt = tryAgainAt();
         return Duration.between(now, nextAttemptAt);
     }
 
-    private Temporal tryAgainAt(WallClock clock) {
+    private Temporal tryAgainAt() {
         if (failedAt.isPresent()) {
             // previously failed, so add the delay to the last failed time
             Duration retryDelay = getRetryDelayConfig();
@@ -210,8 +201,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return getNumberOfFailedAttempts() > 0;
     }
 
-    public boolean isAvailableToTakeAsWork() {
+    public boolean isAvailableToTakeAsWork(WallClock clock) {
         // todo missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
-        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed(normalClock);
+        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed(clock);
     }
+
 }

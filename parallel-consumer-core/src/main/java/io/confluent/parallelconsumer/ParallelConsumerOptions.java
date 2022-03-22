@@ -206,6 +206,12 @@ public class ParallelConsumerOptions<K, V> {
     private final Integer batchSize;
 
     /**
+     * Configure the amount of delay a record experiences, before a warning is logged.
+     */
+    @Builder.Default
+    private final Duration thresholdForTimeSpendInQueueWarning = Duration.ofSeconds(10);
+
+    /**
      * @see #batchSize
      */
     public Optional<Integer> getBatchSize() {

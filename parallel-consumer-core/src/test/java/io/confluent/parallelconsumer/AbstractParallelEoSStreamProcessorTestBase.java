@@ -310,7 +310,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     protected void awaitForCommitExact(int offset) {
         log.debug("Waiting for EXACTLY commit offset {}", offset);
         await().timeout(defaultTimeout)
-                .failFast(msg("Commit was not exact - contained offsets that weren't {}", offset), () -> {
+                .failFast(msg("Commit was not exact - contained offsets that weren't '{}'", offset), () -> {
                     List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
                     return offsets.size() > 1 && !offsets.contains(offset);
                 })
