@@ -5,9 +5,9 @@ package io.confluent.parallelconsumer.state;
  */
 
 import com.google.common.truth.Truth;
-import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -24,10 +24,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.threeten.extra.MutableClock;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
@@ -50,14 +50,7 @@ class WorkManagerTest {
 
     int offset;
 
-    Instant time = Instant.now();
-
-    AdvancingWallClockProvider testClock = new AdvancingWallClockProvider() {
-        @Override
-        public Instant getNow() {
-            return time;
-        }
-    };
+    MutableClock time = MutableClock.epochUTC();
 
     @BeforeEach
     public void setup() {
@@ -69,7 +62,7 @@ class WorkManagerTest {
     private void setupWorkManager(ParallelConsumerOptions build) {
         offset = 0;
 
-        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), testClock);
+        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), time);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
@@ -258,29 +251,29 @@ class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, null, null);
-        assertThat(wc.hasDelayPassed(testClock)).isTrue(); // when new, there's no delay
-        wc.endFlight();
-        assertThat(wc.hasDelayPassed(testClock)).isFalse();
+        var wc = new WorkContainer<String, String>(0, null, null, WorkContainer.DEFAULT_TYPE, this.time);
+        assertThat(wc.hasDelayPassed()).isTrue(); // when new, there's no delay
+        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        assertThat(wc.hasDelayPassed()).isFalse();
         advanceClockBySlightlyLessThanDelay();
-        assertThat(wc.hasDelayPassed(testClock)).isFalse();
+        assertThat(wc.hasDelayPassed()).isFalse();
         advanceClockByDelay();
-        boolean actual = wc.hasDelayPassed(testClock);
+        boolean actual = wc.hasDelayPassed();
         assertThat(actual).isTrue();
     }
 
     private void advanceClockBySlightlyLessThanDelay() {
         Duration retryDelay = WorkContainer.defaultRetryDelay;
         Duration duration = retryDelay.dividedBy(2);
-        time = time.plus(duration);
+        time.add(duration);
     }
 
     private void advanceClockByDelay() {
-        time = time.plus(WorkContainer.defaultRetryDelay);
+        time.add(WorkContainer.defaultRetryDelay);
     }
 
     private void advanceClock(Duration by) {
-        time = time.plus(by);
+        time.add(by);
     }
 
     @Test

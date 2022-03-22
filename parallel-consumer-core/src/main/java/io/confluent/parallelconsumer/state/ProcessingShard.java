@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.RateLimiter;
@@ -48,13 +47,11 @@ public class ProcessingShard<K, V> {
 
     private final PartitionMonitor<K, V> pm;
 
-    private final WallClock clock;
-
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
     public boolean workIsWaitingToBeProcessed() {
         return entries.values().parallelStream()
-                .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork(clock));
+                .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
@@ -82,7 +79,7 @@ public class ProcessingShard<K, V> {
     public long getCountOfWorkAwaitingSelection() {
         return entries.values().parallelStream()
                 // todo missing pm.isBlocked(topicPartition) ?
-                .filter(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork(clock))
+                .filter(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork())
                 .count();
     }
 
@@ -102,7 +99,7 @@ public class ProcessingShard<K, V> {
 
             if (pm.couldBeTakenAsWork(workContainer)) {
 
-                if (workContainer.isAvailableToTakeAsWork(clock)) {
+                if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
@@ -143,7 +140,7 @@ public class ProcessingShard<K, V> {
     private void addToSlowWorkMaybe(ArrayList<WorkContainer<?, ?>> slowWork, WorkContainer<?, ?> workContainer) {
         var msgTemplate = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
         Duration timeInFlight = workContainer.getTimeInFlight();
-        var msg = msg(msgTemplate, workContainer, workContainer.hasDelayPassed(clock), workContainer.isNotInFlight(), !workContainer.isUserFunctionSucceeded(), timeInFlight);
+        var msg = msg(msgTemplate, workContainer, workContainer.hasDelayPassed(), workContainer.isNotInFlight(), !workContainer.isUserFunctionSucceeded(), timeInFlight);
         Duration slowThreshold = options.getThresholdForTimeSpendInQueueWarning();
         if (isGreaterThan(timeInFlight, slowThreshold)) {
             slowWork.add(workContainer);

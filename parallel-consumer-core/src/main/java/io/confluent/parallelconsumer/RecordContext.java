@@ -5,11 +5,11 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkContainer.Failure;
 import lombok.*;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
-import java.util.List;
+import java.time.Instant;
+import java.util.Optional;
 
 /**
  * Context information for the wrapped {@link ConsumerRecord}.
@@ -46,8 +46,8 @@ public class RecordContext<K, V> {
         return workContainer.getNumberOfFailedAttempts();
     }
 
-    public List<Failure> getFailureHistory() {
-        return workContainer.getFailureHistory();
+    public Optional<Instant> getLastFailureAt() {
+        return workContainer.getLastFailedAt();
     }
 }
 

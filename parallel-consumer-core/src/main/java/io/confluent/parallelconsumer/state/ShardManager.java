@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
-import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -16,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,7 +44,7 @@ public class ShardManager<K, V> {
     private final WorkManager<K, V> wm;
 
     @Getter(PRIVATE)
-    private final WallClock clock;
+    private final Clock clock;
 
     /**
      * Map of Object keys to Shard
@@ -60,7 +60,7 @@ public class ShardManager<K, V> {
     // todo performance: disable/remove if using partition order
     private final Map<Object, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue(getClock())));
+    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -185,7 +185,7 @@ public class ShardManager<K, V> {
         // could potentially remove from queue when in flight but that's messy and performance gain would be trivial
         for (WorkContainer<?, ?> workContainer : this.retryQueue) {
             if (workContainer.isNotInFlight())
-                return of(workContainer.getDelayUntilRetryDue(clock));
+                return of(workContainer.getDelayUntilRetryDue());
         }
         return empty();
     }

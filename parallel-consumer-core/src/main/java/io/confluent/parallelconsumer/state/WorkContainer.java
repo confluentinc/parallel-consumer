@@ -4,18 +4,23 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
@@ -23,9 +28,9 @@ import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 
 @Slf4j
 @EqualsAndHashCode
-public class WorkContainer<K, V> implements Comparable<WorkContainer> {
+public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
-    private final String DEFAULT_TYPE = "DEFAULT";
+    static final String DEFAULT_TYPE = "DEFAULT";
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -39,12 +44,22 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
      */
     @Getter
     @Setter
+    // todo change to enum, remove setter
     private String workType;
 
     @Getter
     private final ConsumerRecord<K, V> cr;
 
-    private final Optional<Instant> failedAt = Optional.empty();
+    private final Clock clock;
+
+    @Getter
+    private int numberOfFailedAttempts = 0;
+
+    @Getter
+    private Optional<Instant> lastFailedAt = Optional.empty();
+
+    @Getter
+    private Optional<Throwable> lastFailureReason;
 
     private boolean inFlight = false;
 
@@ -66,32 +81,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     // static instance so can't access generics - but don't need them as Options class ensures type is correct
     private static Function<Object, Duration> retryDelayProvider;
 
-    @AllArgsConstructor
-    @Value
-    public static class Failure {
-        Instant time;
-        Throwable cause;
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
+        Objects.requireNonNull(workType);
 
-        public Failure(Throwable e) {
-            this.time = Instant.now();
-            this.cause = e;
-        }
-    }
-
-    private final LinkedList<Failure> failureHistory = new LinkedList<>();
-
-    public List<Failure> getFailureHistory() {
-        return Collections.unmodifiableList(failureHistory);
-    }
-
-    public int getNumberOfFailedAttempts() {
-        return failureHistory.size();
-    }
-
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider) {
         this.epoch = epoch;
         this.cr = cr;
-        workType = DEFAULT_TYPE;
+        this.workType = workType;
+        this.clock = clock;
 
         if (WorkContainer.retryDelayProvider == null) { // only set once
             // static instance so can't access generics - but don't need them as Options class ensures type is correct
@@ -100,10 +96,11 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType) {
-        this(epoch, cr, retryDelayProvider);
+        this(epoch, cr, retryDelayProvider, workType, Clock.systemDefaultZone());
+    }
 
-        Objects.requireNonNull(workType);
-        this.workType = workType;
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider) {
+        this(epoch, cr, retryDelayProvider, DEFAULT_TYPE, Clock.systemDefaultZone());
     }
 
     public void endFlight() {
@@ -111,12 +108,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         inFlight = false;
     }
 
-    public boolean hasDelayPassed(WallClock clock) {
+    public boolean hasDelayPassed() {
         if (!hasPreviouslyFailed()) {
             // if never failed, there is no artificial delay, so "delay" has always passed
             return true;
         }
-        Duration delay = getDelayUntilRetryDue(clock);
+        Duration delay = getDelayUntilRetryDue();
         boolean negative = delay.isNegative() || delay.isZero(); // for debug
         return negative;
     }
@@ -124,17 +121,17 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     /**
      * @return time until it should be retried
      */
-    public Duration getDelayUntilRetryDue(WallClock clock) {
-        Instant now = clock.getNow();
+    public Duration getDelayUntilRetryDue() {
+        Instant now = clock.instant();
         Temporal nextAttemptAt = tryAgainAt();
         return Duration.between(now, nextAttemptAt);
     }
 
     private Temporal tryAgainAt() {
-        if (failedAt.isPresent()) {
+        if (lastFailedAt.isPresent()) {
             // previously failed, so add the delay to the last failed time
             Duration retryDelay = getRetryDelayConfig();
-            return failedAt.get().plus(retryDelay);
+            return lastFailedAt.get().plus(retryDelay);
         } else {
             // never failed, so no try again delay
             return Instant.now();
@@ -191,12 +188,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     private void updateFailureHistory(Throwable cause) {
-        Failure e = new Failure(cause);
-        failureHistory.addFirst(e);
-        // todo get limit from options
-        if (failureHistory.size() > 10) {
-            failureHistory.removeLast();
-        }
+        numberOfFailedAttempts++;
+        lastFailedAt = Optional.of(Instant.now(clock));
+        lastFailureReason = Optional.of(cause);
     }
 
     public boolean isUserFunctionComplete() {
@@ -229,9 +223,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return getNumberOfFailedAttempts() > 0;
     }
 
-    public boolean isAvailableToTakeAsWork(WallClock clock) {
+    public boolean isAvailableToTakeAsWork() {
         // todo missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
-        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed(clock);
+        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
     }
 
 }

@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.WallClock;
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContext;
@@ -28,6 +28,7 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.io.Closeable;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -62,7 +63,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Injectable clock for testing
      */
     @Setter(AccessLevel.PACKAGE)
-    private WallClock clock = new WallClock();
+    private Clock clock = TimeUtils.getClock();
 
     /**
      * Kafka's default auto commit frequency. https://docs.confluent.io/platform/current/clients/consumer.html#id1
@@ -208,7 +209,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, new WallClock());
+        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
@@ -1033,7 +1034,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private Duration getTimeSinceLastCheck() {
-        Instant now = clock.getNow();
+        Instant now = clock.instant();
         return Duration.between(lastCommitCheckTime, now);
     }
 
