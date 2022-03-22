@@ -5,7 +5,10 @@
 
 // git log --pretty="* %s" 0.3.0.2..HEAD
 
+// only show TOC if this is the root document (not in the README)
+ifndef::github_name[]
 toc::[]
+endif::[]
 
 == v0.4.0.0
 // https://github.com/confluentinc/parallel-consumer/releases/tag/0.4.0.0
