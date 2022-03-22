@@ -987,4 +987,6 @@ Also the information density in the map (i.e. a single not yet completed message
 
 http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.
 
-include::{project_root}/CHANGELOG.adoc[leveloffset=+1]
+:leveloffset: +1
+include::{project_root}/CHANGELOG.adoc[]
+//:leveloffset: -1 - Duplicate key leveloffset (attempted merging values +1 and -1): https://github.com/whelk-io/asciidoc-template-maven-plugin/issues/118

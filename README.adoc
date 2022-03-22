@@ -30,6 +30,7 @@
 // leave it commented out when committing work)
 //:project_root: ../../
 
+note: {docdir}
 
 ifdef::env-github[]
 :tip-caption: :bulb:
@@ -1123,6 +1124,7 @@ Also the information density in the map (i.e. a single not yet completed message
 
 http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.
 
+:leveloffset: +1
 :toc: macro
 :toclevels: 1
 
@@ -1320,3 +1322,4 @@ without operational burden or harming the clusters performance
 ** Java 8 compatibility
 ** Throttle control and broker liveliness management
 ** Clean draining shutdown cycle
+//:leveloffset: -1 - Duplicate key leveloffset (attempted merging values +1 and -1): https://github.com/whelk-io/asciidoc-template-maven-plugin/issues/118
