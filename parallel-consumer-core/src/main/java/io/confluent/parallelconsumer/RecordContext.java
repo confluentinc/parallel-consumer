@@ -4,15 +4,20 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.state.ConsumerRecordId;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.*;
+import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 
 import java.time.Instant;
 import java.util.Optional;
 
 /**
  * Context information for the wrapped {@link ConsumerRecord}.
+ * <p>
+ * Includes all accessors (~getters) in {@link ConsumerRecord} via delegation ({@link Delegate}).
  *
  * @see #getFailureCount()
  */
@@ -21,6 +26,7 @@ import java.util.Optional;
 @Value
 public class RecordContext<K, V> {
 
+    @Delegate
     ConsumerRecord<K, V> consumerRecord;
 
     @Getter(AccessLevel.PACKAGE)
@@ -32,11 +38,13 @@ public class RecordContext<K, V> {
     }
 
     /**
-     * @return the offset of the wrapped record
-     * @see ConsumerRecord#offset()
+     * A useful ID class for consumer records.
+     *
+     * @return the ID for the contained record
      */
-    public long offset() {
-        return consumerRecord.offset();
+    public ConsumerRecordId getRecordId() {
+        var topicPartition = new TopicPartition(topic(), partition());
+        return new ConsumerRecordId(topicPartition, offset());
     }
 
     /**

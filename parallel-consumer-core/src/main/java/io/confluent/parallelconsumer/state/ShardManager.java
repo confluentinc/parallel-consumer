@@ -137,7 +137,7 @@ public class ShardManager<K, V> {
     public void addWorkContainer(final WorkContainer<K, V> wc) {
         Object shardKey = computeShardKey(wc.getCr());
         var shard = processingShards.computeIfAbsent(shardKey,
-                (ignore) -> new ProcessingShard<>(shardKey, options, wm.getPm(), clock));
+                (ignore) -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
     }
 
