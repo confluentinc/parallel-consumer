@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -19,7 +20,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -129,20 +129,20 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
     }
 
     /*
-     * Makes the commit history look like the {@link MockProducer}s one so we can use the same assert method.
+     * Makes the commit history look like the {@link MockProducer}s one, so we can use the same assert method.
      *
      * @see KafkaTestUtils#assertCommitLists(List, List, Optional)
      */
-    public List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> getCommitHistoryWithGropuId() {
+    public List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> getCommitHistoryWithGroupId() {
         var commitHistoryInt = getCommitHistoryInt();
         return injectConsumerGroupId(commitHistoryInt);
     }
 
     @Override
     @SneakyThrows
-    public synchronized void close(final long timeout, final TimeUnit unit) {
+    public synchronized void close(Duration timeout) {
         revokeAssignment();
-        super.close(timeout, unit);
+        super.close(timeout);
     }
 
     /**

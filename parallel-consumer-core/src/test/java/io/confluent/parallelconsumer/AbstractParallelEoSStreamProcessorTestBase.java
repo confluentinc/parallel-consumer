@@ -413,7 +413,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         if (isUsingTransactionalProducer()) {
             ktu.assertCommitLists(producerSpy, offsets, Optional.empty());
         } else {
-            List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistoryWithGropuId = consumerSpy.getCommitHistoryWithGropuId();
+            List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistoryWithGropuId = consumerSpy.getCommitHistoryWithGroupId();
             ktu.assertCommitLists(commitHistoryWithGropuId, offsets, Optional.empty());
         }
     }
@@ -422,7 +422,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         if (isUsingTransactionalProducer()) {
             return producerSpy.consumerGroupOffsetsHistory();
         } else {
-            return consumerSpy.getCommitHistoryWithGropuId();
+            return consumerSpy.getCommitHistoryWithGroupId();
         }
     }
 
