@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -31,7 +30,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
 
     private static final AtomicInteger RECORD_SET_KEY_GENERATOR = new AtomicInteger();
 
-    private static class TestUserFunction implements Consumer<ConsumerRecord<String, String>> {
+    private static class TestUserFunction implements Consumer<PollContext<String, String>> {
 
         private final AtomicInteger numProcessedRecords = new AtomicInteger();
 
@@ -53,7 +52,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         }
 
         @Override
-        public void accept(ConsumerRecord<String, String> t) {
+        public void accept(PollContext<String, String> t) {
             log.debug("Received: {}", t);
             numInFlightRecords.incrementAndGet();
             try {
