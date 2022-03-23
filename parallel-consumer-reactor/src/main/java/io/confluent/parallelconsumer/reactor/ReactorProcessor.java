@@ -91,7 +91,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
             }
 
             // attach internal handler
-            pollContext.getWorkContainers()
+            pollContext.streamWorkContainers()
                     .forEach(x -> x.setWorkType(REACTOR_TYPE));
 
             Publisher<?> publisher = carefullyRun(reactorFunction, pollContext.getPollContext());
@@ -107,17 +107,17 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
                     })
                     .doOnComplete(() -> {
                         log.debug("Reactor success (doOnComplete)");
-                        for (var wc : pollContext.getWorkContainers()) {
+                        pollContext.streamWorkContainers().forEach(wc -> {
                             wc.onUserFunctionSuccess();
                             addToMailbox(wc);
-                        }
+                        });
                     })
                     .doOnError(throwable -> {
                         log.error("Reactor fail signal", throwable);
-                        for (var wc : pollContext.getWorkContainers()) {
+                        pollContext.streamWorkContainers().forEach(wc -> {
                             wc.onUserFunctionFailure(throwable);
                             addToMailbox(wc);
-                        }
+                        });
                     })
                     // cause users Publisher to run a thread pool, if it hasn't already - this is a crucial magical part
                     .subscribeOn(getScheduler())

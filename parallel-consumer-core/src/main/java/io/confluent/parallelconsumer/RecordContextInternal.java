@@ -20,6 +20,6 @@ public class RecordContextInternal<K, V> {
     }
 
     public WorkContainer<K, V> getWorkContainer() {
-        return this.recordContext.getWorkContainer();
+        return getRecordContext().getWorkContainer();
     }
 }

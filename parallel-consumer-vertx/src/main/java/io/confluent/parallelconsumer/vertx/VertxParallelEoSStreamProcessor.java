@@ -184,7 +184,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     private void addVertxHooks(final PollContextInternal<K, V> context, final Future<?> send) {
-        for (var wc : context.getWorkContainers()) {
+        context.streamWorkContainers().forEach(wc -> {
             // attach internal handler
             wc.setWorkType(VERTX_TYPE);
 
@@ -204,7 +204,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
                 log.trace("Running plugin hook");
                 this.onVertxCompleteHook.ifPresent(Runnable::run);
             });
-        }
+        });
     }
 
     @Override
