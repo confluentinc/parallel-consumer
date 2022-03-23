@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.WallClock;
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
@@ -18,6 +18,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
@@ -74,26 +75,24 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    private final WallClock clock;
-
     public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this(options, consumer, new DynamicLoadFactor(), new WallClock());
+        this(options, consumer, new DynamicLoadFactor(), TimeUtils.getClock());
     }
 
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, WallClock clock) {
+    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
         this(options, consumer, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor, WallClock clock) {
+    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.wmbm = new WorkMailBoxManager<>();
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionMonitor<>(consumer, sm);
-        this.clock = clock;
+        this.pm = new PartitionMonitor<>(consumer, sm, options, clock);
     }
 
     /**
@@ -166,14 +165,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Get work with no limit on quantity, useful for testing.
      */
-    public <R> List<WorkContainer<K, V>> getWorkIfAvailable() {
+    public List<WorkContainer<K, V>> getWorkIfAvailable() {
         return getWorkIfAvailable(Integer.MAX_VALUE);
     }
 
     /**
      * Depth first work retrieval.
      */
-    // todo refactor - move into it's own class perhaps
     public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
         // optimise early
         if (requestedMaxWorkToRetrieve < 1) {
@@ -213,11 +211,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return ingested;
     }
 
-    // todo move PM or SM?
-    public void onSuccess(WorkContainer<K, V> wc) {
+    public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
-        wc.succeed();
+        wc.endFlight();
 
         // update as we go
         pm.onSuccess(wc);
@@ -238,9 +235,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         pm.onOffsetCommitSuccess(committed);
     }
 
-    public void onFailure(WorkContainer<K, V> wc) {
+    public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        wc.fail(clock);
+        wc.endFlight();
         sm.onFailure(wc);
         numberRecordsOutForProcessing--;
     }
@@ -345,9 +342,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             Optional<Boolean> userFunctionSucceeded = wc.getUserFunctionSucceeded();
             if (userFunctionSucceeded.isPresent()) {
                 if (TRUE.equals(userFunctionSucceeded.get())) {
-                    onSuccess(wc);
+                    onSuccessResult(wc);
                 } else {
-                    onFailure(wc);
+                    onFailureResult(wc);
                 }
             } else {
                 throw new IllegalStateException("Work returned, but without a success flag - report a bug");
@@ -357,12 +354,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isNoRecordsOutForProcessing() {
         return getNumberRecordsOutForProcessing() == 0;
-    }
-
-    // todo replace raw ConsumerRecord with read only context object wrapper #216
-    public Optional<WorkContainer<K, V>> getWorkContainerFor(ConsumerRecord<K, V> rec) {
-        ShardManager<K, V> shard = getSm();
-        return shard.getWorkContainerForRecord(rec);
     }
 
     public Optional<Duration> getLowestRetryTime() {

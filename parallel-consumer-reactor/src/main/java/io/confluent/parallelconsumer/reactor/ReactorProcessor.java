@@ -5,7 +5,8 @@ package io.confluent.parallelconsumer.reactor;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
@@ -20,13 +21,11 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 /**
@@ -43,7 +42,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
     private final Supplier<Scheduler> schedulerSupplier;
     private final Supplier<Scheduler> defaultSchedulerSupplier = Schedulers::boundedElastic;
 
-    public ReactorProcessor(ParallelConsumerOptions options, Supplier<Scheduler> newSchedulerSupplier) {
+    public ReactorProcessor(ParallelConsumerOptions<K, V> options, Supplier<Scheduler> newSchedulerSupplier) {
         super(options);
         this.schedulerSupplier = (newSchedulerSupplier == null) ? defaultSchedulerSupplier : newSchedulerSupplier;
     }
@@ -67,50 +66,35 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
     }
 
     /**
-     * Like {@link ParallelStreamProcessor#pollBatch} but for Reactor.
-     * <p>
-     * Register a function to be applied to a batch of messages.
+     * Register a function to be to polled messages.
      * <p>
      * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
      * <p>
-     * The system will treat the messages as a set, so if an error is thrown by the user code, then all messages will be
-     * marked as failed and be retried (Note that when they are retried, there is no guarantee they will all be in the
-     * same batch again). So if you're going to process messages individually, then don't use this function.
-     * <p>
-     * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
-     * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      *
      * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
      *                        their work.
-     * @see ParallelStreamProcessor#pollBatch
-     * @see ParallelConsumerOptions#getBatchSize()
+     * @see #react(Function)
+     * @see ParallelConsumerOptions
+     * @see ParallelConsumerOptions#batchSize
+     * @see io.confluent.parallelconsumer.ParallelStreamProcessor#poll
      */
-    public void reactBatch(Function<List<ConsumerRecord<K, V>>, Publisher<?>> reactorFunction) {
-        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recList) -> {
+    public void react(Function<PollContext<K, V>, Publisher<?>> reactorFunction) {
+
+        Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = pollContext -> {
 
             if (log.isTraceEnabled()) {
                 log.trace("Record list ({}), executing void function...",
-                        recList.stream()
+                        pollContext.streamConsumerRecords()
                                 .map(ConsumerRecord::offset)
                                 .collect(Collectors.toList())
                 );
             }
 
-            for (var rec : recList) {
-                // attach internal handler
+            // attach internal handler
+            pollContext.streamWorkContainers()
+                    .forEach(x -> x.setWorkType(REACTOR_TYPE));
 
-                WorkContainer<K, V> wc = wm.getWorkContainerFor(rec).get();
-
-                if (wc == null) {
-                    // throw it - will retry
-                    // should be fixed by moving for TreeMap to ConcurrentSkipListMap
-                    throw new IllegalStateException(msg("WC for record is null! {}", rec));
-                } else {
-                    wc.setWorkType(REACTOR_TYPE);
-                }
-            }
-
-            Publisher<?> publisher = carefullyRun(reactorFunction, recList);
+            Publisher<?> publisher = carefullyRun(reactorFunction, pollContext.getPollContext());
 
             Disposable flux = Flux.from(publisher)
                     // using #subscribeOn so this should be redundant, but testing has shown otherwise
@@ -123,30 +107,17 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
                     })
                     .doOnComplete(() -> {
                         log.debug("Reactor success (doOnComplete)");
-                        for (var rec : recList) {
-                            // todo Optional here is bad smell - shouldn't happen. See ReactorPCTest#concurrencyTest, context object and shard object. Fails when our for processing exceeds MAX limit
-                            Optional<WorkContainer<K, V>> wcOpt = wm.getWorkContainerFor(rec);
-                            if (wcOpt.isPresent()) {
-                                WorkContainer<K, V> wc = wcOpt.get();
-                                wc.onUserFunctionSuccess();
-                                addToMailbox(wc);
-                            } else {
-                                log.warn("WorkContainer for rec removed already: {}", rec);
-                            }
-                        }
+                        pollContext.streamWorkContainers().forEach(wc -> {
+                            wc.onUserFunctionSuccess();
+                            addToMailbox(wc);
+                        });
                     })
                     .doOnError(throwable -> {
                         log.error("Reactor fail signal", throwable);
-                        for (var rec : recList) {
-                            Optional<WorkContainer<K, V>> wcOpt = wm.getWorkContainerFor(rec);
-                            if (wcOpt.isPresent()) {
-                                var wc = wcOpt.get();
-                                wc.onUserFunctionFailure();
-                                addToMailbox(wc);
-                            } else {
-                                log.warn("WorkContainer for rec removed already: {}", rec);
-                            }
-                        }
+                        pollContext.streamWorkContainers().forEach(wc -> {
+                            wc.onUserFunctionFailure(throwable);
+                            addToMailbox(wc);
+                        });
                     })
                     // cause users Publisher to run a thread pool, if it hasn't already - this is a crucial magical part
                     .subscribeOn(getScheduler())
@@ -159,34 +130,6 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
         //
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
         supervisorLoop(wrappedUserFunc, voidCallBack);
-    }
-
-    /**
-     * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
-     * <p>
-     * Like {@link #reactBatch} but no batching - single message at a time.
-     *
-     * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
-     *                        their work.
-     * @see #reactBatch(Function)
-     */
-    public void react(Function<ConsumerRecord<K, V>, Publisher<?>> reactorFunction) {
-        // wrap single record function in batch function
-        Function<List<ConsumerRecord<K, V>>, Publisher<?>> batchReactorFunctionWrapper = (recordList) -> {
-            if (recordList.size() != 1) {
-                throw new IllegalArgumentException("Bug: Function only takes a single element");
-            }
-            var consumerRecord = recordList.get(0); // will always only have one
-            log.trace("Consumed a record ({}), executing void function...", consumerRecord.offset());
-
-            Publisher<?> publisher = carefullyRun(reactorFunction, consumerRecord);
-
-            log.trace("asyncPoll - user function finished ok.");
-            return publisher;
-        };
-
-        //
-        reactBatch(batchReactorFunctionWrapper);
     }
 
     private Scheduler getScheduler() {

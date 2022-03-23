@@ -3,7 +3,10 @@ package io.confluent.parallelconsumer.vertx;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.vertx.core.AsyncResult;
@@ -20,7 +23,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.utils.Time;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -123,10 +125,10 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     @Override
-    public void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
+    public void vertxHttpReqInfo(Function<PollContext<K, V>, RequestInfo> requestInfoFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
-        vertxHttpRequest((WebClient webClient, ConsumerRecord<K, V> rec) -> {
+        vertxHttpRequest((WebClient webClient, PollContext<K, V> rec) -> {
             RequestInfo reqInf = carefullyRun(requestInfoFunction, rec);
 
             HttpRequest<Buffer> req = webClient.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
@@ -139,7 +141,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     @Override
-    public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
+    public void vertxHttpRequest(BiFunction<WebClient, PollContext<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
 
@@ -158,23 +160,19 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     @Override
-    public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
+    public void vertxHttpWebClient(BiFunction<WebClient, PollContext<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
                                    Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
         // wrap single record function in batch function
-        Function<List<ConsumerRecord<K, V>>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (recordList) -> {
-            if (recordList.size() != 1) {
-                throw new IllegalArgumentException("Bug: Function only takes a single element");
-            }
-            var consumerRecord = recordList.get(0); // will always only have one
-            log.trace("Consumed a record ({}), executing void function...", consumerRecord.offset());
+        Function<PollContextInternal<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
+            log.trace("Consumed a record ({}), executing void function...", context);
 
-            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, consumerRecord);
+            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context.getPollContext());
 
             // execute user's onSend callback
             onWebRequestSentCallback.accept(futureWebResponse);
 
-            addVertxHooks(consumerRecord, futureWebResponse);
+            addVertxHooks(context, futureWebResponse);
 
             return UniLists.of(futureWebResponse);
         };
@@ -185,15 +183,9 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         super.supervisorLoop(userFuncWrapper, noOp);
     }
 
-    private void addVertxHooks(ConsumerRecord<K, V> consumerRecord, Future<?> send) {
-        addVertxHooks(UniLists.of(consumerRecord), send);
-    }
-
-    private void addVertxHooks(final List<ConsumerRecord<K, V>> recordList, final Future<?> send) {
-        for (var consumerRecord : recordList) {
+    private void addVertxHooks(final PollContextInternal<K, V> context, final Future<?> send) {
+        context.streamWorkContainers().forEach(wc -> {
             // attach internal handler
-            // todo - refactor: Poll Context object for API #223
-            WorkContainer<K, V> wc = wm.getSm().getWorkContainerForRecord(consumerRecord).get();
             wc.setWorkType(VERTX_TYPE);
 
             send.onSuccess(h -> {
@@ -203,7 +195,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             });
             send.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
-                wc.onUserFunctionFailure();
+                wc.onUserFunctionFailure(h);
                 addToMailbox(wc);
             });
 
@@ -212,23 +204,19 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
                 log.trace("Running plugin hook");
                 this.onVertxCompleteHook.ifPresent(Runnable::run);
             });
-        }
+        });
     }
 
     @Override
-    public void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result) {
+    public void vertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
 
         // wrap single record function in batch function
-        Function<List<ConsumerRecord<K, V>>, List<Future<?>>> userFuncWrapper = recordList -> {
-            if (recordList.size() != 1) {
-                throw new IllegalArgumentException("Bug: Function only takes a single element");
-            }
-            var consumerRecord = recordList.get(0); // will always only have one
-            log.trace("Consumed a record ({}), executing void function...", consumerRecord.offset());
+        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
+            log.trace("Consumed a record ({}), executing void function...", context);
 
-            Future<?> send = carefullyRun(result, consumerRecord);
+            Future<?> send = carefullyRun(result, context.getPollContext());
 
-            addVertxHooks(consumerRecord, send);
+            addVertxHooks(context, send);
 
             return UniLists.of(send);
         };
@@ -240,13 +228,13 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     @Override
-    public void batchVertxFuture(final Function<List<ConsumerRecord<K, V>>, Future<?>> result) {
+    public void batchVertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
 
-        Function<List<ConsumerRecord<K, V>>, List<Future<?>>> userFuncWrapper = record -> {
+        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
 
-            Future<?> send = carefullyRun(result, record);
+            Future<?> send = carefullyRun(result, context.getPollContext());
 
-            addVertxHooks(record, send);
+            addVertxHooks(context, send);
 
             return UniLists.of(send);
         };

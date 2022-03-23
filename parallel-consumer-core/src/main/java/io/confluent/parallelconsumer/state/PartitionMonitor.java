@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
@@ -21,6 +22,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +55,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
+    private final ParallelConsumerOptions options;
+
     /**
      * Hold the tracking state for each of our managed partitions.
      */
@@ -74,6 +78,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * chances no work has completed in the last second.
      */
     private final AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
+
+    final private Clock clock;
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         // may cause the system to wait for a rebalance to finish
@@ -427,7 +433,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 return false;
             } else {
                 int currentPartitionEpoch = getEpoch(rec);
-                var wc = new WorkContainer<>(currentPartitionEpoch, rec);
+                //noinspection unchecked - Lombok builder getter erases generics
+                var wc = new WorkContainer<K, V>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
 
                 sm.addWorkContainer(wc);
 

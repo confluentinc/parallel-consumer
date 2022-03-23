@@ -5,10 +5,12 @@ package io.confluent.parallelconsumer.state;
  */
 
 import com.google.common.truth.Truth;
-import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -24,10 +26,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.threeten.extra.MutableClock;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
@@ -50,14 +52,7 @@ class WorkManagerTest {
 
     int offset;
 
-    Instant time = Instant.now();
-
-    AdvancingWallClockProvider testClock = new AdvancingWallClockProvider() {
-        @Override
-        public Instant getNow() {
-            return time;
-        }
-    };
+    MutableClock time = MutableClock.epochUTC();
 
     @BeforeEach
     public void setup() {
@@ -69,7 +64,7 @@ class WorkManagerTest {
     private void setupWorkManager(ParallelConsumerOptions build) {
         offset = 0;
 
-        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), testClock);
+        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), time);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
@@ -113,7 +108,7 @@ class WorkManagerTest {
         assertThat(gottenWork).hasSize(1);
         assertOffsets(gottenWork, of(0));
 
-        wm.onSuccess(gottenWork.get(0));
+        wm.onSuccessResult(gottenWork.get(0));
 
         gottenWork = wm.getWorkIfAvailable(max);
         assertThat(gottenWork).hasSize(1);
@@ -122,51 +117,82 @@ class WorkManagerTest {
 
     @Test
     void testUnorderedAndDelayed() {
-        setupWorkManager(ParallelConsumerOptions.builder().ordering(UNORDERED).build());
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .build());
         registerSomeWork();
 
         int max = 2;
 
-        var works = wm.getWorkIfAvailable(max);
-        assertThat(works).hasSize(2);
-        assertOffsets(works, of(0, 1));
+        {
+            var workRetrieved = wm.getWorkIfAvailable(max);
+            assertThat(workRetrieved).hasSize(2);
+            assertOffsets(workRetrieved, of(0, 1));
 
-        wm.onSuccess(works.get(0));
-        wm.onFailure(works.get(1));
+            // pass first, fail second
+            WorkContainer<String, String> succeed = workRetrieved.get(0);
+            succeed(succeed);
+            WorkContainer<String, String> fail = workRetrieved.get(1);
+            fail(fail);
+        }
 
-        works = wm.getWorkIfAvailable(max);
-        assertOffsets(works, of(2));
+        {
+            var workRetrieved = wm.getWorkIfAvailable(max);
+            assertOffsets(workRetrieved, of(2),
+                    "no order restriction, 1's delay won't have passed - should get remaining in queue not yet failed");
 
-        wm.onSuccess(works.get(0));
+            WorkContainer<String, String> succeed = workRetrieved.get(0);
+            succeed(succeed);
+        }
 
-        works = wm.getWorkIfAvailable(max);
-        assertOffsets(works, of());
+        {
+            var workRetrieved = wm.getWorkIfAvailable(max);
+            assertOffsets(workRetrieved, of(), "delay won't have passed so should not retrieve anything");
 
-        advanceClockBySlightlyLessThanDelay();
+            advanceClockBySlightlyLessThanDelay();
+        }
 
-        works = wm.getWorkIfAvailable(max);
-        assertOffsets(works, of());
+        {
+            var workRetrieved = wm.getWorkIfAvailable(max);
+            assertOffsets(workRetrieved, of());
 
-        advanceClockByDelay();
+            advanceClockByDelay();
+        }
 
-        works = wm.getWorkIfAvailable(max);
-        assertOffsets(works, of(1));
-        wm.onSuccess(works.get(0));
+        {
+            var workRetrieved = wm.getWorkIfAvailable(max);
+            assertOffsets(workRetrieved, of(1),
+                    "should retrieve 1 given clock has been advanced and retry delay should be over");
+            WorkContainer<String, String> succeed = workRetrieved.get(0);
+            succeed(succeed);
+        }
 
         assertThat(successfulWork)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(of(0, 2, 1));
     }
 
+    private void succeed(WorkContainer<String, String> succeed) {
+        succeed.onUserFunctionSuccess();
+        wm.onSuccessResult(succeed);
+    }
+
     /**
      * Checks the offsets of the work, matches the offsets in the provided list
+     *
+     * @deprecated use {@link CommitHistorySubject} or similar instead
      */
     private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>>
-    assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
+    assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected, String msg) {
         return assertThat(works)
-                .as("offsets of work given")
+                .as(msg)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(expected);
+    }
+
+    private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>>
+    assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected) {
+        return assertOffsets(works, expected, "offsets of work given");
     }
 
     @Test
@@ -187,7 +213,7 @@ class WorkManagerTest {
         works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of()); // should be blocked by in flight
 
-        wm.onSuccess(w);
+        succeed(w);
 
         works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1));
@@ -214,7 +240,7 @@ class WorkManagerTest {
 
         // fail the work
         var wc = works.get(0);
-        wm.onFailure(wc);
+        fail(wc);
 
         // nothing available to get
         works = wm.getWorkIfAvailable(maxWorkToGet);
@@ -228,7 +254,7 @@ class WorkManagerTest {
         assertOffsets(works, of(0));
 
         wc = works.get(0);
-        wm.onFailure(wc);
+        fail(wc);
 
         advanceClock(wc.getRetryDelayConfig().minus(ofSeconds(1)));
 
@@ -240,17 +266,17 @@ class WorkManagerTest {
 
         works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(0));
-        wm.onSuccess(works.get(0));
+        succeed(works.get(0));
 
         assertOffsets(successfulWork, of(0));
 
         works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(1));
-        wm.onSuccess(works.get(0));
+        succeed(works.get(0));
 
         works = wm.getWorkIfAvailable(maxWorkToGet);
         assertOffsets(works, of(2));
-        wm.onSuccess(works.get(0));
+        succeed(works.get(0));
 
         // check all published in the end
         assertOffsets(successfulWork, of(0, 1, 2));
@@ -258,29 +284,29 @@ class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, null);
-        assertThat(wc.hasDelayPassed(testClock)).isTrue(); // when new, there's no delay
-        wc.fail(testClock);
-        assertThat(wc.hasDelayPassed(testClock)).isFalse();
+        var wc = new WorkContainer<String, String>(0, null, null, WorkContainer.DEFAULT_TYPE, this.time);
+        assertThat(wc.hasDelayPassed()).isTrue(); // when new, there's no delay
+        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        assertThat(wc.hasDelayPassed()).isFalse();
         advanceClockBySlightlyLessThanDelay();
-        assertThat(wc.hasDelayPassed(testClock)).isFalse();
+        assertThat(wc.hasDelayPassed()).isFalse();
         advanceClockByDelay();
-        boolean actual = wc.hasDelayPassed(testClock);
+        boolean actual = wc.hasDelayPassed();
         assertThat(actual).isTrue();
     }
 
     private void advanceClockBySlightlyLessThanDelay() {
         Duration retryDelay = WorkContainer.defaultRetryDelay;
         Duration duration = retryDelay.dividedBy(2);
-        time = time.plus(duration);
+        time.add(duration);
     }
 
     private void advanceClockByDelay() {
-        time = time.plus(WorkContainer.defaultRetryDelay);
+        time.add(WorkContainer.defaultRetryDelay);
     }
 
     private void advanceClock(Duration by) {
-        time = time.plus(by);
+        time.add(by);
     }
 
     @Test
@@ -312,8 +338,8 @@ class WorkManagerTest {
         assertOffsets(works, of(0, 1, 2, 6));
 
         // fail some
-        wm.onFailure(works.get(1));
-        wm.onFailure(works.get(3));
+        fail(works.get(1));
+        fail(works.get(3));
 
         //
         works = wm.getWorkIfAvailable(max);
@@ -325,6 +351,11 @@ class WorkManagerTest {
         //
         works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1, 6));
+    }
+
+    private void fail(WorkContainer<String, String> wc) {
+        wc.onUserFunctionFailure(null);
+        wm.onFailureResult(wc);
     }
 
     @Test
@@ -428,7 +459,7 @@ class WorkManagerTest {
 
     private void successAll(List<WorkContainer<String, String>> works) {
         for (WorkContainer<String, String> work : works) {
-            wm.onSuccess(work);
+            wm.onSuccessResult(work);
         }
     }
 
@@ -524,7 +555,7 @@ class WorkManagerTest {
 
         var treeMap = new TreeMap<Long, WorkContainer<String, String>>();
         for (ConsumerRecord<String, String> record : records) {
-            treeMap.put(record.offset(), new WorkContainer<>(0, record));
+            treeMap.put(record.offset(), new WorkContainer<>(0, record, null, TimeUtils.getClock()));
         }
 
         // read back, assert correct order
@@ -551,8 +582,7 @@ class WorkManagerTest {
 
         //
         for (var w : work) {
-            w.onUserFunctionSuccess();
-            wm.onSuccess(w);
+            succeed(w);
         }
 
         //

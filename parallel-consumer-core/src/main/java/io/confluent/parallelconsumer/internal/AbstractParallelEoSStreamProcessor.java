@@ -4,9 +4,10 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.WallClock;
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.AccessLevel;
@@ -22,12 +23,12 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
-import pl.tlinkowski.unij.api.UniLists;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.io.Closeable;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -62,7 +63,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Injectable clock for testing
      */
     @Setter(AccessLevel.PACKAGE)
-    private WallClock clock = new WallClock();
+    private Clock clock = TimeUtils.getClock();
 
     /**
      * Kafka's default auto commit frequency. https://docs.confluent.io/platform/current/clients/consumer.html#id1
@@ -191,7 +192,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see ParallelConsumerOptions
      */
-    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions newOptions) {
+    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
@@ -208,7 +209,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, new WallClock());
+        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
@@ -557,7 +558,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see #supervisorLoop(Function, Consumer)
      */
-    protected <R> void supervisorLoop(Function<List<ConsumerRecord<K, V>>, List<R>> userFunction,
+    protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
         if (state != State.unused) {
             throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
@@ -587,7 +588,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.blockableControlThread = controlThread;
             while (state != closed) {
                 try {
-                    controlLoop(userFunction, callback);
+                    controlLoop(userFunctionWrapped, callback);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
@@ -612,8 +613,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Main control loop
      */
-    private <R> void controlLoop(Function<List<ConsumerRecord<K, V>>, List<R>> userFunction,
-                                 Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
+    private <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
+                                 Consumer<R> callback) throws TimeoutException, ExecutionException {
 
         //
         int newWork = handleWork(userFunction, callback);
@@ -667,7 +668,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getTotalWorkAwaitingIngestion(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    private <R> int handleWork(final Function<List<ConsumerRecord<K, V>>, List<R>> userFunction, final Consumer<R> callback) {
+    private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
 
@@ -700,36 +701,33 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workToProcess the polled records to process
      */
-    protected <R> void submitWorkToPool(Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
+    protected <R> void submitWorkToPool(Function<PollContextInternal<K, V>, List<R>> usersFunction,
                                         Consumer<R> callback,
                                         List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
-            if (options.isUsingBatching()) {
-                // perf: could inline makeBatches
-                var batches = makeBatches(workToProcess);
+
+            // perf: could inline makeBatches
+            var batches = makeBatches(workToProcess);
+
+            // debugging
+            if (log.isDebugEnabled()) {
                 var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
-                if (log.isDebugEnabled()) {
-                    log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
-                    List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize().get()).collect(Collectors.toList());
-                    if (integerStream.size() > 1) {
-                        log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
-                    }
+                log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
+                List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize()).collect(Collectors.toList());
+                if (integerStream.size() > 1) {
+                    log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
                 }
-                for (var batch : batches) {
-                    int target = (int) options.getBatchSize().get();
-                    int size = batch.size();
-                    submitWorkToPoolInner(usersFunction, callback, batch);
-                }
-            } else {
-                for (var batch : workToProcess) {
-                    submitWorkToPoolInner(usersFunction, callback, UniLists.of(batch));
-                }
+            }
+
+            // submit
+            for (var batch : batches) {
+                submitWorkToPoolInner(usersFunction, callback, batch);
             }
         }
     }
 
-    private <R> void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
+    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
                                            final Consumer<R> callback,
                                            final List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
@@ -745,7 +743,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
-        int maxBatchSize = (int) options.getBatchSize().get();
+        int maxBatchSize = options.getBatchSize();
         return partition(workToProcess, maxBatchSize);
     }
 
@@ -787,7 +785,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // always round up to fill batches - get however extra are needed to fill a batch
         if (options.isUsingBatching()) {
             //noinspection OptionalGetWithoutIsPresent
-            int batchSize = (int) options.getBatchSize().get();
+            int batchSize = options.getBatchSize();
             int modulo = delta % batchSize;
             if (modulo > 0) {
                 int extraToFillBatch = target - modulo;
@@ -806,7 +804,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     protected int getQueueTargetLoaded() {
         //noinspection unchecked
-        int batch = (int) options.getBatchSize().orElse(1);
+        int batch = options.getBatchSize();
         return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
     }
 
@@ -1036,7 +1034,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private Duration getTimeSinceLastCheck() {
-        Instant now = clock.getNow();
+        Instant now = clock.instant();
         return Duration.between(lastCommitCheckTime, now);
     }
 
@@ -1056,7 +1054,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Run the supplied function.
      */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
+    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
                                                                                         Consumer<R> callback,
                                                                                         List<WorkContainer<K, V>> workContainerBatch) {
         // call the user's function
@@ -1069,11 +1067,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.trace("Pool received: {}", workContainerBatch);
 
             //
-            List<ConsumerRecord<K, V>> records = workContainerBatch.stream()
-                    .map(WorkContainer::getCr)
-                    .collect(Collectors.toList());
-
-            //
             boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
             if (workIsStale) {
                 // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
@@ -1081,7 +1074,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 return null;
             }
 
-            resultsFromUserFunction = usersFunction.apply(records);
+            PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
+            resultsFromUserFunction = usersFunction.apply(context);
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
@@ -1105,7 +1099,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // handle fail
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure();
+                wc.onUserFunctionFailure(e);
                 addToMailbox(wc); // always add on error
             }
             throw e; // trow again to make the future failed

@@ -1,11 +1,11 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
 import java.util.List;
@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 public interface JStreamParallelStreamProcessor<K, V> extends DrainingCloseable {
 
-    static <KK, VV> JStreamParallelStreamProcessor<KK, VV> createJStreamEosStreamProcessor(ParallelConsumerOptions options) {
+    static JStreamParallelStreamProcessor createJStreamEosStreamProcessor(ParallelConsumerOptions<?, ?> options) {
         return new JStreamParallelEoSStreamProcessor<>(options);
     }
 
@@ -24,6 +24,7 @@ public interface JStreamParallelStreamProcessor<K, V> extends DrainingCloseable 
      *
      * @return a stream of results of applying the function to the polled records
      */
-    Stream<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<ConsumerRecord<K, V>,
-            List<ProducerRecord<K, V>>> userFunction);
+    Stream<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(
+            Function<PollContext<K, V>,
+                    List<ProducerRecord<K, V>>> userFunction);
 }

@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
@@ -218,7 +218,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
 
         parallelConsumer.pollAndProduceMany((rec) -> {
-            processingCheck.add(rec);
+            processingCheck.add(rec.getSingleConsumerRecord());
             ThreadUtils.sleepQuietly(3);
             ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "SourceV: " + rec.value());
             bar.stepTo(producerSpy.history().size());
