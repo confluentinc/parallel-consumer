@@ -239,7 +239,6 @@ without operational burden or harming the cluster's performance
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
 ** Reactor.io Publisher (Mono/Flux) and Java's CompletableFuture (through `Mono#fromFuture`)
-* Reactor non-blocking library integration
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility
