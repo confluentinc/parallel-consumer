@@ -236,16 +236,16 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         pcExecutor.submit(chaosMonkey);
 
 
-        // wait for all pre-produced messages to be processed and produced
+        // wait for all pre-produced messages to be processed
         Assertions.useRepresentation(new TrimListRepresentation());
         var failureMessage = msg("All keys sent to input-topic should be processed, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         ProgressTracker progressTracker = new ProgressTracker(count);
         try {
             waitAtMost(ofMinutes(5))
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
-                    // .failFast( () -> pc1.getFailureCause(), () -> pc1.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
-                    .failFast("A PC has died - check logs", () -> !noneHaveFailed(allPCRunners)) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/issues/240
+                    // .failFast( () -> pc1.getFailureCause(), () -> pc1.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/240
+                    .failFast("A PC has died - check logs", () -> !noneHaveFailed(allPCRunners)) // dynamic reason requires https://github.com/awaitility/awaitility/issues/240
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
@@ -264,6 +264,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
                         all.assertAll();
                     });
         } catch (Throwable error) {
+            // this should be replaceable with dynamic reason generation: https://github.com/awaitility/awaitility/issues/240
             List<Exception> exceptions = checkForFailure(allPCRunners);
             if (error instanceof TerminalFailureException) {
                 Optional<Exception> any = exceptions.stream().findAny();
