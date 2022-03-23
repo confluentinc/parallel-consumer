@@ -99,7 +99,7 @@
 
         <!-- core -->
         <slf4j.version>1.7.36</slf4j.version>
-        <kafka.version>3.1.0</kafka.version>
+        <kafka.version>7.0.1-ce</kafka.version>
         <version.unij>0.1.3</version.unij>
 
         <!-- tests -->
