@@ -454,7 +454,7 @@
             <plugin>
                 <groupId>io.whelk.asciidoc</groupId>
                 <artifactId>asciidoc-template-maven-plugin</artifactId>
-                <version>1.0.17</version>
+                <version>1.0.18</version>
                 <executions>
                     <execution>
                         <id>process</id>
@@ -780,7 +780,7 @@
                 <!-- for use in idea -->
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
-                <version>2.9.0</version>
+                <version>2.10.0</version>
             </plugin>
         </plugins>
 
