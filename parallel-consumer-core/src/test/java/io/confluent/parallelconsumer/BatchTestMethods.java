@@ -8,20 +8,16 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
@@ -59,10 +55,6 @@ public abstract class BatchTestMethods<POLL_RETURN> {
     }
 
     protected abstract AbstractParallelEoSStreamProcessor getPC();
-
-    public List<Long> toOffsets(final List<ConsumerRecord<String, String>> x) {
-        return x.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
-    }
 
     public void averageBatchSizeTest(int numRecsExpected) {
         final int targetBatchSize = 20;
@@ -110,8 +102,8 @@ public abstract class BatchTestMethods<POLL_RETURN> {
      */
     protected abstract void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger);
 
-    protected POLL_RETURN averageBatchSizeTestPollInner(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger, List<ConsumerRecord<String, String>> pollBatch) {
-        int size = pollBatch.size();
+    protected POLL_RETURN averageBatchSizeTestPollInner(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger, PollContext<String, String> pollBatch) {
+        int size = (int) pollBatch.size();
 
         statusLogger.performIfNotLimited(() -> {
             try {
@@ -135,7 +127,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         }
     }
 
-    protected abstract POLL_RETURN averageBatchSizeTestPollStep(List<ConsumerRecord<String, String>> recordList);
+    protected abstract POLL_RETURN averageBatchSizeTestPollStep(PollContext<String, String> recordList);
 
     private double calcAverage(AtomicInteger numRecords, AtomicInteger numBatches) {
         return numRecords.get() / (0.0 + numBatches.get());
@@ -152,7 +144,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         setupParallelConsumer(batchSizeSetting, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
 
         var recs = getKtu().sendRecords(numRecsExpected);
-        List<List<ConsumerRecord<String, String>>> batchesReceived = new CopyOnWriteArrayList<>();
+        List<PollContext<String, String>> batchesReceived = new CopyOnWriteArrayList<>();
 
         //
         simpleBatchTestPoll(batchesReceived);
@@ -172,7 +164,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .as("batch size")
                 .allSatisfy(receivedBatchEntry -> assertThat(receivedBatchEntry).hasSizeLessThanOrEqualTo(batchSizeSetting))
                 .as("all messages processed")
-                .flatExtracting(x -> x).hasSameElementsAs(recs);
+                .flatExtracting(PollContext::getConsumerRecordsFlattened).hasSameElementsAs(recs);
 
         assertThat(getPC().isClosedOrFailed()).isFalse();
 
@@ -180,7 +172,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         getPC().closeDrainFirst();
     }
 
-    public abstract void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> batchesReceived);
+    public abstract void simpleBatchTestPoll(List<PollContext<String, String>> batchesReceived);
 
     @SneakyThrows
     public void batchFailureTest(ParallelConsumerOptions.ProcessingOrder order) {
@@ -190,7 +182,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         setupParallelConsumer(batchSize, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
 
         var recs = getKtu().sendRecords(expectedNumOfMessages);
-        List<List<ConsumerRecord<String, String>>> receivedBatches = Collections.synchronizedList(new ArrayList<>());
+        List<PollContext<String, String>> receivedBatches = Collections.synchronizedList(new ArrayList<>());
 
         //
         batchFailPoll(receivedBatches);
@@ -209,27 +201,25 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .allSatisfy(receivedBatch ->
                         assertThat(receivedBatch).hasSizeLessThanOrEqualTo(batchSize))
                 .as("all messages processed")
-                .flatExtracting(x -> x).hasSameElementsAs(recs);
+                .flatExtracting(PollContext::getConsumerRecordsFlattened).hasSameElementsAs(recs);
 
         //
         assertThat(getPC().isClosedOrFailed()).isFalse();
     }
 
     /**
-     * Must call {@link #batchFailPollInner(List)}
+     * Must call {@link #batchFailPollInner}
      */
-    protected abstract void batchFailPoll(List<List<ConsumerRecord<String, String>>> receivedBatches);
+    protected abstract void batchFailPoll(List<PollContext<String, String>> receivedBatches);
 
-    protected POLL_RETURN batchFailPollInner(List<ConsumerRecord<String, String>> pollBatch) {
-        List<Long> offsets = pollBatch.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
+    protected POLL_RETURN batchFailPollInner(PollContext<String, String> pollBatch) {
+        List<Long> offsets = pollBatch.getOffsetsFlattened();
         log.debug("Got batch {}", offsets);
 
         boolean contains = offsets.contains(FAILURE_TARGET);
         if (contains) {
             var target = pollBatch.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
-            Optional<WorkContainer> workContainerFor = getPC().getWm().getWorkContainerFor(target);
-            WorkContainer targetWc = workContainerFor.get();
-            int numberOfFailedAttempts = targetWc.getNumberOfFailedAttempts();
+            int numberOfFailedAttempts = target.getNumberOfFailedAttempts();
             int targetAttempts = 3;
             if (numberOfFailedAttempts < targetAttempts) {
                 log.debug("Failing batch containing target offset {}", FAILURE_TARGET);

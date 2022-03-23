@@ -236,12 +236,12 @@ without operational burden or harming the cluster's performance
 * Solution for the https://en.wikipedia.org/wiki/Head-of-line_blocking["head of line"] blocking problem where continued failure of a single message, prevents progress for messages behind it in the queue
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
-* Batch version fo the API to process batches of messages in parallel instead of single messages.
+* Batch support in all versions of the API to process batches of messages in parallel instead of single messages.
+** Particularly useful for when your processing function can work with more than a single record at a time - e.g. sending records to an API which has a batch version like Elasticsearch
 * Vert.x and Reactor.io non-blocking library integration
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
 ** Reactor.io Publisher (Mono/Flux) and Java's CompletableFuture (through `Mono#fromFuture`)
-* Reactor non-blocking library integration
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility
@@ -491,9 +491,10 @@ You can also optionally provide a callback function to be run after the message(
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.pollAndProduce(record -> {
-                    var result = processBrokerRecord(record);
-                    return new ProducerRecord<>(outputTopic, record.key(), result.payload);
+        parallelConsumer.pollAndProduce(context -> {
+                    var consumerRecord = context.getSingleRecord().getConsumerRecord();
+                    var result = processBrokerRecord(consumerRecord);
+                    return new ProducerRecord<>(outputTopic, consumerRecord.key(), result.payload);
                 }, consumeProduceResult -> {
                     log.debug("Message {} saved to broker at offset {}",
                             consumeProduceResult.getOut(),
@@ -513,10 +514,12 @@ In future versions, we plan to look at supporting other streaming systems like h
 [[batching]]
 === Batching
 
-The library also support a batch version of the API.
-Using this, you can process batches of messages at once.
+The library also supports sending a batch or records as input to the users processing function in parallel.
+Using this, you can process several records in your function at once.
 
-To use it, use one of the `batch` versions instead.
+To use it, set a `batch size` in the options class.
+
+There are then various access methods for the batch of records - see the `PollContext` object for more information.
 
 IMPORTANT: If an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
 There is no guarantee that the messages will be retried again in the same batch.
@@ -531,10 +534,10 @@ There is no guarantee that the messages will be retried again in the same batch.
                 .maxConcurrency(100)
                 .batchSize(5) // <1>
                 .build());
-        parallelConsumer.pollBatch(batchOfRecords -> {
+        parallelConsumer.poll(context -> {
             // convert the batch into the payload for our processing
-            List<String> payload = batchOfRecords.stream()
-                    .map(this::pareparePayload)
+            List<String> payload = context.stream()
+                    .map(this::preparePayload)
                     .collect(Collectors.toList());
             // process the entire batch payload at once
             processBatchPayload(payload);
@@ -554,9 +557,10 @@ There is no guarantee that the messages will be retried again in the same batch.
 .Call an HTTP endpoint for each message usage
 [source,java,indent=0]
 ----
-        var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
-            log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
-            Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
+        var resultStream = parallelConsumer.vertxHttpReqInfoStream(context -> {
+            var consumerRecord = context.getSingleConsumerRecord();
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", consumerRecord);
+            Map<String, String> params = UniMaps.of("recordKey", consumerRecord.key(), "payload", consumerRecord.value());
             return new RequestInfo("localhost", port, "/api", params); // <1>
         });
 ----
@@ -632,6 +636,14 @@ From the `Clients` view, get the connection information customized to your clust
 .. Create new credentials for your Kafka cluster, and then Confluent Cloud will show a configuration block with your new credentials automatically populated (make sure `show API keys` is checked).
 .. Use these settings presented to https://docs.confluent.io/clients-kafka-java/current/overview.html[configure your clients].
 . Use these clients for steps outlined in the <<common_preparation>> section.
+
+[[upgrading]]
+== Upgrading
+
+=== From 0.4 to 0.5
+
+This version has a breaking change in the API - instead of passing in `ConsumerRecord` instances, it passes in a `PollContext` object which has extra information and utility methods.
+See the `PollContext` class for more information.
 
 [[ordering-guarantees]]
 == Ordering Guarantees
@@ -734,8 +746,8 @@ You can access the retry count of a record through it's wrapped `WorkContainer` 
         final int baseDelaySecond = 1;
 
         ParallelConsumerOptions.<String, String>builder()
-                .retryDelayProvider(workContainer -> {
-                    int numberOfFailedAttempts = workContainer.getNumberOfFailedAttempts();
+                .retryDelayProvider(recordContext -> {
+                    int numberOfFailedAttempts = recordContext.getNumberOfFailedAttempts();
                     long delayMillis = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts) * 1000);
                     return Duration.ofMillis(delayMillis);
                 });
@@ -757,7 +769,8 @@ Implementing a https://github.com/confluentinc/parallel-consumer/issues/196[max 
         final int maxRetries = 10;
         final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
 
-        pc.poll(consumerRecord -> {
+        pc.poll(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
             Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
             if (retryCount < maxRetries) {
                 processRecord(consumerRecord);
@@ -783,7 +796,8 @@ This will put the message back in the queue.
 ----
         final Map<String, Boolean> upMap = new ConcurrentHashMap<>();
 
-        pc.poll(consumerRecord -> {
+        pc.poll(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
             String serverId = extractServerId(consumerRecord);
             boolean up = upMap.computeIfAbsent(serverId, ignore -> true);
 
