@@ -56,7 +56,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
-    private final ParallelConsumerOptions options;
+    private final ParallelConsumerOptions<K, V> options;
 
     /**
      * Hold the tracking state for each of our managed partitions.
@@ -80,7 +80,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      */
     private final AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
-    final private Clock clock;
+    private final Clock clock;
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         // may cause the system to wait for a rebalance to finish
