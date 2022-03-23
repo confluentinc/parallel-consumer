@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
+import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.NonNull;
@@ -46,12 +46,12 @@ public class PartitionState<K, V> {
     // visible for testing
     // todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
     // this is derived from partitionCommitQueues WorkContainer states
-    private Set<WorkContainer<?, ?>> incompleteOffsets = new ConcurrentSkipListSet<>();
+    private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new ConcurrentSkipListSet<>();
 
     private final Set<WorkContainer<?, ?>> completedEligibleWork = new ConcurrentSkipListSet<>();
 
     public Set<Long> getIncompleteOffsets() {
-        return incompleteOffsets.parallelStream().map(WorkContainer::offset).collect(Collectors.toUnmodifiableSet());
+        return incompleteWorkContainers.parallelStream().map(WorkContainer::offset).collect(Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -131,7 +131,7 @@ public class PartitionState<K, V> {
      * Removes all offsets that fall below the new low water mark.
      */
     public void truncateOffsets(final long nextExpectedOffset) {
-        incompleteOffsets.removeIf(offset -> offset.offset() < nextExpectedOffset);
+        incompleteWorkContainers.removeIf(offset -> offset.offset() < nextExpectedOffset);
     }
 
     public void onOffsetCommitSuccess(final OffsetPair committed) {
@@ -155,7 +155,7 @@ public class PartitionState<K, V> {
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         boolean previouslyProcessed;
         long offset = rec.offset();
-        if (incompleteOffsets.contains(offset)) {
+        if (incompleteWorkContainers.contains(offset)) {
             // record previously saved as not being completed, can exit early
             previouslyProcessed = false;
         } else {
@@ -181,7 +181,7 @@ public class PartitionState<K, V> {
 
     public void onSuccess(WorkContainer<K, V> work) {
         updateHighestSucceededOffsetSoFar(work);
-        this.incompleteOffsets.remove(work);
+        this.incompleteWorkContainers.remove(work);
         this.completedEligibleWork.add(work);
     }
 
@@ -204,7 +204,7 @@ public class PartitionState<K, V> {
     public void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
-        incompleteOffsets.add(wc);
+        incompleteWorkContainers.add(wc);
     }
 
     public void remove(Iterable<WorkContainer<?, ?>> workToRemove) {
@@ -223,7 +223,7 @@ public class PartitionState<K, V> {
         return false;
     }
 
-    public void setIncompleteOffsets(LinkedHashSet<Long> incompleteOffsets) {
+    public void setIncompleteWorkContainers(LinkedHashSet<Long> incompleteOffsets) {
         //noop delete
     }
 
@@ -234,11 +234,15 @@ public class PartitionState<K, V> {
         Set<Long> incompletes;
     }
 
-    public Optional<OffsetPair> getCompletedEligibleOffsetsAndRemoveNew() {
+    // todo rename syncOffsetAndIncompleteEncodings
+    public OffsetPair getCompletedEligibleOffsetsAndRemoveNew() {
 
 //        Set<WorkContainer<?, ?>> completedEligibleOffsetsAndRemoveNewNewNEEEEEW = getCompletedEligibleOffsetsAndRemoveNewNewNEEEEEW(remove);
 
-        return createOffsetMeta().map(x -> new OffsetPair(x, getIncompleteOffsets()));
+        OffsetAndMetadata offsetMetadata = createOffsetAndMetadata();
+
+        Set<Long> incompleteOffsets = getIncompleteOffsets();
+        return new OffsetPair(offsetMetadata, incompleteOffsets);
 
 //        Optional<Long> nextExpectedOffset = getCompletedEligibleOffsetsAndRemoveNewNew(remove);
 //
@@ -247,12 +251,13 @@ public class PartitionState<K, V> {
 //                        .map(x -> new OffsetPair(x, incompleteOffsets)));
     }
 
-    private Optional<OffsetAndMetadata> createOffsetMeta() {
+    private OffsetAndMetadata createOffsetAndMetadata() {
+        long nextOffset = getNextExpectedPolledOffset();
         // try to encode
-        Long nextOffset = getNextExpectedPolledOffset();
-        Optional<String> payloadOpt = tryToEncodOffsetsStartingAt(nextOffset);
-        return payloadOpt.map(payload -> new OffsetAndMetadata(nextOffset, payload))
-                .or(() -> Optional.of(new OffsetAndMetadata(nextOffset)));
+        Optional<String> payloadOpt = tryToEncodeOffsetsStartingAt(nextOffset);
+        return payloadOpt
+                .map(s -> new OffsetAndMetadata(nextOffset, s))
+                .orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
     private long getNextExpectedPolledOffset() {
@@ -346,26 +351,30 @@ public class PartitionState<K, V> {
 
 
     /**
-     * @return the String encoded offset map, if possible
+     * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
+     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see {@link
+     * OffsetMapCodecManager#makeOffsetMetadataPayload}.
+     *
+     * @return if possible, the String encoded offset map
      */
     // todo refactor
-    // todo rename TRY to add... or maybe add
-    Optional<String> tryToEncodOffsetsStartingAt(Long offsetOfNextExpectedMessage) {
+    Optional<String> tryToEncodeOffsetsStartingAt(Long offsetOfNextExpectedMessage) {
         // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
 
-        if (incompleteOffsets.isEmpty()) {
+        if (incompleteWorkContainers.isEmpty()) {
             setAllowedMoreRecords(true);
             return Optional.empty();
         }
 
-        OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null); // refactor use of null shouldn't be needed
+        // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null
+        OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
         String offsetMapPayload;
         try {
 
             // encode
             offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
 
-        } catch (EncodingNotSupportedException e) {
+        } catch (NoEncodingPossibleException e) {
             setAllowedMoreRecords(false);
             log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
             return Optional.empty();

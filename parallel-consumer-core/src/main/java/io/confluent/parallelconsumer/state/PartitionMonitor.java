@@ -9,7 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
-import io.confluent.parallelconsumer.offsets.EncodingNotSupportedException;
+import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.state.PartitionState.OffsetPair;
 import lombok.Getter;
@@ -356,7 +356,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             try {
                 PartitionState<K, V> state = getPartitionState(topicPartitionKey);
                 // todo smelly - update the partition state with the new found incomplete offsets. This field is used by nested classes accessing the state
-                state.setIncompleteOffsets(incompleteOffsets);
+                state.setIncompleteWorkContainers(incompleteOffsets);
                 String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, state);
                 int metaPayloadLength = offsetMapPayload.length();
                 boolean moreMessagesAllowed;
@@ -387,7 +387,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
                 setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, moreMessagesAllowed);
                 offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
-            } catch (EncodingNotSupportedException e) {
+            } catch (NoEncodingPossibleException e) {
                 setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, false);
                 log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
             }
@@ -461,17 +461,22 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
         var oldone = findCompletedEligibleOffsetsAndRemoveOld(remove);
 
+        if (!newone.entrySet().containsAll(oldone.entrySet())) {
+            log.error("Regression?");
+        }
+
         return newone;
     }
 
+    // todo rename
     private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemoveNew() {
         Map<TopicPartition, OffsetPair> offsetsToSend = new HashMap<>();
 
-        for (var e : getAssignedPartitions().entrySet()) {
-            Optional<OffsetPair> completedEligibleOffsetsAndRemoveNew = e.getValue().getCompletedEligibleOffsetsAndRemoveNew();
-            completedEligibleOffsetsAndRemoveNew.ifPresent(offsetAndMetadata ->
-                    offsetsToSend.put(e.getKey(), offsetAndMetadata)
-            );
+        for (var entry : getAssignedPartitions().entrySet()) {
+
+            OffsetPair offsetAndMetadata = entry.getValue().getCompletedEligibleOffsetsAndRemoveNew();
+
+            offsetsToSend.put(entry.getKey(), offsetAndMetadata);
         }
 
 //        Map<TopicPartition, OffsetAndMetadata> collect = getAssignedPartitions().entrySet().stream()

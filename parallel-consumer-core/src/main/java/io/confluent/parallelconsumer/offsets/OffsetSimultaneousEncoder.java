@@ -56,12 +56,12 @@ public class OffsetSimultaneousEncoder {
     Map<OffsetEncoding, byte[]> encodingMap = new EnumMap<>(OffsetEncoding.class);
 
     /**
-     * Ordered set of the the different encodings, used to quickly retrieve the most compressed encoding
+     * Ordered set of the different encodings, used to quickly retrieve the most compressed encoding
      *
      * @see #packSmallest()
      */
     @Getter
-    PriorityQueue<EncodedOffsetPair> sortedEncodings = new PriorityQueue();
+    PriorityQueue<EncodedOffsetPair> sortedEncodings = new PriorityQueue<>();
 
 
     /**
@@ -204,7 +204,7 @@ public class OffsetSimultaneousEncoder {
                 toRemove.add(encoder);
             }
         }
-        encoders.removeAll(toRemove);
+        toRemove.forEach(encoders::remove);
 
         // compressed versions
         // sizes over LARGE_INPUT_MAP_SIZE_THRESHOLD bytes seem to benefit from compression
@@ -219,9 +219,9 @@ public class OffsetSimultaneousEncoder {
      *
      * @see #packEncoding(EncodedOffsetPair)
      */
-    public byte[] packSmallest() throws EncodingNotSupportedException {
+    public byte[] packSmallest() throws NoEncodingPossibleException {
         if (sortedEncodings.isEmpty()) {
-            throw new EncodingNotSupportedException("No encodings could be used");
+            throw new NoEncodingPossibleException("No encodings could be used");
         }
         final EncodedOffsetPair best = this.sortedEncodings.poll();
         log.debug("Compression chosen is: {}", best.encoding.name());

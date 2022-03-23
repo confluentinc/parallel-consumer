@@ -18,7 +18,7 @@ abstract class OffsetEncoder {
 
     private final OffsetSimultaneousEncoder offsetSimultaneousEncoder;
 
-    public OffsetEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
+    protected OffsetEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
         this.offsetSimultaneousEncoder = offsetSimultaneousEncoder;
     }
 
@@ -50,7 +50,8 @@ abstract class OffsetEncoder {
 
     private void register(final OffsetEncoding type, final byte[] bytes) {
         log.debug("Registering {}, with site {}", type, bytes.length);
-        offsetSimultaneousEncoder.sortedEncodings.add(new EncodedOffsetPair(type, ByteBuffer.wrap(bytes)));
+        EncodedOffsetPair encodedPair = new EncodedOffsetPair(type, ByteBuffer.wrap(bytes));
+        offsetSimultaneousEncoder.sortedEncodings.add(encodedPair);
         offsetSimultaneousEncoder.encodingMap.put(type, bytes);
     }
 

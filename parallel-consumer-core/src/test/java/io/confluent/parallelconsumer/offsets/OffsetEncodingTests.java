@@ -4,9 +4,11 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -197,8 +199,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             assertThat(bestPayload).isNotEmpty();
 
             //
-            /// todo need to remove all
-//            consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
+            /// todo need to remove all?
+            consumerSpy.commitSync(JavaUtils.remap(completedEligibleOffsetsAndRemove,
+                    PartitionState.OffsetPair::getSync)
+            );
         }
 
         // simulate a rebalance or some sort of reset, by instantiating a new WM with the state from the last
