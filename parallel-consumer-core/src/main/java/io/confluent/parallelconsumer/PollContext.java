@@ -185,11 +185,6 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
      * ConsumerRecord}s in this result set
      */
     public Map<TopicPartition, Set<RecordContext<K, V>>> getByTopicPartitionMap() {
-//        Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
-        //Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
-//        return topicPartitionSetMap;
-        // have to do this because sets are covariant
-        // https://stackoverflow.com/questions/6319163/cant-cast-generic-sets
         return this.records.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey,
                                 set -> set.getValue().stream()

@@ -14,6 +14,8 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Instant;
 import java.util.Optional;
 
+import static lombok.AccessLevel.PROTECTED;
+
 /**
  * Context information for the wrapped {@link ConsumerRecord}.
  * <p>
@@ -21,18 +23,18 @@ import java.util.Optional;
  *
  * @see #getNumberOfFailedAttempts()
  */
-
 @Builder(toBuilder = true)
 @AllArgsConstructor
 @ToString
 @EqualsAndHashCode
 public class RecordContext<K, V> {
 
+    @Getter(PROTECTED)
     protected final WorkContainer<K, V> workContainer;
 
     @Getter
     @Delegate
-    ConsumerRecord<K, V> consumerRecord;
+    private final ConsumerRecord<K, V> consumerRecord;
 
     public RecordContext(WorkContainer<K, V> wc) {
         this.consumerRecord = wc.getCr();
