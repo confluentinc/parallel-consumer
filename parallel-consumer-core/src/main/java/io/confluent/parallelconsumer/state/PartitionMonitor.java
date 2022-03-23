@@ -22,6 +22,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -77,6 +78,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * chances no work has completed in the last second.
      */
     private final AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
+
+    final private Clock clock;
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         // may cause the system to wait for a rebalance to finish
@@ -431,7 +434,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             } else {
                 int currentPartitionEpoch = getEpoch(rec);
                 //noinspection unchecked - Lombok builder getter erases generics
-                var wc = new WorkContainer<K, V>(currentPartitionEpoch, rec, options.getRetryDelayProvider());
+                var wc = new WorkContainer<K, V>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
 
                 sm.addWorkContainer(wc);
 

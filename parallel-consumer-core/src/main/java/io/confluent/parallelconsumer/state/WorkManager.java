@@ -86,12 +86,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this(options, consumer, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
+    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.wmbm = new WorkMailBoxManager<>();
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionMonitor<>(consumer, sm, options);
+        this.pm = new PartitionMonitor<>(consumer, sm, options, clock);
     }
 
     /**
@@ -210,7 +211,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return ingested;
     }
 
-    public void onSuccess(WorkContainer<K, V> wc) {
+    public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
         wc.endFlight();
@@ -234,7 +235,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         pm.onOffsetCommitSuccess(committed);
     }
 
-    public void onFailure(WorkContainer<K, V> wc) {
+    public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
         wc.endFlight();
         sm.onFailure(wc);
@@ -341,9 +342,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             Optional<Boolean> userFunctionSucceeded = wc.getUserFunctionSucceeded();
             if (userFunctionSucceeded.isPresent()) {
                 if (TRUE.equals(userFunctionSucceeded.get())) {
-                    onSuccess(wc);
+                    onSuccessResult(wc);
                 } else {
-                    onFailure(wc);
+                    onFailureResult(wc);
                 }
             } else {
                 throw new IllegalStateException("Work returned, but without a success flag - report a bug");

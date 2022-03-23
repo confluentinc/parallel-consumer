@@ -274,7 +274,7 @@ public class KafkaTestUtils {
         assertThat(future).isDone();
         wc.setFuture(future);
         wc.onUserFunctionSuccess();
-        wmm.onSuccess(wc);
+        wmm.onSuccessResult(wc);
         assertThat(wc.isUserFunctionComplete()).isTrue();
     }
 

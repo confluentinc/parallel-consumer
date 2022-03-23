@@ -95,12 +95,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         }
     }
 
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType) {
-        this(epoch, cr, retryDelayProvider, workType, Clock.systemDefaultZone());
-    }
-
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider) {
-        this(epoch, cr, retryDelayProvider, DEFAULT_TYPE, Clock.systemDefaultZone());
+    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, Clock clock) {
+        this(epoch, cr, retryDelayProvider, DEFAULT_TYPE, clock);
     }
 
     public void endFlight() {
@@ -190,7 +186,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private void updateFailureHistory(Throwable cause) {
         numberOfFailedAttempts++;
         lastFailedAt = Optional.of(Instant.now(clock));
-        lastFailureReason = Optional.of(cause);
+        lastFailureReason = Optional.ofNullable(cause);
     }
 
     public boolean isUserFunctionComplete() {
