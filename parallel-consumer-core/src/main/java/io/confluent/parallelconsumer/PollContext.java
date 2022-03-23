@@ -140,7 +140,10 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
      * @return a flat {@link List} of {@link RecordContext}s, which wrap the {@link ConsumerRecord}s in this result set
      */
     public List<RecordContext<K, V>> getContextsFlattened() {
-        return records.values().stream().flatMap(Collection::stream).collect(Collectors.toList());
+        return records.values().stream()
+                .flatMap(Collection::stream)
+                .map(RecordContextInternal::getRecordContext)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -182,7 +185,7 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
      * ConsumerRecord}s in this result set
      */
     public Map<TopicPartition, Set<RecordContext<K, V>>> getByTopicPartitionMap() {
-        Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
+//        Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
         //Map<TopicPartition, Set<RecordContextInternal<K, V>>> topicPartitionSetMap = Collections.unmodifiableMap(this.records);
 //        return topicPartitionSetMap;
         // have to do this because sets are covariant
@@ -190,7 +193,7 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
         return this.records.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey,
                                 set -> set.getValue().stream()
-                                        .map(y -> (RecordContext<K, V>) y)
+                                        .map(RecordContextInternal::getRecordContext)
                                         .collect(Collectors.toSet())
                         )
                 );

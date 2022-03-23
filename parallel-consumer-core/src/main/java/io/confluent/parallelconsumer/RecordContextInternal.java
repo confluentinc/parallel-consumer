@@ -1,18 +1,21 @@
 package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.state.WorkContainer;
+import lombok.Getter;
 
 /**
  * Internal only view of the {@link RecordContext} class.
- * todo
  */
-public class RecordContextInternal<K, V> extends RecordContext<K, V> {
+public class RecordContextInternal<K, V> {
+
+    @Getter
+    private final RecordContext<K, V> recordContext;
 
     public RecordContextInternal(WorkContainer<K, V> wc) {
-        super(wc);
+        this.recordContext = new RecordContext<>(wc);
     }
 
     public WorkContainer<K, V> getWorkContainer() {
-        return super.workContainer;
+        return this.recordContext.workContainer;
     }
 }

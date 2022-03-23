@@ -94,7 +94,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
             pollContext.getWorkContainers()
                     .forEach(x -> x.setWorkType(REACTOR_TYPE));
 
-            Publisher<?> publisher = carefullyRun(reactorFunction, pollContext);
+            Publisher<?> publisher = carefullyRun(reactorFunction, pollContext.getPollContext());
 
             Disposable flux = Flux.from(publisher)
                     // using #subscribeOn so this should be redundant, but testing has shown otherwise

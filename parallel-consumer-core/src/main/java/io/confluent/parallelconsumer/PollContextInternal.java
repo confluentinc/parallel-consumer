@@ -1,6 +1,8 @@
 package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.state.WorkContainer;
+import lombok.Getter;
+import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
@@ -15,17 +17,21 @@ import java.util.stream.Stream;
  * NB: Yes, a user could cast to the {@link PollContextInternal} class to get access to other public APIs, but they can
  * do lots of things to work around the structure that keeps internals internal.
  */
-public class PollContextInternal<K, V> extends PollContext<K, V> {
+public class PollContextInternal<K, V> {
+
+    @Delegate
+    @Getter
+    private final PollContext<K, V> pollContext;
 
     public PollContextInternal(List<WorkContainer<K, V>> workContainers) {
-        super(workContainers);
+        this.pollContext = new PollContext<>(workContainers);
     }
 
     /**
      * Not public - not part of user API
      */
     public Stream<WorkContainer<K, V>> streamWorkContainers() {
-        return streamInternal().map(RecordContextInternal::getWorkContainer);
+        return pollContext.streamInternal().map(RecordContextInternal::getWorkContainer);
     }
 
     /**

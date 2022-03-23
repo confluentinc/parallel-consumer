@@ -37,7 +37,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = (context) -> {
             log.trace("asyncPoll - Consumed a consumerRecord ({}), executing void function...", context);
 
-            carefullyRun(usersVoidConsumptionFunction, context);
+            carefullyRun(usersVoidConsumptionFunction, context.getPollContext());
 
             log.trace("asyncPoll - user function finished ok.");
             return UniLists.of(); // user function returns no produce records, so we satisfy our api
@@ -57,7 +57,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // wrap user func to add produce function
         Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = context -> {
-            List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context);
+            List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
 
             if (recordListToProduce.isEmpty()) {
                 log.debug("No result returned from function to send.");
@@ -69,7 +69,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
             for (ProducerRecord<K, V> toProduce : recordListToProduce) {
                 log.trace("Producing {}", toProduce);
                 RecordMetadata produceResultMeta = super.getProducerManager().get().produceMessage(toProduce);
-                var result = new ConsumeProduceResult<>(context, toProduce, produceResultMeta);
+                var result = new ConsumeProduceResult<>(context.getPollContext(), toProduce, produceResultMeta);
                 results.add(result);
             }
             return results;

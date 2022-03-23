@@ -167,7 +167,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         Function<PollContextInternal<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
-            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context);
+            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context.getPollContext());
 
             // execute user's onSend callback
             onWebRequestSentCallback.accept(futureWebResponse);
@@ -214,7 +214,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
-            Future<?> send = carefullyRun(result, context);
+            Future<?> send = carefullyRun(result, context.getPollContext());
 
             addVertxHooks(context, send);
 
@@ -232,7 +232,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
 
         Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
 
-            Future<?> send = carefullyRun(result, context);
+            Future<?> send = carefullyRun(result, context.getPollContext());
 
             addVertxHooks(context, send);
 
