@@ -62,7 +62,7 @@ public class WorkMailBoxManager<K, V> {
      * <p>
      * Thread safe for use by control and broker poller thread.
      *
-     * @see WorkManager#onSuccess
+     * @see WorkManager#onSuccessResult
      * @see WorkManager#raisePartitionHighWaterMark
      */
     public void registerWork(final ConsumerRecords<K, V> records) {

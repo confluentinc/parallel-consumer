@@ -27,7 +27,6 @@ import org.assertj.core.api.SoftAssertions;
 import org.assertj.core.internal.StandardComparisonStrategy;
 import org.awaitility.Awaitility;
 import org.awaitility.core.TerminalFailureException;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,10 +34,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.MDC;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -107,7 +103,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
     }
 
     ProgressBar overallProgress;
-    Set<String> overallConsumedKeys = new ConcurrentHashSet<>();
+    Set<String> overallConsumedKeys = new ConcurrentSkipListSet<>();
 
     @SneakyThrows
     private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order, int expectedMessageCount,
@@ -121,7 +117,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         var sendingProgress = ProgressBarUtils.getNewMessagesBar("sending", log, expectedMessageCount);
 
         // pre-produce messages to input-topic
-        Set<String> expectedKeys = new ConcurrentHashSet<>();
+        Set<String> expectedKeys = new ConcurrentSkipListSet<>();
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         int preProduceCount = (int) (expectedMessageCount * fractionOfMessagesToPreProduce);
@@ -240,16 +236,16 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
         pcExecutor.submit(chaosMonkey);
 
 
-        // wait for all pre-produced messages to be processed and produced
+        // wait for all pre-produced messages to be processed
         Assertions.useRepresentation(new TrimListRepresentation());
         var failureMessage = msg("All keys sent to input-topic should be processed, within time (expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         ProgressTracker progressTracker = new ProgressTracker(count);
         try {
             waitAtMost(ofMinutes(5))
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
-                    // .failFast( () -> pc1.getFailureCause(), () -> pc1.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
-                    .failFast("A PC has died - check logs", () -> !noneHaveFailed(allPCRunners)) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/issues/240
+                    // .failFast( () -> pc1.getFailureCause(), () -> pc1.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/240
+                    .failFast("A PC has died - check logs", () -> !noneHaveFailed(allPCRunners)) // dynamic reason requires https://github.com/awaitility/awaitility/issues/240
                     .alias(failureMessage)
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
@@ -268,6 +264,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
                         all.assertAll();
                     });
         } catch (Throwable error) {
+            // this should be replaceable with dynamic reason generation: https://github.com/awaitility/awaitility/issues/240
             List<Exception> exceptions = checkForFailure(allPCRunners);
             if (error instanceof TerminalFailureException) {
                 Optional<Exception> any = exceptions.stream().findAny();

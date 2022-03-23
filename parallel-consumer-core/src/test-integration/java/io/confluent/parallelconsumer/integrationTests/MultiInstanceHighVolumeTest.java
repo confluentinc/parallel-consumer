@@ -118,7 +118,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
         pc.setMyId(Optional.of("id: " + barId));
         barId++;
         pc.poll(record -> {
-                    processRecord(bar, record, consumed);
+                    processRecord(bar, record.getSingleConsumerRecord(), consumed);
                 }
 //                , consumeProduceResult -> {
 //                    callBack(consumeProduceResult);

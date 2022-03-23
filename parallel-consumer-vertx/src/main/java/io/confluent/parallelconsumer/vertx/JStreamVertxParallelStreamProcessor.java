@@ -1,17 +1,17 @@
 package io.confluent.parallelconsumer.vertx;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContext;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -31,7 +31,7 @@ public interface JStreamVertxParallelStreamProcessor<K, V> extends ParallelConsu
      *
      * @see VertxParallelEoSStreamProcessor#vertxHttpReqInfo
      */
-    Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>,
+    Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<PollContext<K, V>,
             VertxParallelEoSStreamProcessor.RequestInfo> requestInfoFunction);
 
     /**
@@ -40,7 +40,7 @@ public interface JStreamVertxParallelStreamProcessor<K, V> extends ParallelConsu
      * @see VertxParallelEoSStreamProcessor#vertxHttpRequest
      */
     Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient,
-            ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction);
+            PollContext<K, V>, HttpRequest<Buffer>> webClientRequestFunction);
 
     /**
      * Streaming version
@@ -48,5 +48,5 @@ public interface JStreamVertxParallelStreamProcessor<K, V> extends ParallelConsu
      * @see VertxParallelEoSStreamProcessor#vertxHttpWebClient
      */
     Stream<JStreamVertxParallelEoSStreamProcessor.VertxCPResult<K, V>> vertxHttpWebClientStream(
-            BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction);
+            BiFunction<WebClient, PollContext<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction);
 }

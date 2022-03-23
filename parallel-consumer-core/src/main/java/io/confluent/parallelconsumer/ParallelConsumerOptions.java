@@ -15,7 +15,6 @@ import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -145,6 +144,7 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final int maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+
     public static final int DEFAULT_MAX_CONCURRENCY = 16;
 
     /**
@@ -159,14 +159,7 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
-    @Builder.Default
-    private final Function<WorkContainer, Duration> retryDelayProvider;
-
-    /**
-     * Dirty global access to the {@link #retryDelayProvider}.
-     */
-    // TODO remove need for writeable global access
-    public static Function<WorkContainer, Duration> retryDelayProviderStatic;
+    private final Function<RecordContext<K, V>, Duration> retryDelayProvider;
 
     /**
      * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
@@ -189,8 +182,16 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
 
     /**
-     * The maximum number of messages to attempt to pass into the {@code batch} versions of the user function. Batch
-     * sizes may sometimes be less than this size, but will never be more.
+     * The maximum number of messages to attempt to pass into the user functions.
+     * <p>
+     * Batch sizes may sometimes be less than this size, but will never be more.
+     * <p>
+     * The system will treat the messages as a set, so if an error is thrown by the user code, then all messages will be
+     * marked as failed and be retried (Note that when they are retried, there is no guarantee they will all be in the
+     * same batch again). So if you're going to process messages individually, then don't set a batch size.
+     * <p>
+     * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
+     * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      * <p>
      * Note that there is no relationship between the {@link ConsumerConfig} setting of {@link
      * ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large layer
@@ -202,8 +203,12 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * If we have enough, then we actively manage pausing our subscription so that we can continue calling {@code poll}
      * without pulling in even more messages.
+     * <p>
+     *
+     * @see ParallelConsumerOptions#getBatchSize()
      */
-    private final Integer batchSize;
+    @Builder.Default
+    private final Integer batchSize = 1;
 
     /**
      * Configure the amount of delay a record experiences, before a warning is logged.
@@ -211,22 +216,18 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration thresholdForTimeSpendInQueueWarning = Duration.ofSeconds(10);
 
-    /**
-     * @see #batchSize
-     */
-    public Optional<Integer> getBatchSize() {
-        return Optional.ofNullable(batchSize);
+    public boolean isUsingBatching() {
+        return getBatchSize() > 1;
     }
 
-    public boolean isUsingBatching() {
-        return this.getBatchSize().isPresent();
-    }
+    @Builder.Default
+    private final int maxFailureHistory = 10;
 
     /**
      * @return the combined target of the desired concurrency by the configured batch size
      */
     public int getTargetAmountOfRecordsInFlight() {
-        return getMaxConcurrency() * getBatchSize().orElse(1);
+        return getMaxConcurrency() * getBatchSize();
     }
 
     public void validate() {
@@ -239,7 +240,6 @@ public class ParallelConsumerOptions<K, V> {
 
         //
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
-        ParallelConsumerOptions.retryDelayProviderStatic = getRetryDelayProvider();
     }
 
     public boolean isUsingTransactionalProducer() {
