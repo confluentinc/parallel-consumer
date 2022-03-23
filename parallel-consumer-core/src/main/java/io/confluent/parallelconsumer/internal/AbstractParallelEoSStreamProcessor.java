@@ -58,7 +58,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
      * user function.
      */
-    public static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
+    private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions options;
