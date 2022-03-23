@@ -40,5 +40,4 @@ public class PollContextInternal<K, V> {
         return streamWorkContainers().collect(Collectors.toList());
     }
 
-
 }

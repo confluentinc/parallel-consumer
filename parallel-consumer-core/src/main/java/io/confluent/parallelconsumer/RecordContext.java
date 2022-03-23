@@ -58,8 +58,18 @@ public class RecordContext<K, V> {
         return workContainer.getNumberOfFailedAttempts();
     }
 
+    /**
+     * @return if the record has failed, return the time at which is last failed at
+     */
     public Optional<Instant> getLastFailureAt() {
         return workContainer.getLastFailedAt();
+    }
+
+    /**
+     * @return if the record had succeeded, returns the time at this the user function returned
+     */
+    public Optional<Instant> getSucceededAt() {
+        return workContainer.getSucceededAt();
     }
 }
 

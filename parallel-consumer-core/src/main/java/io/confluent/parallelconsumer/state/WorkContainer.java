@@ -25,6 +25,7 @@ import java.util.concurrent.Future;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
+import static java.util.Optional.of;
 
 @Slf4j
 @EqualsAndHashCode
@@ -44,7 +45,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      */
     @Getter
     @Setter
-    // todo change to enum, remove setter
+    // todo change to enum, remove setter - #241
     private String workType;
 
     @Getter
@@ -57,6 +58,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     @Getter
     private Optional<Instant> lastFailedAt = Optional.empty();
+
+    @Getter
+    private Optional<Instant> succeededAt = Optional.empty();
 
     @Getter
     private Optional<Throwable> lastFailureReason;
@@ -164,7 +168,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     public void onQueueingForExecution() {
         log.trace("Queueing for execution: {}", this);
         inFlight = true;
-        timeTakenAsWorkMs = Optional.of(System.currentTimeMillis());
+        timeTakenAsWorkMs = of(System.currentTimeMillis());
     }
 
     public TopicPartition getTopicPartition() {
@@ -172,7 +176,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     public void onUserFunctionSuccess() {
-        this.userFunctionSucceeded = Optional.of(true);
+        this.succeededAt = of(clock.instant());
+        this.userFunctionSucceeded = of(true);
     }
 
     public void onUserFunctionFailure(Throwable cause) {
@@ -180,12 +185,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
         updateFailureHistory(cause);
 
-        this.userFunctionSucceeded = Optional.of(false);
+        this.userFunctionSucceeded = of(false);
     }
 
     private void updateFailureHistory(Throwable cause) {
         numberOfFailedAttempts++;
-        lastFailedAt = Optional.of(Instant.now(clock));
+        lastFailedAt = of(Instant.now(clock));
         lastFailureReason = Optional.ofNullable(cause);
     }
 
