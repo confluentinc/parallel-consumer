@@ -28,34 +28,11 @@ public class PartitionState<K, V> {
     @Getter
     private final TopicPartition tp;
 
-    // todo delete
-//    /**
-//     * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
-//     * <p>
-//     * We only need to know the full incompletes when we do the {@link #findCompletedEligibleOffsetsAndRemove} scan, so
-//     * find the full sent only then, and discard. Otherwise, for continuous encoding, the encoders track it them
-//     * selves.
-//     * <p>
-//     * We work with incompletes, instead of completes, because it's a bet that most of the time the storage space for
-//     * storing the incompletes in memory will be smaller.
-//     *
-//     * @see #findCompletedEligibleOffsetsAndRemove(boolean)
-//     * @see #encodeWorkResult(boolean, WorkContainer)
-//     * @see #onSuccess(WorkContainer)
-//     */
-//     visible for testing
-//     todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
-//     this is derived from partitionCommitQueues WorkContainer states
-
     /**
      * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
      */
     // todo why concurrent?
     private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new HashSet<>();
-
-    // todo never queried
-    // todo why concurrent?
-//    private final Set<WorkContainer<?, ?>> completedEligibleWork = new HashSet<>();
 
     public Set<Long> getIncompleteOffsets() {
         return incompleteWorkContainers.parallelStream().map(WorkContainer::offset).collect(Collectors.toUnmodifiableSet());
@@ -243,19 +220,10 @@ public class PartitionState<K, V> {
 
     // todo rename syncOffsetAndIncompleteEncodings
     public OffsetPair getCompletedEligibleOffsetsAndRemoveNew() {
-
-//        Set<WorkContainer<?, ?>> completedEligibleOffsetsAndRemoveNewNewNEEEEEW = getCompletedEligibleOffsetsAndRemoveNewNewNEEEEEW(remove);
-
         OffsetAndMetadata offsetMetadata = createOffsetAndMetadata();
 
         Set<Long> incompleteOffsets = getIncompleteOffsets();
         return new OffsetPair(offsetMetadata, incompleteOffsets);
-
-//        Optional<Long> nextExpectedOffset = getCompletedEligibleOffsetsAndRemoveNewNew(remove);
-//
-//        return nextExpectedOffset.flatMap(nextOffset ->
-//                createOffsetMeta(nextOffset)
-//                        .map(x -> new OffsetPair(x, incompleteOffsets)));
     }
 
     private OffsetAndMetadata createOffsetAndMetadata() {
@@ -270,92 +238,6 @@ public class PartitionState<K, V> {
     private long getNextExpectedPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
-
-//    private Set<WorkContainer<?, ?>> getCompletedEligibleOffsetsAndRemoveNewNewNEEEEEW(boolean remove) {
-//        if (remove) {
-//            remove(this.completedEligibleWork);
-//        }
-//        return completedEligibleWork;
-//    }
-
-
-//    // todo remove parameter remove
-//    private Optional<Long> getCompletedEligibleOffsetsAndRemoveNewNew(boolean remove) {
-//        //        int count = 0;
-////        int removed = 0;
-//
-//        Map<Long, WorkContainer<K, V>> partitionQueue = getCommitQueue();
-//        TopicPartition topicPartitionKey = this.getTp();
-//        log.trace("Starting scan of partition: {}", topicPartitionKey);
-//
-////        count += partitionQueue.size();
-//        var workToRemove = new LinkedList<WorkContainer<?, ?>>();
-//        var incompleteOffsets = new LinkedHashSet<Long>();
-//        long lowWaterMark = -1;
-//        var highestSucceeded = getOffsetHighestSucceeded();
-//        // can't commit this offset or beyond, as this is the latest offset that is incomplete
-//        // i.e. only commit offsets that come before the current one, and stop looking for more
-//        boolean beyondSuccessiveSucceededOffsets = false;
-//
-//        Long nextOffset = null;
-//
-//        for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
-//            // ordered iteration via offset keys thanks to the tree-map
-//            WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
-//
-//            //
-//            long offset = container.getCr().offset();
-//            if (offset > highestSucceeded) {
-//                break; // no more to encode
-//            }
-//
-//            //
-//            boolean userFuncComplete = container.isUserFunctionComplete();
-//            if (userFuncComplete) {
-//                Boolean userFuncSuccess = container.getUserFunctionSucceeded().get();
-//                if (userFuncSuccess) {
-//                    if (beyondSuccessiveSucceededOffsets) {
-//                        // todo lookup the low water mark and include here
-//                        log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset ({}). Will mark as complete in the offset map.",
-//                                container.getCr().offset(), lowWaterMark);
-//                        // no-op - offset map is only for not succeeded or completed offsets
-//                    } else {
-//                        log.trace("Found offset candidate ({}) to add to offset commit map", container);
-//                        workToRemove.add(container);
-//                        // as in flights are processed in order, this will keep getting overwritten with the highest offset available
-//                        // current offset is the highest successful offset, so commit +1 - offset to be committed is defined as the offset of the next expected message to be read
-//                        nextOffset = offset + 1;
-//                    }
-//                } else {
-//                    log.trace("Offset {} is complete, but failed processing. Will track in offset map as failed. Can't do normal offset commit past this point.", container.getCr().offset());
-//                    beyondSuccessiveSucceededOffsets = true;
-//                    incompleteOffsets.add(offset);
-//                }
-//            } else {
-//                lowWaterMark = container.offset();
-//                beyondSuccessiveSucceededOffsets = true;
-//                log.trace("Offset (:{}) is incomplete, holding up the queue ({}) of size {}.",
-//                        container.getCr().offset(),
-//                        topicPartitionKey,
-//                        partitionQueue.size());
-//                incompleteOffsets.add(offset);
-//            }
-//
-//
-//            if (remove) {
-////                removed += workToRemove.size();
-//                // todo so if work is never put bach???
-//                remove(workToRemove);
-//            }
-//        }
-//
-//        //
-//        // todo smelly - update the partition state with the new found incomplete offsets. This field is used by nested classes accessing the state
-//        this.incompleteOffsets = incompleteOffsets;
-//
-//        return Optional.ofNullable(nextOffset);
-//    }
-
 
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no

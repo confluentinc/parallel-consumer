@@ -9,7 +9,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
-import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.state.PartitionState.OffsetPair;
 import lombok.Getter;
@@ -19,19 +18,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -71,14 +67,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * Starts at zero.
      */
     private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
-
-    /**
-     * Gets set to true whenever work is returned completed, so that we know when a commit needs to be made.
-     * <p>
-     * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
-     * chances no work has completed in the last second.
-     */
-    private final AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
 
     private final Clock clock;
 
@@ -328,75 +316,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return !isAllowedMoreRecords(topicPartition);
     }
 
-    /**
-     * Get final offset data, build the offset map, and replace it in our map of offset data to send
-     *
-     * @param offsetsToSend
-     * @param topicPartitionKey
-     * @param incompleteOffsets
-     */
-    //todo refactor
-    void addEncodedOffsets(Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
-                           TopicPartition topicPartitionKey,
-                           LinkedHashSet<Long> incompleteOffsets) {
-        // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
-        boolean incompleteOffsetsNeedingEncoding = !incompleteOffsets.isEmpty();
-        if (incompleteOffsetsNeedingEncoding) {
-            // todo offsetOfNextExpectedMessage should be an attribute of State - consider deriving it from the state class
-            long offsetOfNextExpectedMessage;
-            OffsetAndMetadata finalOffsetOnly = offsetsToSend.get(topicPartitionKey);
-            if (finalOffsetOnly == null) {
-                // no new low watermark to commit, so use the last one again
-                offsetOfNextExpectedMessage = incompleteOffsets.iterator().next(); // first element
-            } else {
-                offsetOfNextExpectedMessage = finalOffsetOnly.offset();
-            }
-
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer);
-            try {
-                PartitionState<K, V> state = getPartitionState(topicPartitionKey);
-                // todo smelly - update the partition state with the new found incomplete offsets. This field is used by nested classes accessing the state
-                state.setIncompleteWorkContainers(incompleteOffsets);
-                String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, state);
-                int metaPayloadLength = offsetMapPayload.length();
-                boolean moreMessagesAllowed;
-                OffsetAndMetadata offsetWithExtraMap;
-                // todo move
-                double pressureThresholdValue = DefaultMaxMetadataSize * USED_PAYLOAD_THRESHOLD_MULTIPLIER;
-
-                if (metaPayloadLength > DefaultMaxMetadataSize) {
-                    // exceeded maximum API allowed, strip the payload
-                    moreMessagesAllowed = false;
-                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage); // strip payload
-                    log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                                    "Warning: messages might be replayed on rebalance. " +
-                                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
-                            metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
-                } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
-                    // try to turn on back pressure before max size is reached
-                    moreMessagesAllowed = false;
-                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                    log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
-                                    "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                            metaPayloadLength, pressureThresholdValue, DefaultMaxMetadataSize);
-                } else { // and thus (metaPayloadLength <= pressureThresholdValue)
-                    moreMessagesAllowed = true;
-                    offsetWithExtraMap = new OffsetAndMetadata(offsetOfNextExpectedMessage, offsetMapPayload);
-                    log.debug("Payload size {} within threshold {}", metaPayloadLength, pressureThresholdValue);
-                }
-
-                setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, moreMessagesAllowed);
-                offsetsToSend.put(topicPartitionKey, offsetWithExtraMap);
-            } catch (NoEncodingPossibleException e) {
-                setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, false);
-                log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
-            }
-        } else {
-            setPartitionMoreRecordsAllowedToProcess(topicPartitionKey, true);
-        }
-    }
-
-
     public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
         TopicPartition topicPartition = toTopicPartition(rec);
         var partitionState = getPartitionState(topicPartition);
@@ -456,15 +375,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemove(boolean remove) {
-
         var newone = findCompletedEligibleOffsetsAndRemoveNew();
-
-        var oldone = findCompletedEligibleOffsetsAndRemoveOld(remove);
-
-        if (!newone.entrySet().containsAll(oldone.entrySet())) {
-            log.error("Regression?");
-        }
-
         return newone;
     }
 
@@ -479,99 +390,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             offsetsToSend.put(entry.getKey(), offsetAndMetadata);
         }
 
-//        Map<TopicPartition, OffsetAndMetadata> collect = getAssignedPartitions().entrySet().stream()
-//                .map(x -> x.getValue().getCompletedEligibleOffsetsAndRemoveNew(remove))
-//                .filter(Optional::isPresent)
-//                .map(Optional::get)
-//                .collect(Collectors.toMap(Map.Entry::getKey,
-//                        o -> o.getValue().getCompletedEligibleOffsetsAndRemoveNew()));
-
         log.debug("Scan finished, {} were in flight, offset(s) ({}) to be committed", offsetsToSend.size(), offsetsToSend);
-        return offsetsToSend;
-    }
-
-
-    /**
-     * Finds eligible offset positions to commit in each assigned partition
-     */
-    // todo remove completely as state of offsets should be tracked live, no need to scan for them - see #201
-    // https://github.com/confluentinc/parallel-consumer/issues/201 Refactor: Live tracking of offsets as they change, so we don't need to scan for them
-    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemoveOld(boolean remove) {
-
-        //
-        Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
-        int count = 0;
-        int removed = 0;
-        log.trace("Scanning for in order in-flight work that has completed...");
-
-        //
-        for (var partitionStateEntry : getAssignedPartitions().entrySet()) {
-            var partitionState = partitionStateEntry.getValue();
-            Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getCommitQueue();
-            TopicPartition topicPartitionKey = partitionStateEntry.getKey();
-            log.trace("Starting scan of partition: {}", topicPartitionKey);
-
-            count += partitionQueue.size();
-            var workToRemove = new LinkedList<WorkContainer<?, ?>>();
-            var incompleteOffsets = new LinkedHashSet<Long>();
-            long lowWaterMark = -1;
-            var highestSucceeded = partitionState.getOffsetHighestSucceeded();
-            // can't commit this offset or beyond, as this is the latest offset that is incomplete
-            // i.e. only commit offsets that come before the current one, and stop looking for more
-            boolean beyondSuccessiveSucceededOffsets = false;
-            for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
-                // ordered iteration via offset keys thanks to the tree-map
-                WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
-
-                //
-                long offset = container.getCr().offset();
-                if (offset > highestSucceeded) {
-                    break; // no more to encode
-                }
-
-                //
-                boolean complete = container.isUserFunctionComplete();
-                if (complete) {
-                    if (container.getUserFunctionSucceeded().get() && !beyondSuccessiveSucceededOffsets) {
-                        log.trace("Found offset candidate ({}) to add to offset commit map", container);
-                        workToRemove.add(container);
-                        // as in flights are processed in order, this will keep getting overwritten with the highest offset available
-                        // current offset is the highest successful offset, so commit +1 - offset to be committed is defined as the offset of the next expected message to be read
-                        long offsetOfNextExpectedMessageToBeCommitted = offset + 1;
-                        OffsetAndMetadata offsetData = new OffsetAndMetadata(offsetOfNextExpectedMessageToBeCommitted);
-                        offsetsToSend.put(topicPartitionKey, offsetData);
-                    } else if (container.getUserFunctionSucceeded().get() && beyondSuccessiveSucceededOffsets) {
-                        // todo lookup the low water mark and include here
-                        log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset ({}). Will mark as complete in the offset map.",
-                                container.getCr().offset(), lowWaterMark);
-                        // no-op - offset map is only for not succeeded or completed offsets
-                    } else {
-                        log.trace("Offset {} is complete, but failed processing. Will track in offset map as failed. Can't do normal offset commit past this point.", container.getCr().offset());
-                        beyondSuccessiveSucceededOffsets = true;
-                        incompleteOffsets.add(offset);
-                    }
-                } else {
-                    lowWaterMark = container.offset();
-                    beyondSuccessiveSucceededOffsets = true;
-                    log.trace("Offset (:{}) is incomplete, holding up the queue ({}) of size {}.",
-                            container.getCr().offset(),
-                            topicPartitionKey,
-                            partitionQueue.size());
-                    incompleteOffsets.add(offset);
-                }
-            }
-
-            addEncodedOffsets(offsetsToSend, topicPartitionKey, incompleteOffsets);
-
-            if (remove) {
-                removed += workToRemove.size();
-                partitionState.remove(workToRemove);
-            }
-        }
-
-
-        log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
-                count, removed, offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;
     }
 
@@ -579,14 +398,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return Collections.unmodifiableMap(this.partitionStates.entrySet().stream()
                 .filter(e -> !e.getValue().isRemoved())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-    }
-
-    boolean isDirty() {
-        return this.partitionStates.values().parallelStream().anyMatch(PartitionState::isDirty);
-    }
-
-    public boolean isClean() {
-        return !isDirty();
     }
 
     public boolean couldBeTakenAsWork(WorkContainer<?, ?> workContainer) {
@@ -621,6 +432,14 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     private boolean isBlockingProgress(WorkContainer<?, ?> workContainer) {
         var partitionState = getPartitionState(workContainer.getTopicPartition());
         return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
+    }
+
+    boolean isDirty() {
+        return this.partitionStates.values().parallelStream().anyMatch(PartitionState::isDirty);
+    }
+
+    public boolean isClean() {
+        return !isDirty();
     }
 
 }

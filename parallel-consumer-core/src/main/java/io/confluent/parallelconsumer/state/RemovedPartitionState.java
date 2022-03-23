@@ -61,14 +61,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
         log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
     }
 
-//    @Override
-//    public void remove(final List<WorkContainer<K, V>> workToRemove) {
-//        if (!workToRemove.isEmpty()) {
-//            // no-op
-//            log.debug("Dropping work container to remove for partition no longer assigned. WC: {}", workToRemove);
-//        }
-//    }
-
     /**
      * Don't allow more records to be processed for this partition. Eventually these records triggering this check will
      * be cleaned out.
@@ -106,11 +98,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
         return READ_ONLY_EMPTY_MAP;
     }
 
-//    @Override
-//    public void setIncompleteOffsets(final Set<Long> incompleteOffsets) {
-//        log.debug(NO_OP);
-//    }
-
     @Override
     void setAllowedMoreRecords(final boolean allowedMoreRecords) {
         log.debug(NO_OP);
@@ -125,11 +112,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     public void truncateOffsets(final long nextExpectedOffset) {
         log.debug(NO_OP);
     }
-
-//    @Override
-//    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
-//        log.debug(NO_OP);
-//    }
 
     @Override
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
