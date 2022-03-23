@@ -55,7 +55,7 @@ public class OffsetMapCodecManager<K, V> {
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
-    // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad
+    // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -92,7 +92,7 @@ public class OffsetMapCodecManager<K, V> {
      */
     public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
-    // todo remove consumer
+    // todo remove consumer #233
     public OffsetMapCodecManager(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.consumer = consumer;
     }
@@ -102,7 +102,7 @@ public class OffsetMapCodecManager<K, V> {
      *
      * @return
      */
-    // todo this is the only method that needs the consumer - offset encoding is being conflated with decoding upon assignment
+    // todo this is the only method that needs the consumer - offset encoding is being conflated with decoding upon assignment #233
     // todo make package private?
     // todo rename
     public Map<TopicPartition, PartitionState<K, V>> loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
@@ -186,10 +186,10 @@ public class OffsetMapCodecManager<K, V> {
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
     byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
-        Set<Long> incompleteOffsets = partitionState.getIncompleteOffsets();
-        log.debug("Encoding partition {} incomplete offsets {}", partitionState.getTp(), incompleteOffsets);
-        long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, offsetHighestSucceeded, incompleteOffsets).invoke();
+        Set<Long> incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+        long highestSucceeded = partitionState.getOffsetHighestSucceeded();
+        log.debug("Encoding partition {}: highest suceeded {}, incomplete offsets {}, ", partitionState.getTp(), highestSucceeded, incompleteOffsets);
+        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
 
         //
         if (forcedCodec.isPresent()) {
@@ -231,6 +231,7 @@ public class OffsetMapCodecManager<K, V> {
         }
     }
 
+    // todo Exists only for testing? delete?
     String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<K, V> state) {
         var runLengthString = new StringBuilder();
         Long lowWaterMark = finalOffsetForPartition;
@@ -238,7 +239,7 @@ public class OffsetMapCodecManager<K, V> {
         long end = highWaterMark - lowWaterMark;
         for (final var relativeOffset : range(end)) {
             long offset = lowWaterMark + relativeOffset;
-            if (state.getIncompleteOffsets().contains(offset)) {
+            if (state.getIncompleteOffsetsBelowHighestSucceeded().contains(offset)) {
                 runLengthString.append("o");
             } else {
                 runLengthString.append("x");

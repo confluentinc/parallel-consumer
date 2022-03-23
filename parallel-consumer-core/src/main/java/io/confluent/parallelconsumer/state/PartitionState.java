@@ -34,8 +34,24 @@ public class PartitionState<K, V> {
     // todo why concurrent?
     private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new HashSet<>();
 
-    public Set<Long> getIncompleteOffsets() {
-        return incompleteWorkContainers.parallelStream().map(WorkContainer::offset).collect(Collectors.toUnmodifiableSet());
+    /**
+     * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
+     */
+    public Set<Long> getAllIncompleteOffsets() {
+        return incompleteWorkContainers.parallelStream()
+                .map(WorkContainer::offset)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * @return incomplete offsets which are lower than the highest succeeded
+     */
+    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+        long highestSucceeded = getOffsetHighestSucceeded();
+        return incompleteWorkContainers.parallelStream()
+                .map(WorkContainer::offset)
+                .filter(x -> x < highestSucceeded)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -221,8 +237,7 @@ public class PartitionState<K, V> {
     // todo rename syncOffsetAndIncompleteEncodings
     public OffsetPair getCompletedEligibleOffsetsAndRemoveNew() {
         OffsetAndMetadata offsetMetadata = createOffsetAndMetadata();
-
-        Set<Long> incompleteOffsets = getIncompleteOffsets();
+        Set<Long> incompleteOffsets = getIncompleteOffsetsBelowHighestSucceeded();
         return new OffsetPair(offsetMetadata, incompleteOffsets);
     }
 
@@ -255,7 +270,7 @@ public class PartitionState<K, V> {
             return Optional.empty();
         }
 
-        // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null
+        // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
         OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
         String offsetMapPayload;
         try {

@@ -74,7 +74,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public Set<Long> getIncompleteOffsets() {
+    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         log.debug(NO_OP);
         //noinspection unchecked - by using unsave generics, we are able to share one static instance
         return READ_ONLY_EMPTY_SET;
