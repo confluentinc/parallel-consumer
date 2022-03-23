@@ -104,7 +104,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public void maybeRaiseHighestSeenOffset(final long highestSeen) {
+    public void maybeRaiseHighestSeenOffset(final long offset) {
         log.debug(NO_OP);
     }
 

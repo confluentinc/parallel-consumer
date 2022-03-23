@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -60,9 +59,8 @@ public class PartitionState<K, V> {
      * Starts off as null - no data
      */
     // visible for testing
-    @NonNull
     @Getter(PUBLIC)
-    private Long offsetHighestSeen;
+    private long offsetHighestSeen;
 
     /**
      * Highest offset which has completed successfully ("succeeded").
@@ -117,12 +115,11 @@ public class PartitionState<K, V> {
         this.offsetHighestSeen = incompletes.getHighestSeenOffset();
     }
 
-    public void maybeRaiseHighestSeenOffset(final long highestSeen) {
-        // rise the high water mark
-        Long oldHighestSeen = this.offsetHighestSeen;
-        if (oldHighestSeen == null || highestSeen >= oldHighestSeen) {
-            log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, highestSeen);
-            offsetHighestSeen = highestSeen;
+    public void maybeRaiseHighestSeenOffset(final long offset) {
+        // rise the highest seen offset
+        if (offset >= offsetHighestSeen) {
+            log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, offset);
+            offsetHighestSeen = offset;
         }
     }
 

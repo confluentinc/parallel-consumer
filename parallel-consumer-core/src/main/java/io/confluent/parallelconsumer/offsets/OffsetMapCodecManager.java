@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.Value;
@@ -231,7 +232,12 @@ public class OffsetMapCodecManager<K, V> {
         }
     }
 
-    // todo Exists only for testing? delete?
+    /**
+     * x is complete
+     * <p>
+     * o is incomplete
+     */
+    // todo Exists only for testing? delete? move to test utils
     String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<K, V> state) {
         var runLengthString = new StringBuilder();
         Long lowWaterMark = finalOffsetForPartition;
@@ -248,6 +254,12 @@ public class OffsetMapCodecManager<K, V> {
         return runLengthString.toString();
     }
 
+    /**
+     * x is complete
+     * <p>
+     * o is incomplete
+     */
+    // todo Exists only for testing? delete? move to test utils
     static Set<Long> bitmapStringToIncomplete(final long baseOffset, final String inputBitmapString) {
         final Set<Long> incompleteOffsets = new HashSet<>();
 
