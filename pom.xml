@@ -11,7 +11,7 @@
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-parent</artifactId>
     <name>Confluent Parallel Consumer</name>
-    <version>0.4.0.2-SNAPSHOT</version>
+    <version>0.5.0.0-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
     <url>http://confluent.io</url>
@@ -441,6 +441,20 @@
         </testResources>
         <plugins>
             <plugin>
+                <groupId>org.sonatype.ossindex.maven</groupId>
+                <artifactId>ossindex-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>audit-dependencies</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>audit</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>com.soebes.maven.plugins</groupId>
                 <artifactId>echo-maven-plugin</artifactId>
                 <version>0.5.0</version>
@@ -627,10 +641,11 @@
                 <version>3.0.0</version>
                 <executions>
                     <execution>
-                        <id>enforce-java</id>
+                        <id>enforce-versions</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
+                        <phase>validate</phase>
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
@@ -639,6 +654,32 @@
                                 <requireMavenVersion>
                                     <version>3.6.3</version>
                                 </requireMavenVersion>
+                                <requireMavenVersion>
+                                    <version>3.6.3</version>
+                                </requireMavenVersion>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <exclude>log4j:*:*:*:runtime</exclude>
+                                        <exclude>log4j:*:*:*:compile</exclude>
+                                        <exclude>log4j:*:*:*:test</exclude>
+                                        <exclude>org.apache.logging.log4j:log4j-core:*:*:runtime</exclude>
+                                        <exclude>org.apache.logging.log4j:log4j-core:*:*:compile</exclude>
+                                        <!-- Javafaker is abandoned and has CVEs and bugs -->
+                                        <exclude>com.github.javafaker</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                                <reactorModuleConvergence/>
+                                <banDuplicatePomDependencyVersions/>
+                                <requireSameVersions/>
+                                <requireReleaseDeps>
+                                    <onlyWhenRelease>false</onlyWhenRelease>
+                                    <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                    <excludes>
+                                        <exclude>io.confluent.parallelconsumer:</exclude>
+                                    </excludes>
+                                </requireReleaseDeps>
+                                <requirePluginVersions/>
                             </rules>
                         </configuration>
                     </execution>
@@ -767,6 +808,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <phase>initialize</phase>

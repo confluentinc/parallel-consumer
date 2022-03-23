@@ -3,7 +3,6 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.SneakyThrows;
