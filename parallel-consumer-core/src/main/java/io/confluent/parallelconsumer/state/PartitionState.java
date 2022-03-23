@@ -31,7 +31,7 @@ public class PartitionState<K, V> {
     /**
      * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
      */
-    // todo why concurrent?
+    // todo why concurrent - doesn't need it?
     private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new HashSet<>();
 
     /**
@@ -114,7 +114,6 @@ public class PartitionState<K, V> {
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
         this.tp = tp;
-//        this.incompleteOffsets = incompletes.getIncompleteOffsets();
         this.offsetHighestSeen = incompletes.getHighestSeenOffset();
     }
 
@@ -182,7 +181,6 @@ public class PartitionState<K, V> {
     public void onSuccess(WorkContainer<K, V> work) {
         updateHighestSucceededOffsetSoFar(work);
         this.incompleteWorkContainers.remove(work);
-//        this.completedEligibleWork.add(work);
     }
 
     public void onFailure(WorkContainer<K, V> work) {
@@ -223,10 +221,6 @@ public class PartitionState<K, V> {
         return false;
     }
 
-    public void setIncompleteWorkContainers(LinkedHashSet<Long> incompleteOffsets) {
-        //noop delete
-    }
-
     // todo maybe not needed in end
     @Value
     public static class OffsetPair {
@@ -261,57 +255,50 @@ public class PartitionState<K, V> {
      *
      * @return if possible, the String encoded offset map
      */
-    // todo refactor
     Optional<String> tryToEncodeOffsetsStartingAt(long offsetOfNextExpectedMessage) {
-        // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
-
         if (incompleteWorkContainers.isEmpty()) {
             setAllowedMoreRecords(true);
             return Optional.empty();
         }
 
-        // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
-        OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
-        String offsetMapPayload;
         try {
-
-            // encode
-            offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
-
+            // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
+            String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
+            updateBlockFromEncodingResult(offsetMapPayload);
+            return Optional.of(offsetMapPayload);
         } catch (NoEncodingPossibleException e) {
             setAllowedMoreRecords(false);
             log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
             return Optional.empty();
         }
+    }
 
-        //
+    private void updateBlockFromEncodingResult(String offsetMapPayload) {
         int metaPayloadLength = offsetMapPayload.length();
-        boolean moreMessagesAllowed;
-
-        // todo move - move what?
-        double pressureThresholdValue = DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
 
         if (metaPayloadLength > DefaultMaxMetadataSize) {
             // exceeded maximum API allowed, strip the payload
-            moreMessagesAllowed = false;
+            setAllowedMoreRecords(false);
             log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
                             "Warning: messages might be replayed on rebalance. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
                     metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
-        } else if (metaPayloadLength > pressureThresholdValue) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
+        } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
-            moreMessagesAllowed = false;
+            setAllowedMoreRecords(false);
             log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
                             "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                    metaPayloadLength, pressureThresholdValue, DefaultMaxMetadataSize);
+                    metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
-            moreMessagesAllowed = true;
-            log.debug("Payload size {} within threshold {}", metaPayloadLength, pressureThresholdValue);
+            setAllowedMoreRecords(true);
+            log.debug("Payload size {} within threshold {}", metaPayloadLength, getPressureThresholdValue());
         }
+    }
 
-        setAllowedMoreRecords(moreMessagesAllowed);
-        return Optional.of(offsetMapPayload);
+    private double getPressureThresholdValue() {
+        return DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
 }

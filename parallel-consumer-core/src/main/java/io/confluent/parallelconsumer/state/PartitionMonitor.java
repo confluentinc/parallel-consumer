@@ -285,11 +285,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 .orElse(0);
     }
 
-    private void setPartitionMoreRecordsAllowedToProcess(TopicPartition topicPartitionKey, boolean moreMessagesAllowed) {
-        var state = getPartitionState(topicPartitionKey);
-        state.setAllowedMoreRecords(moreMessagesAllowed);
-    }
-
     public Long getHighestSeenOffset(final TopicPartition tp) {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
