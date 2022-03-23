@@ -185,10 +185,10 @@ public class OffsetMapCodecManager<K, V> {
      * <p>
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
-    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partition) throws NoEncodingPossibleException {
-        Set<Long> incompleteOffsets = partition.getIncompleteOffsets();
-        log.debug("Encoding partition {} incomplete offsets {}", partition.getTp(), incompleteOffsets);
-        long offsetHighestSucceeded = partition.getOffsetHighestSucceeded();
+    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
+        Set<Long> incompleteOffsets = partitionState.getIncompleteOffsets();
+        log.debug("Encoding partition {} incomplete offsets {}", partitionState.getTp(), incompleteOffsets);
+        long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, offsetHighestSucceeded, incompleteOffsets).invoke();
 
         //

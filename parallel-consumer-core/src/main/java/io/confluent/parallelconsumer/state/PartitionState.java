@@ -17,7 +17,6 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
@@ -29,26 +28,34 @@ public class PartitionState<K, V> {
     @Getter
     private final TopicPartition tp;
 
+    // todo delete
+//    /**
+//     * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
+//     * <p>
+//     * We only need to know the full incompletes when we do the {@link #findCompletedEligibleOffsetsAndRemove} scan, so
+//     * find the full sent only then, and discard. Otherwise, for continuous encoding, the encoders track it them
+//     * selves.
+//     * <p>
+//     * We work with incompletes, instead of completes, because it's a bet that most of the time the storage space for
+//     * storing the incompletes in memory will be smaller.
+//     *
+//     * @see #findCompletedEligibleOffsetsAndRemove(boolean)
+//     * @see #encodeWorkResult(boolean, WorkContainer)
+//     * @see #onSuccess(WorkContainer)
+//     */
+//     visible for testing
+//     todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
+//     this is derived from partitionCommitQueues WorkContainer states
+
     /**
      * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
-     * <p>
-     * We only need to know the full incompletes when we do the {@link #findCompletedEligibleOffsetsAndRemove} scan, so
-     * find the full sent only then, and discard. Otherwise, for continuous encoding, the encoders track it them
-     * selves.
-     * <p>
-     * We work with incompletes, instead of completes, because it's a bet that most of the time the storage space for
-     * storing the incompletes in memory will be smaller.
-     *
-     * @see #findCompletedEligibleOffsetsAndRemove(boolean)
-     * @see #encodeWorkResult(boolean, WorkContainer)
-     * @see #onSuccess(WorkContainer)
      */
-    // visible for testing
-    // todo should be tracked live, as we know when the state of work containers flips - i.e. they are continuously tracked
-    // this is derived from partitionCommitQueues WorkContainer states
-    private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new ConcurrentSkipListSet<>();
+    // todo why concurrent?
+    private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new HashSet<>();
 
-    private final Set<WorkContainer<?, ?>> completedEligibleWork = new ConcurrentSkipListSet<>();
+    // todo never queried
+    // todo why concurrent?
+//    private final Set<WorkContainer<?, ?>> completedEligibleWork = new HashSet<>();
 
     public Set<Long> getIncompleteOffsets() {
         return incompleteWorkContainers.parallelStream().map(WorkContainer::offset).collect(Collectors.toUnmodifiableSet());
@@ -182,11 +189,11 @@ public class PartitionState<K, V> {
     public void onSuccess(WorkContainer<K, V> work) {
         updateHighestSucceededOffsetSoFar(work);
         this.incompleteWorkContainers.remove(work);
-        this.completedEligibleWork.add(work);
+//        this.completedEligibleWork.add(work);
     }
 
     public void onFailure(WorkContainer<K, V> work) {
-        this.completedEligibleWork.remove(work);
+        // no-op
     }
 
     /**
@@ -358,7 +365,7 @@ public class PartitionState<K, V> {
      * @return if possible, the String encoded offset map
      */
     // todo refactor
-    Optional<String> tryToEncodeOffsetsStartingAt(Long offsetOfNextExpectedMessage) {
+    Optional<String> tryToEncodeOffsetsStartingAt(long offsetOfNextExpectedMessage) {
         // TODO potential optimisation: store/compare the current incomplete offsets to the last committed ones, to know if this step is needed or not (new progress has been made) - isdirty?
 
         if (incompleteWorkContainers.isEmpty()) {
