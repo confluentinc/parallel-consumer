@@ -30,7 +30,6 @@
 // leave it commented out when committing work)
 //:project_root: ../../
 
-note: {docdir}
 
 ifdef::env-github[]
 :tip-caption: :bulb:
@@ -1150,6 +1149,20 @@ http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and ht
 ifndef::github_name[]
 toc::[]
 endif::[]
+
+== Next Version
+
+=== Features
+
+* PollContext API - provides central access to result set with various convenience methods as well as metadata about records, such as failure count
+* Batching - all API methods now support batching.
+See the Options class set batch size for more information.
+
+=== Fixes and Improvements
+
+* Event system - better CPU usage in control thread
+* Concurrency stability improvements
+* Update dependencies
 
 == v0.4.0.0
 // https://github.com/confluentinc/parallel-consumer/releases/tag/0.4.0.0
