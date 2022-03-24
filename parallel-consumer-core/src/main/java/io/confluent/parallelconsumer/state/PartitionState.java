@@ -264,7 +264,11 @@ public class PartitionState<K, V> {
     }
 
     public long getOffsetHighestSequentialSucceeded() {
-        return this.incompleteOffsets.first() - 1;
+        if (this.incompleteOffsets.isEmpty()) {
+            return -1;
+        } else {
+            return this.incompleteOffsets.first() - 1;
+        }
     }
 
     /**
