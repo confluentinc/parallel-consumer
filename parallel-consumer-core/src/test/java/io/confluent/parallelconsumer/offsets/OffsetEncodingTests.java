@@ -16,7 +16,6 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -191,18 +190,19 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             KafkaTestUtils.completeWork(wmm, work, highest);
 
 
-            var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
-
-            // prepare for commit
-            // check for graceful fall back to the smallest available encoder
-            OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
-            OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
-            var state = wmm.getPm().getPartitionState(tp);
-            String bestPayload = om.makeOffsetMetadataPayload(1, state);
-            assertThat(bestPayload).isNotEmpty();
+            {
+                // check for graceful fall back to the smallest available encoder
+                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
+                OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
+                var state = wmm.getPm().getPartitionState(tp);
+                String bestPayload = om.makeOffsetMetadataPayload(1, state);
+                assertThat(bestPayload).isNotEmpty();
+            }
 
             // make the commit
-            Map<TopicPartition, OffsetAndMetadata> remap = JavaUtils.remap(completedEligibleOffsetsAndRemove, PartitionState.OffsetPair::getSync);
+            var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
+            var remap = JavaUtils.remap(completedEligibleOffsetsAndRemove, PartitionState.OffsetPair::getSync);
+            assertThat(remap.get(tp).offset()).isEqualTo(1L);
             consumerSpy.commitSync(remap);
         }
 
