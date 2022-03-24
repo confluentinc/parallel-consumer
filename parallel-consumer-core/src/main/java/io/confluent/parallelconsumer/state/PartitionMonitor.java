@@ -246,7 +246,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         partitionState.maybeRaiseHighestSeenOffset(seenOffset);
     }
 
-    boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
+    //todo visible for testing
+    public boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
         var partitionState = getPartitionState(tp);
         boolean previouslyCompleted = partitionState.isRecordPreviouslyCompleted(rec);

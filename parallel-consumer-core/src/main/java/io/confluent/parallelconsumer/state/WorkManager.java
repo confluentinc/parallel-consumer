@@ -195,7 +195,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return the number of extra records ingested due to request
      */
     // todo rename - shunt messages from internal buffer into queues
-    int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
+    //todo visible for testing
+    public int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
         long available = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;

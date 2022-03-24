@@ -375,7 +375,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         assertThat(OffsetRunLength.runLengthDecodeToString(integers)).isEqualTo(stringMap);
     }
 
-
+// todo delete
 //    static ArgumentSets differentInputsAndCompressions() {
 //        ArgumentSets.argumentsForFirstParameter(inputsToCompress)
 //                .argumentsForNextParameter()
@@ -422,12 +422,6 @@ class WorkManagerOffsetMapCodecManagerTest {
             assertWithMessage(encoding.encoding.name())
                     .that(simple).isEqualTo(input);
         }
-    }
-
-    @Disabled
-    @Test
-    void testAllInputsEachEncoding() {
-        assertThat(true).isFalse();
     }
 
 }

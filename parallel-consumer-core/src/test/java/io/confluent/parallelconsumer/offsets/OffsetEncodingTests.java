@@ -170,13 +170,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
         recordsMap.put(tp, records);
-        ConsumerRecords<String, String> crs = new ConsumerRecords<>(recordsMap);
+        ConsumerRecords<String, String> testRecords = new ConsumerRecords<>(recordsMap);
 
         // write offsets
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
-            wmm.registerWork(crs);
+            wmm.registerWork(testRecords);
 
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
@@ -212,7 +212,48 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             var newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
-            newWm.registerWork(crs);
+            newWm.registerWork(testRecords);
+
+            var pm = newWm.getPm();
+            var partitionState = pm.getPartitionState(tp);
+
+            {
+                long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
+                assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
+
+                long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
+                assertThat(offsetHighestSucceeded).isEqualTo(25_000);
+
+                long offsetHighestSeen = partitionState.getOffsetHighestSeen();
+                assertThat(offsetHighestSeen).isEqualTo(72770);
+
+                Set<Long> incompleteOffsetsBelowHighestSucceeded = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+                assertThat(incompleteOffsetsBelowHighestSucceeded).isNotEmpty();
+                assertThat(incompleteOffsetsBelowHighestSucceeded).isEmpty();
+
+            }
+
+
+            var anIncompleteRecord = records.get(3);
+            Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
+
+
+            {
+                int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
+
+
+                long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
+                long offsetHighestSeen = partitionState.getOffsetHighestSeen();
+                Set<Long> incompleteOffsetsBelowHighestSucceeded = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+
+                assertThat(offsetHighestSucceeded);
+
+                assertThat(ingested).isEqualTo(testRecords.count());
+                Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isTrue();
+
+            }
+
+
             var workRetrieved = newWm.getWorkIfAvailable();
             var workRetrievedOffsets = workRetrieved.stream().map(WorkContainer::offset).collect(Collectors.toList());
             Truth.assertThat(workRetrieved).isNotEmpty();
