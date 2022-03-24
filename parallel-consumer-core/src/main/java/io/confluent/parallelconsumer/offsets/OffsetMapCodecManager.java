@@ -238,21 +238,26 @@ public class OffsetMapCodecManager<K, V> {
      * o is incomplete
      */
     // todo Exists only for testing? delete? move to test utils
-    String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<K, V> state) {
+    // todo should get finalOffsetForPartition from state
+    static String incompletesToBitmapString(long finalOffsetForPartition, long highestSeen, Set<Long> incompletes) {
         var runLengthString = new StringBuilder();
-        Long lowWaterMarkReal = state.getOffsetHighestSequentialSucceeded();
         Long lowWaterMark = finalOffsetForPartition;
-        Long highestSeen = state.getOffsetHighestSeen().get();
         long end = highestSeen - lowWaterMark;
         for (final var relativeOffset : range(end)) {
             long offset = lowWaterMark + relativeOffset;
-            if (state.getIncompleteOffsetsBelowHighestSucceeded().contains(offset)) {
+            if (incompletes.contains(offset)) {
                 runLengthString.append("o");
             } else {
                 runLengthString.append("x");
             }
         }
         return runLengthString.toString();
+    }
+
+    // todo Exists only for testing? delete? move to test utils
+    static String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<?, ?> state) {
+        return incompletesToBitmapString(finalOffsetForPartition,
+                state.getOffsetHighestSeen().get(), state.getIncompleteOffsetsBelowHighestSucceeded());
     }
 
     /**

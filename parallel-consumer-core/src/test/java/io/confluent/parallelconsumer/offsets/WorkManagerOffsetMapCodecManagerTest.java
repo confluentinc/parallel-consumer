@@ -4,10 +4,12 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
+import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -18,6 +20,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.xerial.snappy.SnappyOutputStream;
 import pl.tlinkowski.unij.api.UniLists;
@@ -29,8 +33,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
+import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.bitmapStringToIncomplete;
+import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.incompletesToBitmapString;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,6 +97,7 @@ class WorkManagerOffsetMapCodecManagerTest {
             "xxxxxxoooooxoxoxoooooxxxxoooooxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxoxoxooxoxoxoxoxoxoxoxoxoxoxoxo"
     );
 
+    @Getter
     static List<String> inputsToCompress = new ArrayList<>();
 
     @BeforeEach
@@ -116,9 +124,10 @@ class WorkManagerOffsetMapCodecManagerTest {
         inputsToCompress.add(input100);
         inputsToCompress.add(input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100);
         inputsToCompress.add(inputString);
-        inputsToCompress.add(generateRandomData(1000).toString());
-        inputsToCompress.add(generateRandomData(10000).toString());
-        inputsToCompress.add(generateRandomData(30000).toString());
+//        inputsToCompress.add(generateRandomData(1000).toString());
+        // todo remove? slow, not needed
+//        inputsToCompress.add(generateRandomData(10000).toString());
+//        inputsToCompress.add(generateRandomData(30000).toString());
     }
 
     private static StringBuffer generateRandomData(int entries) {
@@ -246,24 +255,23 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @Test
     void decodeOffsetMap() {
-        Set<Long> set = OffsetMapCodecManager.bitmapStringToIncomplete(2L, "ooxx");
+        Set<Long> set = bitmapStringToIncomplete(2L, "ooxx");
         assertThat(set).containsExactly(2L, 3L);
 
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "ooxxoxox")).containsExactly(2L, 3L, 6L, 8L);
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "o")).containsExactly(2L);
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "x")).containsExactly();
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "")).containsExactly();
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "ooo")).containsExactly(2L, 3L, 4L);
-        assertThat(OffsetMapCodecManager.bitmapStringToIncomplete(2L, "xxx")).containsExactly();
+        assertThat(bitmapStringToIncomplete(2L, "ooxxoxox")).containsExactly(2L, 3L, 6L, 8L);
+        assertThat(bitmapStringToIncomplete(2L, "o")).containsExactly(2L);
+        assertThat(bitmapStringToIncomplete(2L, "x")).containsExactly();
+        assertThat(bitmapStringToIncomplete(2L, "")).containsExactly();
+        assertThat(bitmapStringToIncomplete(2L, "ooo")).containsExactly(2L, 3L, 4L);
+        assertThat(bitmapStringToIncomplete(2L, "xxx")).containsExactly();
     }
 
     @Test
     void binaryArrayConstruction() {
         state.maybeRaiseHighestSeenOffset(6L);
 
-        // was using 1 L for finalOffsetForPartition
-        String s = offsetCodecManager.incompletesToBitmapString(finalOffsetForPartition, state);
-        assertThat(s).isEqualTo("xooxx");
+        String encoding = incompletesToBitmapString(finalOffsetForPartition, state);
+        assertThat(encoding).isEqualTo("oxooxx");
     }
 
     @SneakyThrows
@@ -311,7 +319,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         for (var inputString : inputsToCompress) {
             int inputLength = inputString.length();
 
-            Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, inputString);
+            Set<Long> longs = bitmapStringToIncomplete(finalOffsetForPartition, inputString);
 
             OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, longs).invoke();
             byte[] byteByte = simultaneousEncoder.getEncodingMap().get(ByteArray);
@@ -335,7 +343,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         long highestSucceeded = input.length() - 1;
 
         int nextExpectedOffset = 0;
-        Set<Long> incompletes = OffsetMapCodecManager.bitmapStringToIncomplete(nextExpectedOffset, input);
+        Set<Long> incompletes = bitmapStringToIncomplete(nextExpectedOffset, input);
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(nextExpectedOffset, highestSucceeded, incompletes);
         encoder.invoke();
         byte[] pack = encoder.packSmallest();
@@ -360,49 +368,59 @@ class WorkManagerOffsetMapCodecManagerTest {
     void runLengthEncoding() {
         raiseToHardCodedHighestSeenOffset();
 
-        String stringMap = offsetCodecManager.incompletesToBitmapString(finalOffsetForPartition, state);
+        String stringMap = incompletesToBitmapString(finalOffsetForPartition, state);
         List<Integer> integers = OffsetRunLength.runLengthEncode(stringMap);
         assertThat(integers).as("encoding of map: " + stringMap).containsExactlyElementsOf(UniLists.of(1, 1, 2));
 
         assertThat(OffsetRunLength.runLengthDecodeToString(integers)).isEqualTo(stringMap);
     }
 
+
+//    static ArgumentSets differentInputsAndCompressions() {
+//        ArgumentSets.argumentsForFirstParameter(inputsToCompress)
+//                .argumentsForNextParameter()
+//    }
+
+    static List<String> differentInputsAndCompressions() {
+        return inputsToCompress;
+    }
+
     /**
      * Compare compression performance on different types of inputs, and tests that each encoding type is decompressed
      * again correctly
      */
-    @Test
-    void differentInputsAndCompressions() {
-        for (final String input : inputsToCompress) {
-            // override high water mark setup, as the test sets it manually
-            setup();
-            wm.getPm().maybeRaiseHighestSeenOffset(tp, 0L); // hard reset to zero
-            long highWater = input.length();
-            wm.getPm().maybeRaiseHighestSeenOffset(tp, highWater);
+    @ParameterizedTest
+    @MethodSource
+    void differentInputsAndCompressions(String input) {
+        long highestSeen = input.length() - 1; // pretend we've gone one higher than the input incompletes
+
+        //
+        log.debug("Testing round - size: {} input: '{}'", input.length(), input);
+        Set<Long> inputIncompletes = bitmapStringToIncomplete(finalOffsetForPartition, input);
+        String sanityEncoding = incompletesToBitmapString(finalOffsetForPartition, highestSeen + 1, inputIncompletes);
+        Truth.assertThat(sanityEncoding).isEqualTo(input);
+
+        //
+        OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSeen, inputIncompletes);
+        encoder.invoke();
+
+        // test all encodings created
+        for (final EncodedOffsetPair encoding : encoder.sortedEncodings) {
+            //
+            byte[] packedEncoding = encoder.packEncoding(encoding);
 
             //
-            log.debug("Testing round - size: {} input: '{}'", input.length(), input);
-            Set<Long> longs = OffsetMapCodecManager.bitmapStringToIncomplete(finalOffsetForPartition, input);
-            OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highWater, longs);
-            encoder.invoke();
+            var recoveredIncompleteAndOffset =
+                    OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, packedEncoding);
+            Set<Long> recoveredIncompletes = recoveredIncompleteAndOffset.getIncompleteOffsets();
 
-            // test all encodings created
-            for (final EncodedOffsetPair pair : encoder.sortedEncodings) {
-                byte[] result = encoder.packEncoding(pair);
+            //
+            assertThat(recoveredIncompletes).containsExactlyInAnyOrderElementsOf(inputIncompletes);
 
-                //
-                OffsetMapCodecManager.HighestOffsetAndIncompletes recoveredIncompleteOffsetTuple =
-                        OffsetMapCodecManager.decodeCompressedOffsets(finalOffsetForPartition, result);
-                Set<Long> recoveredIncompletes = recoveredIncompleteOffsetTuple.getIncompleteOffsets();
-
-                //
-                assertThat(recoveredIncompletes).containsExactlyInAnyOrderElementsOf(longs);
-
-                //
-                var state = new PartitionState<String, String>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highWater), recoveredIncompletes));
-                String recoveredOffsetBitmapAsString = offsetCodecManager.incompletesToBitmapString(finalOffsetForPartition, state);
-                assertThat(recoveredOffsetBitmapAsString).isEqualTo(input);
-            }
+            //
+            String simple = incompletesToBitmapString(finalOffsetForPartition, highestSeen + 1, recoveredIncompletes);
+            assertWithMessage(encoding.encoding.name())
+                    .that(simple).isEqualTo(input);
         }
     }
 

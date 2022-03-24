@@ -14,7 +14,10 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.NavigableMap;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
@@ -32,24 +35,26 @@ public class PartitionState<K, V> {
      * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
      */
     // todo why concurrent - doesn't need it?
-    private final Set<WorkContainer<?, ?>> incompleteWorkContainers = new HashSet<>();
+    private final Set<Long> incompleteOffsets;
 
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
      */
     public Set<Long> getAllIncompleteOffsets() {
-        return incompleteWorkContainers.parallelStream()
-                .map(WorkContainer::offset)
+        return incompleteOffsets.parallelStream()
+//                .map(WorkContainer::offset)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
+    // todo move down
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
-        return incompleteWorkContainers.parallelStream()
-                .map(WorkContainer::offset)
+        return incompleteOffsets.parallelStream()
+//                .map(WorkContainer::offset)
+                // todo less thna or less than and equal?
                 .filter(x -> x < highestSucceeded)
                 .collect(Collectors.toUnmodifiableSet());
     }
@@ -114,6 +119,7 @@ public class PartitionState<K, V> {
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
         this.tp = tp;
         this.offsetHighestSeen = incompletes.getHighestSeenOffset();
+        this.incompleteOffsets = incompletes.getIncompleteOffsets();
     }
 
     public void maybeRaiseHighestSeenOffset(final long offset) {
@@ -131,7 +137,7 @@ public class PartitionState<K, V> {
      * Removes all offsets that fall below the new low water mark.
      */
     public void truncateOffsets(final long nextExpectedOffset) {
-        incompleteWorkContainers.removeIf(offset -> offset.offset() < nextExpectedOffset);
+        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
     }
 
     public void onOffsetCommitSuccess(final OffsetPair committed) {
@@ -179,7 +185,7 @@ public class PartitionState<K, V> {
 
     public void onSuccess(WorkContainer<K, V> work) {
         updateHighestSucceededOffsetSoFar(work);
-        this.incompleteWorkContainers.remove(work);
+        this.incompleteOffsets.remove(work.offset());
     }
 
     public void onFailure(WorkContainer<K, V> work) {
@@ -201,7 +207,7 @@ public class PartitionState<K, V> {
     public void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
-        incompleteWorkContainers.add(wc);
+        incompleteOffsets.add(wc.offset());
     }
 
     public void remove(Iterable<WorkContainer<?, ?>> workToRemove) {
@@ -255,7 +261,7 @@ public class PartitionState<K, V> {
      * @return if possible, the String encoded offset map
      */
     Optional<String> tryToEncodeOffsetsStartingAt(long offsetOfNextExpectedMessage) {
-        if (incompleteWorkContainers.isEmpty()) {
+        if (incompleteOffsets.isEmpty()) {
             setAllowedMoreRecords(true);
             return Optional.empty();
         }

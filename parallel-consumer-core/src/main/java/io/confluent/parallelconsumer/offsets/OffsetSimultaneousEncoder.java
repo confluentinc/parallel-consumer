@@ -80,7 +80,7 @@ public class OffsetSimultaneousEncoder {
     /**
      * The encoders to run
      */
-    private final Set<OffsetEncoder> encoders = new HashSet<>();
+    private final Set<OffsetEncoder> encoders;
 
     public OffsetSimultaneousEncoder(long lowWaterMark, long highestSucceededOffset, Set<Long> incompleteOffsets) {
         this.lowWaterMark = lowWaterMark;
@@ -101,28 +101,31 @@ public class OffsetSimultaneousEncoder {
         // sanity
         if (bitsetLengthL != length) throw new IllegalArgumentException("Integer overflow");
 
-        initEncoders();
+        this.encoders = initEncoders();
     }
 
-    private void initEncoders() {
+    private Set<OffsetEncoder> initEncoders() {
+        var newEncoders = new HashSet<OffsetEncoder>();
         if (length > LARGE_INPUT_MAP_SIZE_THRESHOLD) {
             log.debug("~Large input map size: {} (start: {} end: {})", length, lowWaterMark, lowWaterMark + length);
         }
 
         try {
-            encoders.add(new BitSetEncoder(length, this, v1));
+            newEncoders.add(new BitSetEncoder(length, this, v1));
         } catch (BitSetEncodingNotSupportedException a) {
             log.debug("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
         try {
-            encoders.add(new BitSetEncoder(length, this, v2));
+            newEncoders.add(new BitSetEncoder(length, this, v2));
         } catch (BitSetEncodingNotSupportedException a) {
             log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
-        encoders.add(new RunLengthEncoder(this, v1));
-        encoders.add(new RunLengthEncoder(this, v2));
+        newEncoders.add(new RunLengthEncoder(this, v1));
+        newEncoders.add(new RunLengthEncoder(this, v2));
+
+        return newEncoders;
     }
 
     /**
