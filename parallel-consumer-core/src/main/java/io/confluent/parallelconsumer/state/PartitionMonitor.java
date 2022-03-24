@@ -103,7 +103,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
             try {
                 Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
-                OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation
+                OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
                 var partitionStates = om.loadOffsetMapForPartition(partitionsSet);
                 this.partitionStates.putAll(partitionStates);
             } catch (Exception e) {
@@ -285,7 +285,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 .orElse(0);
     }
 
-    public Long getHighestSeenOffset(final TopicPartition tp) {
+    public Optional<Long> getHighestSeenOffset(final TopicPartition tp) {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 

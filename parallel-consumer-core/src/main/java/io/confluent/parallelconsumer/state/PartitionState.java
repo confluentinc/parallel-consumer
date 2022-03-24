@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
+import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
 @Slf4j
@@ -60,7 +61,7 @@ public class PartitionState<K, V> {
      */
     // visible for testing
     @Getter(PUBLIC)
-    private long offsetHighestSeen;
+    private Optional<Long> offsetHighestSeen;
 
     /**
      * Highest offset which has completed successfully ("succeeded").
@@ -117,9 +118,12 @@ public class PartitionState<K, V> {
 
     public void maybeRaiseHighestSeenOffset(final long offset) {
         // rise the highest seen offset
-        if (offset >= offsetHighestSeen) {
+        //noinspection SimplifyOptionalCallChains - java 8
+        if (!offsetHighestSeen.isPresent()) {
+            offsetHighestSeen = of(offset);
+        } else if (offset >= offsetHighestSeen.get()) {
             log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, offset);
-            offsetHighestSeen = offset;
+            offsetHighestSeen = of(offset);
         }
     }
 
@@ -149,18 +153,16 @@ public class PartitionState<K, V> {
     }
 
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
-        boolean previouslyProcessed;
-        long offset = rec.offset();
-        if (incompleteWorkContainers.contains(offset)) {
-            // record previously saved as not being completed, can exit early
-            previouslyProcessed = false;
+        long recOffset = rec.offset();
+        // todo slow - maintain a hashset of offsets instead
+        if (offsetHighestSeen.isPresent() && !getIncompleteOffsetsBelowHighestSucceeded().contains(recOffset)) {
+            long highestSeen = offsetHighestSeen.get();
+            // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
+            return recOffset <= highestSeen;
         } else {
-            Long offsetHighWaterMark = offsetHighestSeen;
-            // within the range of tracked offsets, so must have been previously completed
             // we haven't recorded this far up, so must not have been processed yet
-            previouslyProcessed = offsetHighWaterMark != null && offset <= offsetHighWaterMark;
+            return false;
         }
-        return previouslyProcessed;
     }
 
     public boolean hasWorkInCommitQueue() {
@@ -263,7 +265,7 @@ public class PartitionState<K, V> {
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             updateBlockFromEncodingResult(offsetMapPayload);
-            return Optional.of(offsetMapPayload);
+            return of(offsetMapPayload);
         } catch (NoEncodingPossibleException e) {
             setAllowedMoreRecords(false);
             log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);

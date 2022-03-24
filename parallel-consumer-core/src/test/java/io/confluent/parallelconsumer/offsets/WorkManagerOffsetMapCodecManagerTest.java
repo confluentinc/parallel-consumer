@@ -32,6 +32,7 @@ import java.util.*;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Optional.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // todo refactor - remove tests which use hard coded state vs dynamic state - #compressionCycle, #selialiseCycle, #runLengthEncoding, #loadCompressedRunLengthRncoding
@@ -50,7 +51,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     TreeSet<Long> incompleteOffsets = new TreeSet<>(UniSets.of(0L, 2L, 3L));
 
     /**
-     * Committable offset of 2, meaning 1 is complete and 2 and 3 are incomplete. 4 is also complete.
+     * Committable offset of 0, meaning 1 and 4 are complete and 2 and 3 are incomplete
+     * <p>
+     * 0X00X
      */
     long finalOffsetForPartition = 0L;
 
@@ -59,7 +62,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     long highestSucceeded = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(highestSucceeded, incompleteOffsets));
+    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
 
     {
         WorkContainer mock = Mockito.mock(WorkContainer.class);
@@ -258,7 +261,8 @@ class WorkManagerOffsetMapCodecManagerTest {
     void binaryArrayConstruction() {
         state.maybeRaiseHighestSeenOffset(6L);
 
-        String s = offsetCodecManager.incompletesToBitmapString(1L, state);
+        // was using 1 L for finalOffsetForPartition
+        String s = offsetCodecManager.incompletesToBitmapString(finalOffsetForPartition, state);
         assertThat(s).isEqualTo("xooxx");
     }
 
@@ -395,7 +399,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 assertThat(recoveredIncompletes).containsExactlyInAnyOrderElementsOf(longs);
 
                 //
-                var state = new PartitionState<String, String>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(highWater, recoveredIncompletes));
+                var state = new PartitionState<String, String>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highWater), recoveredIncompletes));
                 String recoveredOffsetBitmapAsString = offsetCodecManager.incompletesToBitmapString(finalOffsetForPartition, state);
                 assertThat(recoveredOffsetBitmapAsString).isEqualTo(input);
             }

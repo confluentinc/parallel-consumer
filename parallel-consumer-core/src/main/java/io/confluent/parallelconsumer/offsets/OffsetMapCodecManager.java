@@ -68,23 +68,23 @@ public class OffsetMapCodecManager<K, V> {
         /**
          * The highest represented offset in this result.
          */
-        Long highestSeenOffset;
+        Optional<Long> highestSeenOffset;
 
         /**
          * Of the offsets encoded, the incomplete ones.
          */
         Set<Long> incompleteOffsets;
 
-        public static HighestOffsetAndIncompletes of(Long highestSeenOffset) {
-            return new HighestOffsetAndIncompletes(highestSeenOffset, new HashSet<>());
+        public static HighestOffsetAndIncompletes of(long highestSeenOffset) {
+            return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>());
         }
 
         public static HighestOffsetAndIncompletes of(long highestSeenOffset, Set<Long> incompleteOffsets) {
-            return new HighestOffsetAndIncompletes(highestSeenOffset, incompleteOffsets);
+            return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), incompleteOffsets);
         }
 
         public static HighestOffsetAndIncompletes of() {
-            return HighestOffsetAndIncompletes.of(null);
+            return new HighestOffsetAndIncompletes(Optional.empty(), new HashSet<>());
         }
     }
 
@@ -143,9 +143,11 @@ public class OffsetMapCodecManager<K, V> {
 
         // for each assignment which isn't now added in the states to return, enter a default entry. Catches multiple other cases.
         assignment.stream()
-                .filter(x -> !states.containsKey(x))
-                .forEach(x ->
-                        states.put(x, new PartitionState<>(x, HighestOffsetAndIncompletes.of())));
+                .filter(topicPartition -> !states.containsKey(topicPartition))
+                .forEach(topicPartition -> {
+                    PartitionState<K, V> defaultEntry = new PartitionState<>(topicPartition, HighestOffsetAndIncompletes.of());
+                    states.put(topicPartition, defaultEntry);
+                });
 
         return states;
     }
@@ -222,13 +224,11 @@ public class OffsetMapCodecManager<K, V> {
             return HighestOffsetAndIncompletes.of(highestSeenOffsetIsThen);
         } else {
             var result = EncodedOffsetPair.unwrap(decodedBytes);
-
-            HighestOffsetAndIncompletes incompletesTuple = result.getDecodedIncompletes(nextExpectedOffset);
-
-            Set<Long> incompletes = incompletesTuple.getIncompleteOffsets();
-            long highWater = incompletesTuple.getHighestSeenOffset();
-
-            return HighestOffsetAndIncompletes.of(highWater, incompletes);
+            return result.getDecodedIncompletes(nextExpectedOffset);
+//            Set<Long> incompletes = incompletesTuple.getIncompleteOffsets();
+//            long highWater = incompletesTuple.getHighestSeenOffset();
+//            return HighestOffsetAndIncompletes.of(highWater, incompletes);
+//            return incompletesTuple;
         }
     }
 
@@ -240,9 +240,10 @@ public class OffsetMapCodecManager<K, V> {
     // todo Exists only for testing? delete? move to test utils
     String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<K, V> state) {
         var runLengthString = new StringBuilder();
+        Long lowWaterMarkReal = state.getOffsetHighestSequentialSucceeded();
         Long lowWaterMark = finalOffsetForPartition;
-        Long highWaterMark = state.getOffsetHighestSeen();
-        long end = highWaterMark - lowWaterMark;
+        Long highestSeen = state.getOffsetHighestSeen().get();
+        long end = highestSeen - lowWaterMark;
         for (final var relativeOffset : range(end)) {
             long offset = lowWaterMark + relativeOffset;
             if (state.getIncompleteOffsetsBelowHighestSucceeded().contains(offset)) {

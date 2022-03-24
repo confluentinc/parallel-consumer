@@ -8,6 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import io.confluent.parallelconsumer.state.PartitionMonitor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
@@ -137,7 +138,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 // check offset encoding incomplete payload doesn't contain expected completed messages
                 String metadata = mostRecentCommit.metadata();
                 HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, metadata);
-                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset();
+                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset().get();
                 Set<Long> incompletes = decodedOffsetPayload.getIncompleteOffsets();
                 assertThat(incompletes).isNotEmpty()
                         .contains(offsetToBlock)
@@ -169,7 +170,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                                         .as("Partition SHOULD be blocked due to back pressure")
                                         .isTrue()); // blocked
 
-                Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
+                Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition).get();
                 assertThat(partitionOffsetHighWaterMarks)
                         .isGreaterThan(numberOfRecords); // high watermark is beyond our initial processed count upon blocking
 
@@ -199,7 +200,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             int extraMessages = numberOfRecords + extraRecordsToBlockWithThresholdBlocks / 2;
             {
                 // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
-                wm.getPm().setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
+                PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
 
                 //
                 msgLockThree.countDown(); // unlock to make state dirty to get a commit
