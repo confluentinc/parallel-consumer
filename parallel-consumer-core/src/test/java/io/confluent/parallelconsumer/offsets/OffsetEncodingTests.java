@@ -213,7 +213,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(crs);
-            List<WorkContainer<String, String>> workRetrieved = newWm.getWorkIfAvailable();
+            var workRetrieved = newWm.getWorkIfAvailable();
+            var workRetrievedOffsets = workRetrieved.stream().map(WorkContainer::offset).collect(Collectors.toList());
             Truth.assertThat(workRetrieved).isNotEmpty();
 
             List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
@@ -225,19 +226,23 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                         BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
                         RunLength, RunLengthCompressed // RunLength V1 max runlength is Short.MAX_VALUE
                         -> {
+                    assertThat(workRetrievedOffsets).doesNotContain(2500L);
+                    assertThat(workRetrievedOffsets).doesNotContainSequence(expected);
+
+                    // delete
                     assertThatThrownBy(() -> {
-                        assertThat(workRetrieved.stream().map(WorkContainer::offset))
+                        assertThat(workRetrievedOffsets)
                                 .containsExactlyElementsOf(expected);
 
 //                        assertThat(workRetrieved).extracting(WorkContainer::getCr)
 //                                .containsExactlyElementsOf(incompleteRecords);
                     })
                             .hasMessageContaining("but some elements were not")
-                            .hasMessageContaining("offset = 25000");
+                            .hasMessageContaining("25000L");
 
                 }
                 default -> {
-                    assertThat(workRetrieved.stream().map(WorkContainer::offset))
+                    assertThat(workRetrievedOffsets)
                             .as("Contains only incomplete records")
                             .containsExactlyElementsOf(expected);
                 }
