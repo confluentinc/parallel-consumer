@@ -106,15 +106,15 @@ public class OffsetMapCodecManager<K, V> {
     // todo this is the only method that needs the consumer - offset encoding is being conflated with decoding upon assignment #233
     // todo make package private?
     // todo rename
-    public Map<TopicPartition, PartitionState<K, V>> loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
+    public Map<TopicPartition, PartitionState<K, V>> loadPartitionStateForAssignment(final Set<TopicPartition> assignment) {
         // load last committed state / metadata from consumer
         // todo this should be controlled for - improve consumer management so that this can't happen
-        Map<TopicPartition, OffsetAndMetadata> lastCommittedOffsets = null;
+        Map<TopicPartition, OffsetAndMetadata> partitionLastCommittedOffsets = null;
         int attempts = 0;
-        while (lastCommittedOffsets == null) {
+        while (partitionLastCommittedOffsets == null) {
             WakeupException lastWakeupException = null;
             try {
-                lastCommittedOffsets = consumer.committed(assignment);
+                partitionLastCommittedOffsets = consumer.committed(assignment);
             } catch (WakeupException exception) {
                 log.debug("Woken up trying to get assignment", exception);
                 lastWakeupException = exception;
@@ -124,15 +124,12 @@ public class OffsetMapCodecManager<K, V> {
                 throw new InternalRuntimeError("Failed to get partition assignment - continuously woken up.", lastWakeupException);
         }
 
-        var states = new HashMap<TopicPartition, PartitionState<K, V>>();
-        lastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
+        var partitionStates = new HashMap<TopicPartition, PartitionState<K, V>>();
+        partitionLastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
-                long nextExpectedOffset = offsetAndMeta.offset();
-                String metadata = offsetAndMeta.metadata();
                 try {
-                    // todo rename
-                    PartitionState<K, V> incompletes = decodeIncompletes(nextExpectedOffset, tp, metadata);
-                    states.put(tp, incompletes);
+                    PartitionState<K, V> incompletes = decodeIncompletes(tp, offsetAndMeta);
+                    partitionStates.put(tp, incompletes);
                 } catch (OffsetDecodingError offsetDecodingError) {
                     log.error("Error decoding offsets from assigned partition, dropping offset map (will replay previously completed messages - partition: {}, data: {})",
                             tp, offsetAndMeta, offsetDecodingError);
@@ -141,15 +138,20 @@ public class OffsetMapCodecManager<K, V> {
 
         });
 
-        // for each assignment which isn't now added in the states to return, enter a default entry. Catches multiple other cases.
+        // assigned partitions for which there has never been a commit
+        // for each assignment with no commit history, enter a default entry. Catches multiple other cases.
         assignment.stream()
-                .filter(topicPartition -> !states.containsKey(topicPartition))
+                .filter(topicPartition -> !partitionStates.containsKey(topicPartition))
                 .forEach(topicPartition -> {
                     PartitionState<K, V> defaultEntry = new PartitionState<>(topicPartition, HighestOffsetAndIncompletes.of());
-                    states.put(topicPartition, defaultEntry);
+                    partitionStates.put(topicPartition, defaultEntry);
                 });
 
-        return states;
+        return partitionStates;
+    }
+
+    private HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(OffsetAndMetadata offsetData) throws OffsetDecodingError {
+        return deserialiseIncompleteOffsetMapFromBase64(offsetData.offset(), offsetData.metadata());
     }
 
     public static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long committedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
@@ -162,9 +164,8 @@ public class OffsetMapCodecManager<K, V> {
         return decodeCompressedOffsets(committedOffsetForPartition, decodedBytes);
     }
 
-    // todo rename
-    PartitionState<K, V> decodeIncompletes(long nextExpectedOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
-        HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(nextExpectedOffset, offsetMetadataPayload);
+    PartitionState<K, V> decodeIncompletes(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
+        HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
         return new PartitionState<K, V>(tp, incompletes);
     }

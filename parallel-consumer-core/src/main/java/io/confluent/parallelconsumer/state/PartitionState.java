@@ -32,7 +32,11 @@ public class PartitionState<K, V> {
     private final TopicPartition tp;
 
     /**
-     * A subset of Offsets, beyond the highest committable offset, which haven't been totally completed.
+     * Offset data beyond the highest committable offset, which haven't totally succeeded.
+     * <p>
+     * This is independent of the actual queued {@link WorkContainer}s. This is because to start with, data about
+     * incomplete offsets come from the encoded metadata payload that gets committed along with the highest committable
+     * offset ({@link #getOffsetHighestSequentialSucceeded()}). They are not always in sync.
      */
     // todo why concurrent - doesn't need it?
     private final Set<Long> incompleteOffsets;
@@ -42,7 +46,6 @@ public class PartitionState<K, V> {
      */
     public Set<Long> getAllIncompleteOffsets() {
         return incompleteOffsets.parallelStream()
-//                .map(WorkContainer::offset)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
@@ -53,8 +56,7 @@ public class PartitionState<K, V> {
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         return incompleteOffsets.parallelStream()
-//                .map(WorkContainer::offset)
-                // todo less thna or less than and equal?
+                // todo less than or less than and equal?
                 .filter(x -> x < highestSucceeded)
                 .collect(Collectors.toUnmodifiableSet());
     }

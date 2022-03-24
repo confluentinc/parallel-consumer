@@ -104,7 +104,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             try {
                 Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
-                var partitionStates = om.loadOffsetMapForPartition(partitionsSet);
+                var partitionStates = om.loadPartitionStateForAssignment(partitionsSet);
                 this.partitionStates.putAll(partitionStates);
             } catch (Exception e) {
                 log.error("Error in onPartitionsAssigned", e);
