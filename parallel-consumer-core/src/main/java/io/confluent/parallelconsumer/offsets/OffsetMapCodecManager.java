@@ -128,8 +128,8 @@ public class OffsetMapCodecManager<K, V> {
         partitionLastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
                 try {
-                    PartitionState<K, V> incompletes = decodeIncompletes(tp, offsetAndMeta);
-                    partitionStates.put(tp, incompletes);
+                    PartitionState<K, V> state = decodePartitionState(tp, offsetAndMeta);
+                    partitionStates.put(tp, state);
                 } catch (OffsetDecodingError offsetDecodingError) {
                     log.error("Error decoding offsets from assigned partition, dropping offset map (will replay previously completed messages - partition: {}, data: {})",
                             tp, offsetAndMeta, offsetDecodingError);
@@ -164,7 +164,7 @@ public class OffsetMapCodecManager<K, V> {
         return decodeCompressedOffsets(committedOffsetForPartition, decodedBytes);
     }
 
-    PartitionState<K, V> decodeIncompletes(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
+    PartitionState<K, V> decodePartitionState(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
         return new PartitionState<K, V>(tp, incompletes);
@@ -190,7 +190,7 @@ public class OffsetMapCodecManager<K, V> {
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
     byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
-        Set<Long> incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+        var incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
         long highestSucceeded = partitionState.getOffsetHighestSucceeded();
         log.debug("Encoding partition {}: highest suceeded {}, incomplete offsets {}, ", partitionState.getTp(), highestSucceeded, incompleteOffsets);
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();

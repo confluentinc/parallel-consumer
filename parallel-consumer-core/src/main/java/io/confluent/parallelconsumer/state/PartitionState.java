@@ -14,16 +14,14 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collections;
-import java.util.NavigableMap;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.of;
-import static lombok.AccessLevel.*;
+import static lombok.AccessLevel.PACKAGE;
+import static lombok.AccessLevel.PUBLIC;
 
 @Slf4j
 public class PartitionState<K, V> {
@@ -37,9 +35,11 @@ public class PartitionState<K, V> {
      * This is independent of the actual queued {@link WorkContainer}s. This is because to start with, data about
      * incomplete offsets come from the encoded metadata payload that gets committed along with the highest committable
      * offset ({@link #getOffsetHighestSequentialSucceeded()}). They are not always in sync.
+     * <p>
+     * TreeSet so we can always get the lowest offset.
      */
     // todo why concurrent - doesn't need it?
-    private final Set<Long> incompleteOffsets;
+    private final TreeSet<Long> incompleteOffsets;
 
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
@@ -74,15 +74,12 @@ public class PartitionState<K, V> {
      * Highest offset which has completed successfully ("succeeded").
      */
     @Getter(PUBLIC)
-    @Setter(PRIVATE)
     private long offsetHighestSucceeded = -1L;
 
     /**
      * Highest continuous succeeded offset
      */
-    @Getter(PUBLIC)
-    @Setter(PRIVATE)
-    private long offsetHighestSequentialSucceeded = -1L;
+//    private long offsetHighestSequentialSucceeded = -1L;
 
     /**
      * If true, more messages are allowed to process for this partition.
@@ -118,10 +115,11 @@ public class PartitionState<K, V> {
         return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
-    public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
+    public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
-        this.offsetHighestSeen = incompletes.getHighestSeenOffset().orElse(-1L);
-        this.incompleteOffsets = incompletes.getIncompleteOffsets();
+        this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(-1L);
+        this.incompleteOffsets = new TreeSet<>(offsetData.getIncompleteOffsets());
+        this.offsetHighestSucceeded = this.offsetHighestSeen;
     }
 
     public void maybeRaiseHighestSeenOffset(final long offset) {
@@ -174,7 +172,7 @@ public class PartitionState<K, V> {
     }
 
     public boolean hasWorkThatNeedsCommitting() {
-        return commitQueue.values().parallelStream().anyMatch(x -> x.isUserFunctionSucceeded());
+        return commitQueue.values().parallelStream().anyMatch(WorkContainer::isUserFunctionSucceeded);
     }
 
     public int getCommitQueueSize() {
@@ -182,8 +180,11 @@ public class PartitionState<K, V> {
     }
 
     public void onSuccess(WorkContainer<K, V> work) {
+        long offset = work.offset();
+        boolean removed = this.incompleteOffsets.remove(offset);
+        assert (removed);
+
         updateHighestSucceededOffsetSoFar(work);
-        this.incompleteOffsets.remove(work.offset());
     }
 
     public void onFailure(WorkContainer<K, V> work) {
@@ -198,9 +199,20 @@ public class PartitionState<K, V> {
         long thisOffset = work.offset();
         if (thisOffset > highestSucceeded) {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
-            setOffsetHighestSucceeded(thisOffset);
+            this.offsetHighestSucceeded = thisOffset;
         }
+
+//        updateHighestSucceededSequential(work);
     }
+
+//    private void updateHighestSucceededSequential(WorkContainer<K, V> work) {
+//        long offset = work.offset();
+//        boolean thisOffsetIsNextAfterHighest = this.offsetHighestSequentialSucceeded + 1 == offset;
+//        if (thisOffsetIsNextAfterHighest) {
+//            // find the new highest sequentially succeeded
+//            this.offsetHighestSequentialSucceeded = findHighestSucceeded();
+//        }
+//    }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
@@ -249,6 +261,10 @@ public class PartitionState<K, V> {
 
     private long getNextExpectedPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
+    }
+
+    public long getOffsetHighestSequentialSucceeded() {
+        return this.incompleteOffsets.first() - 1;
     }
 
     /**

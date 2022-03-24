@@ -161,6 +161,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 25_000).findFirst().get());
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highest).findFirst().get());
 
+        List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
+                .sorted()
+                .collect(Collectors.toList());
 
         //
         ktu.send(consumerSpy, records);
@@ -190,6 +193,12 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             KafkaTestUtils.completeWork(wmm, work, highest);
 
 
+            // make the commit
+            var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
+            var remap = JavaUtils.remap(completedEligibleOffsetsAndRemove, PartitionState.OffsetPair::getSync);
+            assertThat(remap.get(tp).offset()).isEqualTo(1L);
+            consumerSpy.commitSync(remap);
+
             {
                 // check for graceful fall back to the smallest available encoder
                 OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
@@ -198,19 +207,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 String bestPayload = om.makeOffsetMetadataPayload(1, state);
                 assertThat(bestPayload).isNotEmpty();
             }
-
-            // make the commit
-            var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
-            var remap = JavaUtils.remap(completedEligibleOffsetsAndRemove, PartitionState.OffsetPair::getSync);
-            assertThat(remap.get(tp).offset()).isEqualTo(1L);
-            consumerSpy.commitSync(remap);
         }
 
         // check
         {
             var committed = consumerSpy.committed(UniSets.of(tp)).get(tp);
             assertThat(committed.offset()).isEqualTo(1L);
-            // todo why not blank
+            // todo why not blank - only some are - check when done
 //            assertThat(committed.metadata()).isNotBlank();
         }
 
@@ -230,45 +233,43 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
                 long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-                assertThat(offsetHighestSucceeded).isEqualTo(25_000);
+                assertThat(offsetHighestSucceeded).isEqualTo(highest);
 
                 long offsetHighestSeen = partitionState.getOffsetHighestSeen();
-                assertThat(offsetHighestSeen).isEqualTo(72770);
+                assertThat(offsetHighestSeen).isEqualTo(highest);
 
-                Set<Long> incompleteOffsetsBelowHighestSucceeded = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
-                assertThat(incompleteOffsetsBelowHighestSucceeded).isNotEmpty();
-                assertThat(incompleteOffsetsBelowHighestSucceeded).isEmpty();
-
+                var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+                Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
             }
 
-
+            // check record is marked as incomplete
             var anIncompleteRecord = records.get(3);
             Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
 
-
+            // force ingestion early, and check results
             {
                 int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
 
+                long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
+                assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
                 long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
+                assertThat(offsetHighestSucceeded).isEqualTo(highest);
+
                 long offsetHighestSeen = partitionState.getOffsetHighestSeen();
-                Set<Long> incompleteOffsetsBelowHighestSucceeded = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+                assertThat(offsetHighestSeen).isEqualTo(highest);
 
-                assertThat(offsetHighestSucceeded);
+                var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+                Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
 
-                assertThat(ingested).isEqualTo(testRecords.count());
-                Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isTrue();
-
+                assertThat(ingested).isEqualTo(testRecords.count() - 4); // 4 were succeeded
+                Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
             }
 
 
             var workRetrieved = newWm.getWorkIfAvailable();
             var workRetrievedOffsets = workRetrieved.stream().map(WorkContainer::offset).collect(Collectors.toList());
             Truth.assertThat(workRetrieved).isNotEmpty();
-
-            List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
-                    .sorted()
-                    .collect(Collectors.toList());
 
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long

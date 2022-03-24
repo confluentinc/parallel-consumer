@@ -371,9 +371,9 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
 
+    //todo remove bool
     private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemove(boolean remove) {
-        var newone = findCompletedEligibleOffsetsAndRemoveNew();
-        return newone;
+        return findCompletedEligibleOffsetsAndRemoveNew();
     }
 
     // todo rename
