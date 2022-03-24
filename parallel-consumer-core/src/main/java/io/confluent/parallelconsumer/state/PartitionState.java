@@ -183,7 +183,8 @@ public class PartitionState<K, V> {
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
         boolean removed = this.incompleteOffsets.remove(offset);
-        assert (removed);
+        //todo
+//        assert (removed);
 
         updateHighestSucceededOffsetSoFar(work);
     }
