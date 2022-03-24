@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import com.google.common.truth.Truth;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -44,7 +45,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @Test
     void runLengthDeserialise() {
         var sb = ByteBuffer.allocate(3);
-        sb.put((byte) 0); // magic byte place holder, can ignore
+        sb.put((byte) 0); // magic byte placeholder, can ignore
         sb.putShort((short) 1);
         byte[] array = new byte[2];
         sb.rewind();
@@ -165,7 +166,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         ktu.send(consumerSpy, records);
 
         //
-        ParallelConsumerOptions options = parallelConsumer.getWm().getOptions();
+        ParallelConsumerOptions<String, String> options = parallelConsumer.getWm().getOptions();
         HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
         recordsMap.put(tp, records);
@@ -209,24 +210,33 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            WorkManager<String, String> newWm = new WorkManager<>(options, consumerSpy);
+            var newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(crs);
             List<WorkContainer<String, String>> workRetrieved = newWm.getWorkIfAvailable();
+            Truth.assertThat(workRetrieved).isNotEmpty();
+
+            List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
+                    .sorted()
+                    .collect(Collectors.toList());
+
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
                         BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
                         RunLength, RunLengthCompressed // RunLength V1 max runlength is Short.MAX_VALUE
                         -> {
-                    assertThatThrownBy(() ->
-                            assertThat(workRetrieved).extracting(WorkContainer::getCr)
-                                    .containsExactlyElementsOf(incompleteRecords))
+                    assertThatThrownBy(() -> {
+                        assertThat(workRetrieved.stream().map(WorkContainer::offset))
+                                .containsExactlyElementsOf(expected);
+
+//                        assertThat(workRetrieved).extracting(WorkContainer::getCr)
+//                                .containsExactlyElementsOf(incompleteRecords);
+                    })
                             .hasMessageContaining("but some elements were not")
                             .hasMessageContaining("offset = 25000");
+
                 }
                 default -> {
-                    List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
-                    Collections.sort(expected);
                     assertThat(workRetrieved.stream().map(WorkContainer::offset))
                             .as("Contains only incomplete records")
                             .containsExactlyElementsOf(expected);

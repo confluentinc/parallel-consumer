@@ -96,7 +96,7 @@ class RunLengthEncoderTest {
 
                 HighestOffsetAndIncompletes result = OffsetMapCodecManager.decodeCompressedOffsets(0, wrapped);
 
-                assertThat(result.getHighestSeenOffset()).isEqualTo(10);
+                assertThat(result.getHighestSeenOffset()).contains(10L);
 
                 assertThat(result.getIncompleteOffsets()).containsExactlyElementsOf(incompletes);
             }
