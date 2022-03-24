@@ -170,7 +170,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                                         .as("Partition SHOULD be blocked due to back pressure")
                                         .isTrue()); // blocked
 
-                Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition).get();
+                Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
                         .isGreaterThan(numberOfRecords); // high watermark is beyond our initial processed count upon blocking
 

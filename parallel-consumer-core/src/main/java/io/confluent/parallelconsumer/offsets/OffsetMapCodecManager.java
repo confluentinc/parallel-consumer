@@ -258,7 +258,7 @@ public class OffsetMapCodecManager<K, V> {
     // todo Exists only for testing? delete? move to test utils
     static String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<?, ?> state) {
         return incompletesToBitmapString(finalOffsetForPartition,
-                state.getOffsetHighestSeen().get(), state.getIncompleteOffsetsBelowHighestSucceeded());
+                state.getOffsetHighestSeen(), state.getIncompleteOffsetsBelowHighestSucceeded());
     }
 
     /**

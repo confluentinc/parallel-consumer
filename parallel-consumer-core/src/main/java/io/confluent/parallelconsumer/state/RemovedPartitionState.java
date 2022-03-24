@@ -80,9 +80,9 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public Optional<Long> getOffsetHighestSeen() {
+    public long getOffsetHighestSeen() {
         log.debug(NO_OP);
-        return Optional.of(-1L);
+        return -1L;
     }
 
     @Override

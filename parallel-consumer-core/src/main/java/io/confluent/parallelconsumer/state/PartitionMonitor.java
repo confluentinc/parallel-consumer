@@ -285,7 +285,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 .orElse(0);
     }
 
-    public Optional<Long> getHighestSeenOffset(final TopicPartition tp) {
+    public long getHighestSeenOffset(final TopicPartition tp) {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 

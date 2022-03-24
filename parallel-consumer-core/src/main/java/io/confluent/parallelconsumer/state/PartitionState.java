@@ -64,11 +64,11 @@ public class PartitionState<K, V> {
     /**
      * The highest seen offset for a partition.
      * <p>
-     * Starts off as null - no data
+     * Starts off as -1 - no data. Offsets in Kafka are never negative, so this is fine.
      */
     // visible for testing
     @Getter(PUBLIC)
-    private Optional<Long> offsetHighestSeen;
+    private long offsetHighestSeen;
 
     /**
      * Highest offset which has completed successfully ("succeeded").
@@ -120,18 +120,15 @@ public class PartitionState<K, V> {
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes incompletes) {
         this.tp = tp;
-        this.offsetHighestSeen = incompletes.getHighestSeenOffset();
+        this.offsetHighestSeen = incompletes.getHighestSeenOffset().orElse(-1L);
         this.incompleteOffsets = incompletes.getIncompleteOffsets();
     }
 
     public void maybeRaiseHighestSeenOffset(final long offset) {
         // rise the highest seen offset
-        //noinspection SimplifyOptionalCallChains - java 8
-        if (!offsetHighestSeen.isPresent()) {
-            offsetHighestSeen = of(offset);
-        } else if (offset >= offsetHighestSeen.get()) {
+        if (offset >= offsetHighestSeen) {
             log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, offset);
-            offsetHighestSeen = of(offset);
+            offsetHighestSeen = offset;
         }
     }
 
@@ -163,10 +160,9 @@ public class PartitionState<K, V> {
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         long recOffset = rec.offset();
         // todo slow - maintain a hashset of offsets instead
-        if (offsetHighestSeen.isPresent() && !getIncompleteOffsetsBelowHighestSucceeded().contains(recOffset)) {
-            long highestSeen = offsetHighestSeen.get();
+        if (!getIncompleteOffsetsBelowHighestSucceeded().contains(recOffset)) {
             // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
-            return recOffset <= highestSeen;
+            return recOffset <= offsetHighestSeen;
         } else {
             // we haven't recorded this far up, so must not have been processed yet
             return false;
