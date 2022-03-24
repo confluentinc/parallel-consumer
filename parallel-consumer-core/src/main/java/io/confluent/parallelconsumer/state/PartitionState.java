@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
+import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.PACKAGE;
 import static lombok.AccessLevel.PUBLIC;
@@ -281,27 +282,36 @@ public class PartitionState<K, V> {
     Optional<String> tryToEncodeOffsetsStartingAt(long offsetOfNextExpectedMessage) {
         if (incompleteOffsets.isEmpty()) {
             setAllowedMoreRecords(true);
-            return Optional.empty();
+            return empty();
         }
 
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
-            updateBlockFromEncodingResult(offsetMapPayload);
-            return of(offsetMapPayload);
+            boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
+            if (mustStrip) {
+                return empty();
+            } else {
+                return of(offsetMapPayload);
+            }
         } catch (NoEncodingPossibleException e) {
             setAllowedMoreRecords(false);
             log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
-            return Optional.empty();
+            return empty();
         }
     }
 
-    private void updateBlockFromEncodingResult(String offsetMapPayload) {
+    /**
+     * @return true if the payload is too large and must be stripped
+     */
+    private boolean updateBlockFromEncodingResult(String offsetMapPayload) {
         int metaPayloadLength = offsetMapPayload.length();
+        boolean mustStrip = false;
 
         if (metaPayloadLength > DefaultMaxMetadataSize) {
             // exceeded maximum API allowed, strip the payload
+            mustStrip = true;
             setAllowedMoreRecords(false);
             log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
                             "Warning: messages might be replayed on rebalance. " +
@@ -318,6 +328,8 @@ public class PartitionState<K, V> {
             setAllowedMoreRecords(true);
             log.debug("Payload size {} within threshold {}", metaPayloadLength, getPressureThresholdValue());
         }
+
+        return mustStrip;
     }
 
     private double getPressureThresholdValue() {
