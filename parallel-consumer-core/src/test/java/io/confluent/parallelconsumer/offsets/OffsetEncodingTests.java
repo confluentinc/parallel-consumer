@@ -206,6 +206,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             );
         }
 
+        // check
+        {
+            var committed = consumerSpy.committed(UniSets.of(tp)).get(tp);
+            assertThat(committed.offset()).isEqualTo(1L);
+            assertThat(committed.metadata()).isNotBlank();
+        }
+
         // simulate a rebalance or some sort of reset, by instantiating a new WM with the state from the last
 
         // read offsets

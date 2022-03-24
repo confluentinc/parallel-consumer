@@ -79,30 +79,31 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     /**
-     * Load offset map for assigned partitions
+     * Load offset map for assigned assignedPartitions
      */
     @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        log.debug("Partitions assigned: {}", partitions);
+    public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
+        log.debug("Partitions assigned: {}", assignedPartitions);
         synchronized (this.partitionStates) {
 
-            for (final TopicPartition partition : partitions) {
-                if (this.partitionStates.containsKey(partition)) {
-                    PartitionState<K, V> state = partitionStates.get(partition);
-                    if (state.isRemoved()) {
-                        log.trace("Reassignment of previously revoked partition {} - state: {}", partition, state);
+            for (final TopicPartition partitionAssignment : assignedPartitions) {
+                boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionAssignment);
+                if (isAlreadyAssigned) {
+                    PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionAssignment);
+                    if (previouslyAssignedState.isRemoved()) {
+                        log.trace("Reassignment of previously revoked partition {} - state: {}", partitionAssignment, previouslyAssignedState);
                     } else {
                         log.warn("New assignment of partition which already exists and isn't recorded as removed in " +
                                 "partition state. Could be a state bug - was the partition revocation somehow missed, " +
-                                "or is this a race? Please file a GH issue. Partition: {}, state: {}", partition, state);
+                                "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionAssignment, previouslyAssignedState);
                     }
                 }
             }
 
-            incrementPartitionAssignmentEpoch(partitions);
+            incrementPartitionAssignmentEpoch(assignedPartitions);
 
             try {
-                Set<TopicPartition> partitionsSet = UniSets.copyOf(partitions);
+                Set<TopicPartition> partitionsSet = UniSets.copyOf(assignedPartitions); // todo why copy?
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
                 var partitionStates = om.loadPartitionStateForAssignment(partitionsSet);
                 this.partitionStates.putAll(partitionStates);
