@@ -148,20 +148,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    //todo delete
-//    /**
-//     * Removes all offsets that fall below the new low water mark.
-//     */
-//    private void truncateOffsets(final long nextExpectedOffset) {
-////        truncateWork();
-//        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
-//    }
-
     public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
-//        long nextExpectedOffset = committed.getSync().offset();
-//        truncateOffsets(nextExpectedOffset);
-
-        // todo possibility this is run a different thread than controller?
         setClean();
     }
 
@@ -175,8 +162,7 @@ public class PartitionState<K, V> {
 
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         long recOffset = rec.offset();
-        // todo slow - maintain a hashset of offsets instead
-        if (!getIncompleteOffsetsBelowHighestSucceeded().contains(recOffset)) {
+        if (!incompleteOffsets.contains(recOffset)) {
             // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
             return recOffset <= offsetHighestSeen;
         } else {
