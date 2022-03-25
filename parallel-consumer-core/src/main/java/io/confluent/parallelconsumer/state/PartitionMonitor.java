@@ -23,10 +23,10 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Clock;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -361,20 +361,12 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     public Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {
-        var offsetsToSend = getAssignedPartitions().values().stream()
-                .flatMap(state ->
-                        {
-                            var offsetAndMetadata = state.getCommitDataIfDirty();
-                            //noinspection OptionalIsPresent // optional#stream only in java 9
-                            if (offsetAndMetadata.isPresent())
-                                return Stream.of(Map.entry(state.getTp(), offsetAndMetadata.get()));
-                            else
-                                return Stream.of();
-                        }
-                ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-        log.debug("Scan finished, {} were in flight, offset(s) ({}) to be committed", offsetsToSend.size(), offsetsToSend);
-        return offsetsToSend;
+        var dirties = new HashMap<TopicPartition, OffsetAndMetadata>();
+        for (var state : getAssignedPartitions().values()) {
+            var offsetAndMetadata = state.getCommitDataIfDirty();
+            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTp(), andMetadata));
+        }
+        return dirties;
     }
 
     private Map<TopicPartition, PartitionState<K, V>> getAssignedPartitions() {
