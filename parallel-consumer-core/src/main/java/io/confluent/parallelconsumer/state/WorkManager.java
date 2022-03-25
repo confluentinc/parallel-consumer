@@ -196,7 +196,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return the number of extra records ingested due to request
      */
     // todo rename - shunt messages from internal buffer into queues
-    int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
+    // visible for testing
+    public int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
         long available = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
@@ -238,6 +239,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
         wc.endFlight();
+        pm.onFailure(wc);
         sm.onFailure(wc);
         numberRecordsOutForProcessing--;
     }
@@ -250,9 +252,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return wmbm.getAmountOfWorkQueuedWaitingIngestion();
     }
 
-    // todo rename
-    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
-        return pm.findCompletedEligibleOffsetsAndRemove();
+    public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
+        return pm.collectDirtyCommitData();
     }
 
     /**

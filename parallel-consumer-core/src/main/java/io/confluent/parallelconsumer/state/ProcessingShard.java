@@ -12,10 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NavigableMap;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
@@ -90,7 +87,7 @@ public class ProcessingShard<K, V> {
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
 
-        var slowWork = new ArrayList<WorkContainer<?, ?>>();
+        var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
         var iterator = entries.entrySet().iterator();
@@ -125,7 +122,7 @@ public class ProcessingShard<K, V> {
         return workTaken;
     }
 
-    private void logSlowWork(ArrayList<WorkContainer<?, ?>> slowWork) {
+    private void logSlowWork(Set<WorkContainer<?, ?>> slowWork) {
         // log
         if (!slowWork.isEmpty()) {
             List<String> slowTopics = slowWork.parallelStream()
@@ -137,7 +134,7 @@ public class ProcessingShard<K, V> {
         }
     }
 
-    private void addToSlowWorkMaybe(ArrayList<WorkContainer<?, ?>> slowWork, WorkContainer<?, ?> workContainer) {
+    private void addToSlowWorkMaybe(Set<WorkContainer<?, ?>> slowWork, WorkContainer<?, ?> workContainer) {
         var msgTemplate = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
         Duration timeInFlight = workContainer.getTimeInFlight();
         var msg = msg(msgTemplate, workContainer, workContainer.hasDelayPassed(), workContainer.isNotInFlight(), !workContainer.isUserFunctionSucceeded(), timeInFlight);

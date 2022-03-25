@@ -12,6 +12,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static java.time.Duration.ofMillis;
 
@@ -37,6 +39,21 @@ public class JavaUtils {
 
     public static boolean isGreaterThan(Duration compare, Duration to) {
         return compare.compareTo(to) > 0;
+    }
+
+    /**
+     * A shortcut for changing only the values of a Map.
+     * <p>
+     * https://stackoverflow.com/a/50740570/105741
+     */
+    public static <K, V1, V2> Map<K, V2> remap(Map<K, V1> map,
+                                               Function<? super V1, ? extends V2> function) {
+        return map.entrySet()
+                .stream() // or parallel
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> function.apply(e.getValue())
+                ));
     }
 
 }

@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import lombok.experimental.UtilityClass;
@@ -13,24 +13,24 @@ import org.slf4j.Logger;
 @UtilityClass
 public class ProgressBarUtils {
 
-    public static ProgressBar getNewMessagesBar(Logger log, int initialMax) {
+
+    public static ProgressBar getNewMessagesBar(Logger log, long initialMax) {
         return getNewMessagesBar(null, log, initialMax);
     }
 
-    public static ProgressBar getNewMessagesBar(String name, Logger log, int initialMax) {
+    public static ProgressBar getNewMessagesBar(String name, Logger log, long initialMax) {
         DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);
 
         String usedName = "progress";
         if (name != null)
             usedName = name;
 
-        ProgressBar build = new ProgressBarBuilder()
+        return new ProgressBarBuilder()
                 .setConsumer(delegatingProgressBarConsumer)
                 .setInitialMax(initialMax)
                 .showSpeed()
                 .setTaskName(usedName)
                 .setUnit("msg", 1)
                 .build();
-        return build;
     }
 }

@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
@@ -21,7 +21,6 @@ import org.apache.kafka.common.TopicPartition;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.time.temporal.TemporalUnit;
 import java.util.ConcurrentModificationException;
 import java.util.Map;
 import java.util.concurrent.Future;

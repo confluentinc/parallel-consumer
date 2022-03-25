@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -56,12 +56,12 @@ public class OffsetSimultaneousEncoder {
     Map<OffsetEncoding, byte[]> encodingMap = new EnumMap<>(OffsetEncoding.class);
 
     /**
-     * Ordered set of the the different encodings, used to quickly retrieve the most compressed encoding
+     * Ordered set of the different encodings, used to quickly retrieve the most compressed encoding
      *
      * @see #packSmallest()
      */
     @Getter
-    PriorityQueue<EncodedOffsetPair> sortedEncodings = new PriorityQueue();
+    PriorityQueue<EncodedOffsetPair> sortedEncodings = new PriorityQueue<>();
 
 
     /**
@@ -80,7 +80,7 @@ public class OffsetSimultaneousEncoder {
     /**
      * The encoders to run
      */
-    private final Set<OffsetEncoder> encoders = new HashSet<>();
+    private final Set<OffsetEncoder> encoders;
 
     public OffsetSimultaneousEncoder(long lowWaterMark, long highestSucceededOffset, Set<Long> incompleteOffsets) {
         this.lowWaterMark = lowWaterMark;
@@ -101,28 +101,31 @@ public class OffsetSimultaneousEncoder {
         // sanity
         if (bitsetLengthL != length) throw new IllegalArgumentException("Integer overflow");
 
-        initEncoders();
+        this.encoders = initEncoders();
     }
 
-    private void initEncoders() {
+    private Set<OffsetEncoder> initEncoders() {
+        var newEncoders = new HashSet<OffsetEncoder>();
         if (length > LARGE_INPUT_MAP_SIZE_THRESHOLD) {
             log.debug("~Large input map size: {} (start: {} end: {})", length, lowWaterMark, lowWaterMark + length);
         }
 
         try {
-            encoders.add(new BitSetEncoder(length, this, v1));
+            newEncoders.add(new BitSetEncoder(length, this, v1));
         } catch (BitSetEncodingNotSupportedException a) {
             log.debug("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
         try {
-            encoders.add(new BitSetEncoder(length, this, v2));
+            newEncoders.add(new BitSetEncoder(length, this, v2));
         } catch (BitSetEncodingNotSupportedException a) {
             log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
-        encoders.add(new RunLengthEncoder(this, v1));
-        encoders.add(new RunLengthEncoder(this, v2));
+        newEncoders.add(new RunLengthEncoder(this, v1));
+        newEncoders.add(new RunLengthEncoder(this, v2));
+
+        return newEncoders;
     }
 
     /**
@@ -204,7 +207,7 @@ public class OffsetSimultaneousEncoder {
                 toRemove.add(encoder);
             }
         }
-        encoders.removeAll(toRemove);
+        toRemove.forEach(encoders::remove);
 
         // compressed versions
         // sizes over LARGE_INPUT_MAP_SIZE_THRESHOLD bytes seem to benefit from compression
@@ -219,9 +222,9 @@ public class OffsetSimultaneousEncoder {
      *
      * @see #packEncoding(EncodedOffsetPair)
      */
-    public byte[] packSmallest() throws EncodingNotSupportedException {
+    public byte[] packSmallest() throws NoEncodingPossibleException {
         if (sortedEncodings.isEmpty()) {
-            throw new EncodingNotSupportedException("No encodings could be used");
+            throw new NoEncodingPossibleException("No encodings could be used");
         }
         final EncodedOffsetPair best = this.sortedEncodings.poll();
         log.debug("Compression chosen is: {}", best.encoding.name());

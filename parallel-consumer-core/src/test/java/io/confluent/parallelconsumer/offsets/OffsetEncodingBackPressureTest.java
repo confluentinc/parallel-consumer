@@ -5,9 +5,11 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
+import com.google.common.truth.Truth8;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import io.confluent.parallelconsumer.state.PartitionMonitor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
@@ -137,7 +139,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 // check offset encoding incomplete payload doesn't contain expected completed messages
                 String metadata = mostRecentCommit.metadata();
                 HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, metadata);
-                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset();
+                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset().get();
                 Set<Long> incompletes = decodedOffsetPayload.getIncompleteOffsets();
                 assertThat(incompletes).isNotEmpty()
                         .contains(offsetToBlock)
@@ -189,7 +191,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                                     .deserialiseIncompleteOffsetMapFromBase64(0L, meta);
                             Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
                                     .that(incompletes.getIncompleteOffsets()).containsExactlyElementsIn(blockedOffsets);
-                            assertThat(incompletes.getHighestSeenOffset()).isEqualTo(numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1);
+                            Truth8.assertThat(incompletes.getHighestSeenOffset()).hasValue(numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1);
                         }
                 );
             }
@@ -199,7 +201,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             int extraMessages = numberOfRecords + extraRecordsToBlockWithThresholdBlocks / 2;
             {
                 // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
-                wm.getPm().setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
+                PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
 
                 //
                 msgLockThree.countDown(); // unlock to make state dirty to get a commit
@@ -251,7 +253,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
             {
                 await().untilAsserted(() -> {
-                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
+                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
                     assertThat(offsets).contains(userFuncFinishedCount.get());
                 });
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());

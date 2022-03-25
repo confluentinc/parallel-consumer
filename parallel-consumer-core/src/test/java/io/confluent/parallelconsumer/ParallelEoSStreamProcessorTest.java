@@ -384,7 +384,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void testVoidPollMethod(CommitMode commitMode) {
+    void testVoidPollMethod(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
         int expected = 1;
@@ -396,7 +396,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(msgCompleteBarrier);
 
-        awaitForOneLoopCycle();
+        awaitForSomeLoopCycles(2);
 
         parallelConsumer.close();
 

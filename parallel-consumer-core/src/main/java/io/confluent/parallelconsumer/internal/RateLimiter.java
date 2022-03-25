@@ -1,11 +1,10 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import lombok.Getter;
-import lombok.SneakyThrows;
 
 import java.time.Duration;
 
@@ -22,7 +21,6 @@ public class RateLimiter {
         this.rate = Duration.ofSeconds(seconds);
     }
 
-    @SneakyThrows
     public void performIfNotLimited(final Runnable action) {
         if (isOkToCallAction()) {
             lastFireMs = System.currentTimeMillis();

@@ -37,8 +37,8 @@
 
     <!-- Key classes -->
     <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionMonitor" level="trace"/>-->
+    <!-- <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionMonitor" level="trace"/> -->
     <!--        <logger name="io.confluent.parallelconsumer.state" level="trace"/>-->
 
     <!-- Offset committing-->
@@ -48,7 +48,7 @@
 
     <!-- Broker polling -->
     <!--        <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
+    <!--        <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
     <!--            <logger name="io.confluent.parallelconsumer.internal" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.state.WorkManager" level="trace"/>-->
 

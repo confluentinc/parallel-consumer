@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import com.google.common.flogger.FluentLogger;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
@@ -17,8 +16,6 @@ import java.util.concurrent.ThreadPoolExecutor;
  */
 @Slf4j
 public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProcessor<K, V> {
-
-    private static final FluentLogger flog = FluentLogger.forEnclosingClass();
 
     protected ExternalEngine(final ParallelConsumerOptions<K, V> newOptions) {
         super(newOptions);

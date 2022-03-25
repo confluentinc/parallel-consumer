@@ -6,10 +6,8 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.KafkaUtils;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.*;
@@ -62,14 +60,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
         log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
     }
 
-    @Override
-    public void remove(final LinkedList<WorkContainer<K, V>> workToRemove) {
-        if (!workToRemove.isEmpty()) {
-            // no-op
-            log.debug("Dropping work container to remove for partition no longer assigned. WC: {}", workToRemove);
-        }
-    }
-
     /**
      * Don't allow more records to be processed for this partition. Eventually these records triggering this check will
      * be cleaned out.
@@ -83,53 +73,22 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public Set<Long> getIncompleteOffsets() {
+    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         log.debug(NO_OP);
         //noinspection unchecked - by using unsave generics, we are able to share one static instance
         return READ_ONLY_EMPTY_SET;
     }
 
     @Override
-    public @NonNull Long getOffsetHighestSeen() {
+    public long getOffsetHighestSeen() {
         log.debug(NO_OP);
         return -1L;
     }
 
     @Override
-    public long getOffsetHighestSucceeded() { // NOSONAR
+    public long getOffsetHighestSucceeded() {
         log.debug(NO_OP);
         return -1L;
-    }
-
-    @Override
-    NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
-        //noinspection unchecked - by using unsave generics, we are able to share one static instance
-        return READ_ONLY_EMPTY_MAP;
-    }
-
-    @Override
-    public void setIncompleteOffsets(final Set<Long> incompleteOffsets) {
-        log.debug(NO_OP);
-    }
-
-    @Override
-    void setAllowedMoreRecords(final boolean allowedMoreRecords) {
-        log.debug(NO_OP);
-    }
-
-    @Override
-    public void maybeRaiseHighestSeenOffset(final long highestSeen) {
-        log.debug(NO_OP);
-    }
-
-    @Override
-    public void truncateOffsets(final long nextExpectedOffset) {
-        log.debug(NO_OP);
-    }
-
-    @Override
-    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
-        log.debug(NO_OP);
     }
 
     @Override
