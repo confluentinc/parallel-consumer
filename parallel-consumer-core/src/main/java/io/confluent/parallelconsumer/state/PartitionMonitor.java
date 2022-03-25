@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -355,8 +356,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 return false;
             } else {
                 int currentPartitionEpoch = getEpoch(rec);
-                //noinspection unchecked - Lombok builder getter erases generics
-                var wc = new WorkContainer<K, V>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
+                var wc = new WorkContainer<>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
 
                 sm.addWorkContainer(wc);
 
@@ -367,23 +367,15 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
-        return findCompletedEligibleOffsetsAndRemove(true);
-    }
-
-    //todo remove bool
-    private Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
-        return findCompletedEligibleOffsetsAndRemoveNew();
-    }
-
-    // todo rename
-    private Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemoveNew() {
+    public Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {
         var offsetsToSend = getAssignedPartitions().values().stream()
-                .filter(PartitionState::isDirty)
-                .map(state ->
+                .flatMap(state ->
                         {
-                            var offsetAndMetadata = state.getCompletedEligibleOffsetsAndRemoveNew();
-                            return Map.entry(state.getTp(), offsetAndMetadata);
+                            var offsetAndMetadata = state.getCommitDataIfDirty();
+                            return offsetAndMetadata.stream()
+                                    .flatMap(andMetadata ->
+                                            Stream.of(Map.entry(state.getTp(), andMetadata))
+                                    );
                         }
                 ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
@@ -429,14 +421,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     private boolean isBlockingProgress(WorkContainer<?, ?> workContainer) {
         var partitionState = getPartitionState(workContainer.getTopicPartition());
         return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
-    }
-
-    boolean isDirty() {
-        return this.partitionStates.values().parallelStream().anyMatch(PartitionState::isDirty);
-    }
-
-    public boolean isClean() {
-        return !isDirty();
     }
 
 }

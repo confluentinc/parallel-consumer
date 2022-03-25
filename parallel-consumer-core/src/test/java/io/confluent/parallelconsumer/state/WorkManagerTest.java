@@ -598,7 +598,7 @@ class WorkManagerTest {
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).as("Partition commit queues are now empty").isZero();
 
         // drain commit queue
-        var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
+        var completedFutureOffsets = wm.collectCommitDataForDirtyPartitions();
         assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
         var sync = completedFutureOffsets.values().stream().findFirst().get();
         Truth.assertThat(sync.offset()).isEqualTo(3);

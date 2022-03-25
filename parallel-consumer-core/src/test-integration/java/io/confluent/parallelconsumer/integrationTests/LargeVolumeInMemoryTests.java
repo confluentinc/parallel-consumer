@@ -28,7 +28,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
@@ -96,7 +95,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             List<Map<TopicPartition, OffsetAndMetadata>> consumerCommitHistory = consumerSpy.getCommitHistoryInt();
 
             assertThat(consumerCommitHistory).isNotEmpty();
-            long mostRecentConsumerCommitOffset = consumerCommitHistory.get(consumerCommitHistory.size() - 1).values().stream().collect(Collectors.toList()).get(0).offset(); // non-tx
+            long mostRecentConsumerCommitOffset = new ArrayList<>(consumerCommitHistory.get(consumerCommitHistory.size() - 1).values()).get(0).offset(); // non-tx
             assertThat(mostRecentConsumerCommitOffset).isEqualTo(quantityOfMessagesToProduce);
         }
 

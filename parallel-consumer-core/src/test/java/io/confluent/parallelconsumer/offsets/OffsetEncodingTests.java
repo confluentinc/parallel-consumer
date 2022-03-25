@@ -192,9 +192,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
 
             // make the commit
-            var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
-            assertThat(completedEligibleOffsetsAndRemove.get(tp).offset()).isEqualTo(1L);
-            consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
+            var completedEligibleOffsets = wmm.collectCommitDataForDirtyPartitions();
+            assertThat(completedEligibleOffsets.get(tp).offset()).isEqualTo(1L);
+            consumerSpy.commitSync(completedEligibleOffsets);
 
             {
                 // check for graceful fall back to the smallest available encoder

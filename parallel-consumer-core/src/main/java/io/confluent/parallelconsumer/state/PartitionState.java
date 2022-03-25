@@ -25,8 +25,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static lombok.AccessLevel.PACKAGE;
-import static lombok.AccessLevel.PUBLIC;
+import static lombok.AccessLevel.*;
 
 @Slf4j
 public class PartitionState<K, V> {
@@ -55,8 +54,8 @@ public class PartitionState<K, V> {
      * Cache view of the state of the partition. Is set dirty when the incomplete state of any offset changes. Is set
      * clean after a successful commit of the state.
      */
-    @Setter
-    @Getter
+    @Setter(PRIVATE)
+    @Getter(PRIVATE)
     private boolean dirty;
 
     /**
@@ -246,9 +245,11 @@ public class PartitionState<K, V> {
         return false;
     }
 
-    // todo rename syncOffsetAndIncompleteEncodings
-    public OffsetAndMetadata getCompletedEligibleOffsetsAndRemoveNew() {
-        return createOffsetAndMetadata();
+    public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
+        if (isDirty())
+            return of(createOffsetAndMetadata());
+        else
+            return empty();
     }
 
     private OffsetAndMetadata createOffsetAndMetadata() {

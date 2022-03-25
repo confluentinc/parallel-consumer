@@ -26,10 +26,9 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
     @Override
     public void retrieveOffsetsAndCommit() {
         log.debug("Commit starting - find completed work to commit offsets");
-        // todo shouldn't be removed until commit succeeds (there's no harm in committing the same offset twice)
         preAcquireWork();
         try {
-            var offsetsToCommit = wm.findCompletedEligibleOffsetsAndRemove();
+            var offsetsToCommit = wm.collectCommitDataForDirtyPartitions();
             if (offsetsToCommit.isEmpty()) {
                 log.debug("No offsets ready");
             } else {

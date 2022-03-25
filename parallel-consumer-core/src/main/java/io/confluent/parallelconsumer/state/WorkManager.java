@@ -252,9 +252,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return wmbm.getAmountOfWorkQueuedWaitingIngestion();
     }
 
-    // todo rename
-    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
-        return pm.findCompletedEligibleOffsetsAndRemove();
+    public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
+        return pm.collectDirtyCommitData();
     }
 
     /**
@@ -305,14 +304,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isWorkInFlightMeetingTarget() {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
-    }
-
-    public boolean isClean() {
-        return pm.isClean();
-    }
-
-    public boolean isDirty() {
-        return pm.isDirty();
     }
 
     /**
