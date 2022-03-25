@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -35,9 +35,9 @@ import java.util.*;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.parallelconsumer.offsets.OffsetCodecTestUtils.bitmapStringToIncomplete;
+import static io.confluent.parallelconsumer.offsets.OffsetCodecTestUtils.incompletesToBitmapString;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.bitmapStringToIncomplete;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.incompletesToBitmapString;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.of;
 import static org.assertj.core.api.Assertions.assertThat;

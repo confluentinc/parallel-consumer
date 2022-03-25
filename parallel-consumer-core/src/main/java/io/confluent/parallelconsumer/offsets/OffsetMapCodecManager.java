@@ -16,7 +16,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -225,58 +224,6 @@ public class OffsetMapCodecManager<K, V> {
             var result = EncodedOffsetPair.unwrap(decodedBytes);
             return result.getDecodedIncompletes(nextExpectedOffset);
         }
-    }
-
-    /**
-     * x is complete
-     * <p>
-     * o is incomplete
-     */
-    // todo Exists only for testing? delete? move to test utils
-    // todo should get finalOffsetForPartition from state
-    static String incompletesToBitmapString(long finalOffsetForPartition, long highestSeen, Set<Long> incompletes) {
-        var runLengthString = new StringBuilder();
-        Long lowWaterMark = finalOffsetForPartition;
-        long end = highestSeen - lowWaterMark;
-        for (final var relativeOffset : range(end)) {
-            long offset = lowWaterMark + relativeOffset;
-            if (incompletes.contains(offset)) {
-                runLengthString.append("o");
-            } else {
-                runLengthString.append("x");
-            }
-        }
-        return runLengthString.toString();
-    }
-
-    // todo Exists only for testing? delete? move to test utils
-    static String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<?, ?> state) {
-        return incompletesToBitmapString(finalOffsetForPartition,
-                state.getOffsetHighestSeen(), state.getIncompleteOffsetsBelowHighestSucceeded());
-    }
-
-    /**
-     * x is complete
-     * <p>
-     * o is incomplete
-     */
-    // todo Exists only for testing? delete? move to test utils
-    static Set<Long> bitmapStringToIncomplete(final long baseOffset, final String inputBitmapString) {
-        final Set<Long> incompleteOffsets = new HashSet<>();
-
-        final long longLength = inputBitmapString.length();
-        range(longLength).forEach(i -> {
-            var bit = inputBitmapString.charAt(i);
-            if (bit == 'o') {
-                incompleteOffsets.add(baseOffset + i);
-            } else if (bit == 'x') {
-                log.trace("Dropping completed offset");
-            } else {
-                throw new IllegalArgumentException("Invalid encoding - unexpected char: " + bit);
-            }
-        });
-
-        return incompleteOffsets;
     }
 
 }
