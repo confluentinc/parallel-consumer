@@ -218,8 +218,9 @@ public class PartitionState<K, V> {
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
      */
     public Set<Long> getAllIncompleteOffsets() {
-        return incompleteOffsets.parallelStream()
-                .collect(Collectors.toUnmodifiableSet());
+        //noinspection FuseStreamOperations - only in java 10
+        return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
+                .collect(Collectors.toSet()));
     }
 
     /**
@@ -227,10 +228,10 @@ public class PartitionState<K, V> {
      */
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
-        return incompleteOffsets.parallelStream()
+        return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
                 // todo less than or less than and equal?
                 .filter(x -> x < highestSucceeded)
-                .collect(Collectors.toUnmodifiableSet());
+                .collect(Collectors.toSet()));
     }
 
     public long getOffsetHighestSequentialSucceeded() {

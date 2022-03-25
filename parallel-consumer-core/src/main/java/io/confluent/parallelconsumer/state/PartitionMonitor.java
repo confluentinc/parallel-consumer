@@ -365,10 +365,11 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
                 .flatMap(state ->
                         {
                             var offsetAndMetadata = state.getCommitDataIfDirty();
-                            return offsetAndMetadata.stream()
-                                    .flatMap(andMetadata ->
-                                            Stream.of(Map.entry(state.getTp(), andMetadata))
-                                    );
+                            //noinspection OptionalIsPresent // optional#stream only in java 9
+                            if (offsetAndMetadata.isPresent())
+                                return Stream.of(Map.entry(state.getTp(), offsetAndMetadata.get()));
+                            else
+                                return Stream.of();
                         }
                 ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
