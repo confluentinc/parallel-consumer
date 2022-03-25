@@ -9,7 +9,6 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecords;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -179,7 +178,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
-            wmm.registerWork(new EpochAndRecords(testRecords));
+            wmm.registerWork(new EpochAndRecords<>(testRecords, 0));
 
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
@@ -249,7 +248,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             // force ingestion early, and check results
             {
-                int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
+                // todo ingestion no longer a thing - what to do here?
+                Truth.assertThat(true).isFalse();
+//                int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
 
                 if (!encodingsThatFail.contains(encoding)) {
                     long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
@@ -264,7 +265,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                     Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
 
-                    assertThat(ingested).isEqualTo(testRecords.count() - 4); // 4 were succeeded
+                    //todo and here
+//                    assertThat(ingested).isEqualTo(testRecords.count() - 4); // 4 were succeeded
                     Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
                 }
             }
