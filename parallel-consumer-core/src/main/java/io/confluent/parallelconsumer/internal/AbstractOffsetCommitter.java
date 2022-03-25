@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +12,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -31,7 +29,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // todo shouldn't be removed until commit succeeds (there's no harm in committing the same offset twice)
         preAcquireWork();
         try {
-            Map<TopicPartition, PartitionState.OffsetPair> offsetsToCommit = wm.findCompletedEligibleOffsetsAndRemove();
+            var offsetsToCommit = wm.findCompletedEligibleOffsetsAndRemove();
             if (offsetsToCommit.isEmpty()) {
                 log.debug("No offsets ready");
             } else {
@@ -39,10 +37,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
                 ConsumerGroupMetadata groupMetadata = consumerMgr.groupMetadata();
 
                 log.debug("Begin commit");
-                Map<TopicPartition, OffsetAndMetadata> offsetsToCommitOFFSEEETS = offsetsToCommit.entrySet().parallelStream()
-                        .collect(Collectors.toMap(Map.Entry::getKey,
-                                o -> o.getValue().getSync()));
-                commitOffsets(offsetsToCommitOFFSEEETS, groupMetadata);
+                commitOffsets(offsetsToCommit, groupMetadata);
 
                 log.debug("On commit success");
                 onOffsetCommitSuccess(offsetsToCommit);
@@ -60,7 +55,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    private void onOffsetCommitSuccess(final Map<TopicPartition, PartitionState.OffsetPair> committed) {
+    private void onOffsetCommitSuccess(final Map<TopicPartition, OffsetAndMetadata> committed) {
         wm.onOffsetCommitSuccess(committed);
     }
 

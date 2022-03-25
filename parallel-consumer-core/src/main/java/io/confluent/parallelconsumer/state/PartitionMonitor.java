@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import io.confluent.parallelconsumer.state.PartitionState.OffsetPair;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -18,11 +17,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Clock;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -103,9 +105,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             incrementPartitionAssignmentEpoch(assignedPartitions);
 
             try {
-                Set<TopicPartition> partitionsSet = UniSets.copyOf(assignedPartitions); // todo why copy?
                 OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
-                var partitionStates = om.loadPartitionStateForAssignment(partitionsSet);
+                var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
                 this.partitionStates.putAll(partitionStates);
             } catch (Exception e) {
                 log.error("Error in onPartitionsAssigned", e);
@@ -162,7 +163,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
      * offset.
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetPair> committed) {
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         committed.forEach((tp, meta) -> {
             var partition = getPartitionState(tp);
@@ -247,7 +248,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         partitionState.maybeRaiseHighestSeenOffset(seenOffset);
     }
 
-    //todo visible for testing
     public boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
         var partitionState = getPartitionState(tp);
@@ -367,22 +367,22 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemove() {
+    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
         return findCompletedEligibleOffsetsAndRemove(true);
     }
 
     //todo remove bool
-    private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemove(boolean remove) {
+    private Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
         return findCompletedEligibleOffsetsAndRemoveNew();
     }
 
     // todo rename
-    private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemoveNew() {
+    private Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemoveNew() {
         var offsetsToSend = getAssignedPartitions().values().stream()
                 .filter(PartitionState::isDirty)
                 .map(state ->
                         {
-                            OffsetPair offsetAndMetadata = state.getCompletedEligibleOffsetsAndRemoveNew();
+                            var offsetAndMetadata = state.getCompletedEligibleOffsetsAndRemoveNew();
                             return Map.entry(state.getTp(), offsetAndMetadata);
                         }
                 ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));

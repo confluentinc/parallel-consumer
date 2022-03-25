@@ -9,7 +9,6 @@ import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -158,7 +157,7 @@ public class PartitionState<K, V> {
 //        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
 //    }
 
-    public void onOffsetCommitSuccess(final OffsetPair committed) {
+    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
 //        long nextExpectedOffset = committed.getSync().offset();
 //        truncateOffsets(nextExpectedOffset);
 
@@ -261,19 +260,9 @@ public class PartitionState<K, V> {
         return false;
     }
 
-    // todo maybe not needed in end
-    @Value
-    public static class OffsetPair {
-        OffsetAndMetadata sync;
-        Set<Long> incompletes;
-    }
-
     // todo rename syncOffsetAndIncompleteEncodings
-    public OffsetPair getCompletedEligibleOffsetsAndRemoveNew() {
-        OffsetAndMetadata offsetMetadata = createOffsetAndMetadata();
-        Set<Long> incompleteOffsetsBelowHighest = getIncompleteOffsetsBelowHighestSucceeded();
-//        truncateOffsets(offsetMetadata.offset());
-        return new OffsetPair(offsetMetadata, incompleteOffsetsBelowHighest);
+    public OffsetAndMetadata getCompletedEligibleOffsetsAndRemoveNew() {
+        return createOffsetAndMetadata();
     }
 
     private OffsetAndMetadata createOffsetAndMetadata() {

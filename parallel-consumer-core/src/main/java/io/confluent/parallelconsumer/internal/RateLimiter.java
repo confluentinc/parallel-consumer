@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import lombok.Getter;
-import lombok.SneakyThrows;
 
 import java.time.Duration;
 
@@ -22,7 +21,6 @@ public class RateLimiter {
         this.rate = Duration.ofSeconds(seconds);
     }
 
-    @SneakyThrows
     public void performIfNotLimited(final Runnable action) {
         if (isOkToCallAction()) {
             lastFireMs = System.currentTimeMillis();

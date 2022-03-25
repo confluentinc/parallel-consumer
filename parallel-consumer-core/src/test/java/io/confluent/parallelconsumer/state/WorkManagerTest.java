@@ -12,10 +12,14 @@ import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
 import org.assertj.core.api.ObjectAssert;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -71,7 +75,12 @@ class WorkManagerTest {
     }
 
     private void assignPartition(final int partition) {
-        wm.onPartitionsAssigned(UniLists.of(new TopicPartition(INPUT_TOPIC, partition)));
+        wm.onPartitionsAssigned(UniLists.of(getTopicPartition(partition)));
+    }
+
+    @NotNull
+    private TopicPartition getTopicPartition(int partition) {
+        return new TopicPartition(INPUT_TOPIC, partition);
     }
 
     /**
@@ -84,7 +93,7 @@ class WorkManagerTest {
         var rec1 = makeRec("1", key, partition);
         var rec2 = makeRec("2", key, partition);
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec0, rec1, rec2));
+        m.put(getTopicPartition(partition), of(rec0, rec1, rec2));
         var recs = new ConsumerRecords<>(m);
         wm.registerWork(recs);
     }
@@ -327,7 +336,7 @@ class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, key, "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, key, "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec));
+        m.put(getTopicPartition(partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -436,7 +445,7 @@ class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "66", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "66", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec));
+        m.put(getTopicPartition(partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -482,7 +491,7 @@ class WorkManagerTest {
         var rec5 = new ConsumerRecord<>(INPUT_TOPIC, partition, 15, "key-a", "value");
         var rec6 = new ConsumerRecord<>(INPUT_TOPIC, partition, 20, "key-c", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, partition), of(rec2, rec3, rec0, rec4, rec5, rec6));
+        m.put(getTopicPartition(partition), of(rec2, rec3, rec0, rec4, rec5, rec6));
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -534,7 +543,7 @@ class WorkManagerTest {
         flattened.sort(comparingLong(ConsumerRecord::offset));
 
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(new TopicPartition(INPUT_TOPIC, 0), flattened);
+        m.put(getTopicPartition(0), flattened);
         var recs = new ConsumerRecords<>(m);
 
         //
@@ -591,11 +600,11 @@ class WorkManagerTest {
         // drain commit queue
         var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
         assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
-        PartitionState.OffsetPair offsetPair = completedFutureOffsets.values().stream().findFirst().get();
-        OffsetAndMetadata sync = offsetPair.getSync();
+        var sync = completedFutureOffsets.values().stream().findFirst().get();
         Truth.assertThat(sync.offset()).isEqualTo(3);
         Truth.assertThat(sync.metadata()).isEmpty();
-        Truth.assertThat(offsetPair.getIncompletes()).isEmpty();
+        PartitionState<String, String> state = wm.getPm().getPartitionState(getTopicPartition(0));
+        Truth.assertThat(state.getAllIncompleteOffsets()).isEmpty();
     }
 
     /**
@@ -617,9 +626,9 @@ class WorkManagerTest {
         assignPartition(2);
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         var rec = new ConsumerRecord<>(INPUT_TOPIC, 1, 11, "11", "value");
-        m.put(new TopicPartition(INPUT_TOPIC, 1), of(rec));
+        m.put(getTopicPartition(1), of(rec));
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, 2, 21, "21", "value");
-        m.put(new TopicPartition(INPUT_TOPIC, 2), of(rec2));
+        m.put(getTopicPartition(2), of(rec2));
         var recs = new ConsumerRecords<>(m);
         wm.registerWork(recs);
 

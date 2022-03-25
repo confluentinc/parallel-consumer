@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -231,7 +232,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see PartitionMonitor#onOffsetCommitSuccess(Map)
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, PartitionState.OffsetPair> committed) {
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
         pm.onOffsetCommitSuccess(committed);
     }
 
@@ -252,7 +253,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     // todo rename
-    public Map<TopicPartition, PartitionState.OffsetPair> findCompletedEligibleOffsetsAndRemove() {
+    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
         return pm.findCompletedEligibleOffsetsAndRemove();
     }
 

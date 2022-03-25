@@ -13,9 +13,14 @@ import org.slf4j.Logger;
 @UtilityClass
 public class ProgressBarUtils {
 
-    public static ProgressBar getNewMessagesBar(Logger log, int initialMax) {
-        return getNewMessagesBar(null, log, initialMax);
+
+    public static ProgressBar getNewMessagesBar(Logger log, long initialMax) {
+        return getNewMessagesBar(null, log, (int) initialMax);
     }
+
+//    public static ProgressBar getNewMessagesBar(Logger log, int initialMax) {
+//        return getNewMessagesBar(null, log, initialMax);
+//    }
 
     public static ProgressBar getNewMessagesBar(String name, Logger log, int initialMax) {
         DelegatingProgressBarConsumer delegatingProgressBarConsumer = new DelegatingProgressBarConsumer(log::info);

@@ -5,11 +5,9 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
-import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -195,9 +193,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             // make the commit
             var completedEligibleOffsetsAndRemove = wmm.findCompletedEligibleOffsetsAndRemove();
-            var remap = JavaUtils.remap(completedEligibleOffsetsAndRemove, PartitionState.OffsetPair::getSync);
-            assertThat(remap.get(tp).offset()).isEqualTo(1L);
-            consumerSpy.commitSync(remap);
+            assertThat(completedEligibleOffsetsAndRemove.get(tp).offset()).isEqualTo(1L);
+            consumerSpy.commitSync(completedEligibleOffsetsAndRemove);
 
             {
                 // check for graceful fall back to the smallest available encoder

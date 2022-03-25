@@ -100,13 +100,11 @@ public class OffsetMapCodecManager<K, V> {
 
     /**
      * Load all the previously completed offsets that were not committed
-     *
-     * @return
      */
     // todo this is the only method that needs the consumer - offset encoding is being conflated with decoding upon assignment #233
     // todo make package private?
     // todo rename
-    public Map<TopicPartition, PartitionState<K, V>> loadPartitionStateForAssignment(final Set<TopicPartition> assignment) {
+    public Map<TopicPartition, PartitionState<K, V>> loadPartitionStateForAssignment(final Collection<TopicPartition> assignment) {
         // load last committed state / metadata from consumer
         // todo this should be controlled for - improve consumer management so that this can't happen
         Map<TopicPartition, OffsetAndMetadata> partitionLastCommittedOffsets = null;
@@ -114,7 +112,7 @@ public class OffsetMapCodecManager<K, V> {
         while (partitionLastCommittedOffsets == null) {
             WakeupException lastWakeupException = null;
             try {
-                partitionLastCommittedOffsets = consumer.committed(assignment);
+                partitionLastCommittedOffsets = consumer.committed(new HashSet<>(assignment));
             } catch (WakeupException exception) {
                 log.debug("Woken up trying to get assignment", exception);
                 lastWakeupException = exception;
@@ -226,10 +224,6 @@ public class OffsetMapCodecManager<K, V> {
         } else {
             var result = EncodedOffsetPair.unwrap(decodedBytes);
             return result.getDecodedIncompletes(nextExpectedOffset);
-//            Set<Long> incompletes = incompletesTuple.getIncompleteOffsets();
-//            long highWater = incompletesTuple.getHighestSeenOffset();
-//            return HighestOffsetAndIncompletes.of(highWater, incompletes);
-//            return incompletesTuple;
         }
     }
 
