@@ -29,7 +29,6 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assume.assumeThat;
@@ -211,7 +210,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var committed = consumerSpy.committed(UniSets.of(tp)).get(tp);
             assertThat(committed.offset()).isEqualTo(1L);
             // todo why not blank - only some are - check when done
-//            assertThat(committed.metadata()).isNotBlank();
+            assertThat(committed.metadata()).isNotBlank();
         }
 
         // simulate a rebalance or some sort of reset, by instantiating a new WM with the state from the last
@@ -278,18 +277,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                         -> {
                     assertThat(workRetrievedOffsets).doesNotContain(2500L);
                     assertThat(workRetrievedOffsets).doesNotContainSequence(expected);
-
-                    // delete
-                    assertThatThrownBy(() -> {
-                        assertThat(workRetrievedOffsets)
-                                .containsExactlyElementsOf(expected);
-
-//                        assertThat(workRetrieved).extracting(WorkContainer::getCr)
-//                                .containsExactlyElementsOf(incompleteRecords);
-                    })
-                            .hasMessageContaining("but some elements were not")
-                            .hasMessageContaining("25000L");
-
                 }
                 default -> {
                     assertThat(workRetrievedOffsets)

@@ -124,10 +124,10 @@ class WorkManagerOffsetMapCodecManagerTest {
         inputsToCompress.add(input100);
         inputsToCompress.add(input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100 + input100);
         inputsToCompress.add(inputString);
-//        inputsToCompress.add(generateRandomData(1000).toString());
-        // todo remove? slow, not needed
-//        inputsToCompress.add(generateRandomData(10000).toString());
-//        inputsToCompress.add(generateRandomData(30000).toString());
+        inputsToCompress.add(generateRandomData(1000).toString());
+        // remove? slow, not needed?
+        inputsToCompress.add(generateRandomData(10000).toString());
+        inputsToCompress.add(generateRandomData(30000).toString());
     }
 
     private static StringBuffer generateRandomData(int entries) {
@@ -374,12 +374,6 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         assertThat(OffsetRunLength.runLengthDecodeToString(integers)).isEqualTo(stringMap);
     }
-
-// todo delete
-//    static ArgumentSets differentInputsAndCompressions() {
-//        ArgumentSets.argumentsForFirstParameter(inputsToCompress)
-//                .argumentsForNextParameter()
-//    }
 
     static List<String> differentInputsAndCompressions() {
         return inputsToCompress;

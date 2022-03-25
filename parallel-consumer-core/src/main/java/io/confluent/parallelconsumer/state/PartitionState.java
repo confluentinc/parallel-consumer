@@ -59,26 +59,6 @@ public class PartitionState<K, V> {
     private boolean dirty;
 
     /**
-     * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
-     */
-    public Set<Long> getAllIncompleteOffsets() {
-        return incompleteOffsets.parallelStream()
-                .collect(Collectors.toUnmodifiableSet());
-    }
-
-    /**
-     * @return incomplete offsets which are lower than the highest succeeded
-     */
-    // todo move down
-    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
-        long highestSucceeded = getOffsetHighestSucceeded();
-        return incompleteOffsets.parallelStream()
-                // todo less than or less than and equal?
-                .filter(x -> x < highestSucceeded)
-                .collect(Collectors.toUnmodifiableSet());
-    }
-
-    /**
      * The highest seen offset for a partition.
      * <p>
      * Starts off as -1 - no data. Offsets in Kafka are never negative, so this is fine.
@@ -94,11 +74,6 @@ public class PartitionState<K, V> {
     private long offsetHighestSucceeded = -1L;
 
     /**
-     * Highest continuous succeeded offset
-     */
-//    private long offsetHighestSequentialSucceeded = -1L;
-
-    /**
      * If true, more messages are allowed to process for this partition.
      * <p>
      * If false, we have calculated that we can't record any more offsets for this partition, as our best performing
@@ -112,7 +87,7 @@ public class PartitionState<K, V> {
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
     @Getter(PACKAGE)
-    @Setter(PACKAGE)
+    @Setter(PRIVATE)
     private boolean allowedMoreRecords = true;
 
     /**
@@ -124,8 +99,8 @@ public class PartitionState<K, V> {
      * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
      * ({@link #findCompletedEligibleOffsetsAndRemove})
      *
-     * @see #findCompletedEligibleOffsetsAndRemove
      */
+    // todo doesn't need to be concurrent any more?
     private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
     NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
@@ -174,10 +149,6 @@ public class PartitionState<K, V> {
         return !commitQueue.isEmpty();
     }
 
-    public boolean hasWorkThatNeedsCommitting() {
-        return commitQueue.values().parallelStream().anyMatch(WorkContainer::isUserFunctionSucceeded);
-    }
-
     public int getCommitQueueSize() {
         return commitQueue.size();
     }
@@ -186,10 +157,10 @@ public class PartitionState<K, V> {
         long offset = work.offset();
         WorkContainer<K, V> remove = this.commitQueue.remove(work.offset());
         //todo update tests to put this back - WorkManagerOffsetMapCodecManagerTest doesn't succeed work properly
-//        assert(remove != null);
+        assert (remove != null);
         boolean removed = this.incompleteOffsets.remove(offset);
         //todo update tests to put this back
-//        assert (removed);
+        assert (removed);
 
         updateHighestSucceededOffsetSoFar(work);
 
@@ -210,31 +181,13 @@ public class PartitionState<K, V> {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
             this.offsetHighestSucceeded = thisOffset;
         }
-
-//        updateHighestSucceededSequential(work);
     }
-
-//    private void updateHighestSucceededSequential(WorkContainer<K, V> work) {
-//        long offset = work.offset();
-//        boolean thisOffsetIsNextAfterHighest = this.offsetHighestSequentialSucceeded + 1 == offset;
-//        if (thisOffsetIsNextAfterHighest) {
-//            // find the new highest sequentially succeeded
-//            this.offsetHighestSequentialSucceeded = findHighestSucceeded();
-//        }
-//    }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
         incompleteOffsets.add(wc.offset());
     }
-
-//    private void truncateWork() {
-//        for (var workContainer : workToRemove) {
-//            var offset = workContainer.getCr().offset();
-//            this.commitQueue.remove(offset);
-//        }
-//    }
 
     /**
      * Has this partition been removed? No.
@@ -265,6 +218,25 @@ public class PartitionState<K, V> {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
+    /**
+     * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
+     */
+    public Set<Long> getAllIncompleteOffsets() {
+        return incompleteOffsets.parallelStream()
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * @return incomplete offsets which are lower than the highest succeeded
+     */
+    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+        long highestSucceeded = getOffsetHighestSucceeded();
+        return incompleteOffsets.parallelStream()
+                // todo less than or less than and equal?
+                .filter(x -> x < highestSucceeded)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
     public long getOffsetHighestSequentialSucceeded() {
         if (this.incompleteOffsets.isEmpty()) {
             return this.offsetHighestSeen;
@@ -272,6 +244,7 @@ public class PartitionState<K, V> {
             return this.incompleteOffsets.first() - 1;
         }
     }
+
 
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no

@@ -41,6 +41,7 @@ public class KafkaTestUtils {
 
     int offset = 0;
 
+    // todo not used anymore - delete?
     public void assignConsumerToTopic(final MockConsumer mc) {
         TopicPartition tp1 = new TopicPartition(INPUT_TOPIC, 1);
         TopicPartition tp0 = new TopicPartition(INPUT_TOPIC, 0);
@@ -57,11 +58,6 @@ public class KafkaTestUtils {
      * assume it doesn't.
      */
     public static List<Integer> trimAllGenesisOffset(final List<Integer> collect) {
-//        while (!collect.isEmpty() && collect.get(0) == 0) {
-//            int genesisOffset = collect.get(0);
-//            if (genesisOffset == 0)
-//                collect.remove(0);
-//        }
         return collect.stream().filter(x -> x != 0).collect(Collectors.toList());
     }
 
