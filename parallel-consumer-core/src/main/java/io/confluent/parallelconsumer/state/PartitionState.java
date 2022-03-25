@@ -154,8 +154,10 @@ public class PartitionState<K, V> {
 
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
+
         WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(work.offset());
         assert (removedFromQueue != null);
+
         boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
         assert (removedFromIncompletes);
 
