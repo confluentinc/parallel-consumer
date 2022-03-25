@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -13,6 +14,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
@@ -20,9 +22,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.xerial.snappy.SnappyOutputStream;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -44,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 // todo refactor - remove tests which use hard coded state vs dynamic state - #compressionCycle, #selialiseCycle, #runLengthEncoding, #loadCompressedRunLengthRncoding
 @Slf4j
+@ExtendWith(MockitoExtension.class)
 class WorkManagerOffsetMapCodecManagerTest {
 
     WorkManager<String, String> wm;
@@ -71,10 +77,15 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
 
-    {
-        WorkContainer mock = Mockito.mock(WorkContainer.class);
-        Mockito.doReturn(highestSucceeded).when(mock).offset();
-        state.onSuccess(mock); // in this case the highest seen is also the highest succeeded
+    @Mock
+    ConsumerRecord<String, String> mockCr;
+
+    @BeforeEach
+    void setupMock() {
+        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null, TimeUtils.getClock());
+        Mockito.doReturn(highestSucceeded).when(mockCr).offset();
+        state.addWorkContainer(workContainer);
+        state.onSuccess(workContainer); // in this case the highest seen is also the highest succeeded
     }
 
     /**

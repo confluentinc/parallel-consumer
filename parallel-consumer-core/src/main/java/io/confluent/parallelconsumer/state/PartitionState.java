@@ -155,12 +155,10 @@ public class PartitionState<K, V> {
 
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
-        WorkContainer<K, V> remove = this.commitQueue.remove(work.offset());
-        //todo update tests to put this back - WorkManagerOffsetMapCodecManagerTest doesn't succeed work properly
-        assert (remove != null);
-        boolean removed = this.incompleteOffsets.remove(offset);
-        //todo update tests to put this back
-        assert (removed);
+        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(work.offset());
+        assert (removedFromQueue != null);
+        boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
+        assert (removedFromIncompletes);
 
         updateHighestSucceededOffsetSoFar(work);
 

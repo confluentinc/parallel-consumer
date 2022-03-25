@@ -86,7 +86,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public long getOffsetHighestSucceeded() { // NOSONAR
+    public long getOffsetHighestSucceeded() {
         log.debug(NO_OP);
         return -1L;
     }
@@ -95,11 +95,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
         //noinspection unchecked - by using unsave generics, we are able to share one static instance
         return READ_ONLY_EMPTY_MAP;
-    }
-
-    @Override
-    void setAllowedMoreRecords(final boolean allowedMoreRecords) {
-        log.debug(NO_OP);
     }
 
     @Override
