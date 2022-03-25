@@ -92,17 +92,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
-        //noinspection unchecked - by using unsave generics, we are able to share one static instance
-        return READ_ONLY_EMPTY_MAP;
-    }
-
-    @Override
-    public void maybeRaiseHighestSeenOffset(final long offset) {
-        log.debug(NO_OP);
-    }
-
-    @Override
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         log.debug("Ignoring previously completed request for partition no longer assigned. Partition: {}", KafkaUtils.toTopicPartition(rec));
         return false;

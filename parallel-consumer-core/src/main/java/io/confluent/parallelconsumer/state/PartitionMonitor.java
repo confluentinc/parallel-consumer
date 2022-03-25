@@ -24,7 +24,6 @@ import java.time.Clock;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -195,8 +194,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             partitionStates.put(removedPartition, RemovedPartitionState.getSingleton());
 
             //
-            NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition = partition.getCommitQueue();
-            sm.removeAnyShardsReferencedBy(workFromRemovedPartition);
+            partition.onPartitionsRemoved(sm);
         }
     }
 
@@ -242,11 +240,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             return true;
         }
         return false;
-    }
-
-    public void maybeRaiseHighestSeenOffset(TopicPartition tp, long seenOffset) {
-        PartitionState<K, V> partitionState = getPartitionState(tp);
-        partitionState.maybeRaiseHighestSeenOffset(seenOffset);
     }
 
     public boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {

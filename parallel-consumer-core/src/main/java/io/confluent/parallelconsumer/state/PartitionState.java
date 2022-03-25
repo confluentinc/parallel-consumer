@@ -97,13 +97,12 @@ public class PartitionState<K, V> {
      * advancing offsets, as this isn't a guarantee of kafka's.
      * <p>
      * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
-     * ({@link #findCompletedEligibleOffsetsAndRemove})
-     *
+     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}
      */
     // todo doesn't need to be concurrent any more?
     private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
-    NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
+    private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
         return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
@@ -114,7 +113,7 @@ public class PartitionState<K, V> {
         this.offsetHighestSucceeded = this.offsetHighestSeen;
     }
 
-    public void maybeRaiseHighestSeenOffset(final long offset) {
+    private void maybeRaiseHighestSeenOffset(final long offset) {
         // rise the highest seen offset
         if (offset >= offsetHighestSeen) {
             log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, offset);
@@ -204,9 +203,8 @@ public class PartitionState<K, V> {
     }
 
     private OffsetAndMetadata createOffsetAndMetadata() {
+        Optional<String> payloadOpt = tryToEncodeOffsets();
         long nextOffset = getNextExpectedPolledOffset();
-        // try to encode
-        Optional<String> payloadOpt = tryToEncodeOffsetsStartingAt(nextOffset);
         return payloadOpt
                 .map(s -> new OffsetAndMetadata(nextOffset, s))
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
@@ -243,7 +241,6 @@ public class PartitionState<K, V> {
         }
     }
 
-
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
      * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see {@link
@@ -251,7 +248,7 @@ public class PartitionState<K, V> {
      *
      * @return if possible, the String encoded offset map
      */
-    Optional<String> tryToEncodeOffsetsStartingAt(long offsetOfNextExpectedMessage) {
+    private Optional<String> tryToEncodeOffsets() {
         if (incompleteOffsets.isEmpty()) {
             setAllowedMoreRecords(true);
             return empty();
@@ -260,6 +257,7 @@ public class PartitionState<K, V> {
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
+            long offsetOfNextExpectedMessage = getNextExpectedPolledOffset();
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
@@ -308,4 +306,7 @@ public class PartitionState<K, V> {
         return DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
+    public void onPartitionsRemoved(ShardManager<K, V> sm) {
+        sm.removeAnyShardsReferencedBy(getCommitQueue());
+    }
 }
