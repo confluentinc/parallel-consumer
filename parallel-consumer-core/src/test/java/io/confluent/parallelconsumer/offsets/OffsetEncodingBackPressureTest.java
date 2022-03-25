@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
+import com.google.common.truth.Truth8;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
@@ -190,7 +191,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                                     .deserialiseIncompleteOffsetMapFromBase64(0L, meta);
                             Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
                                     .that(incompletes.getIncompleteOffsets()).containsExactlyElementsIn(blockedOffsets);
-                            assertThat(incompletes.getHighestSeenOffset()).isEqualTo(numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1);
+                            Truth8.assertThat(incompletes.getHighestSeenOffset()).hasValue(numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1);
                         }
                 );
             }
@@ -252,7 +253,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
             {
                 await().untilAsserted(() -> {
-                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
+                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
                     assertThat(offsets).contains(userFuncFinishedCount.get());
                 });
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());

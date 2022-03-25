@@ -31,8 +31,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import static io.confluent.csid.utils.KafkaTestUtils.trimAllGeneisOffset;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
@@ -311,7 +311,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         log.debug("Waiting for EXACTLY commit offset {}", offset);
         await().timeout(defaultTimeout)
                 .failFast(msg("Commit was not exact - contained offsets that weren't '{}'", offset), () -> {
-                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
+                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
                     return offsets.size() > 1 && !offsets.contains(offset);
                 })
                 .untilAsserted(() -> assertCommits(of(offset)));
@@ -336,8 +336,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     private List<Integer> getCommitHistoryFlattened() {
         return (isUsingTransactionalProducer())
-                ? ktu.getProducerCommits(producerSpy)
-                : extractAllPartitionsOffsetsSequentially();
+                ? ktu.getProducerCommitsFlattened(producerSpy)
+                : extractAllPartitionsOffsetsSequentially(false);
     }
 
     public void assertCommits(List<Integer> offsets, String description) {
@@ -349,27 +349,22 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      * exists, unless it's contained in the assertion.
      */
     public void assertCommits(List<Integer> offsets, Optional<String> description) {
+        boolean trimGenesis = !offsets.contains(0);
+
         if (isUsingTransactionalProducer()) {
             ktu.assertCommits(producerSpy, offsets, description);
-            assertThat(extractAllPartitionsOffsetsSequentially()).isEmpty();
+            assertThat(extractAllPartitionsOffsetsSequentially(trimGenesis)).isEmpty();
         } else {
-            List<Integer> collect = extractAllPartitionsOffsetsSequentially();
-            if (!offsets.contains(0)) {
-                collect = trimAllGeneisOffset(collect);
-            }
+            List<Integer> collect = extractAllPartitionsOffsetsSequentially(trimGenesis);
+
             // duplicates are ok
             // is there a nicer optional way?
             // {@link Optional#ifPresentOrElse} only @since 9
             if (description.isPresent()) {
                 assertThat(collect).as(description.get()).hasSameElementsAs(offsets);
             } else {
-                try {
-                    assertThat(collect).hasSameElementsAs(offsets);
-                } catch (AssertionError e) {
-                    throw e;
-                }
+                assertThat(collect).hasSameElementsAs(offsets);
             }
-
             ktu.assertCommits(producerSpy, UniLists.of(), Optional.of("Empty"));
         }
     }
@@ -377,14 +372,18 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     /**
      * Flattens the offsets of all partitions into a single sequential list
      */
-    protected List<Integer> extractAllPartitionsOffsetsSequentially() {
+    protected List<Integer> extractAllPartitionsOffsetsSequentially(boolean trimGenesis) {
         // copy the list for safe concurrent access
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
         return history.stream()
                 .flatMap(commits ->
                         {
                             Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values()); // 4 debugging
-                            return values.stream().map(meta -> (int) meta.offset()); // int cast a luxury in test context - no big offsets
+                            Stream<Integer> rawOffsets = values.stream().map(meta -> (int) meta.offset());
+                            if (trimGenesis)
+                                return rawOffsets.filter(x -> x != 0);
+                            else
+                                return rawOffsets; // int cast a luxury in test context - no big offsets
                         }
                 ).collect(Collectors.toList());
     }

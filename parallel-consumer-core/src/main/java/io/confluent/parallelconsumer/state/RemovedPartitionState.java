@@ -108,11 +108,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public void truncateOffsets(final long nextExpectedOffset) {
-        log.debug(NO_OP);
-    }
-
-    @Override
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         log.debug("Ignoring previously completed request for partition no longer assigned. Partition: {}", KafkaUtils.toTopicPartition(rec));
         return false;

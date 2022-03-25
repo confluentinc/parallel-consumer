@@ -235,6 +235,7 @@
     </profiles>
 
     <dependencies>
+        <!-- Main -->
         <dependency>
             <groupId>com.github.bsideup.jabel</groupId>
             <artifactId>jabel-javac-plugin</artifactId>
@@ -263,7 +264,7 @@
             <scope>compile</scope>
         </dependency>
 
-        <!-- test dependencies -->
+        <!-- Test -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
@@ -324,6 +325,16 @@
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-slf4j-backend</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

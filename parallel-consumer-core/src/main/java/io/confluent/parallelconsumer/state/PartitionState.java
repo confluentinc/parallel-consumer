@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -14,8 +15,12 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.NavigableMap;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
@@ -38,9 +43,22 @@ public class PartitionState<K, V> {
      * offset ({@link #getOffsetHighestSequentialSucceeded()}). They are not always in sync.
      * <p>
      * TreeSet so we can always get the lowest offset.
+     * <p>
+     * Needs to be concurrent because, the committer requesting the data to commit may be another thread - the broker
+     * polling sub system - {@link BrokerPollSystem#maybeDoCommit}. The alternative to having this as a concurrent
+     * collection, would be to have the control thread prepare possible commit data on every cycle, and park that data
+     * so that the broker polling thread can grab it, if it wants to commit - i.e. the poller would not prepare/query
+     * the data for itself. See also #200 Refactor: Consider a shared nothing architecture.
      */
-    // todo why concurrent - doesn't need it?
-    private final TreeSet<Long> incompleteOffsets;
+    private final ConcurrentSkipListSet<Long> incompleteOffsets;
+
+    /**
+     * Cache view of the state of the partition. Is set dirty when the incomplete state of any offset changes. Is set
+     * clean after a successful commit of the state.
+     */
+    @Setter
+    @Getter
+    private boolean dirty;
 
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
@@ -119,7 +137,7 @@ public class PartitionState<K, V> {
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(-1L);
-        this.incompleteOffsets = new TreeSet<>(offsetData.getIncompleteOffsets());
+        this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
     }
 
@@ -131,29 +149,29 @@ public class PartitionState<K, V> {
         }
     }
 
-    /**
-     * Removes all offsets that fall below the new low water mark.
-     */
-    public void truncateOffsets(final long nextExpectedOffset) {
-        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
-    }
+    //todo delete
+//    /**
+//     * Removes all offsets that fall below the new low water mark.
+//     */
+//    private void truncateOffsets(final long nextExpectedOffset) {
+////        truncateWork();
+//        incompleteOffsets.removeIf(offset -> offset < nextExpectedOffset);
+//    }
 
     public void onOffsetCommitSuccess(final OffsetPair committed) {
-        long nextExpectedOffset = committed.getSync().offset();
-        truncateOffsets(nextExpectedOffset);
+//        long nextExpectedOffset = committed.getSync().offset();
+//        truncateOffsets(nextExpectedOffset);
 
         // todo possibility this is run a different thread than controller?
-        updateIncompletes(committed);
+        setClean();
     }
 
-    private void updateIncompletes(OffsetPair committed) {
-        // todo - track dirty state here
+    private void setClean() {
+        setDirty(false);
     }
 
-
-    boolean isDirty() {
-        // todo return is dirty ?
-        return true;
+    private void setDirty() {
+        setDirty(true);
     }
 
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
@@ -182,11 +200,16 @@ public class PartitionState<K, V> {
 
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
+        WorkContainer<K, V> remove = this.commitQueue.remove(work.offset());
+        //todo update tests to put this back - WorkManagerOffsetMapCodecManagerTest doesn't succeed work properly
+//        assert(remove != null);
         boolean removed = this.incompleteOffsets.remove(offset);
-        //todo
+        //todo update tests to put this back
 //        assert (removed);
 
         updateHighestSucceededOffsetSoFar(work);
+
+        setDirty();
     }
 
     public void onFailure(WorkContainer<K, V> work) {
@@ -222,12 +245,12 @@ public class PartitionState<K, V> {
         incompleteOffsets.add(wc.offset());
     }
 
-    public void remove(Iterable<WorkContainer<?, ?>> workToRemove) {
-        for (var workContainer : workToRemove) {
-            var offset = workContainer.getCr().offset();
-            this.commitQueue.remove(offset);
-        }
-    }
+//    private void truncateWork() {
+//        for (var workContainer : workToRemove) {
+//            var offset = workContainer.getCr().offset();
+//            this.commitQueue.remove(offset);
+//        }
+//    }
 
     /**
      * Has this partition been removed? No.
@@ -248,8 +271,9 @@ public class PartitionState<K, V> {
     // todo rename syncOffsetAndIncompleteEncodings
     public OffsetPair getCompletedEligibleOffsetsAndRemoveNew() {
         OffsetAndMetadata offsetMetadata = createOffsetAndMetadata();
-        Set<Long> incompleteOffsets = getIncompleteOffsetsBelowHighestSucceeded();
-        return new OffsetPair(offsetMetadata, incompleteOffsets);
+        Set<Long> incompleteOffsetsBelowHighest = getIncompleteOffsetsBelowHighestSucceeded();
+//        truncateOffsets(offsetMetadata.offset());
+        return new OffsetPair(offsetMetadata, incompleteOffsetsBelowHighest);
     }
 
     private OffsetAndMetadata createOffsetAndMetadata() {
@@ -267,7 +291,7 @@ public class PartitionState<K, V> {
 
     public long getOffsetHighestSequentialSucceeded() {
         if (this.incompleteOffsets.isEmpty()) {
-            return -1;
+            return this.offsetHighestSeen;
         } else {
             return this.incompleteOffsets.first() - 1;
         }

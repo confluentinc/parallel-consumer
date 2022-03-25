@@ -56,13 +56,13 @@ public class KafkaTestUtils {
      * It's a race to see if the genesis offset gets committed or not. So lets remove it if it exists, and all tests can
      * assume it doesn't.
      */
-    public static List<Integer> trimAllGeneisOffset(final List<Integer> collect) {
-        while (!collect.isEmpty() && collect.get(0) == 0) {
-            int genesisOffset = collect.get(0);
-            if (genesisOffset == 0)
-                collect.remove(0);
-        }
-        return collect;
+    public static List<Integer> trimAllGenesisOffset(final List<Integer> collect) {
+//        while (!collect.isEmpty() && collect.get(0) == 0) {
+//            int genesisOffset = collect.get(0);
+//            if (genesisOffset == 0)
+//                collect.remove(0);
+//        }
+        return collect.stream().filter(x -> x != 0).collect(Collectors.toList());
     }
 
     public ConsumerRecord<String, String> makeRecord(String key, String value) {
@@ -90,17 +90,17 @@ public class KafkaTestUtils {
      */
     public void assertCommits(MockProducer mp, List<Integer> expectedOffsets, Optional<String> description) {
         log.debug("Asserting commits of {}", expectedOffsets);
-        List<Integer> set = getProducerCommits(mp);
+        List<Integer> offsets = getProducerCommitsFlattened(mp);
 
         if (!expectedOffsets.contains(0)) {
-            KafkaTestUtils.trimAllGeneisOffset(set);
+            offsets = KafkaTestUtils.trimAllGenesisOffset(offsets);
         }
 
-        assertThat(set).describedAs(description.orElse("Which offsets are committed and in the expected order"))
+        assertThat(offsets).describedAs(description.orElse("Which offsets are committed and in the expected order"))
                 .containsExactlyElementsOf(expectedOffsets);
     }
 
-    public List<Integer> getProducerCommits(MockProducer mp) {
+    public List<Integer> getProducerCommitsFlattened(MockProducer mp) {
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
         List<Integer> set = history.stream().flatMap(histories -> {

@@ -12,10 +12,7 @@ import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.MockConsumer;
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.api.AbstractListAssert;
 import org.assertj.core.api.ObjectAssert;
@@ -175,6 +172,10 @@ class WorkManagerTest {
     private void succeed(WorkContainer<String, String> succeed) {
         succeed.onUserFunctionSuccess();
         wm.onSuccessResult(succeed);
+    }
+
+    private void succeed(Iterable<WorkContainer<String, String>> succeed) {
+        succeed.forEach(this::succeed);
     }
 
     /**
@@ -569,8 +570,8 @@ class WorkManagerTest {
      * Checks work management is correct in this respect.
      */
     @Test
-    public void workQueuesEmptyWhenAllWorkComplete() {
-        ParallelConsumerOptions build = ParallelConsumerOptions.builder()
+    void workQueuesEmptyWhenAllWorkComplete() {
+        var build = ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
                 .build();
         setupWorkManager(build);
@@ -581,18 +582,20 @@ class WorkManagerTest {
         assertThat(work).hasSize(3);
 
         //
-        for (var w : work) {
-            succeed(w);
-        }
+        succeed(work);
 
         //
         assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(3);
+        assertThat(wm.getNumberOfEntriesInPartitionQueues()).as("Partition commit queues are now empty").isZero();
 
         // drain commit queue
         var completedFutureOffsets = wm.findCompletedEligibleOffsetsAndRemove();
         assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(0);
+        PartitionState.OffsetPair offsetPair = completedFutureOffsets.values().stream().findFirst().get();
+        OffsetAndMetadata sync = offsetPair.getSync();
+        Truth.assertThat(sync.offset()).isEqualTo(3);
+        Truth.assertThat(sync.metadata()).isEmpty();
+        Truth.assertThat(offsetPair.getIncompletes()).isEmpty();
     }
 
     /**

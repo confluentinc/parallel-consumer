@@ -378,14 +378,14 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     // todo rename
     private Map<TopicPartition, OffsetPair> findCompletedEligibleOffsetsAndRemoveNew() {
-        Map<TopicPartition, OffsetPair> offsetsToSend = new HashMap<>();
-
-        for (var entry : getAssignedPartitions().entrySet()) {
-
-            OffsetPair offsetAndMetadata = entry.getValue().getCompletedEligibleOffsetsAndRemoveNew();
-
-            offsetsToSend.put(entry.getKey(), offsetAndMetadata);
-        }
+        var offsetsToSend = getAssignedPartitions().values().stream()
+                .filter(PartitionState::isDirty)
+                .map(state ->
+                        {
+                            OffsetPair offsetAndMetadata = state.getCompletedEligibleOffsetsAndRemoveNew();
+                            return Map.entry(state.getTp(), offsetAndMetadata);
+                        }
+                ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         log.debug("Scan finished, {} were in flight, offset(s) ({}) to be committed", offsetsToSend.size(), offsetsToSend);
         return offsetsToSend;

@@ -77,6 +77,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
         //
         waitAtMost(defaultTimeout).alias("expected number of records")
+                .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
                     bar.stepTo(numRecordsProcessed.get());
                     assertThat(numRecordsProcessed.get()).isEqualTo(numRecsExpected);
