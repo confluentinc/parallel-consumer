@@ -122,11 +122,6 @@ class WorkManagerOffsetMapCodecManagerTest {
         wm.onPartitionsAssigned(UniLists.of(tp));
         offsetCodecManager = new OffsetMapCodecManager<>(consumer);
     }
-//
-//    // todo refactor tests out that depend on this
-//    private void raiseToHardCodedHighestSeenOffset() {
-//        wm.getPm().getPartitionState(tp).maybeRaiseHighestSeenOffset(highestSucceeded);
-//    }
 
     @BeforeAll
     static void data() {
@@ -321,7 +316,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     @SneakyThrows
     @Test
     void largeOffsetMap() {
-//        state.maybeRaiseHighestSeenOffset(200L); // force system to have seen a high offset
+        injectSucceededWorkAtOffset(200); // force system to have seen a high offset
         byte[] bytes = offsetCodecManager.encodeOffsetsCompressed(0L, state);
         int smallestCompressionObserved = 10;
         assertThat(bytes).as("very small")
@@ -381,8 +376,6 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @Test
     void runLengthEncoding() {
-//        raiseToHardCodedHighestSeenOffset();
-
         String stringMap = incompletesToBitmapString(finalOffsetForPartition, state);
         List<Integer> integers = OffsetRunLength.runLengthEncode(stringMap);
         assertThat(integers).as("encoding of map: " + stringMap).containsExactlyElementsOf(UniLists.of(1, 1, 2));
