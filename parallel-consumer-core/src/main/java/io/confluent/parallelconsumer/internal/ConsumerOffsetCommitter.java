@@ -127,7 +127,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      * Commit request message
      */
     @Value
-    static class CommitRequest {
+    public static class CommitRequest {
         UUID id = UUID.randomUUID();
         long requestedAtMs = System.currentTimeMillis();
     }
@@ -136,7 +136,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      * Commit response message, linked to a {@link CommitRequest}
      */
     @Value
-    static class CommitResponse {
+    public static class CommitResponse {
         CommitRequest request;
     }
 

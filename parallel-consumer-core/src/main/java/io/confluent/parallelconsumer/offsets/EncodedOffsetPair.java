@@ -25,7 +25,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
  * @see #unwrap
  */
 @Slf4j
-final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
+public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
 
     @Getter
     OffsetEncoding encoding;

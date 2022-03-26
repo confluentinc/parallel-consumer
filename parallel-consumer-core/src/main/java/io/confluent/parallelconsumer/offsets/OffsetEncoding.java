@@ -35,7 +35,7 @@ public enum OffsetEncoding {
     RunLengthV2(v2, (byte) 'e'),
     RunLengthV2Compressed(v2, (byte) 'p');
 
-    enum Version {
+    public enum Version {
         v1, v2
     }
 

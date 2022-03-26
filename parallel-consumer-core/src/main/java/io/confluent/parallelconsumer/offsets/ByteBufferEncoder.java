@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArray;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArrayCompressed;
 
-class ByteBufferEncoder extends OffsetEncoder {
+public class ByteBufferEncoder extends OffsetEncoder {
 
     private final ByteBuffer bytesBuffer;
 
