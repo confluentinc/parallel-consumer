@@ -471,39 +471,21 @@
             </testResource>
         </testResources>
         <plugins>
-            <plugin>
-                <groupId>io.stubbs.truth</groupId>
-                <artifactId>truth-generator-maven-plugin</artifactId>
-                <version>${truth-generator-maven-plugin.version}</version>
-                <configuration>
-                    <packages>
-                        <package>io.confluent.parallelconsumer</package>
-                        <package>io.confluent.csid</package>
-                    </packages>
-                    <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
+
             <plugin>
                 <groupId>org.sonatype.ossindex.maven</groupId>
                 <artifactId>ossindex-maven-plugin</artifactId>
                 <version>3.2.0</version>
-                <executions>
-                    <execution>
-                        <id>audit-dependencies</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>audit</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <!--                todo -->
+                <!--                <executions>-->
+                <!--                    <execution>-->
+                <!--                        <id>audit-dependencies</id>-->
+                <!--                        <phase>validate</phase>-->
+                <!--                        <goals>-->
+                <!--                            <goal>audit</goal>-->
+                <!--                        </goals>-->
+                <!--                    </execution>-->
+                <!--                </executions>-->
             </plugin>
             <plugin>
                 <groupId>com.soebes.maven.plugins</groupId>
