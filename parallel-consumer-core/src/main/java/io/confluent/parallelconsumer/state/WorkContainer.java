@@ -185,7 +185,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
         updateFailureHistory(cause);
 
-        this.userFunctionSucceeded = of(false);
+        this.maybeUserFunctionSucceeded = of(false);
     }
 
     private void updateFailureHistory(Throwable cause) {

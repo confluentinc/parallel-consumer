@@ -16,47 +16,6 @@
     <artifactId>parallel-consumer-core</artifactId>
     <name>Confluent Parallel Consumer Core</name>
 
-    <properties>
-    </properties>
-
-    <build>
-        <plugins>
-            <plugin>
-                <artifactId>truth-generator-maven-plugin</artifactId>
-                <groupId>com.google.truth.extensions</groupId>
-                <version>HEAD-SNAPSHOT</version>
-                <configuration>
-                    <!-- List the classes you want to generate assertions for -->
-                    <packages>
-                        <param>io.confluent.parallelconsumer.state</param>
-                    </packages>
-                    <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>io.whelk.asciidoc</groupId>
-                <artifactId>asciidoc-template-maven-plugin</artifactId>
-                <version>1.0.12-RELEASE</version>
-                <configuration>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>process</id>
-                        <phase>none</phase>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-
     <dependencies>
         <!-- Main -->
         <dependency>
@@ -135,30 +94,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.google.truth</groupId>
-            <artifactId>truth</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.truth.extensions</groupId>
-            <artifactId>truth-java8-extension</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threeten-extra</artifactId>
             <version>1.7.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>one.util</groupId>
-            <artifactId>streamex</artifactId>
-            <version>0.8.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.truth.extensions</groupId>
-            <artifactId>truth-generator-extension</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

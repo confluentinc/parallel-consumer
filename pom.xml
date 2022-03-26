@@ -112,6 +112,8 @@
         <truth.version>1.1.3</truth.version>
         <flogger.version>0.7.4</flogger.version>
         <mockito.version>4.4.0</mockito.version>
+        <!-- todo lock -->
+        <truth-generator-maven-plugin.version>0.1-SNAPSHOT</truth-generator-maven-plugin.version>
     </properties>
 
     <profiles>
@@ -237,11 +239,11 @@
 
     <dependencies>
         <!-- Main -->
-        <dependency>
-            <groupId>com.github.bsideup.jabel</groupId>
-            <artifactId>jabel-javac-plugin</artifactId>
-            <version>0.4.2</version>
-        </dependency>
+        <!--        <dependency>-->
+        <!--            <groupId>com.github.bsideup.jabel</groupId>-->
+        <!--            <artifactId>jabel-javac-plugin</artifactId>-->
+        <!--            <version>0.4.2</version>-->
+        <!--        </dependency>-->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -341,6 +343,18 @@
         <dependency>
             <groupId>com.google.flogger</groupId>
             <artifactId>flogger-slf4j-backend</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>one.util</groupId>
+            <artifactId>streamex</artifactId>
+            <version>0.8.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.stubbs.truth</groupId>
+            <artifactId>truth-generator-maven-plugin</artifactId>
+            <version>${truth-generator-maven-plugin.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -457,6 +471,26 @@
             </testResource>
         </testResources>
         <plugins>
+            <plugin>
+                <groupId>io.stubbs.truth</groupId>
+                <artifactId>truth-generator-maven-plugin</artifactId>
+                <version>${truth-generator-maven-plugin.version}</version>
+                <configuration>
+                    <packages>
+                        <package>io.confluent.parallelconsumer</package>
+                        <package>io.confluent.csid</package>
+                    </packages>
+                    <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.sonatype.ossindex.maven</groupId>
                 <artifactId>ossindex-maven-plugin</artifactId>
@@ -690,13 +724,16 @@
                                 <banDuplicatePomDependencyVersions/>
                                 <requireSameVersions/>
                                 <requireReleaseDeps>
-                                    <onlyWhenRelease>false</onlyWhenRelease>
+                                    <!-- todo false -->
+                                    <onlyWhenRelease>true</onlyWhenRelease>
                                     <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
                                     <excludes>
                                         <exclude>io.confluent.parallelconsumer:</exclude>
                                     </excludes>
                                 </requireReleaseDeps>
-                                <requirePluginVersions/>
+                                <!-- todo false -->
+
+                                <!--                                <requirePluginVersions/>-->
                             </rules>
                         </configuration>
                     </execution>
@@ -839,7 +876,7 @@
                 <!-- for use in idea -->
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
-                <version>2.10.0</version>
+                <version>2.9.0</version>
             </plugin>
         </plugins>
 
@@ -894,6 +931,22 @@
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
         </repository>
+        <repository>
+            <id>astubbs-truth-generator</id>
+            <url>https://packagecloud.io/astubbs/truth-generator/maven2</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
     </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>astubbs-truth-generator</id>
+            <url>https://packagecloud.io/astubbs/truth-generator/maven2</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
 </project>
