@@ -14,6 +14,7 @@ import io.stubbs.truth.generator.internal.MyStringSubject;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.consumer.OffsetAndMetadataSubject;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -22,11 +23,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
+
 class TruthGeneratorTests {
 
     @Test
     void generate(@TempDir Path tempDir) {
-        TruthGeneratorAPI tg = TruthGeneratorAPI.create(tempDir);
+        TruthGeneratorAPI tg = TruthGeneratorAPI.createDefaultOptions(tempDir);
         tg.registerStandardSubjectExtension(String.class, MyStringSubject.class);
         SourceClassSets ss = new SourceClassSets(CommitHistory.class);
 
@@ -46,17 +49,17 @@ class TruthGeneratorTests {
 
         tg.generate(ss);
 
-        ConsumerRecord actual = PodamUtils.createInstance(ConsumerRecord.class, String.class, String.class);
-//    ConsumerRecordChildSubject.assertTruth(actual).hasTopic();
-//    ManagedTruth.assertTruth(PodamUtils.createInstance(ConsumerRecords.class)).hasPartitions();
-//
-//    ManagedTruth.assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class));
-//
-//    ManagedTruth.assertTruth(PodamUtils.createInstance(TopicPartition.class));
-//
-//    ManagedTruth.assertTruth(PodamUtils.createInstance(RecordMetadata.class));
-//
-//    ManagedTruth.assertTruth(PodamUtils.createInstance(ProducerRecord.class));
+        // todo check legacy's also contribute to subject graph
+        assertTruth(PodamUtils.createInstance(ConsumerRecords.class)).getPartitions().isEmpty();
+
+        OffsetAndMetadataSubject offsetAndMetadataSubject = assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class));
+        offsetAndMetadataSubject.hasOffsetEqualTo(1);
+
+        assertTruth(PodamUtils.createInstance(TopicPartition.class)).hasTopic().contains("sdf");
+
+        assertTruth(PodamUtils.createInstance(RecordMetadata.class)).ishasTimestamp();
+
+        assertTruth(PodamUtils.createInstance(ProducerRecord.class)).getHeaders().isEmpty();
 
     }
 

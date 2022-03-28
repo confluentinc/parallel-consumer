@@ -117,15 +117,23 @@
                 <configuration>
                     <cleanTargetDir>true</cleanTargetDir>
                     <useHas>false</useHas>
+                    <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
+                    <useHas>false</useHas>
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.state.WorkContainer</class>
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>
                         <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                     </classes>
                     <legacyClasses>
+                        <!-- todo check legacy is recursive -->
                         <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
+                        <class>org.apache.kafka.clients.consumer.ConsumerRecord</class>
+                        <class>org.apache.kafka.clients.consumer.ConsumerRecords</class>
+                        <class>org.apache.kafka.clients.producer.RecordMetadata</class>
+                        <class>org.apache.kafka.clients.producer.ProducerRecord</class>
                     </legacyClasses>
                     <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
                 </configuration>
