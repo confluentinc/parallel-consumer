@@ -115,12 +115,18 @@
                 <artifactId>truth-generator-maven-plugin</artifactId>
                 <version>${truth-generator-maven-plugin.version}</version>
                 <configuration>
-                    <packages>
-                        <package>io.confluent.parallelconsumer</package>
-                    </packages>
-                    <!--                    <classes>-->
-                    <!--                        <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>-->
-                    <!--                    </classes>-->
+                    <cleanTargetDir>true</cleanTargetDir>
+                    <useHas>false</useHas>
+                    <classes>
+                        <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.state.WorkManager</class>
+                        <class>io.confluent.parallelconsumer.state.PartitionState</class>
+                        <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
+                    </classes>
+                    <legacyClasses>
+                        <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
+                    </legacyClasses>
                     <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
                 </configuration>
                 <executions>
