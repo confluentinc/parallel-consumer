@@ -55,8 +55,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 //@Isolated // performance sensitive
 @Slf4j
-public
-class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
+public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     static final int DEFAULT_MAX_POLL = 500;
     public static final int CHAOS_FREQUENCY = 500;
@@ -324,8 +323,7 @@ class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, String> {
 
     @Getter
     @ToString
-    public
-    class ParallelConsumerRunnable implements Runnable {
+    public class ParallelConsumerRunnable implements Runnable {
 
         private final int instanceId;
 
