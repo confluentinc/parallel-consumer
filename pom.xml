@@ -239,11 +239,6 @@
 
     <dependencies>
         <!-- Main -->
-        <!--        <dependency>-->
-        <!--            <groupId>com.github.bsideup.jabel</groupId>-->
-        <!--            <artifactId>jabel-javac-plugin</artifactId>-->
-        <!--            <version>0.4.2</version>-->
-        <!--        </dependency>-->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -475,16 +470,15 @@
                 <groupId>org.sonatype.ossindex.maven</groupId>
                 <artifactId>ossindex-maven-plugin</artifactId>
                 <version>3.2.0</version>
-                <!--                todo -->
-                <!--                <executions>-->
-                <!--                    <execution>-->
-                <!--                        <id>audit-dependencies</id>-->
-                <!--                        <phase>validate</phase>-->
-                <!--                        <goals>-->
-                <!--                            <goal>audit</goal>-->
-                <!--                        </goals>-->
-                <!--                    </execution>-->
-                <!--                </executions>-->
+                <executions>
+                    <execution>
+                        <id>audit-dependencies</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>audit</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>com.soebes.maven.plugins</groupId>
@@ -713,8 +707,9 @@
                                     </excludes>
                                 </requireReleaseDeps>
                                 <!-- todo false -->
-
-                                <!--                                <requirePluginVersions/>-->
+                                <requirePluginVersions>
+                                    <unCheckedPluginList>io.stubbs.truth:truth-generator-maven-plugin</unCheckedPluginList>
+                                </requirePluginVersions>
                             </rules>
                         </configuration>
                     </execution>
@@ -857,7 +852,7 @@
                 <!-- for use in idea -->
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
-                <version>2.9.0</version>
+                <version>2.10.0</version>
             </plugin>
         </plugins>
 
