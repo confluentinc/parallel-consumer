@@ -62,13 +62,12 @@ public class DbTest extends BrokerIntegrationTest<String, String> {
 
         // create if exists doesn't seem to be thread safe - something around postgres creating indexes causes a distinct exception
         dbLock.lock();
-        PreparedStatement create_table = connection.prepareStatement("""
-                CREATE TABLE IF NOT EXISTS DATA(
-                   ID SERIAL PRIMARY KEY     NOT NULL,
-                   KEY           TEXT    NOT NULL,
-                   VALUE         TEXT     NOT NULL
-                );
-                """);
+        PreparedStatement create_table = connection.prepareStatement(
+                "CREATE TABLE IF NOT EXISTS DATA(\n" +
+                        "                   ID SERIAL PRIMARY KEY     NOT NULL,\n" +
+                        "                   KEY           TEXT    NOT NULL,\n" +
+                        "                   VALUE         TEXT     NOT NULL\n" +
+                        "                );");
         create_table.execute();
         dbLock.unlock();
     }

@@ -14,12 +14,12 @@ import io.stubbs.truth.generator.internal.MyStringSubject;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadataSubject;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.nio.file.Path;
 
@@ -50,16 +50,15 @@ class TruthGeneratorTests {
         tg.generate(ss);
 
         // todo check legacy's also contribute to subject graph
-        assertTruth(PodamUtils.createInstance(ConsumerRecords.class)).getPartitions().isEmpty();
+        assertTruth(new ConsumerRecords<>(UniMaps.of())).getPartitions().isEmpty();
 
-        OffsetAndMetadataSubject offsetAndMetadataSubject = assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class));
-        offsetAndMetadataSubject.hasOffsetEqualTo(1);
+        assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class)).hasOffsetEqualTo(1);
 
-        assertTruth(PodamUtils.createInstance(TopicPartition.class)).hasTopic().contains("sdf");
+        assertTruth(PodamUtils.createInstance(TopicPartition.class)).hasTopic().isNotEmpty();
 
         assertTruth(PodamUtils.createInstance(RecordMetadata.class)).ishasTimestamp();
 
-        assertTruth(PodamUtils.createInstance(ProducerRecord.class)).getHeaders().isEmpty();
+        assertTruth(PodamUtils.createInstance(ProducerRecord.class, String.class, String.class)).getHeaders().isEmpty();
 
     }
 
