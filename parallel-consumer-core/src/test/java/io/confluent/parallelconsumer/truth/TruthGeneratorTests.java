@@ -11,17 +11,14 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import pl.tlinkowski.unij.api.UniMaps;
-
-import java.nio.file.Path;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 
 class TruthGeneratorTests {
 
     @Test
-    void generate(@TempDir Path tempDir) {
+    void generate() {
         // todo check legacy's also contribute to subject graph
         assertTruth(new ConsumerRecords<>(UniMaps.of())).getPartitions().isEmpty();
 
