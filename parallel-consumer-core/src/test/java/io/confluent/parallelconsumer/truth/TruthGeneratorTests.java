@@ -59,7 +59,6 @@ class TruthGeneratorTests {
         assertTruth(PodamUtils.createInstance(RecordMetadata.class)).ishasTimestamp();
 
         assertTruth(PodamUtils.createInstance(ProducerRecord.class, String.class, String.class)).getHeaders().isEmpty();
-
     }
 
 }

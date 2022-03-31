@@ -56,7 +56,6 @@
         <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
         <url>https://github.com/confluentinc/parallel-consumer.git</url>
-        <tag>0.4.0.1</tag>
     </scm>
 
     <distributionManagement>
@@ -344,12 +343,6 @@
             <groupId>one.util</groupId>
             <artifactId>streamex</artifactId>
             <version>0.8.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.stubbs.truth</groupId>
-            <artifactId>truth-generator-maven-plugin</artifactId>
-            <version>${truth-generator-maven-plugin.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
