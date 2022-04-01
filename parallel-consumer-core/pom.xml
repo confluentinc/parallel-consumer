@@ -125,6 +125,7 @@
                     <useHas>false</useHas>
                     <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
                     <useHas>false</useHas>
+                    <releaseTarget>8</releaseTarget>
 <!--                    <jdkClassSourceOverride>C:\Users\anton\.jdks\adopt-openjdk-1.8.0_292\jre\lib\rt.jar</jdkClassSourceOverride>-->
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
