@@ -15,6 +15,9 @@ import pl.tlinkowski.unij.api.UniMaps;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 
+/**
+ * Basic tests of simple usage of the Truth Generator maven plugin
+ */
 class TruthGeneratorTests {
 
     @Test
