@@ -95,7 +95,7 @@
         <mycila.version>4.2.rc2</mycila.version>
         <lombok.version>1.18.22</lombok.version>
         <auto-service.version>1.0.1</auto-service.version>
-        <surefire.version>3.0.0-M5</surefire.version>
+        <surefire.version>3.0.0-M6</surefire.version>
 
         <!-- core -->
         <slf4j.version>1.7.36</slf4j.version>
