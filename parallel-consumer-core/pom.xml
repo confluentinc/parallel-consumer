@@ -124,7 +124,6 @@
                     <cleanTargetDir>true</cleanTargetDir>
                     <useHas>false</useHas>
                     <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
-                    <useHas>false</useHas>
                     <releaseTarget>8</releaseTarget>
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
