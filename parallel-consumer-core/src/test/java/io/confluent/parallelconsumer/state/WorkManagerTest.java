@@ -44,7 +44,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see WorkManager
  */
 @Slf4j
-class WorkManagerTest {
+public class WorkManagerTest {
 
     public static final String INPUT_TOPIC = "input";
     public static final String OUTPUT_TOPIC = "output";
@@ -392,7 +392,7 @@ class WorkManagerTest {
         assertThat(wm.getWorkIfAvailable()).isEmpty();
     }
 
-    static class FluentQueue<T> implements Iterable<T> {
+    public static class FluentQueue<T> implements Iterable<T> {
         ArrayDeque<T> work = new ArrayDeque<>();
 
         Collection<T> add(Collection<T> c) {

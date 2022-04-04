@@ -68,7 +68,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private boolean inFlight = false;
 
     @Getter
-    private Optional<Boolean> userFunctionSucceeded = Optional.empty();
+    private Optional<Boolean> maybeUserFunctionSucceeded = Optional.empty();
 
     /**
      * @see ParallelConsumerOptions#getDefaultMessageRetryDelay()
@@ -177,7 +177,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     public void onUserFunctionSuccess() {
         this.succeededAt = of(clock.instant());
-        this.userFunctionSucceeded = of(true);
+        this.maybeUserFunctionSucceeded = of(true);
     }
 
     public void onUserFunctionFailure(Throwable cause) {
@@ -185,7 +185,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
         updateFailureHistory(cause);
 
-        this.userFunctionSucceeded = of(false);
+        this.maybeUserFunctionSucceeded = of(false);
     }
 
     private void updateFailureHistory(Throwable cause) {
@@ -195,11 +195,11 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     public boolean isUserFunctionComplete() {
-        return this.getUserFunctionSucceeded().isPresent();
+        return this.getMaybeUserFunctionSucceeded().isPresent();
     }
 
     public boolean isUserFunctionSucceeded() {
-        Optional<Boolean> userFunctionSucceeded = this.getUserFunctionSucceeded();
+        Optional<Boolean> userFunctionSucceeded = this.getMaybeUserFunctionSucceeded();
         return userFunctionSucceeded.orElse(false);
     }
 

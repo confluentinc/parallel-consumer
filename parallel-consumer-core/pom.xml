@@ -4,7 +4,9 @@
     Copyright (C) 2020-2022 Confluent, Inc.
 
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
@@ -15,9 +17,6 @@
 
     <artifactId>parallel-consumer-core</artifactId>
     <name>Confluent Parallel Consumer Core</name>
-
-    <properties>
-    </properties>
 
     <dependencies>
         <!-- Main -->
@@ -97,27 +96,64 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.google.truth</groupId>
-            <artifactId>truth</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.truth.extensions</groupId>
-            <artifactId>truth-java8-extension</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threeten-extra</artifactId>
             <version>1.7.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>one.util</groupId>
-            <artifactId>streamex</artifactId>
-            <version>0.8.1</version>
+            <groupId>io.stubbs.truth</groupId>
+            <artifactId>truth-generator-api</artifactId>
+            <version>${truth-generator-maven-plugin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>uk.co.jemos.podam</groupId>
+            <artifactId>podam</artifactId>
+            <version>7.2.8.RELEASE</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.stubbs.truth</groupId>
+                <artifactId>truth-generator-maven-plugin</artifactId>
+                <version>${truth-generator-maven-plugin.version}</version>
+                <configuration>
+                    <cleanTargetDir>true</cleanTargetDir>
+                    <useHas>false</useHas>
+                    <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
+                    <releaseTarget>8</releaseTarget>
+                    <classes>
+                        <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.state.WorkContainer</class>
+                        <class>io.confluent.parallelconsumer.state.WorkManager</class>
+                        <class>io.confluent.parallelconsumer.state.PartitionState</class>
+                        <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
+                    </classes>
+                    <legacyClasses>
+                        <!-- todo check legacy is recursive -->
+                        <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
+                        <class>org.apache.kafka.clients.consumer.ConsumerRecord</class>
+                        <class>org.apache.kafka.clients.consumer.ConsumerRecords</class>
+                        <class>org.apache.kafka.clients.producer.RecordMetadata</class>
+                        <class>org.apache.kafka.clients.producer.ProducerRecord</class>
+                    </legacyClasses>
+                    <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 
 </project>

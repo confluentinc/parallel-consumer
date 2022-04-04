@@ -14,7 +14,7 @@ import java.nio.ByteBuffer;
  * Base OffsetEncoder
  */
 @Slf4j
-abstract class OffsetEncoder {
+public abstract class OffsetEncoder {
 
     private final OffsetSimultaneousEncoder offsetSimultaneousEncoder;
 

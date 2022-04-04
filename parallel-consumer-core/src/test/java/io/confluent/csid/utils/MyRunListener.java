@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import com.google.auto.service.AutoService;
@@ -26,12 +26,10 @@ import static io.confluent.csid.utils.StringUtils.msg;
 @AutoService(TestExecutionListener.class)
 public class MyRunListener implements TestExecutionListener {
 
-    private final String template = """
-
-            =========
-               JUNIT {}:    {} ({})
-            =========
-            """;
+    private final String template = "\n" +
+            "=========\n" +
+            "   JUNIT {}:    {} ({})\n" +
+            "=========";
 
     @Override
     public void testPlanExecutionStarted(final TestPlan testPlan) {

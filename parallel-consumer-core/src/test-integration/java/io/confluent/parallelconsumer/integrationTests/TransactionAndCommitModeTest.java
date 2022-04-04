@@ -267,7 +267,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         assertThat(expectedMessageCount).isEqualTo(processedCount.get());
         assertThat(producedKeysAcknowledged).hasSameSizeAs(expectedKeys);
         // todo performance: tighten up progress check (<2)
-        assertThat(progressTracker.getHighestRoundCountSeen()).isLessThan(30); // 3 seconds
+        assertThat(progressTracker.getHighestRoundCountSeen()).isLessThan(40);
         bar.close();
     }
 

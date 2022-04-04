@@ -340,7 +340,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             // no op, partition has been revoked
             log.debug("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
         } else {
-            Optional<Boolean> userFunctionSucceeded = wc.getUserFunctionSucceeded();
+            Optional<Boolean> userFunctionSucceeded = wc.getMaybeUserFunctionSucceeded();
             if (userFunctionSucceeded.isPresent()) {
                 if (TRUE.equals(userFunctionSucceeded.get())) {
                     onSuccessResult(wc);

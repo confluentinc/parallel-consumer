@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.Range;
@@ -21,7 +21,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * One such nature is that gaps between completed offsets get encoded as succeeded offsets. This doesn't matter because
  * they don't exist and we'll neve see them (they no longer exist in the source partition).
  */
-class RunLengthEncoder extends OffsetEncoder {
+public class RunLengthEncoder extends OffsetEncoder {
 
     private int currentRunLengthCount = 0;
     private boolean previousRunLengthState = false;
