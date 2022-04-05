@@ -55,7 +55,6 @@ import static org.awaitility.Awaitility.waitAtMost;
  */
 @Isolated // messes with static state - breaks other tests running in parallel
 @Slf4j
-// todo this test is way too complicated and needs to be rewritten - OffsetEncodingBackPressureUnitTest
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
     @AfterAll
@@ -279,8 +278,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             }
         } finally {
             // make sure to unlock threads - speeds up failed tests, instead of waiting for latch or close timeouts
-            msgLock.countDown();
-            msgLockTwo.countDown();
+//            msgLock.countDown();
+//            msgLockTwo.countDown();
 
             // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
             OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient

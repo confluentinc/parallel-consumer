@@ -143,7 +143,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
             if (parentParallelConsumer.getFailureCause() != null) {
                 log.error("PC has error - test failed");
             }
-            log.debug("Test finished, closing pc...");
+            log.debug("Test ended (maybe a failure), closing pc...");
             parentParallelConsumer.close();
         } else {
             log.debug("Test finished, pc already closed.");

@@ -122,33 +122,16 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                 unblock(wm, workIfAvailable, 2L);
                 log.debug("// unlock to make state dirty to get a commit");
                 Optional<OffsetAndMetadata> commitDataIfDirty = partitionState.getCommitDataIfDirty();
-//                msgLockThree.countDown();
 
                 //
                 log.debug("// send {} more messages", extraMessages);
                 sendRecordsToWM(extraMessages, wm);
                 succeedExcept(wm, UniLists.of(0L));
 
-//                ktu.send(consumerSpy, ktu.generateRecords(extraMessages));
-
-//                awaitForOneLoopCycle();
-//                parallelConsumer.requestCommitAsap();
-
-//                log.debug("// wait for the new message to be processed");
-//                await().atMost(defaultTimeout).untilAsserted(() ->
-//                assertThat(userFuncFinishedCount.get()).isEqualTo(processedBeforePartitionBlock + extraMessages + 1)
-//                );
-
                 log.debug("// assert payload missing from commit now");
-//                await().untilAsserted(() -> {
-//                Optional<OffsetAndMetadata> commitDataIfDirty = partitionState.getCommitDataIfDirty();
-//                assertThat(partitionCommit.offset()).isZero();
-//                Truth8.assertThat(commitDataIfDirty).isPresent();
-//                assertTruth(commitDataIfDirty).get.getOffset().isEqualTo(0);
+
                 assertTruth(partitionState).getCommitDataIfDirty().hasOffsetEqualTo(0);
-//                    assertThat(partitionCommit.metadata()).isBlank(); // missing offset encoding as too large
                 assertTruth(partitionState).getCommitDataIfDirty().getMetadata().isEmpty();
-//                });
             }
 
             log.debug("// test failed messages can retry");
@@ -164,8 +147,6 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                 WorkContainer.setDefaultRetryDelay(aggressiveDelay);
 
                 // release message that was blocking partition progression
-                // fail the message
-//                msgLock.countDown();
 
                 wm.onFailureResult(findWC(workIfAvailable, 0L));
 
@@ -174,26 +155,13 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                     assertTruth(workIfAvailable1).contains(0L);
                 }
 
-//
-//
-//                // wait for the retry
-//                awaitForOneLoopCycle();
-//                sleepQuietly(aggressiveDelay.toMillis());
-//                await().until(() -> attempts.get() >= 2);
-//
-//                // assert partition still blocked
-//                awaitForOneLoopCycle();
-//                await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isFalse());
 
-                // release the message for the second time, allowing it to succeed
-//                msgLockTwo.countDown();
                 unblock(wm, workIfAvailable, 0L);
             }
 
             // assert partition is now not blocked
             {
-//                awaitForOneLoopCycle();
-//                await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
+
                 Optional<OffsetAndMetadata> commitDataIfDirty = partitionState.getCommitDataIfDirty();
                 assertTruth(partitionState).isAllowedMoreRecords();
 
@@ -201,20 +169,14 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
 
             // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
             {
-//                await().untilAsserted(() -> {
-//                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
-//                    assertThat(offsets).contains(userFuncFinishedCount.get());
-//                });
+
                 assertTruth(partitionState).getCommitDataIfDirty().getOffset().isEqualTo(processedBeforePartitionBlock + extraMessages + numberOfBlockedMessages);
 
-//                await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
                 assertTruth(partitionState).isAllowedMoreRecords();
 
             }
         } finally {
-//            // make sure to unlock threads - speeds up failed tests, instead of waiting for latch or close timeouts
-//            msgLock.countDown();
-//            msgLockTwo.countDown();
+
 
             // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
             OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient
@@ -246,12 +208,6 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
         wm.registerWork(new ConsumerRecords<>(UniMaps.of(topicPartition, records)));
     }
-//
-//    private OffsetAndMetadata getLastCommit() {
-//        List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> commitHistory = getCommitHistory();
-//        Map<String, Map<TopicPartition, OffsetAndMetadata>> lastCommit = getLast(commitHistory).get();
-//        Map<TopicPartition, OffsetAndMetadata> allPartitionCommits = getOnlyOne(lastCommit).get();
-//        return allPartitionCommits.get(topicPartition);
-//    }
+
 
 }

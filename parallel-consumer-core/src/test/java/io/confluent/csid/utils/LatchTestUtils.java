@@ -51,7 +51,7 @@ public class LatchTestUtils {
                         seconds, seconds - toSeconds(between(start, now())));
         }
         if (latchReachedZero) {
-            log.trace("Latch released");
+            log.trace("Latch was released (#countdown)");
         } else {
             throw new TimeoutException("Latch await timeout (" + seconds + " seconds) - " + latch.getCount() + " count remaining");
         }
