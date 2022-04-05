@@ -362,8 +362,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #maybeRegisterNewRecordAsWork(ConsumerRecord)
      */
-    public void maybeRegisterNewRecordAsWork(EpochAndRecords records) {
-        // todo unchecked
+    public void maybeRegisterNewRecordAsWork(EpochAndRecords<K, V> records) {
         ConsumerRecords<K, V> poll = records.getPoll();
         for (ConsumerRecord<K, V> consumerRec : poll) {
             maybeRegisterNewRecordAsWork(consumerRec, records.getMyEpoch());

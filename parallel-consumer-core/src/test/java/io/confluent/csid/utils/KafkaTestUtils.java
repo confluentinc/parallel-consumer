@@ -246,6 +246,7 @@ public class KafkaTestUtils {
     }
 
     public void send(MockConsumer<String, String> consumerSpy, List<ConsumerRecord<String, String>> records) {
+        log.debug("Sending {} more messages to the consumer stub", records.size());
         // send records in `correct` offset order as declared by the input data, regardless of the order of the input list
         List<ConsumerRecord<String, String>> sorted = new ArrayList(records);
         Collections.sort(sorted, Comparator.comparingLong(ConsumerRecord::offset));

@@ -122,21 +122,33 @@ public class WorkManagerTest {
                 .build());
         registerSomeWork();
 
-        int max = 1;
-        var gottenWork = wm.getWorkIfAvailable(max);
+        //
+        var gottenWork = wm.getWorkIfAvailable();
 
         if (order == UNORDERED) {
             assertThat(gottenWork).hasSize(3);
+            assertOffsets(gottenWork, of(0, 1, 2));
         } else {
             assertThat(gottenWork).hasSize(1);
             assertOffsets(gottenWork, of(0));
         }
 
+        //
         wm.onSuccessResult(gottenWork.get(0));
 
-        gottenWork = wm.getWorkIfAvailable(max);
-        assertThat(gottenWork).hasSize(1);
-        assertOffsets(gottenWork, of(1));
+        //
+        gottenWork = wm.getWorkIfAvailable();
+
+        if (order == UNORDERED) {
+            assertThat(gottenWork).isEmpty();
+        } else {
+            assertThat(gottenWork).hasSize(1);
+            assertOffsets(gottenWork, of(1));
+        }
+
+        //
+        gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).isEmpty();
     }
 
     @Test
@@ -556,13 +568,17 @@ public class WorkManagerTest {
         var flattened = ktu.flatten(records.values());
         flattened.sort(comparingLong(ConsumerRecord::offset));
 
-        var recs = new ConsumerRecords<>(UniMaps.of(topicPartitionOf(0), flattened));
+        int partition = 0;
+        var recs = new ConsumerRecords<>(UniMaps.of(topicPartitionOf(partition), flattened));
+
+        assignPartition(partition);
 
         //
         wm.registerWork(recs);
 
         //
-
+        long awaiting = wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection();
+        assertThat(awaiting).isEqualTo(quantity);
 
         //
         List<WorkContainer<String, String>> work = wm.getWorkIfAvailable();

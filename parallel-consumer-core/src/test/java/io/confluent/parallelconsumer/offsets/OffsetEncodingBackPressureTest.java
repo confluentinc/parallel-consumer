@@ -92,17 +92,19 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             if (rec.offset() == offsetToBlock) {
                 int attemptNumber = attempts.incrementAndGet();
                 if (attemptNumber == 1) {
-                    log.debug("force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark");
-                    awaitLatch(msgLock, 120);
-                    log.debug("very slow message awoken, throwing exception");
+                    log.debug("Force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark. Waiting for msgLock countdown.");
+                    int sleepFor = 120;
+                    awaitLatch(msgLock, sleepFor);
+                    log.debug("Very slow message awoken, throwing exception");
                     throw new FakeRuntimeError("Fake error");
                 } else {
-                    log.debug("Second attempt, sleeping");
+                    log.debug("Second attempt, waiting for msgLockTwo countdown");
                     awaitLatch(msgLockTwo, 60);
                     log.debug("Second attempt, unlocked, succeeding");
                 }
             } else if (rec.offset() == 2l) {
                 awaitLatch(msgLockThree);
+                log.debug("// msg 2L unblocked");
             } else {
                 sleepQuietly(1);
             }
@@ -156,7 +158,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 assertThat(partitionBlocked).isFalse();
             }
 
-            // feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's gauranteed to block
+            log.debug("// feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's guaranteed to block");
             int extraRecordsToBlockWithThresholdBlocks = numberOfRecords / 2;
             {
                 assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue(); // should initially be not blocked
@@ -196,25 +198,29 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 );
             }
 
-            // test max payload exceeded, payload dropped
+            log.debug("// test max payload exceeded, payload dropped");
             int processedBeforePartitionBlock = userFuncFinishedCount.get();
             int extraMessages = numberOfRecords + extraRecordsToBlockWithThresholdBlocks / 2;
+            log.debug("// messages already sent {}, sending {} more", processedBeforePartitionBlock, extraMessages);
             {
-                // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
+                log.debug("// force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)");
                 PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
 
                 //
-                msgLockThree.countDown(); // unlock to make state dirty to get a commit
+                log.debug("// unlock to make state dirty to get a commit");
+                msgLockThree.countDown();
+                log.debug("// send {} more messages", extraMessages);
                 ktu.send(consumerSpy, ktu.generateRecords(extraMessages));
 
                 awaitForOneLoopCycle();
                 parallelConsumer.requestCommitAsap();
 
-                //
+                log.debug("// wait for the new message to be processed");
                 await().atMost(defaultTimeout).untilAsserted(() ->
-                        assertThat(userFuncFinishedCount.get()).isEqualTo(processedBeforePartitionBlock + extraMessages + 1) // some new message processed
+                        assertThat(userFuncFinishedCount.get()).isEqualTo(processedBeforePartitionBlock + extraMessages + 1)
                 );
-                // assert payload missing from commit now
+
+                log.debug("// assert payload missing from commit now");
                 await().untilAsserted(() -> {
                     OffsetAndMetadata partitionCommit = getLastCommit();
                     assertThat(partitionCommit.offset()).isZero();
@@ -222,7 +228,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 });
             }
 
-            // test failed messages can retry
+            log.debug("// test failed messages can retry");
             {
                 Duration aggressiveDelay = ofMillis(100);
                 WorkContainer.setDefaultRetryDelay(aggressiveDelay); // more aggressive retry

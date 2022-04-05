@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.internal.EpochAndRecords;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -127,11 +126,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
+        // no-op - nothing to do
 //        wmbm.onPartitionsRemoved(partitions);
     }
 
     /**
-     * for testing only
+     * Hard codes epoch as genesis - for testing only
      */
     public void registerWork(ConsumerRecords<K, V> records) {
         registerWork(new EpochAndRecords(records, 0));
