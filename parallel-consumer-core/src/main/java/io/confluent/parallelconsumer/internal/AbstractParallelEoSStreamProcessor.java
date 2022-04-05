@@ -889,7 +889,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
-        Set<ActionItem> results = new HashSet<>();
+        Queue<ActionItem> results = new ArrayDeque<>();
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
@@ -927,7 +927,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         for (var action : results) {
             WorkContainer<K, V> work = action.getWorkContainer();
             if (work == null) {
-                EpochAndRecords consumerRecords = action.getConsumerRecords();
+                EpochAndRecords<?, ?> consumerRecords = action.getConsumerRecords();
                 wm.registerWork(consumerRecords);
             } else {
                 MDC.put("offset", work.toString());
@@ -1138,6 +1138,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     public void registerWork(EpochAndRecords polledRecords) {
         log.debug("Adding {} to mailbox...", polledRecords);
+
         workMailBox.add(new ActionItem(null, polledRecords));
     }
 
