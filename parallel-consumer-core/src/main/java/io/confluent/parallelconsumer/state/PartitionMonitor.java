@@ -46,6 +46,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      */
     @Getter
     @Setter
+    // todo remove static
     private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
 
     private final Consumer<K, V> consumer;
@@ -363,8 +364,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * @see #maybeRegisterNewRecordAsWork(ConsumerRecord)
      */
     public void maybeRegisterNewRecordAsWork(EpochAndRecords<K, V> records) {
-        ConsumerRecords<K, V> poll = records.getPoll();
-        for (ConsumerRecord<K, V> consumerRec : poll) {
+        ConsumerRecords<K, V> recordCollection = records.getConsumerRecs();
+        for (ConsumerRecord<K, V> consumerRec : recordCollection) {
             maybeRegisterNewRecordAsWork(consumerRec, records.getMyEpoch());
         }
     }

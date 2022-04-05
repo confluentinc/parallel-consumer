@@ -41,7 +41,6 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
-import static java.util.Comparator.comparingLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -566,7 +565,6 @@ public class WorkManagerTest {
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());
-        flattened.sort(comparingLong(ConsumerRecord::offset));
 
         int partition = 0;
         var recs = new ConsumerRecords<>(UniMaps.of(topicPartitionOf(partition), flattened));

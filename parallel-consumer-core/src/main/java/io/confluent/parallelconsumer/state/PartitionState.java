@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -27,6 +28,7 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
+@ToString
 @Slf4j
 public class PartitionState<K, V> {
 
@@ -100,6 +102,7 @@ public class PartitionState<K, V> {
      * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}
      */
     // todo doesn't need to be concurrent any more?
+    @ToString.Exclude
     private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
     private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
@@ -313,3 +316,4 @@ public class PartitionState<K, V> {
         sm.removeAnyShardsReferencedBy(getCommitQueue());
     }
 }
+

@@ -15,6 +15,7 @@ import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
@@ -48,10 +49,19 @@ import static org.awaitility.Awaitility.waitAtMost;
  * indirectly on the behaviour of the metadata size, even if not so explicitly.
  * <p>
  * See {@link OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK}
+ *
+ * @see OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK
+ * @see OffsetEncodingBackPressureUnitTest
  */
 @Isolated // messes with static state - breaks other tests running in parallel
 @Slf4j
+// todo this test is way too complicated and needs to be rewritten - OffsetEncodingBackPressureUnitTest
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
+
+    @AfterAll
+    static void cleanup() {
+        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(0.75);
+    }
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
@@ -80,10 +90,10 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         CountDownLatch msgLock = new CountDownLatch(1);
         CountDownLatch msgLockTwo = new CountDownLatch(1);
         CountDownLatch msgLockThree = new CountDownLatch(1);
-        final int numberOfBlockedMessages = 2;
         AtomicInteger attempts = new AtomicInteger(0);
         long offsetToBlock = 0;
         List<Long> blockedOffsets = UniLists.of(0L, 2L);
+        final int numberOfBlockedMessages = blockedOffsets.size();
 
         parallelConsumer.poll((rec) -> {
 
@@ -166,7 +176,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
                 awaitForOneLoopCycle();
 
-                // assert partition now blocked from threshold
+                log.debug("// assert partition now blocked from threshold");
                 waitAtMost(ofSeconds(30))
                         .untilAsserted(
                                 () -> assertThat(wm.getPm().isBlocked(topicPartition))
@@ -180,7 +190,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 parallelConsumer.requestCommitAsap();
                 awaitForOneLoopCycle();
 
-                // assert blocked, but can still write payload
+                log.debug("// assert blocked, but can still write payload");
                 // assert the committed offset metadata contains a payload
                 waitAtMost(defaultTimeout).untilAsserted(() ->
                         {
@@ -198,6 +208,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 );
             }
 
+            // recreates the situation where the payload size is too large and must be dropped
             log.debug("// test max payload exceeded, payload dropped");
             int processedBeforePartitionBlock = userFuncFinishedCount.get();
             int extraMessages = numberOfRecords + extraRecordsToBlockWithThresholdBlocks / 2;
@@ -205,6 +216,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             {
                 log.debug("// force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)");
                 PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
+                parallelConsumer.requestCommitAsap();
+                awaitForOneLoopCycle();
 
                 //
                 log.debug("// unlock to make state dirty to get a commit");

@@ -170,7 +170,8 @@ public class KafkaTestUtils {
 
     public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
         HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(defaultKeys, quantity);
-        return flatten(integerListHashMap.values());
+        Collection<List<ConsumerRecord<String, String>>> values = integerListHashMap.values();
+        return flatten(values);
     }
 
     /**
@@ -210,12 +211,12 @@ public class KafkaTestUtils {
         return records;
     }
 
-    public <T> List<T> flatten(Collection<List<T>> listlist) {
-        List<T> all = new ArrayList<>();
-        for (Collection<T> value : listlist) {
+    public <KEY, VALUE> List<ConsumerRecord<KEY, VALUE>> flatten(Collection<List<ConsumerRecord<KEY, VALUE>>> listlist) {
+        SortedSet<ConsumerRecord<KEY, VALUE>> all = new TreeSet<>(Comparator.comparing(ConsumerRecord::offset));
+        for (Collection<ConsumerRecord<KEY, VALUE>> value : listlist) {
             all.addAll(value);
         }
-        return all;
+        return new ArrayList<>(all);
     }
 
     @Setter
@@ -248,8 +249,8 @@ public class KafkaTestUtils {
     public void send(MockConsumer<String, String> consumerSpy, List<ConsumerRecord<String, String>> records) {
         log.debug("Sending {} more messages to the consumer stub", records.size());
         // send records in `correct` offset order as declared by the input data, regardless of the order of the input list
-        List<ConsumerRecord<String, String>> sorted = new ArrayList(records);
-        Collections.sort(sorted, Comparator.comparingLong(ConsumerRecord::offset));
+        List<ConsumerRecord<String, String>> sorted = new ArrayList<>(records);
+        sorted.sort(Comparator.comparingLong(ConsumerRecord::offset));
         for (ConsumerRecord<String, String> record : sorted) {
             consumerSpy.addRecord(record);
         }
@@ -276,7 +277,7 @@ public class KafkaTestUtils {
     }
 
     public List<ConsumerRecord<String, String>> sendRecords(final int i) {
-        List<ConsumerRecord<String, String>> consumerRecords = generateRecords(i);
+        var consumerRecords = generateRecords(i);
         send(consumerSpy, consumerRecords);
         return consumerRecords;
     }

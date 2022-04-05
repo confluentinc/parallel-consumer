@@ -137,9 +137,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         log.trace("Loop: Broker poller: ({})", state);
         if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
             EpochAndRecords polledRecords = pollBrokerForRecords();
-            log.debug("Got {} records in poll result", polledRecords.getPoll().count());
+            log.debug("Got {} records in poll result", polledRecords.getConsumerRecs().count());
 
-            if (!polledRecords.getPoll().isEmpty()) {
+            if (!polledRecords.getConsumerRecs().isEmpty()) {
                 log.trace("Loop: Register work");
                 pc.registerWork(polledRecords);
 //                wm.registerWork(polledRecords);

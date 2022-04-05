@@ -160,9 +160,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 25_000).findFirst().get());
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highest).findFirst().get());
 
-        List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
+        var expected = incompleteRecords.stream().map(ConsumerRecord::offset)
                 .sorted()
-                .collect(Collectors.toList());
+                .collect(Collectors.toSet());
 
         //
         ktu.send(consumerSpy, records);
@@ -171,7 +171,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         ParallelConsumerOptions<String, String> options = parallelConsumer.getWm().getOptions();
         HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
-        recordsMap.put(tp, records);
+        recordsMap.put(tp, new ArrayList<>(records));
         ConsumerRecords<String, String> testRecords = new ConsumerRecords<>(recordsMap);
 
         // write offsets
