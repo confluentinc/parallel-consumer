@@ -112,6 +112,12 @@
             <version>7.2.8.RELEASE</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.stubbs.truth</groupId>
+            <artifactId>truth-generator-api</artifactId>
+            <version>0.1-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
