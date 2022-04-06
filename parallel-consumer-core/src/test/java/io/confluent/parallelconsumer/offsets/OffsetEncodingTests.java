@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.in;
@@ -160,9 +161,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 25_000).findFirst().get());
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highest).findFirst().get());
 
-        var expected = incompleteRecords.stream().map(ConsumerRecord::offset)
+        List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
                 .sorted()
-                .collect(Collectors.toSet());
+                .collect(Collectors.toList());
 
         //
         ktu.send(consumerSpy, records);
@@ -246,10 +247,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var anIncompleteRecord = records.get(3);
             Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
 
-            // force ingestion early, and check results
+            // check state
             {
                 // todo ingestion no longer a thing - what to do here?
-                Truth.assertThat(true).isFalse();
+//                Truth.assertThat(true).isFalse();
 //                int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
 
                 if (!encodingsThatFail.contains(encoding)) {
@@ -274,7 +275,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             var workRetrieved = newWm.getWorkIfAvailable();
             var workRetrievedOffsets = workRetrieved.stream().map(WorkContainer::offset).collect(Collectors.toList());
-            Truth.assertThat(workRetrieved).isNotEmpty();
+            assertTruth(workRetrieved).isNotEmpty();
 
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
@@ -285,9 +286,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     assertThat(workRetrievedOffsets).doesNotContainSequence(expected);
                 }
                 default -> {
-                    assertThat(workRetrievedOffsets)
-                            .as("Contains only incomplete records")
-                            .containsExactlyElementsOf(expected);
+                    Truth.assertWithMessage("Contains only incomplete records")
+                            .that(workRetrievedOffsets)
+                            .containsExactlyElementsIn(expected)
+                            .inOrder();
                 }
             }
         }

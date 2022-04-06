@@ -34,6 +34,8 @@ import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
+import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -198,9 +200,12 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 log.debug("// assert partition now blocked from threshold");
                 waitAtMost(ofSeconds(30))
                         .untilAsserted(
-                                () -> assertThat(wm.getPm().isBlocked(topicPartition))
-                                        .as("Partition SHOULD be blocked due to back pressure")
-                                        .isTrue()); // blocked
+                                () -> {
+                                    assertWithMessage("Partition SHOULD be blocked due to back pressure")
+                                            .that(partitionState)
+                                            .isAllowedMoreRecords();
+                                    assertTruth(partitionState).isNotAllowedMoreRecords();
+                                }); // blocked
 
                 Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
