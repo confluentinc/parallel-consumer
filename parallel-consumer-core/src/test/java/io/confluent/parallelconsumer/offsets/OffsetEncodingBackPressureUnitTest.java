@@ -23,6 +23,7 @@ import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
+import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
 import java.util.List;
@@ -30,6 +31,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
+import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static java.time.Duration.ofMillis;
 
 /**
@@ -104,9 +106,13 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                 // "The only incomplete record now is offset zero, which we are blocked on"
                 assertTruth(partitionState).getOffsetHighestSeen().isEqualTo(numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1);
                 assertTruth(partitionState).getCommitDataIfDirty().getMetadata().isNotEmpty();
-                // todo assert with message "The only incomplete record now is offset zero, which we are blocked on"
-                assertTruth(partitionState).getAllIncompleteOffsets().containsNoneIn(samplingOfShouldBeCompleteOffsets);
-                assertTruth(partitionState).getAllIncompleteOffsets().containsExactlyElementsIn(blockedOffsets);
+                assertTruth(partitionState)
+                        .getAllIncompleteOffsets()
+                        .containsNoneIn(samplingOfShouldBeCompleteOffsets);
+                assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
+                        .that(partitionState).getAllIncompleteOffsets().containsExactlyElementsIn(blockedOffsets);
+                assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
+                        .that(partitionState).getAllIncompleteOffsets().containsExactlyElementsIn(UniSets.of(0L));
             }
 
 
