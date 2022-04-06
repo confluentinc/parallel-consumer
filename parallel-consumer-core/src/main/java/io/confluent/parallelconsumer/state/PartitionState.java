@@ -186,10 +186,10 @@ public class PartitionState<K, V> {
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
-        long offsetHighestSeen = getOffsetHighestSeen();
-        if (wc.offset() != offsetHighestSeen + 1) {
-            log.error("");
-        }
+//        long offsetHighestSeen = getOffsetHighestSeen();
+//        if (wc.offset() != offsetHighestSeen + 1) {
+//            log.error("");
+//        }
 
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
@@ -239,6 +239,7 @@ public class PartitionState<K, V> {
      */
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
+        //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
         return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
                 // todo less than or less than and equal?
                 .filter(x -> x < highestSucceeded)

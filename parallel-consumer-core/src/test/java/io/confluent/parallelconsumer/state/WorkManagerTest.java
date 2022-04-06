@@ -369,7 +369,7 @@ public class WorkManagerTest {
         var recs = new ConsumerRecords<>(m);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         int max = 10;
 
@@ -391,6 +391,11 @@ public class WorkManagerTest {
         works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1, 6));
     }
+
+    private void registerWork(ConsumerRecords<String, String> recs) {
+        wm.registerWork(new EpochAndRecords<>(recs, 0));
+    }
+
 
     private void fail(WorkContainer<String, String> wc) {
         wc.onUserFunctionFailure(null);
@@ -444,22 +449,6 @@ public class WorkManagerTest {
     }
 
     @Test
-    @Disabled
-    public void multipleFailures() {
-    }
-
-
-    @Test
-    @Disabled
-    public void delayedOrdered() {
-    }
-
-    @Test
-    @Disabled
-    public void delayedUnordered() {
-    }
-
-    @Test
     void orderedByPartitionsParallel() {
         ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder()
                 .ordering(PARTITION)
@@ -478,7 +467,7 @@ public class WorkManagerTest {
         var recs = new ConsumerRecords<>(m);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         //
         var works = wm.getWorkIfAvailable();
@@ -524,7 +513,7 @@ public class WorkManagerTest {
         var recs = new ConsumerRecords<>(m);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         //
         var works = wm.getWorkIfAvailable();
@@ -572,7 +561,7 @@ public class WorkManagerTest {
         assignPartition(partition);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         //
         long awaiting = wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection();
@@ -659,7 +648,7 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, 2, 21, "21", "value");
         m.put(topicPartitionOf(2), of(rec2));
         var recs = new ConsumerRecords<>(m);
-        wm.registerWork(recs);
+        registerWork(recs);
 
 //        // force ingestion of records - see refactor: Queue unification #219
 //        wm.tryToEnsureQuantityOfWorkQueuedAvailable(100);
@@ -691,6 +680,9 @@ public class WorkManagerTest {
     /**
      * Checks that when using shards are not starved when there's enough work queued to satisfy poll request from the
      * initial request (without needing to iterate to other shards)
+     *
+     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/236">#236</a> Under some conditions, a
+     * shard (by partition or key), can get starved for attention
      */
     @Test
     void starvation() {

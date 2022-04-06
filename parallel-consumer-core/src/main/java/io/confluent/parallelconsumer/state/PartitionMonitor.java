@@ -15,7 +15,10 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
@@ -331,42 +334,25 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * work with the {@link TopicPartition}'s {@link PartitionState} and the {@link ShardManager}. Keeping the two
      * different views in sync. Of course now, having a shared nothing architecture would mean all access to the state
      * is by a single thread, and so this could never occur (see ).
-     *
-     * @return true if the record was taken, false if it was skipped (previously successful)
      */
-    boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec, final long epoch) {
-        if (rec == null) return false;
-
+    void maybeRegisterNewRecordAsWork(final EpochAndRecords<K, V> records) {
+//        if (records == null) return false;
         synchronized (partitionStates) {
-            if (isPartitionRemovedOrNeverAssigned(rec)) {
-                log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(rec), rec);
-                return false;
+            for (var rec : records.getConsumerRecs()) {
+                if (isPartitionRemovedOrNeverAssigned(rec)) {
+                    log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(rec), rec);
+                }
+
+                if (isRecordPreviouslyCompleted(rec)) {
+                    log.trace("Record previously completed, skipping. offset: {}", rec.offset());
+                } else {
+                    int currentPartitionEpoch = getEpoch(rec);
+                    var work = new WorkContainer<>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
+
+                    sm.addWorkContainer(work);
+                    addWorkContainer(work);
+                }
             }
-
-            if (isRecordPreviouslyCompleted(rec)) {
-                log.trace("Record previously completed, skipping. offset: {}", rec.offset());
-                return false;
-            } else {
-                int currentPartitionEpoch = getEpoch(rec);
-                var wc = new WorkContainer<>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
-
-                sm.addWorkContainer(wc);
-
-                addWorkContainer(wc);
-
-                return true;
-            }
-        }
-    }
-
-
-    /**
-     * @see #maybeRegisterNewRecordAsWork(ConsumerRecord)
-     */
-    public void maybeRegisterNewRecordAsWork(EpochAndRecords<K, V> records) {
-        ConsumerRecords<K, V> recordCollection = records.getConsumerRecs();
-        for (ConsumerRecord<K, V> consumerRec : recordCollection) {
-            maybeRegisterNewRecordAsWork(consumerRec, records.getMyEpoch());
         }
     }
 

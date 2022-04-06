@@ -22,11 +22,13 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
@@ -138,15 +140,15 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
-                        ProcessingShard<String, String> stringStringProcessingShard = sm.getProcessingShards().get(topicPartition);
-                        if (stringStringProcessingShard != null) {
-                            long countOfWorkAwaitingSelection = stringStringProcessingShard.getCountOfWorkAwaitingSelection();
-                            NavigableMap<Long, WorkContainer<String, String>> entries = stringStringProcessingShard.getEntries();
-                            boolean b = sm.workIsWaitingToBeProcessed();
-                            long countWorkInFlight = stringStringProcessingShard.getCountWorkInFlight();
-                            long countOfWorkTracked = stringStringProcessingShard.getCountOfWorkTracked();
-                            long numberOfWorkQueuedInShardsAwaitingSelection = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-                        }
+//                        ProcessingShard<String, String> stringStringProcessingShard = sm.getProcessingShards().get(topicPartition);
+//                        if (stringStringProcessingShard != null) {
+//                            long countOfWorkAwaitingSelection = stringStringProcessingShard.getCountOfWorkAwaitingSelection();
+//                            NavigableMap<Long, WorkContainer<String, String>> entries = stringStringProcessingShard.getEntries();
+//                            boolean b = sm.workIsWaitingToBeProcessed();
+//                            long countWorkInFlight = stringStringProcessingShard.getCountWorkInFlight();
+//                            long countOfWorkTracked = stringStringProcessingShard.getCountOfWorkTracked();
+//                            long numberOfWorkQueuedInShardsAwaitingSelection = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+//                        }
                         assertThat(userFuncFinishedCount.get()).isEqualTo(numberOfRecords - numberOfBlockedMessages);
 //                        Truth.assertThat(numberOfWorkQueuedInShardsAwaitingSelection).isEqualTo(-4);
                     });
@@ -253,14 +255,14 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 log.debug("// wait for the new message to be processed");
                 await().atMost(defaultTimeout).untilAsserted(() ->
                         {
-                            long numberOfWorkQueuedInShardsAwaitingSelection1 = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-                            ShardManager<String, String> sm1 = sm;
-                            List<Long> seen1 = seen.stream().sorted().collect(Collectors.toList());
-                            long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-                            long offsetHighestSeen = partitionState.getOffsetHighestSeen();
-                            long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
-                            int i = userFuncStartCount.get();
-                            int i1 = userFuncFinishedCount.get();
+//                            long numberOfWorkQueuedInShardsAwaitingSelection1 = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+//                            ShardManager<String, String> sm1 = sm;
+//                            List<Long> seen1 = seen.stream().sorted().collect(Collectors.toList());
+//                            long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
+//                            long offsetHighestSeen = partitionState.getOffsetHighestSeen();
+//                            long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
+//                            int i = userFuncStartCount.get();
+//                            int i1 = userFuncFinishedCount.get();
                             int expectedUserFunctionFinishedCount = processedBeforePartitionBlock + extraMessages + 1;
                             assertThat(userFuncFinishedCount.get()).isEqualTo(expectedUserFunctionFinishedCount);
                         }

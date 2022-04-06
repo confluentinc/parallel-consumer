@@ -7,6 +7,11 @@ package io.confluent.parallelconsumer.internal;
 import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 
+/**
+ * For tagging polled records with our epoch
+ *
+ * @see BrokerPollSystem#partitionAssignmentEpoch
+ */
 @Value
 public class EpochAndRecords<K, V> {
     ConsumerRecords<K, V> consumerRecs;

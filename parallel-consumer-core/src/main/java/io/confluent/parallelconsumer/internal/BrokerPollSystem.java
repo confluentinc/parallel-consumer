@@ -28,6 +28,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Subsystem for polling the broker for messages.
@@ -61,9 +62,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
 
     private final WorkManager<K, V> wm;
 
-    private long epoch = 0L;
+    /**
+     * Gets incremented every time there's a new assignment event. This epoch is forever associated with a record, and
+     * is used to more easily determine stale records.
+     */
+    @Getter(PRIVATE)
+    private long partitionAssignmentEpoch = 0L;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions options) {
+    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
 
@@ -153,6 +159,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         }
     }
 
+    // todo ?
     private void transitionToCloseMaybe() {
         // make sure everything is committed
         if (isResponsibleForCommits() && !wm.isRecordsAwaitingToBeCommitted()) {
@@ -193,19 +200,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        epoch++;
+        partitionAssignmentEpoch++;
     }
 
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        epoch++;
+        partitionAssignmentEpoch++;
     }
 
-    private long getEpoch() {
-        return epoch;
-    }
-
-    private EpochAndRecords pollBrokerForRecords() {
+    private EpochAndRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
 
@@ -217,7 +220,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
 
         log.debug("Poll completed");
-        return new EpochAndRecords(poll, getEpoch());
+        return new EpochAndRecords<>(poll, getPartitionAssignmentEpoch());
     }
 
     /**

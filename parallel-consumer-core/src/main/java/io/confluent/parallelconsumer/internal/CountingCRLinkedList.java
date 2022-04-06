@@ -18,6 +18,7 @@ import java.util.Queue;
  * Also protects against concurrent modification exceptions, as we don't need to traverse the list to count the nested
  * elements. The count won't then be always exact, but it doesn't need to be.
  */
+// todo used?
 @EqualsAndHashCode(callSuper = true)
 public class CountingCRLinkedList<K, V> extends LinkedList<ConsumerRecords<K, V>> implements Queue<ConsumerRecords<K, V>> {
 

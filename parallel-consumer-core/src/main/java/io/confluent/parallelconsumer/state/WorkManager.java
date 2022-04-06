@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.internal.EpochAndRecords;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
@@ -130,14 +129,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        wmbm.onPartitionsRemoved(partitions);
     }
 
-    /**
-     * Hard codes epoch as genesis - for testing only
-     */
-    public void registerWork(ConsumerRecords<K, V> records) {
-        registerWork(new EpochAndRecords(records, 0));
-    }
+//    /**
+//     * Hard codes epoch as genesis - for testing only
+//     */
+//    public void registerWork(ConsumerRecords<K, V> records) {
+//        registerWork(new EpochAndRecords(records, 0));
+//    }
 
-    public void registerWork(EpochAndRecords records) {
+    public void registerWork(EpochAndRecords<K, V> records) {
 //        wmbm.registerWork(records);
         pm.maybeRegisterNewRecordAsWork(records);
     }
@@ -323,7 +322,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getTotalWorkAwaitingIngestion() > options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
+        return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -341,17 +340,17 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public boolean isWorkInFlightMeetingTarget() {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
-
-    /**
-     * @return Work count in mailbox plus work added to the processing shards
-     */
-    public long getTotalWorkAwaitingIngestion() {
-//        return sm.getNumberOfEntriesInPartitionQueues
-        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-//        long workQueuedInShardsCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-//        Integer workQueuedInMailboxCount = getAmountOfWorkQueuedWaitingIngestion();
-//        return workQueuedInShardsCount + workQueuedInMailboxCount;
-    }
+//
+//    /**
+//     * @return Work count in mailbox plus work added to the processing shards
+//     */
+//    public long getTotalWorkAwaitingIngestion() {
+////        return sm.getNumberOfEntriesInPartitionQueues
+//        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+////        long workQueuedInShardsCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+////        Integer workQueuedInMailboxCount = getAmountOfWorkQueuedWaitingIngestion();
+////        return workQueuedInShardsCount + workQueuedInMailboxCount;
+//    }
 
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();

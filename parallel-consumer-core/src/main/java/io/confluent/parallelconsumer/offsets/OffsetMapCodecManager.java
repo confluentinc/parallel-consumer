@@ -15,7 +15,6 @@ import org.apache.kafka.common.errors.WakeupException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -194,7 +193,7 @@ public class OffsetMapCodecManager<K, V> {
             log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
                     partitionState.getTp(),
                     highestSucceeded,
-                    incompleteOffsets.stream().filter(x -> x < highestSucceeded).collect(Collectors.toList()));
+                    partitionState.getIncompleteOffsetsBelowHighestSucceeded());
         }
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
 
