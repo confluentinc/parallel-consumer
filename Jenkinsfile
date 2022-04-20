@@ -45,7 +45,7 @@ def job = {
                 withMaven(globalMavenSettingsFilePath: "${env.MAVEN_GLOBAL_SETTINGS_FILE}") {
                     withDockerServer([uri: dockerHost()]) {
                         if (params.RELEASE_TAG.trim().equals('')) {
-                            sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean install"
+                            sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean deploy"
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                             sh '''
