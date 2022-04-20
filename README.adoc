@@ -382,7 +382,7 @@ This library is copyright Confluent Inc, and licensed under the Apache License V
 
 === Maven
 
-This project is available in maven central, https://repo1.maven.org/maven2/io/confluent/parallelconsumer/[repo1].
+This project is available in maven central, https://repo1.maven.org/maven2/io/confluent/parallelconsumer/[repo1], along with SNAPSHOT builds (starting with 0.5-SNAPSHOT) in https://oss.sonatype.org/content/repositories/snapshots/io/confluent/parallelconsumer/[repo1's SNAPSHOTS repo].
 
 Latest version can be seen https://search.maven.org/artifact/io.confluent.parallelconsumer/parallel-consumer-core[here].
 
@@ -392,12 +392,19 @@ Where `${project.version}` is the version to be used:
 * artifact ID: `parallel-consumer-core`
 * version: image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
-
 .Core Module Dependency
 [source,xml,indent=0]
         <dependency>
             <groupId>io.confluent.parallelconsumer</groupId>
             <artifactId>parallel-consumer-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+.Reactor Module Dependency
+[source,xml,indent=0]
+        <dependency>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-reactor</artifactId>
             <version>${project.version}</version>
         </dependency>
 

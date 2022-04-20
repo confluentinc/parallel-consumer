@@ -1,14 +1,15 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 public class MathUtils {
 
     /**
-     * @deprecated old use with AssertJ - not needed with Truth (has fuzzy matching built in)
+     * @deprecated old, was used with AssertJ - not needed with Truth (has fuzzy matching built in)
      */
+    @Deprecated
     public static boolean isLessWithin(final int needle, final int target, final int percent) {
         int i = target * (1 - percent / 100);
 
