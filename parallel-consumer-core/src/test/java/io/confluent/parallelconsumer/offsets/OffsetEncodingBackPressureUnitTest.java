@@ -23,7 +23,6 @@ import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
 import java.util.List;
@@ -111,8 +110,6 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                         .containsNoneIn(samplingOfShouldBeCompleteOffsets);
                 assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
                         .that(partitionState).getAllIncompleteOffsets().containsExactlyElementsIn(blockedOffsets);
-                assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
-                        .that(partitionState).getAllIncompleteOffsets().containsExactlyElementsIn(UniSets.of(0L));
             }
 
 
