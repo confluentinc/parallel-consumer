@@ -521,6 +521,7 @@
                 <inherited>false</inherited>
                 <!-- To apply the license run: -->
                 <!-- ↪ mvn com.mycila:license-maven-plugin:format-->
+                <!-- To skip: -Dlicense.skip -->
                 <configuration>
                     <aggregate>true</aggregate>
                     <licenseSets>

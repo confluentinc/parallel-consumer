@@ -12,6 +12,8 @@
             <list>
               <option value="generate-test-sources" />
               <option value="-e" />
+              <option value="-DskipTests" />
+              <option value="-Dlicense.skip" />
             </list>
           </option>
           <option name="pomFileName" />
