@@ -4,8 +4,6 @@ package io.confluent.parallelconsumer.vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.MessageCodec;
 import io.vertx.core.eventbus.impl.codecs.JsonArrayMessageCodec;
-import io.vertx.core.json.Json;
-import io.vertx.core.json.JsonArray;
 
 class BatchWrapperCodec<K, V> implements MessageCodec<BatchWrapper<K, V>, BatchWrapper<K, V>> {
 
@@ -13,15 +11,17 @@ class BatchWrapperCodec<K, V> implements MessageCodec<BatchWrapper<K, V>, BatchW
 
     @Override
     public void encodeToWire(Buffer buffer, BatchWrapper kvBatchWrapper) {
-        String encode = Json.encode(kvBatchWrapper);
-        buffer.appendString(encode);
+//        String encode = Json.encode(kvBatchWrapper);
+//        buffer.appendString(encode);
+        throw new java.lang.UnsupportedOperationException("Not implemented");
     }
 
     @Override
     public BatchWrapper<K, V> decodeFromWire(int pos, Buffer buffer) {
-        JsonArray objects = delegate.decodeFromWire(pos, buffer);
-        Object[] objects1 = objects.stream().toArray();
-        return new BatchWrapper(null);
+//        JsonArray objects = delegate.decodeFromWire(pos, buffer);
+//        Object[] objects1 = objects.stream().toArray();
+//        return new BatchWrapper(null);
+        throw new java.lang.UnsupportedOperationException("Not implemented");
     }
 
     @Override

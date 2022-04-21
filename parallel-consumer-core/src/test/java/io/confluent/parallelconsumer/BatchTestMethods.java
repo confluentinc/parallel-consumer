@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -167,7 +166,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
                     assertThat(batchesReceived).hasSize(expectedNumOfBatches);
-                    assertThat(batchesReceived.stream().mapToLong(Collection::size).sum()).isEqualTo(numRecsExpected);
+                    assertThat(batchesReceived.stream().mapToLong(PollContext::size).sum()).isEqualTo(numRecsExpected);
                 });
 
         assertThat(batchesReceived)

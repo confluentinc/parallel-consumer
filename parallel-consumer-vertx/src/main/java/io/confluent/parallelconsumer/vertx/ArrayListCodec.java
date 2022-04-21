@@ -16,8 +16,7 @@ public class ArrayListCodec implements MessageCodec<ArrayList, ArrayList> {
 
     @Override
     public ArrayList decodeFromWire(int pos, Buffer buffer) {
-        throw new IllegalStateException("Not implemented");
-
+        throw new java.lang.UnsupportedOperationException("Not implemented");
     }
 
     @Override

@@ -168,7 +168,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * todo
      */
-    protected Function<List<ConsumerRecord<K, V>>, List<?>> userFunction;
+    protected Function<PollContextInternal<K, V>, List<?>> userFunction;
 
     /**
      * Time of last successful commit
@@ -610,7 +610,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             executorService = Executors.newSingleThreadExecutor();
         }
 
-        this.userFunction = userFunction;
+        this.userFunction = userFunctionWrapped;
 
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {

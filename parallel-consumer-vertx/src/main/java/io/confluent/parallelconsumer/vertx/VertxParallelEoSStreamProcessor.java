@@ -25,6 +25,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.utils.Time;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -154,6 +155,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
                 List<WorkContainer<K, V>> batch = recordList.getBatch();
                 List<Tuple<ConsumerRecord<K, V>, ?>> result = null;
                 try {
+                    // todo need a better way to access the registered user function?
                     result = runUserFunction(userFunction,
                             recordEntry -> {
                                 log.debug("Callback for {}", recordEntry);
@@ -208,12 +210,12 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
 
             @Override
             public void start(Promise<Void> startPromise) throws Exception {
-
+                log.info("Starting...");
             }
 
             @Override
             public void stop(Promise<Void> stopPromise) throws Exception {
-
+                log.info("Stopping...");
             }
         }, options);
     }
