@@ -201,9 +201,21 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 waitAtMost(ofSeconds(30))
                         .untilAsserted(
                                 () -> {
+                                    // old
+                                    assertThat(wm.getPm().isBlocked(topicPartition))
+                                            .as("Partition SHOULD be blocked due to back pressure")
+                                            .isTrue();
+
+                                    // new
+                                    assertWithMessage("Partition SHOULD be blocked due to back pressure")
+                                            .that(partitionState)
+                                            .isBlocked();
+
                                     assertWithMessage("Partition SHOULD be blocked due to back pressure")
                                             .that(partitionState)
                                             .isNotAllowedMoreRecords();
+
+                                    //
                                 }); // blocked
 
                 Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);

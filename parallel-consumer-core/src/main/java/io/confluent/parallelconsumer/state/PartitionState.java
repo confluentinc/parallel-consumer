@@ -322,5 +322,12 @@ public class PartitionState<K, V> {
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
         sm.removeAnyShardsReferencedBy(getCommitQueue());
     }
+
+    /**
+     * @see #isAllowedMoreRecords()
+     */
+    public boolean isBlocked() {
+        return !isAllowedMoreRecords();
+    }
 }
 
