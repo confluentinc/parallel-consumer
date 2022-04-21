@@ -11,7 +11,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
@@ -19,7 +18,6 @@ import org.slf4j.MDC;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -28,7 +26,6 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Subsystem for polling the broker for messages.
@@ -37,7 +34,9 @@ import static lombok.AccessLevel.PRIVATE;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanceListener {
+public class BrokerPollSystem<K, V> implements OffsetCommitter
+//        , ConsumerRebalanceListener
+{
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -62,12 +61,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
 
     private final WorkManager<K, V> wm;
 
-    /**
-     * Gets incremented every time there's a new assignment event. This epoch is forever associated with a record, and
-     * is used to more easily determine stale records.
-     */
-    @Getter(PRIVATE)
-    private long partitionAssignmentEpoch = 0L;
+//    /**
+//     * Gets incremented every time there's a new assignment event. This epoch is forever associated with a record, and
+//     * is used to more easily determine stale records.
+//     */
+//    @Getter(PRIVATE)
+//    private long partitionAssignmentEpoch = 0L;
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
@@ -142,10 +141,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
     private void handlePoll() {
         log.trace("Loop: Broker poller: ({})", state);
         if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
-            EpochAndRecords polledRecords = pollBrokerForRecords();
-            log.debug("Got {} records in poll result", polledRecords.getConsumerRecs().count());
+            var polledRecords = pollBrokerForRecords();
+            int count = polledRecords.count();
+            log.debug("Got {} records in poll result", count);
 
-            if (!polledRecords.getConsumerRecs().isEmpty()) {
+            if (count > 0) {
                 log.trace("Loop: Register work");
                 pc.registerWork(polledRecords);
 //                wm.registerWork(polledRecords);
@@ -198,15 +198,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         return committer.isPresent();
     }
 
-    @Override
-    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        partitionAssignmentEpoch++;
-    }
-
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        partitionAssignmentEpoch++;
-    }
+//    @Override
+//    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+//        partitionAssignmentEpoch++;
+//    }
+//
+//    @Override
+//    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+//        partitionAssignmentEpoch++;
+//    }
 
     private EpochAndRecords<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
@@ -220,7 +220,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
         ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
 
         log.debug("Poll completed");
-        return new EpochAndRecords<>(poll, getPartitionAssignmentEpoch());
+
+        // build records map
+        return new EpochAndRecords<>(poll, wm.getPm());
     }
 
     /**

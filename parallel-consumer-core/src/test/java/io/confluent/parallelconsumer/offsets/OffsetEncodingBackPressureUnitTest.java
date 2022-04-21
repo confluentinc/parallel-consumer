@@ -214,10 +214,8 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
     private void sendRecordsToWM(int numberOfRecords, WorkManager<String, String> wm) {
         log.debug("~Sending {} more records", numberOfRecords);
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
-        int hardCodedEpochForTesting = 0;
-        wm.registerWork(new EpochAndRecords<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), hardCodedEpochForTesting));
+        wm.registerWork(new EpochAndRecords<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
         Truth.assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(numberOfRecords);
     }
-
 
 }

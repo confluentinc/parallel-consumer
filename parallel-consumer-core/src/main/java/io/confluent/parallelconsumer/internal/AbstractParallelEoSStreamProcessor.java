@@ -349,7 +349,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
-        brokerPollSubsystem.onPartitionsAssigned(partitions);
+//        brokerPollSubsystem.onPartitionsAssigned(partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifySomethingToDo();
@@ -363,7 +363,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void onPartitionsLost(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
-        brokerPollSubsystem.onPartitionsLost(partitions);
+//        brokerPollSubsystem.onPartitionsLost(partitions);
         wm.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }

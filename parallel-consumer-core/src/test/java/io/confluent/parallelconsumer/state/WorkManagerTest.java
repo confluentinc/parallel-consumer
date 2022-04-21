@@ -104,7 +104,7 @@ public class WorkManagerTest {
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         m.put(topicPartitionOf(partition), of(rec0, rec1, rec2));
         var recs = new ConsumerRecords<>(m);
-        wm.registerWork(new EpochAndRecords(recs, 0));
+        wm.registerWork(new EpochAndRecords(recs, wm.getPm()));
     }
 
     private ConsumerRecord<String, String> makeRec(String value, String key, int partition) {
@@ -393,7 +393,7 @@ public class WorkManagerTest {
     }
 
     private void registerWork(ConsumerRecords<String, String> recs) {
-        wm.registerWork(new EpochAndRecords<>(recs, 0));
+        wm.registerWork(new EpochAndRecords<>(recs, wm.getPm()));
     }
 
 

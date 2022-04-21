@@ -186,6 +186,7 @@ public class PartitionState<K, V> {
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
+        // for test debugging
 //        long offsetHighestSeen = getOffsetHighestSeen();
 //        if (wc.offset() != offsetHighestSeen + 1) {
 //            log.error("");
@@ -194,7 +195,6 @@ public class PartitionState<K, V> {
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
         incompleteOffsets.add(wc.offset());
-
     }
 
     /**
