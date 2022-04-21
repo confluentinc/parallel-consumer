@@ -42,6 +42,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 // todo rename to partition manager
 public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
+    public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
     /**
      * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
      * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
@@ -50,7 +51,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Getter
     @Setter
     // todo remove static
-    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
+    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
     private final Consumer<K, V> consumer;
 

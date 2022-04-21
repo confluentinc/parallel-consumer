@@ -35,6 +35,7 @@ import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
+import static io.confluent.parallelconsumer.state.PartitionMonitor.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -60,7 +61,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
     @AfterAll
     static void cleanup() {
-        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(0.75);
+        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
     }
 
     /**
@@ -84,6 +85,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         OffsetMapCodecManager.DefaultMaxMetadataSize = 40; // reduce available to make testing easier
         OffsetMapCodecManager.forcedCodec = Optional.of(OffsetEncoding.BitSetV2); // force one that takes a predictable large amount of space
 
+        //
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
         ktu.send(consumerSpy, records);
 
@@ -198,13 +200,13 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 awaitForOneLoopCycle();
 
                 log.debug("// assert partition now blocked from threshold");
-                waitAtMost(ofSeconds(30))
+                waitAtMost(ofSeconds(10))
                         .untilAsserted(
                                 () -> {
                                     // old
-                                    assertThat(wm.getPm().isBlocked(topicPartition))
-                                            .as("Partition SHOULD be blocked due to back pressure")
-                                            .isTrue();
+//                                    assertThat(wm.getPm().isBlocked(topicPartition))
+//                                            .as("Partition SHOULD be blocked due to back pressure")
+//                                            .isTrue();
 
                                     // new
                                     assertWithMessage("Partition SHOULD be blocked due to back pressure")

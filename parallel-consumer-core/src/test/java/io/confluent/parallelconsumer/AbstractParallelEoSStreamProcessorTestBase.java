@@ -46,6 +46,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+// todo migrate commit assertion methods in to a Truth Subject
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
 

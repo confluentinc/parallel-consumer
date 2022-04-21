@@ -18,6 +18,7 @@ import one.util.streamex.StreamEx;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
+import static io.confluent.parallelconsumer.state.PartitionMonitor.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 
 /**
@@ -40,6 +42,11 @@ import static java.time.Duration.ofMillis;
  */
 @Slf4j
 class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestBase {
+
+    @AfterAll
+    static void cleanup() {
+        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
+    }
 
     @SneakyThrows
     @Test
@@ -54,7 +61,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         OffsetMapCodecManager.DefaultMaxMetadataSize = 40; // reduce available to make testing easier
         OffsetMapCodecManager.forcedCodec = Optional.of(OffsetEncoding.BitSetV2); // force one that takes a predictable large amount of space
 
-
+        //
         var wm = parallelConsumer.getWm();
         var pm = wm.getPm();
         PartitionState<String, String> partitionState = pm.getPartitionState(topicPartition);
@@ -181,14 +188,10 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
 
             }
         } finally {
-
-
             // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
             OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient
             OffsetMapCodecManager.forcedCodec = Optional.empty();
         }
-
-
     }
 
     private void succeedExcept(WorkManager<String, String> wm, List<Long> incomplete) {
