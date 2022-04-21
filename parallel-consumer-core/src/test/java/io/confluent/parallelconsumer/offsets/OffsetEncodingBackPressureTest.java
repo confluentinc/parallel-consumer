@@ -189,6 +189,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 assertThat(partitionBlocked).isFalse();
             }
 
+            //
             log.debug("// feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's guaranteed to block");
             int extraRecordsToBlockWithThresholdBlocks = numberOfRecords / 2;
             {
