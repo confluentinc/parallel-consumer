@@ -43,7 +43,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
     public AtomicInteger processedCount = new AtomicInteger(0);
     public AtomicInteger producedCount = new AtomicInteger(0);
 
-    int maxPoll = 5000000;
+    int maxPoll = 500; // 500 is the kafka default
 
     ParallelConsumerOptions.CommitMode commitMode = ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
     ParallelConsumerOptions.ProcessingOrder order = ParallelConsumerOptions.ProcessingOrder.KEY;
