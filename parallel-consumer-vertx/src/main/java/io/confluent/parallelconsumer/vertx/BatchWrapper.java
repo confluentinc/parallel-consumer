@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.vertx;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Data;
 

@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.vertx;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.MessageCodec;
 import lombok.extern.slf4j.Slf4j;
