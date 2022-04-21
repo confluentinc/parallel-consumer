@@ -324,6 +324,9 @@ public class PartitionState<K, V> {
     }
 
     /**
+     * Convenience method for readability
+     *
+     * @return true if {@link #isAllowedMoreRecords()} is false
      * @see #isAllowedMoreRecords()
      */
     public boolean isBlocked() {
