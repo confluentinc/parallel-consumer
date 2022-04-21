@@ -98,7 +98,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Collection of work waiting to be
      */
     @Getter(PROTECTED)
-    private final BlockingQueue<ActionItem> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
+    private final BlockingQueue<ActionItem<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     /**
      * Either or
@@ -117,12 +117,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return !isWorkResult();
         }
 
-        private static <K,V> ActionItem<K,V> of(EpochAndRecords<K, V> polledRecords) {
+        private static <K, V> ActionItem<K, V> of(EpochAndRecords<K, V> polledRecords) {
             return new ActionItem<>(null, polledRecords);
         }
 
-        public static <K,V> ActionItem<K,V>  of(WorkContainer<K, V> work) {
-            return new ActionItem<K,V>(work, null);
+        public static <K, V> ActionItem<K, V> of(WorkContainer<K, V> work) {
+            return new ActionItem<K, V>(work, null);
         }
     }
 
@@ -902,7 +902,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
-        Queue<ActionItem> results = new ArrayDeque<>();
+        Queue<ActionItem<K, V>> results = new ArrayDeque<>();
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
@@ -915,7 +915,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
             try {
-                ActionItem firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
+                var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
                     log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
                 } else {
