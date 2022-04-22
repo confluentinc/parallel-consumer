@@ -8,6 +8,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
+import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
@@ -50,7 +51,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
     public static final String MDC_OFFSET_MARKER = "offset";
@@ -100,6 +101,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
+    private ConsumerRebalanceHandler rebalanceHanlder;
+
     /**
      * An inbound message to the controller.
      * <p>
@@ -107,24 +110,33 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
+    protected static class ControllerEventMessage<K, V> {
         WorkContainer<K, V> workContainer;
         EpochAndRecordsMap<K, V> consumerRecords;
+        ConsumerRebalanceHandler.PartitionEventMessage partitionEventMessage;
 
         private boolean isWorkResult() {
             return workContainer != null;
         }
 
         private boolean isNewConsumerRecords() {
-            return !isWorkResult();
+            return consumerRecords != null;
         }
 
-        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords);
+        private boolean isPartitionEvent() {
+            return partitionEventMessage != null;
         }
 
-        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<K, V>(work, null);
+        protected static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords, null);
+        }
+
+        protected static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<>(work, null, null);
+        }
+
+        public static <K, V> ControllerEventMessage<K, V> of(ConsumerRebalanceHandler.PartitionEventMessage event) {
+            return new ControllerEventMessage<>(null, null, event);
         }
     }
 
@@ -201,6 +213,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
+    // todo move into PartitionStateManager
     @Getter
     private int numberOfAssignedPartitions;
 
@@ -298,27 +311,27 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
-        consumer.subscribe(topics, this);
+        consumer.subscribe(topics, this.rebalanceHanlder);
     }
 
     @Override
     public void subscribe(Pattern pattern) {
         log.debug("Subscribing to {}", pattern);
-        consumer.subscribe(pattern, this);
+        consumer.subscribe(pattern, this.rebalanceHanlder);
     }
 
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(topics, this);
+        consumer.subscribe(topics, this.rebalanceHanlder);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(pattern, this);
+        consumer.subscribe(pattern, this.rebalanceHanlder);
     }
 
     /**
@@ -326,8 +339,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
-    @Override
-    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+    private void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
@@ -347,25 +359,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+    private void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifySomethingToDo();
-    }
-
-    /**
-     * Delegate to {@link WorkManager}
-     *
-     * @see WorkManager#onPartitionsAssigned
-     */
-    @Override
-    public void onPartitionsLost(Collection<TopicPartition> partitions) {
-        numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
-        wm.onPartitionsLost(partitions);
-        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }
 
     /**
@@ -943,14 +942,31 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.trace("Processing drained work {}...", results.size());
         for (var action : results) {
-            if (action.isNewConsumerRecords()) {
-                wm.registerWork(action.getConsumerRecords());
-            } else {
-                WorkContainer<K, V> work = action.getWorkContainer();
-                MDC.put(MDC_OFFSET_MARKER, work.toString());
-                wm.handleFutureResult(work);
-                MDC.remove(MDC_OFFSET_MARKER);
+            processEvent(action);
+        }
+    }
+
+    private void processEvent(ControllerEventMessage<K, V> message) {
+        if (message.isNewConsumerRecords()) {
+            wm.registerWork(message.getConsumerRecords());
+        } else if (message.isWorkResult()) {
+            WorkContainer<K, V> work = message.getWorkContainer();
+            MDC.put(MDC_OFFSET_MARKER, work.toString());
+            wm.handleFutureResult(work);
+            MDC.remove(MDC_OFFSET_MARKER);
+        } else if (message.isPartitionEvent()) {
+            var event = message.getPartitionEventMessage();
+            var type = event.getType();
+            switch (type) {
+                case ASSIGNED: {
+                    onPartitionsAssigned(event.getPartitions());
+                }
+                case REVOKED: {
+                    onPartitionsRevoked(event.getPartitions());
+                }
             }
+        } else {
+            throw new IllegalStateException("Unknown message");
         }
     }
 
@@ -1124,14 +1140,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                addToMailbox(wc); // always add on error
+                sendWorkResultEvent(wc); // always add on error
             }
             throw e; // trow again to make the future failed
         }
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        addToMailbox(wc);
+        sendWorkResultEvent(wc);
     }
 
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1139,15 +1155,26 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
-    protected void addToMailbox(WorkContainer<K, V> wc) {
-        String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
-        log.trace("Adding {} {} to mailbox...", state, wc);
-        workMailBox.add(ControllerEventMessage.of(wc));
+    protected void sendWorkResultEvent(WorkContainer<K, V> wc) {
+        var message = ControllerEventMessage.of(wc);
+        addMessage(message);
     }
 
-    public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
-        log.debug("Adding {} to mailbox...", polledRecords);
-        workMailBox.add(ControllerEventMessage.of(polledRecords));
+    private void addMessage(ControllerEventMessage<K, V> message) {
+        log.debug("Adding {} to mailbox...", message);
+        workMailBox.add(message);
+    }
+
+    public void sendConsumerRecordsEvent(EpochAndRecordsMap<K, V> polledRecords) {
+        var message = ControllerEventMessage.of(polledRecords);
+        addMessage(message);
+    }
+
+    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
+        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
+        log.debug("Adding {} to mailbox...", event);
+        var message = ControllerEventMessage.<K, V>of(event);
+        workMailBox.add(message);
     }
 
     /**
