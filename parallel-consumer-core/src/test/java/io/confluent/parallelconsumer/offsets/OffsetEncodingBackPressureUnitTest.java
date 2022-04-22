@@ -6,9 +6,9 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
-import io.confluent.parallelconsumer.state.PartitionMonitor;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.state.PartitionState;
+import io.confluent.parallelconsumer.state.PartitionStateManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
-import static io.confluent.parallelconsumer.state.PartitionMonitor.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 
 /**
@@ -45,7 +45,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
 
     @AfterAll
     static void cleanup() {
-        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
+        PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
     }
 
     @SneakyThrows
@@ -127,7 +127,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
             log.debug("// messages already sent {}, sending {} more", processedBeforePartitionBlock, extraMessages);
             {
                 log.debug("// force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)");
-                PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
+                PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
 
                 //
                 // unlock 2L as well
@@ -214,7 +214,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
     private void sendRecordsToWM(int numberOfRecords, WorkManager<String, String> wm) {
         log.debug("~Sending {} more records", numberOfRecords);
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
-        wm.registerWork(new EpochAndRecords<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
+        wm.registerWork(new EpochAndRecordsMap<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
         Truth.assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(numberOfRecords);
     }
 

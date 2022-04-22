@@ -8,7 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -33,11 +33,12 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * In charge of managing {@link PartitionState}s.
  * <p>
  * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
+ *
+ * @see PartitionState
  */
 @Slf4j
 @RequiredArgsConstructor
-// todo rename to partition manager
-public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
+public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
     /**
@@ -75,10 +76,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     private final Clock clock;
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
-        // by locking on partitionState, may cause the system to wait for a rebalance to finish
-//        synchronized (partitionStates) {
         return partitionStates.get(tp);
-//        }
     }
 
     /**
@@ -87,7 +85,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
         log.debug("Partitions assigned: {}", assignedPartitions);
-//        synchronized (this.partitionStates) {
 
         for (final TopicPartition partitionAssignment : assignedPartitions) {
             boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionAssignment);
@@ -113,8 +110,6 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
             log.error("Error in onPartitionsAssigned", e);
             throw e;
         }
-
-//        }
     }
 
     /**
@@ -137,10 +132,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-//        synchronized (this.partitionStates) {
         incrementPartitionAssignmentEpoch(partitions);
         resetOffsetMapAndRemoveWork(partitions);
-//        }
     }
 
     /**
@@ -220,7 +213,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
         for (final TopicPartition partition : partitions) {
-            Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, -1L);
+            Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, PartitionState.KAFKA_OFFSET_ABSENCE);
             epoch++;
             partitionsAssignmentEpochs.put(partition, epoch);
         }
@@ -338,45 +331,40 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      * Takes a record as work and puts it into internal queues, unless it's been previously recorded as completed as per
      * loaded records.
      */
-    void maybeRegisterNewRecordAsWork(final EpochAndRecords<K, V> recordsCollection) {
-//        if (records == null) return false;
-//        /**
-//         * Locking on partition state here, means that the check for partition assignment (that the source partition of the
-//         * work is still assigned) is in the same sync block as registering the work with the {@link TopicPartition}'s
-//         * {@link PartitionState} and the {@link ShardManager}. Keeping the two different views in sync. Of course now,
-//         * having a shared nothing architecture would mean all access to the state is by a single thread, and so this could
-//         * never occur.
-//         */
-//        synchronized (partitionStates) {
-
-        for (var partition : recordsCollection.partitions()) {
-            var records = recordsCollection.records(partition);
-            var epochOfInboundRecords = records.getEpochOfPartitionAtPoll();
-            for (var rec : records.getRecords()) {
-
-                // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
-                var currentPartitionEpoch = getEpochOfPartitionForRecord(rec);
-                if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {
-
-                    if (isPartitionRemovedOrNeverAssigned(rec)) {
-                        log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(rec), rec);
-                    }
-
-                    if (isRecordPreviouslyCompleted(rec)) {
-                        log.trace("Record previously completed, skipping. offset: {}", rec.offset());
-                    } else {
-                        var work = new WorkContainer<>(epochOfInboundRecords, rec, options.getRetryDelayProvider(), clock);
-
-                        sm.addWorkContainer(work);
-                        addWorkContainer(work);
-                    }
-                } else {
-                    log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
-                            epochOfInboundRecords, currentPartitionEpoch);
-                }
+    void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
+        for (var partition : recordsMap.partitions()) {
+            var recordsList = recordsMap.records(partition);
+            var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
+            for (var rec : recordsList.getRecords()) {
+                maybeRegisterNewRecordAsWork(epochOfInboundRecords, rec);
             }
         }
-//        }
+    }
+
+    /**
+     * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
+     */
+    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, ConsumerRecord<K, V> rec) {
+        // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
+        var currentPartitionEpoch = getEpochOfPartitionForRecord(rec);
+        if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {
+
+            if (isPartitionRemovedOrNeverAssigned(rec)) {
+                log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(rec), rec);
+            }
+
+            if (isRecordPreviouslyCompleted(rec)) {
+                log.trace("Record previously completed, skipping. offset: {}", rec.offset());
+            } else {
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, options.getRetryDelayProvider(), clock);
+
+                sm.addWorkContainer(work);
+                addWorkContainer(work);
+            }
+        } else {
+            log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
+                    epochOfInboundRecords, currentPartitionEpoch);
+        }
     }
 
     public Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {

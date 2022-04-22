@@ -8,7 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -179,7 +179,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
-            wmm.registerWork(new EpochAndRecords<>(testRecords, wmm.getPm()));
+            wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
@@ -213,7 +213,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var committed = consumerSpy.committed(UniSets.of(tp)).get(tp);
             assertThat(committed.offset()).isEqualTo(1L);
 
-            if (!encodingsThatFail.contains(encoding)) {
+            if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                 assertThat(committed.metadata()).isNotBlank();
             }
         }
@@ -224,12 +224,12 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             var newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
-            newWm.registerWork(new EpochAndRecords(testRecords, newWm.getPm()));
+            newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 
             var pm = newWm.getPm();
             var partitionState = pm.getPartitionState(tp);
 
-            if (!encodingsThatFail.contains(encoding)) {
+            if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                 long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
                 assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
@@ -249,11 +249,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             // check state
             {
-                // todo ingestion no longer a thing - what to do here?
-//                Truth.assertThat(true).isFalse();
-//                int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
-
-                if (!encodingsThatFail.contains(encoding)) {
+                if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                     long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
                     assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
@@ -266,8 +262,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                     Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
 
-                    //todo and here
-//                    assertThat(ingested).isEqualTo(testRecords.count() - 4); // 4 were succeeded
                     Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
                 }
             }
@@ -295,6 +289,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         }
 
         OffsetSimultaneousEncoder.compressionForced = false;
+    }
+
+    /**
+     * A {@link OffsetEncoding} that works in this test scenario
+     */
+    private boolean assumeWorkingCodec(OffsetEncoding encoding, List<OffsetEncoding> encodingsThatFail) {
+        return !encodingsThatFail.contains(encoding);
     }
 
     /**

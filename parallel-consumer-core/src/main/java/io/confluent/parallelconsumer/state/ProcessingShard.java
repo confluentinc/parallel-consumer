@@ -43,7 +43,7 @@ public class ProcessingShard<K, V> {
 
     private final ParallelConsumerOptions<?, ?> options;
 
-    private final PartitionMonitor<K, V> pm;
+    private final PartitionStateManager<K, V> pm;
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
