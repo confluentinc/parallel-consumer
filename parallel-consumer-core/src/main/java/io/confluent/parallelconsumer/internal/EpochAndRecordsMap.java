@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.PartitionMonitor;
+import io.confluent.parallelconsumer.state.PartitionStateManager;
 import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -22,7 +22,7 @@ public class EpochAndRecordsMap<K, V> {
 
     Map<TopicPartition, RecordsAndEpoch> recordMap = new HashMap<>();
 
-    public EpochAndRecordsMap(ConsumerRecords<K, V> poll, PartitionMonitor<K, V> pm) {
+    public EpochAndRecordsMap(ConsumerRecords<K, V> poll, PartitionStateManager<K, V> pm) {
         poll.partitions().forEach(partition -> {
             var records = poll.records(partition);
             Long epochOfPartition = pm.getEpochOfPartition(partition);

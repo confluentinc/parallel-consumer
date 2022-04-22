@@ -28,6 +28,9 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
+/**
+ * @see PartitionStateManager
+ */
 @ToString
 @Slf4j
 public class PartitionState<K, V> {
@@ -316,7 +319,7 @@ public class PartitionState<K, V> {
     }
 
     private double getPressureThresholdValue() {
-        return DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+        return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
