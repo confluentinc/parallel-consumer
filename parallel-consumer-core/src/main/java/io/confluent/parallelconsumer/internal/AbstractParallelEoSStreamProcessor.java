@@ -529,7 +529,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @deprecated no longer used, will be removed in next version
      */
     // TODO delete
-    @Deprecated(forRemoval = true)
+    @Deprecated
     @SneakyThrows
     public void waitForProcessedNotCommitted(Duration timeout) {
         log.debug("Waiting processed but not committed...");
