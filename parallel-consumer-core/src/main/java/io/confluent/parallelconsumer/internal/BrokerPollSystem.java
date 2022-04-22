@@ -34,9 +34,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter
-//        , ConsumerRebalanceListener
-{
+public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -60,13 +58,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
     private final WorkManager<K, V> wm;
-
-//    /**
-//     * Gets incremented every time there's a new assignment event. This epoch is forever associated with a record, and
-//     * is used to more easily determine stale records.
-//     */
-//    @Getter(PRIVATE)
-//    private long partitionAssignmentEpoch = 0L;
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
@@ -148,29 +139,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
             if (count > 0) {
                 log.trace("Loop: Register work");
                 pc.registerWork(polledRecords);
-//                wm.registerWork(polledRecords);
-
-//                // notify control work has been registered, in case it's sleeping waiting for work that will never come
-//                if (wm.isStarvedForNewWork()) {
-//                    log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
-//                    pc.notifySomethingToDo();
-//                }
-            }
-        }
-    }
-
-    // todo ?
-    private void transitionToCloseMaybe() {
-        // make sure everything is committed
-        if (isResponsibleForCommits() && !wm.isRecordsAwaitingToBeCommitted()) {
-            // transition to closing
-            state = State.closing;
-        } else {
-            log.trace("Draining, but work still needs to be committed. Yielding thread to avoid busy wait.");
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
     }
@@ -198,17 +166,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
         return committer.isPresent();
     }
 
-//    @Override
-//    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-//        partitionAssignmentEpoch++;
-//    }
-//
-//    @Override
-//    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-//        partitionAssignmentEpoch++;
-//    }
-
-    private EpochAndRecords<K, V> pollBrokerForRecords() {
+    private EpochAndRecordsMap<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
 
@@ -222,7 +180,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter
         log.debug("Poll completed");
 
         // build records map
-        return new EpochAndRecords<>(poll, wm.getPm());
+        return new EpochAndRecordsMap<>(poll, wm.getPm());
     }
 
     /**

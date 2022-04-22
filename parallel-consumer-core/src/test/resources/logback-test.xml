@@ -43,7 +43,7 @@
     <!-- Key classes -->
     <!--        <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
     <!-- <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="trace"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionMonitor" level="trace"/> -->
+    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionStateManager" level="trace"/> -->
     <!--        <logger name="io.confluent.parallelconsumer.state" level="trace"/>-->
 
     <!-- Offset committing-->

@@ -98,16 +98,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Collection of work waiting to be
      */
     @Getter(PROTECTED)
-    private final BlockingQueue<ActionItem<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
+    private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     /**
-     * Either or
+     * An inbound message to the controller.
+     * <p>
+     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    private static class ActionItem<K, V> {
+    private static class ControllerEventMessage<K, V> {
         WorkContainer<K, V> workContainer;
-        EpochAndRecords<K, V> consumerRecords;
+        EpochAndRecordsMap<K, V> consumerRecords;
 
         private boolean isWorkResult() {
             return workContainer != null;
@@ -117,12 +119,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return !isWorkResult();
         }
 
-        private static <K, V> ActionItem<K, V> of(EpochAndRecords<K, V> polledRecords) {
-            return new ActionItem<>(null, polledRecords);
+        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords);
         }
 
-        public static <K, V> ActionItem<K, V> of(WorkContainer<K, V> work) {
-            return new ActionItem<K, V>(work, null);
+        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<K, V>(work, null);
         }
     }
 
@@ -354,7 +356,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
-//        brokerPollSubsystem.onPartitionsAssigned(partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifySomethingToDo();
@@ -368,7 +369,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void onPartitionsLost(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
-//        brokerPollSubsystem.onPartitionsLost(partitions);
         wm.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }
@@ -528,7 +528,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Block the calling thread until no more messages are being processed.
+     * <p>
+     * Used for testing.
+     *
+     * @deprecated no longer used, will be removed in next version
      */
+    // TODO delete
+    @Deprecated
     @SneakyThrows
     public void waitForProcessedNotCommitted(Duration timeout) {
         log.debug("Waiting processed but not committed...");
@@ -886,7 +892,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int queueSize = getNumberOfUserFunctionsQueued();
         int queueTarget = getPoolLoadTarget();
         boolean workAmountBelowTarget = queueSize <= queueTarget;
-//        boolean hasWorkInMailboxes = wm.hasWorkAwaitingIngestionToShards();
         log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
                 workAmountBelowTarget, queueSize, queueTarget);
         return workAmountBelowTarget;
@@ -919,7 +924,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
-        Queue<ActionItem<K, V>> results = new ArrayDeque<>();
+        Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
@@ -969,17 +974,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The amount of time to block poll in this cycle
      *
-     * @return either the duration until next commit, or next work retry //     * @see WorkManager#isStarvedForNewWork()
+     * @return either the duration until next commit, or next work retry
      * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
     private Duration getTimeToBlockFor() {
-//        // should not block as not enough work is being done, and there's more work to ingest
-//        boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
-//        if (ingestionWorkAndStarved) {
-//            log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
-//            return Duration.ofMillis(0);
-//        }
-
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
         if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
@@ -1058,7 +1056,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
         boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
 
-        // disable - commit frequency takes care of lingering? is this outdated?
+        // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
     }
 
@@ -1161,12 +1159,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected void addToMailbox(WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
         log.trace("Adding {} {} to mailbox...", state, wc);
-        workMailBox.add(ActionItem.of(wc));
+        workMailBox.add(ControllerEventMessage.of(wc));
     }
 
-    public void registerWork(EpochAndRecords<K, V> polledRecords) {
+    public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
         log.debug("Adding {} to mailbox...", polledRecords);
-        workMailBox.add(ActionItem.of(polledRecords));
+        workMailBox.add(ControllerEventMessage.of(polledRecords));
     }
 
     /**

@@ -35,7 +35,7 @@ import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
-import static io.confluent.parallelconsumer.state.PartitionMonitor.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -61,7 +61,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
     @AfterAll
     static void cleanup() {
-        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
+        PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
     }
 
     /**
@@ -143,17 +143,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
-//                        ProcessingShard<String, String> stringStringProcessingShard = sm.getProcessingShards().get(topicPartition);
-//                        if (stringStringProcessingShard != null) {
-//                            long countOfWorkAwaitingSelection = stringStringProcessingShard.getCountOfWorkAwaitingSelection();
-//                            NavigableMap<Long, WorkContainer<String, String>> entries = stringStringProcessingShard.getEntries();
-//                            boolean b = sm.workIsWaitingToBeProcessed();
-//                            long countWorkInFlight = stringStringProcessingShard.getCountWorkInFlight();
-//                            long countOfWorkTracked = stringStringProcessingShard.getCountOfWorkTracked();
-//                            long numberOfWorkQueuedInShardsAwaitingSelection = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-//                        }
                         assertThat(userFuncFinishedCount.get()).isEqualTo(numberOfRecords - numberOfBlockedMessages);
-//                        Truth.assertThat(numberOfWorkQueuedInShardsAwaitingSelection).isEqualTo(-4);
                     });
 
             // # assert commit ok - nothing blocked
@@ -202,23 +192,9 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 log.debug("// assert partition now blocked from threshold");
                 waitAtMost(ofSeconds(10))
                         .untilAsserted(
-                                () -> {
-                                    // old
-//                                    assertThat(wm.getPm().isBlocked(topicPartition))
-//                                            .as("Partition SHOULD be blocked due to back pressure")
-//                                            .isTrue();
-
-                                    // new
-                                    assertWithMessage("Partition SHOULD be blocked due to back pressure")
-                                            .that(partitionState)
-                                            .isBlocked();
-
-                                    assertWithMessage("Partition SHOULD be blocked due to back pressure")
-                                            .that(partitionState)
-                                            .isNotAllowedMoreRecords();
-
-                                    //
-                                }); // blocked
+                                () -> assertWithMessage("Partition SHOULD be blocked due to back pressure")
+                                        .that(partitionState)
+                                        .isBlocked()); // blocked
 
                 Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
@@ -248,12 +224,9 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
             // recreates the situation where the payload size is too large and must be dropped
             log.debug("// test max payload exceeded, payload dropped");
-
-//            log.debug("// messages already sent {}, sending {} more", processedBeforePartitionBlock, extraMessages);
             {
-                long numberOfWorkQueuedInShardsAwaitingSelection = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
                 log.debug("// force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)");
-                PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(30);
+                PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(30);
                 parallelConsumer.requestCommitAsap();
                 awaitForOneLoopCycle();
 
@@ -273,14 +246,6 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 log.debug("// wait for the new message to be processed");
                 await().atMost(defaultTimeout).untilAsserted(() ->
                         {
-//                            long numberOfWorkQueuedInShardsAwaitingSelection1 = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-//                            ShardManager<String, String> sm1 = sm;
-//                            List<Long> seen1 = seen.stream().sorted().collect(Collectors.toList());
-//                            long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-//                            long offsetHighestSeen = partitionState.getOffsetHighestSeen();
-//                            long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
-//                            int i = userFuncStartCount.get();
-//                            int i1 = userFuncFinishedCount.get();
                             int expectedUserFunctionFinishedCount = processedBeforePartitionBlock + extraMessages + 1;
                             assertThat(userFuncFinishedCount.get()).isEqualTo(expectedUserFunctionFinishedCount);
                         }
@@ -331,10 +296,6 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
             }
         } finally {
-            // make sure to unlock threads - speeds up failed tests, instead of waiting for latch or close timeouts
-//            msgLock.countDown();
-//            msgLockTwo.countDown();
-
             // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
             OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient
             OffsetMapCodecManager.forcedCodec = Optional.empty();

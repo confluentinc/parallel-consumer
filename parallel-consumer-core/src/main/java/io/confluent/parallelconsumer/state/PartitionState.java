@@ -32,6 +32,12 @@ import static lombok.AccessLevel.*;
 @Slf4j
 public class PartitionState<K, V> {
 
+    /**
+     * Symbolic value for a parameter which is initialised as having an offset absent (instead of using Optional or
+     * null)
+     */
+    public static final long KAFKA_OFFSET_ABSENCE = -1L;
+
     @Getter
     private final TopicPartition tp;
 
@@ -73,7 +79,7 @@ public class PartitionState<K, V> {
      * Highest offset which has completed successfully ("succeeded").
      */
     @Getter(PUBLIC)
-    private long offsetHighestSucceeded = -1L;
+    private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
 
     /**
      * If true, more messages are allowed to process for this partition.
@@ -111,7 +117,7 @@ public class PartitionState<K, V> {
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
-        this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(-1L);
+        this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
     }
@@ -186,12 +192,6 @@ public class PartitionState<K, V> {
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
-        // for test debugging
-//        long offsetHighestSeen = getOffsetHighestSeen();
-//        if (wc.offset() != offsetHighestSeen + 1) {
-//            log.error("");
-//        }
-
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
         incompleteOffsets.add(wc.offset());
@@ -316,7 +316,7 @@ public class PartitionState<K, V> {
     }
 
     private double getPressureThresholdValue() {
-        return DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+        return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
