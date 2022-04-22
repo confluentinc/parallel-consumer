@@ -8,7 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -179,7 +179,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
-            wmm.registerWork(new EpochAndRecords<>(testRecords, wmm.getPm()));
+            wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
@@ -224,7 +224,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             var newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
-            newWm.registerWork(new EpochAndRecords(testRecords, newWm.getPm()));
+            newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 
             var pm = newWm.getPm();
             var partitionState = pm.getPartitionState(tp);

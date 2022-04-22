@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.state.PartitionMonitor;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -214,7 +214,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
     private void sendRecordsToWM(int numberOfRecords, WorkManager<String, String> wm) {
         log.debug("~Sending {} more records", numberOfRecords);
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
-        wm.registerWork(new EpochAndRecords<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
+        wm.registerWork(new EpochAndRecordsMap<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
         Truth.assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(numberOfRecords);
     }
 

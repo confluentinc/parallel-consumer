@@ -9,7 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -136,7 +136,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        registerWork(new EpochAndRecords(records, 0));
 //    }
 
-    public void registerWork(EpochAndRecords<K, V> records) {
+    public void registerWork(EpochAndRecordsMap<K, V> records) {
 //        wmbm.registerWork(records);
         pm.maybeRegisterNewRecordAsWork(records);
     }

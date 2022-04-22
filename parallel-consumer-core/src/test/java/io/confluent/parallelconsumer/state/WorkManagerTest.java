@@ -11,7 +11,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.internal.EpochAndRecords;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -104,7 +104,7 @@ public class WorkManagerTest {
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         m.put(topicPartitionOf(partition), of(rec0, rec1, rec2));
         var recs = new ConsumerRecords<>(m);
-        wm.registerWork(new EpochAndRecords(recs, wm.getPm()));
+        wm.registerWork(new EpochAndRecordsMap(recs, wm.getPm()));
     }
 
     private ConsumerRecord<String, String> makeRec(String value, String key, int partition) {
@@ -393,7 +393,7 @@ public class WorkManagerTest {
     }
 
     private void registerWork(ConsumerRecords<String, String> recs) {
-        wm.registerWork(new EpochAndRecords<>(recs, wm.getPm()));
+        wm.registerWork(new EpochAndRecordsMap<>(recs, wm.getPm()));
     }
 
 

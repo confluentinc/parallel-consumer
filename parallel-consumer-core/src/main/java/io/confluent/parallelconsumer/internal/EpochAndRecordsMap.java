@@ -18,11 +18,11 @@ import java.util.*;
  * @see BrokerPollSystem#partitionAssignmentEpoch
  */
 @Value
-public class EpochAndRecords<K, V> {
+public class EpochAndRecordsMap<K, V> {
 
     Map<TopicPartition, RecordsAndEpoch> recordMap = new HashMap<>();
 
-    public EpochAndRecords(ConsumerRecords<K, V> poll, PartitionMonitor<K, V> pm) {
+    public EpochAndRecordsMap(ConsumerRecords<K, V> poll, PartitionMonitor<K, V> pm) {
         poll.partitions().forEach(partition -> {
             var records = poll.records(partition);
             Long epochOfPartition = pm.getEpochOfPartition(partition);
