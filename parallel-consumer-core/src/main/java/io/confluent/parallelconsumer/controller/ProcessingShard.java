@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -34,9 +33,11 @@ public class ProcessingShard<K, V> {
      * <p>
      * Uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some concurrency
      * errors (missing WorkContainers).
+     * <p>
+     * TODO NOTE: Needs to be concurrent because?
      */
     @Getter
-    private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
+    private final NavigableMap<Long, WorkContainer<K, V>> entries = new TreeMap<>();
 
     @Getter(PRIVATE)
     private final Object key;
@@ -52,7 +53,7 @@ public class ProcessingShard<K, V> {
                 .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
     }
 
-    public void addWorkContainer(WorkContainer<K, V> wc) {
+    protected void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
         if (entries.containsKey(key)) {
             log.debug("Entry for {} already exists in shard queue", wc);
@@ -61,41 +62,41 @@ public class ProcessingShard<K, V> {
         }
     }
 
-    public void onSuccess(WorkContainer<?, ?> wc) {
+    protected void onSuccess(WorkContainer<?, ?> wc) {
         // remove work from shard's queue
         entries.remove(wc.offset());
     }
 
-    public boolean isEmpty() {
+    protected boolean isEmpty() {
         return entries.isEmpty();
     }
 
-    public Optional<WorkContainer<K, V>> getWorkForOffset(long offset) {
+    protected Optional<WorkContainer<K, V>> getWorkForOffset(long offset) {
         return Optional.ofNullable(entries.get(offset));
     }
 
-    public long getCountOfWorkAwaitingSelection() {
+    protected long getCountOfWorkAwaitingSelection() {
         return entries.values().stream()
                 // todo missing pm.isBlocked(topicPartition) ?
                 .filter(WorkContainer::isAvailableToTakeAsWork)
                 .count();
     }
 
-    public long getCountOfWorkTracked() {
+    protected long getCountOfWorkTracked() {
         return entries.size();
     }
 
-    public long getCountWorkInFlight() {
+    protected long getCountWorkInFlight() {
         return entries.values().stream()
                 .filter(WorkContainer::isInFlight)
                 .count();
     }
 
-    public WorkContainer<K, V> remove(long offset) {
+    protected WorkContainer<K, V> remove(long offset) {
         return entries.remove(offset);
     }
 
-    ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
+    protected ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
 
         var slowWork = new HashSet<WorkContainer<?, ?>>();

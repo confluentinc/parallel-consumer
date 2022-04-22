@@ -15,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -36,7 +35,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
  */
 @Slf4j
 @RequiredArgsConstructor
-public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
+public class PartitionStateManager<K, V> {
 
     public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
     /**
@@ -71,15 +70,14 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final Clock clock;
 
-    public PartitionState<K, V> getPartitionState(TopicPartition tp) {
+    protected PartitionState<K, V> getPartitionState(TopicPartition tp) {
         return partitionStates.get(tp);
     }
 
     /**
      * Load offset map for assigned assignedPartitions
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
+    protected void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
         log.debug("Partitions assigned: {}", assignedPartitions);
 
         for (final TopicPartition partitionAssignment : assignedPartitions) {
@@ -115,8 +113,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see AbstractParallelEoSStreamProcessor#onPartitionsRevoked
      */
-    @Override
-    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.info("Partitions revoked: {}", partitions);
 
         try {
@@ -135,7 +132,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
      * offset.
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    protected void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         committed.forEach((tp, meta) -> {
             var partition = getPartitionState(tp);
@@ -173,7 +170,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @return the current epoch of the partition this record belongs to
      */
-    public Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
+    protected Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
         Long epoch = partitionsAssignmentEpochs.get(tp);
         if (epoch == null) {
@@ -185,7 +182,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @return the current epoch of the partition
      */
-    public Long getEpochOfPartition(TopicPartition partition) {
+    protected Long getEpochOfPartition(TopicPartition partition) {
         return partitionsAssignmentEpochs.get(partition);
     }
 
@@ -205,7 +202,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
+    protected boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
         var topicPartitionKey = workContainer.getTopicPartition();
 
         Long currentPartitionEpoch = partitionsAssignmentEpochs.get(topicPartitionKey);
@@ -223,7 +220,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
-    public boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
+    protected boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
         var partitionState = getPartitionState(tp);
         boolean previouslyCompleted = partitionState.isRecordPreviouslyCompleted(rec);
@@ -234,7 +231,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Check we have capacity in offset storage to process more messages
      */
-    public boolean isAllowedMoreRecords(TopicPartition tp) {
+    protected boolean isAllowedMoreRecords(TopicPartition tp) {
         PartitionState<K, V> partitionState = getPartitionState(tp);
         return partitionState.isAllowedMoreRecords();
     }
@@ -242,11 +239,11 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #isAllowedMoreRecords(TopicPartition)
      */
-    public boolean isAllowedMoreRecords(WorkContainer<?, ?> wc) {
+    protected boolean isAllowedMoreRecords(WorkContainer<?, ?> wc) {
         return isAllowedMoreRecords(wc.getTopicPartition());
     }
 
-    public boolean hasWorkInCommitQueues() {
+    protected boolean hasWorkInCommitQueues() {
         for (var partition : getAssignedPartitions().values()) {
             if (partition.hasWorkInCommitQueue())
                 return true;
@@ -254,7 +251,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
-    public long getNumberOfEntriesInPartitionQueues() {
+    protected long getNumberOfEntriesInPartitionQueues() {
         Collection<PartitionState<K, V>> values = getAssignedPartitions().values();
         return values.stream()
                 .mapToLong(PartitionState::getCommitQueueSize)
@@ -262,11 +259,11 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 .orElse(0);
     }
 
-    public long getHighestSeenOffset(final TopicPartition tp) {
+    protected long getHighestSeenOffset(final TopicPartition tp) {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
+    protected void addWorkContainer(final WorkContainer<K, V> wc) {
         var tp = wc.getTopicPartition();
         getPartitionState(tp).addWorkContainer(wc);
     }
@@ -284,23 +281,23 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
-    public boolean isBlocked(final TopicPartition topicPartition) {
+    protected boolean isBlocked(final TopicPartition topicPartition) {
         return !isAllowedMoreRecords(topicPartition);
     }
 
-    public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
+    protected boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
         TopicPartition topicPartition = toTopicPartition(rec);
         var partitionState = getPartitionState(topicPartition);
         boolean hasNeverBeenAssigned = partitionState == null;
         return hasNeverBeenAssigned || partitionState.isRemoved();
     }
 
-    public void onSuccess(WorkContainer<K, V> wc) {
+    protected void onSuccess(WorkContainer<K, V> wc) {
         PartitionState<K, V> partitionState = getPartitionState(wc.getTopicPartition());
         partitionState.onSuccess(wc);
     }
 
-    public void onFailure(WorkContainer<K, V> wc) {
+    protected void onFailure(WorkContainer<K, V> wc) {
         PartitionState<K, V> partitionState = getPartitionState(wc.getTopicPartition());
         partitionState.onFailure(wc);
     }
@@ -309,7 +306,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * Takes a record as work and puts it into internal queues, unless it's been previously recorded as completed as per
      * loaded records.
      */
-    void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
+    protected void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         for (var partition : recordsMap.partitions()) {
             var recordsList = recordsMap.records(partition);
             var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
@@ -345,7 +342,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {
+    protected Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {
         var dirties = new HashMap<TopicPartition, OffsetAndMetadata>();
         for (var state : getAssignedPartitions().values()) {
             var offsetAndMetadata = state.getCommitDataIfDirty();
@@ -360,7 +357,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
     }
 
-    public boolean couldBeTakenAsWork(WorkContainer<?, ?> workContainer) {
+    protected boolean couldBeTakenAsWork(WorkContainer<?, ?> workContainer) {
         if (checkIfWorkIsStale(workContainer)) {
             log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
             return false;

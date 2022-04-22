@@ -17,7 +17,6 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
@@ -51,13 +50,15 @@ public class ShardManager<K, V> {
      * Object Type is either the K key type, or it is a {@link TopicPartition}
      * <p>
      * Used to collate together a queue of work units for each unique key consumed
+     * <p>
+     * TODO NOTE: Needs to be concurrent because?
      *
      * @see ProcessingShard
      * @see K
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    private final Map<Object, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    private final Map<Object, ProcessingShard<K, V>> processingShards = new HashMap<>();
 
     private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
 
@@ -81,27 +82,27 @@ public class ShardManager<K, V> {
         return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
     }
 
-    Object computeShardKey(ConsumerRecord<?, ?> rec) {
+    protected Object computeShardKey(ConsumerRecord<?, ?> rec) {
         return switch (options.getOrdering()) {
             case KEY -> rec.key();
             case PARTITION, UNORDERED -> new TopicPartition(rec.topic(), rec.partition());
         };
     }
 
-    Object computeShardKey(WorkContainer<?, ?> wc) {
+    protected Object computeShardKey(WorkContainer<?, ?> wc) {
         return computeShardKey(wc.getCr());
     }
 
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
-    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+    protected long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
                 .sum();
     }
 
-    public boolean workIsWaitingToBeProcessed() {
+    protected boolean workIsWaitingToBeProcessed() {
         Collection<ProcessingShard<K, V>> allShards = processingShards.values();
         return allShards.parallelStream()
                 .anyMatch(ProcessingShard::workIsWaitingToBeProcessed);
@@ -112,7 +113,7 @@ public class ShardManager<K, V> {
      *
      * @param workFromRemovedPartition collection of work to scan to get keys of shards to remove
      */
-    void removeAnyShardsReferencedBy(NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition) {
+    protected void removeAnyShardsReferencedBy(NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition) {
         for (WorkContainer<K, V> work : workFromRemovedPartition.values()) {
             removeShardFor(work);
         }
@@ -133,14 +134,14 @@ public class ShardManager<K, V> {
         this.retryQueue.remove(work);
     }
 
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
+    protected void addWorkContainer(final WorkContainer<K, V> wc) {
         Object shardKey = computeShardKey(wc.getCr());
         var shard = processingShards.computeIfAbsent(shardKey,
                 (ignore) -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
     }
 
-    void removeShardIfEmpty(final Object key) {
+    protected void removeShardIfEmpty(final Object key) {
         Optional<ProcessingShard<K, V>> shardOpt = getShard(key);
 
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
@@ -151,7 +152,7 @@ public class ShardManager<K, V> {
         }
     }
 
-    public void onSuccess(WorkContainer<?, ?> wc) {
+    protected void onSuccess(WorkContainer<?, ?> wc) {
         //
         this.retryQueue.remove(wc);
 
@@ -171,7 +172,7 @@ public class ShardManager<K, V> {
     /**
      * Idempotent - work may have not been removed, either way it's put back
      */
-    public void onFailure(WorkContainer<?, ?> wc) {
+    protected void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
     }
@@ -179,7 +180,7 @@ public class ShardManager<K, V> {
     /**
      * @return none if there are no messages to retry
      */
-    public Optional<Duration> getLowestRetryTime() {
+    protected Optional<Duration> getLowestRetryTime() {
         // find the first in the queue that isn't in flight
         // could potentially remove from queue when in flight but that's messy and performance gain would be trivial
         for (WorkContainer<?, ?> workContainer : this.retryQueue) {
@@ -189,7 +190,7 @@ public class ShardManager<K, V> {
         return empty();
     }
 
-    public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
+    protected List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
         LoopingResumingIterator<Object, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
 
         //

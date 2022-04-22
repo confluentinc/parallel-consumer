@@ -26,7 +26,8 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static lombok.AccessLevel.*;
+import static lombok.AccessLevel.PACKAGE;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * @see PartitionStateManager
@@ -75,13 +76,13 @@ public class PartitionState<K, V> {
      * Starts off as -1 - no data. Offsets in Kafka are never negative, so this is fine.
      */
     // visible for testing
-    @Getter(PUBLIC)
+    @Getter(PACKAGE)
     private long offsetHighestSeen;
 
     /**
      * Highest offset which has completed successfully ("succeeded").
      */
-    @Getter(PUBLIC)
+    @Getter(PACKAGE)
     private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
 
     /**
@@ -118,7 +119,7 @@ public class PartitionState<K, V> {
         return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
-    public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+    protected PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
@@ -133,7 +134,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
+    protected void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
         setClean();
     }
 
@@ -145,7 +146,7 @@ public class PartitionState<K, V> {
         setDirty(true);
     }
 
-    public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
+    protected boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         long recOffset = rec.offset();
         if (!incompleteOffsets.contains(recOffset)) {
             // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
@@ -156,15 +157,15 @@ public class PartitionState<K, V> {
         }
     }
 
-    public boolean hasWorkInCommitQueue() {
+    protected boolean hasWorkInCommitQueue() {
         return !commitQueue.isEmpty();
     }
 
-    public int getCommitQueueSize() {
+    protected int getCommitQueueSize() {
         return commitQueue.size();
     }
 
-    public void onSuccess(WorkContainer<K, V> work) {
+    protected void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
 
         WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(work.offset());
@@ -178,7 +179,7 @@ public class PartitionState<K, V> {
         setDirty();
     }
 
-    public void onFailure(WorkContainer<K, V> work) {
+    protected void onFailure(WorkContainer<K, V> work) {
         // no-op
     }
 
@@ -194,7 +195,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    public void addWorkContainer(WorkContainer<K, V> wc) {
+    protected void addWorkContainer(WorkContainer<K, V> wc) {
         maybeRaiseHighestSeenOffset(wc.offset());
         commitQueue.put(wc.offset(), wc);
         incompleteOffsets.add(wc.offset());
@@ -205,11 +206,11 @@ public class PartitionState<K, V> {
      *
      * @return by definition false in this implementation
      */
-    public boolean isRemoved() {
+    protected boolean isRemoved() {
         return false;
     }
 
-    public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
+    protected Optional<OffsetAndMetadata> getCommitDataIfDirty() {
         if (isDirty())
             return of(createOffsetAndMetadata());
         else
@@ -231,7 +232,7 @@ public class PartitionState<K, V> {
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
      */
-    public Set<Long> getAllIncompleteOffsets() {
+    protected Set<Long> getAllIncompleteOffsets() {
         //noinspection FuseStreamOperations - only in java 10
         return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
                 .collect(Collectors.toSet()));
@@ -240,7 +241,7 @@ public class PartitionState<K, V> {
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
-    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    protected Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
         return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
@@ -249,7 +250,7 @@ public class PartitionState<K, V> {
                 .collect(Collectors.toSet()));
     }
 
-    public long getOffsetHighestSequentialSucceeded() {
+    protected long getOffsetHighestSequentialSucceeded() {
         if (this.incompleteOffsets.isEmpty()) {
             return this.offsetHighestSeen;
         } else {
@@ -322,7 +323,7 @@ public class PartitionState<K, V> {
         return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
-    public void onPartitionsRemoved(ShardManager<K, V> sm) {
+    protected void onPartitionsRemoved(ShardManager<K, V> sm) {
         sm.removeAnyShardsReferencedBy(getCommitQueue());
     }
 
@@ -332,7 +333,7 @@ public class PartitionState<K, V> {
      * @return true if {@link #isAllowedMoreRecords()} is false
      * @see #isAllowedMoreRecords()
      */
-    public boolean isBlocked() {
+    protected boolean isBlocked() {
         return !isAllowedMoreRecords();
     }
 }

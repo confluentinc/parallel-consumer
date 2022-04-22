@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
@@ -21,7 +20,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 import static java.lang.Boolean.TRUE;
-import static lombok.AccessLevel.PUBLIC;
+import static lombok.AccessLevel.PACKAGE;
 
 /**
  * Sharded, prioritised, offset managed, order controlled, delayed work queue.
@@ -39,17 +38,17 @@ import static lombok.AccessLevel.PUBLIC;
  * @param <V>
  */
 @Slf4j
-public class WorkManager<K, V> implements ConsumerRebalanceListener {
+public class WorkManager<K, V> {
 
     @Getter
     private final ParallelConsumerOptions<K, V> options;
 
     // todo make private
-    @Getter(PUBLIC)
+    @Getter(PACKAGE)
     final PartitionStateManager<K, V> pm;
 
     // todo make private
-    @Getter(PUBLIC)
+    @Getter(PACKAGE)
     private final ShardManager<K, V> sm;
 
     /**
@@ -66,7 +65,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Useful for testing
      */
-    @Getter(PUBLIC)
+    @Getter(PACKAGE)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
     public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
@@ -76,12 +75,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
+    protected WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
         this(options, consumer, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
+    protected WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                          final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(options, this, clock);
@@ -91,8 +90,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Load offset map for assigned partitions
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+    protected void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         pm.onPartitionsAssigned(partitions);
     }
 
@@ -103,26 +101,25 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see AbstractParallelEoSStreamProcessor#onPartitionsRevoked
      */
-    @Override
-    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         pm.onPartitionsRevoked(partitions);
     }
 
-    public void registerWork(EpochAndRecordsMap<K, V> records) {
+    protected void registerWork(EpochAndRecordsMap<K, V> records) {
         pm.maybeRegisterNewRecordAsWork(records);
     }
 
     /**
      * Get work with no limit on quantity, useful for testing.
      */
-    public List<WorkContainer<K, V>> getWorkIfAvailable() {
+    protected List<WorkContainer<K, V>> getWorkIfAvailable() {
         return getWorkIfAvailable(Integer.MAX_VALUE);
     }
 
     /**
      * Depth first work retrieval.
      */
-    public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
+    protected List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
         // optimise early
         if (requestedMaxWorkToRetrieve < 1) {
             return UniLists.of();
@@ -142,7 +139,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return work;
     }
 
-    public void onSuccessResult(WorkContainer<K, V> wc) {
+    protected void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
         wc.endFlight();
@@ -162,11 +159,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see PartitionStateManager#onOffsetCommitSuccess(Map)
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    protected void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
         pm.onOffsetCommitSuccess(committed);
     }
 
-    public void onFailureResult(WorkContainer<K, V> wc) {
+    protected void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
         wc.endFlight();
         pm.onFailure(wc);
@@ -174,11 +171,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         numberRecordsOutForProcessing--;
     }
 
-    public long getNumberOfEntriesInPartitionQueues() {
+    protected long getNumberOfEntriesInPartitionQueues() {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
+    protected Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
         return pm.collectDirtyCommitData();
     }
 
@@ -188,7 +185,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return true if any epoch is stale, false if not
      * @see #checkIfWorkIsStale(WorkContainer)
      */
-    public boolean checkIfWorkIsStale(final List<WorkContainer<K, V>> workContainers) {
+    protected boolean checkIfWorkIsStale(final List<WorkContainer<K, V>> workContainers) {
         for (final WorkContainer<K, V> workContainer : workContainers) {
             if (checkIfWorkIsStale(workContainer)) return true;
         }
@@ -200,11 +197,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    public boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
+    protected boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
         return pm.checkIfWorkIsStale(workContainer);
     }
 
-    public boolean shouldThrottle() {
+    protected boolean shouldThrottle() {
         return isSufficientlyLoaded();
     }
 
@@ -212,7 +209,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
      * should be downloaded (or pipelined in the Consumer)
      */
-    public boolean isSufficientlyLoaded() {
+    protected boolean isSufficientlyLoaded() {
         return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
@@ -220,37 +217,37 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return dynamicLoadFactor.getCurrentFactor();
     }
 
-    public boolean workIsWaitingToBeProcessed() {
+    protected boolean workIsWaitingToBeProcessed() {
         return sm.workIsWaitingToBeProcessed();
     }
 
-    public boolean hasWorkInFlight() {
+    protected boolean hasWorkInFlight() {
         return getNumberRecordsOutForProcessing() != 0;
     }
 
-    public boolean isWorkInFlightMeetingTarget() {
+    protected boolean isWorkInFlightMeetingTarget() {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
-    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+    protected long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
 
-    public boolean hasWorkInCommitQueues() {
+    protected boolean hasWorkInCommitQueues() {
         return pm.hasWorkInCommitQueues();
     }
 
-    public boolean isRecordsAwaitingProcessing() {
+    protected boolean isRecordsAwaitingProcessing() {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
     }
 
-    public boolean isRecordsAwaitingToBeCommitted() {
+    protected boolean isRecordsAwaitingToBeCommitted() {
         // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
         var partitionWorkRemainingCount = getNumberOfEntriesInPartitionQueues();
         return partitionWorkRemainingCount > 0;
     }
 
-    public void handleFutureResult(WorkContainer<K, V> wc) {
+    protected void handleFutureResult(WorkContainer<K, V> wc) {
         if (checkIfWorkIsStale(wc)) {
             // no op, partition has been revoked
             log.debug("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
@@ -268,11 +265,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public boolean isNoRecordsOutForProcessing() {
+    protected boolean isNoRecordsOutForProcessing() {
         return getNumberRecordsOutForProcessing() == 0;
     }
 
-    public Optional<Duration> getLowestRetryTime() {
+    protected Optional<Duration> getLowestRetryTime() {
         return sm.getLowestRetryTime();
     }
 
