@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.kafkabridge;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.ControllerEventBus;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
@@ -17,7 +17,7 @@ import static io.confluent.parallelconsumer.sharedstate.PartitionEventMessage.Pa
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 
-    AbstractParallelEoSStreamProcessor<K, V> controller;
+    ControllerEventBus<K, V> controller;
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {

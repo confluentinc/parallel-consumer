@@ -109,14 +109,14 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
                         log.debug("Reactor success (doOnComplete)");
                         pollContext.streamWorkContainers().forEach(wc -> {
                             wc.onUserFunctionSuccess();
-                            sendWorkResultEvent(wc);
+                            getBus().sendWorkResultEvent(wc);
                         });
                     })
                     .doOnError(throwable -> {
                         log.error("Reactor fail signal", throwable);
                         pollContext.streamWorkContainers().forEach(wc -> {
                             wc.onUserFunctionFailure(throwable);
-                            sendWorkResultEvent(wc);
+                            getBus().sendWorkResultEvent(wc);
                         });
                     })
                     // cause users Publisher to run a thread pool, if it hasn't already - this is a crucial magical part

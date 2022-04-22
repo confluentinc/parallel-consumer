@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.kafkabridge;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.controller.WorkManager;
+import io.confluent.parallelconsumer.internal.ControllerEventBus;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.sharedstate.CommitData;
 import io.confluent.parallelconsumer.sharedstate.CommitRequest;
@@ -56,8 +56,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      */
     private final BlockingQueue<CommitResponse> commitResponseQueue = new LinkedBlockingQueue<>();
 
-    public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, final ParallelConsumerOptions<K, V> options) {
-        super(newConsumer, newWorkManager);
+    public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, ControllerEventBus<?, ?> bus, final ParallelConsumerOptions<K, V> options) {
+        super(newConsumer, bus);
         commitMode = options.getCommitMode();
         commitTimeout = options.getOffsetCommitTimeout();
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {

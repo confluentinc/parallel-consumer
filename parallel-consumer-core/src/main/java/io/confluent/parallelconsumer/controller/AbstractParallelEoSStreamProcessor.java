@@ -14,8 +14,6 @@ import io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler;
 import io.confluent.parallelconsumer.kafkabridge.OffsetCommitter;
 import io.confluent.parallelconsumer.sharedstate.CommitData;
 import io.confluent.parallelconsumer.sharedstate.ControllerEventMessage;
-import io.confluent.parallelconsumer.sharedstate.PartitionEventMessage;
-import io.confluent.parallelconsumer.sharedstate.PartitionEventMessage.PartitionEventType;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -58,6 +56,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
+// todo package private?
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
@@ -101,12 +100,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     // todo make package level
     @Getter(AccessLevel.PUBLIC)
     protected final WorkManager<K, V> wm;
-
-    /**
-     * Collection of work waiting to be
-     */
-    @Getter(PROTECTED)
-    private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private final ConsumerRebalanceHandler rebalanceHandler = new ConsumerRebalanceHandler();
 
@@ -153,6 +146,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Time of last successful commit
      */
     private Instant lastCommitTime;
+
+    @Getter
+    protected final ControllerEventBus<K, V> bus = new ControllerEventBus<>();
 
     public boolean isClosedOrFailed() {
         boolean closed = runState == RunState.closed;
@@ -892,7 +888,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
             try {
-                var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
+                var firstBlockingPoll = bus.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
                     log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
                 } else {
@@ -909,9 +905,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // check for more work to batch up, there may be more work queued up behind the head that we can also take
         // see how big the queue is now, and poll that many times
-        int size = workMailBox.size();
+        int size = bus.size();
         log.trace("Draining {} more, got {} already...", size, results.size());
-        workMailBox.drainTo(results, size);
+        bus.drainTo(results, size);
 
         log.trace("Processing drained work {}...", results.size());
         for (var action : results) {
@@ -1026,7 +1022,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // no work is currently being done
         boolean workInFlight = wm.hasWorkInFlight();
         // work mailbox is empty
-        boolean workWaitingInMailbox = !workMailBox.isEmpty();
+        boolean workWaitingInMailbox = !bus.isEmpty();
         boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
         log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};",
                 workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
@@ -1117,48 +1113,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                sendWorkResultEvent(wc); // always add on error
+                this.bus.sendWorkResultEvent(wc); // always add on error
             }
             throw e; // trow again to make the future failed
         }
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        sendWorkResultEvent(wc);
+        this.bus.sendWorkResultEvent(wc);
     }
 
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
         wc.onUserFunctionSuccess();
-    }
-
-    protected void sendWorkResultEvent(WorkContainer<K, V> wc) {
-        var message = ControllerEventMessage.of(wc);
-        addMessage(message);
-    }
-
-    private void addMessage(ControllerEventMessage<K, V> message) {
-        log.debug("Adding {} to mailbox...", message);
-        workMailBox.add(message);
-    }
-
-    public void sendConsumerRecordsEvent(EpochAndRecordsMap<K, V> polledRecords) {
-        var message = ControllerEventMessage.of(polledRecords);
-        addMessage(message);
-    }
-
-    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
-        var event = new PartitionEventMessage(type, partitions);
-        log.debug("Adding {} to mailbox...", event);
-        var message = ControllerEventMessage.<K, V>of(event);
-        workMailBox.add(message);
-    }
-
-    // todo extract all to an event bus
-    public void sendOffsetCommitSuccessEvent(CommitData event) {
-        log.debug("Adding {} to mailbox...", event);
-        var message = new ControllerEventMessage<K, V>(event);
-        workMailBox.add(message);
     }
 
     /**

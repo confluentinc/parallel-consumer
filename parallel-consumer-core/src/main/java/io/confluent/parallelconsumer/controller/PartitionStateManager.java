@@ -171,7 +171,8 @@ class PartitionStateManager<K, V> {
      */
     protected Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
-        Long epoch = partitionsAssignmentEpochs.get(tp);
+        Long epoch = partitionEpochTracker.getEpochFor(tp);
+
         if (epoch == null) {
             throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
         }
@@ -181,8 +182,9 @@ class PartitionStateManager<K, V> {
     /**
      * @return the current epoch of the partition
      */
+    // todo remove?
     protected Long getEpochOfPartition(TopicPartition partition) {
-        return partitionsAssignmentEpochs.get(partition);
+        return partitionEpochTracker.getEpochFor(partition);
     }
 
     private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
@@ -200,7 +202,7 @@ class PartitionStateManager<K, V> {
     protected boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
         var topicPartitionKey = workContainer.getTopicPartition();
 
-        Long currentPartitionEpoch = partitionsAssignmentEpochs.get(topicPartitionKey);
+        Long currentPartitionEpoch = partitionEpochTracker.getEpochFor(topicPartitionKey);
         long workEpoch = workContainer.getEpoch();
 
         boolean partitionNotAssigned = isPartitionRemovedOrNeverAssigned(workContainer.getCr());

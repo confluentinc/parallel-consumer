@@ -270,7 +270,8 @@ class PartitionState<K, V> {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
             long offsetOfNextExpectedMessage = getNextExpectedPolledOffset();
-            String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
+            var offsetState = new OffsetMapCodecManager.HighestOffsetAndIncompletes(Optional.of(this.getOffsetHighestSucceeded()), this.getAllIncompleteOffsets());
+            String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, offsetState);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
                 return empty();

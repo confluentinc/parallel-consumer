@@ -4,8 +4,8 @@ package io.confluent.parallelconsumer.kafkabridge;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.controller.WorkManager;
+import io.confluent.parallelconsumer.internal.ControllerEventBus;
 import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +18,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
     protected final ConsumerManager<K, V> consumerMgr;
 
     //    protected final WorkManager<K, V> wm;
-    private final AbstractParallelEoSStreamProcessor<?, ?> controller;
+    private final ControllerEventBus<?, ?> controller;
 
     /**
      * Get offsets from {@link WorkManager} that are ready to commit

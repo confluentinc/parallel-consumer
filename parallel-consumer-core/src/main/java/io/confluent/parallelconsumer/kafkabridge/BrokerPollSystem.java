@@ -73,7 +73,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
 
         switch (options.getCommitMode()) {
             case PERIODIC_CONSUMER_SYNC, PERIODIC_CONSUMER_ASYNCHRONOUS -> {
-                ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
+                ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, pc.getBus(), options);
                 committer = Optional.of(consumerCommitter);
             }
         }
@@ -146,7 +146,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanc
 
             if (count > 0) {
                 log.trace("Loop: Register work");
-                pc.sendConsumerRecordsEvent(polledRecords);
+                pc.getBus().sendConsumerRecordsEvent(polledRecords);
             }
         }
     }

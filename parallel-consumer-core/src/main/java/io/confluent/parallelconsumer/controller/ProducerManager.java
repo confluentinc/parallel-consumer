@@ -52,7 +52,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Method txManagerMethodIsReady;
 
     public ProducerManager(final Producer<K, V> newProducer, ConsumerManager<K, V> newConsumer, AbstractParallelEoSStreamProcessor<?, ?> controller, ParallelConsumerOptions<K, V> options) {
-        super(newConsumer, controller);
+        super(newConsumer, controller.getBus());
         this.producer = newProducer;
         this.options = options;
 
