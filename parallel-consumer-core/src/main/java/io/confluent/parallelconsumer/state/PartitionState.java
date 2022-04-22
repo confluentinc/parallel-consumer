@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -27,8 +28,15 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
+@ToString
 @Slf4j
 public class PartitionState<K, V> {
+
+    /**
+     * Symbolic value for a parameter which is initialised as having an offset absent (instead of using Optional or
+     * null)
+     */
+    public static final long KAFKA_OFFSET_ABSENCE = -1L;
 
     @Getter
     private final TopicPartition tp;
@@ -71,7 +79,7 @@ public class PartitionState<K, V> {
      * Highest offset which has completed successfully ("succeeded").
      */
     @Getter(PUBLIC)
-    private long offsetHighestSucceeded = -1L;
+    private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
 
     /**
      * If true, more messages are allowed to process for this partition.
@@ -100,6 +108,7 @@ public class PartitionState<K, V> {
      * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}
      */
     // todo doesn't need to be concurrent any more?
+    @ToString.Exclude
     private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
     private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
@@ -108,7 +117,7 @@ public class PartitionState<K, V> {
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
-        this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(-1L);
+        this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
     }
@@ -230,6 +239,7 @@ public class PartitionState<K, V> {
      */
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
+        //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
         return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
                 // todo less than or less than and equal?
                 .filter(x -> x < highestSucceeded)
@@ -306,10 +316,21 @@ public class PartitionState<K, V> {
     }
 
     private double getPressureThresholdValue() {
-        return DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+        return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
         sm.removeAnyShardsReferencedBy(getCommitQueue());
     }
+
+    /**
+     * Convenience method for readability
+     *
+     * @return true if {@link #isAllowedMoreRecords()} is false
+     * @see #isAllowedMoreRecords()
+     */
+    public boolean isBlocked() {
+        return !isAllowedMoreRecords();
+    }
 }
+

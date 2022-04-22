@@ -61,8 +61,7 @@ public class OffsetSimultaneousEncoder {
      * @see #packSmallest()
      */
     @Getter
-    PriorityQueue<EncodedOffsetPair> sortedEncodings = new PriorityQueue<>();
-
+    SortedSet<EncodedOffsetPair> sortedEncodings = new TreeSet<>();
 
     /**
      * Force the encoder to also add the compressed versions. Useful for testing.
@@ -226,7 +225,7 @@ public class OffsetSimultaneousEncoder {
         if (sortedEncodings.isEmpty()) {
             throw new NoEncodingPossibleException("No encodings could be used");
         }
-        final EncodedOffsetPair best = this.sortedEncodings.poll();
+        final EncodedOffsetPair best = this.sortedEncodings.first();
         log.debug("Compression chosen is: {}", best.encoding.name());
         return packEncoding(best);
     }
