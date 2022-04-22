@@ -522,7 +522,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Block the calling thread until no more messages are being processed.
+     * <p>
+     * Used for testing.
+     *
+     * @deprecated no longer used, will be removed in next version
      */
+    @Deprecated(forRemoval = true)
     @SneakyThrows
     public void waitForProcessedNotCommitted(Duration timeout) {
         log.debug("Waiting processed but not committed...");

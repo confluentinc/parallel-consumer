@@ -33,6 +33,8 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * In charge of managing {@link PartitionState}s.
  * <p>
  * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
+ *
+ * @see PartitionState
  */
 @Slf4j
 @RequiredArgsConstructor
