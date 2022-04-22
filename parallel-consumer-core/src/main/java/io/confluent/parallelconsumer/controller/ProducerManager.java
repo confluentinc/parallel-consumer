@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.internal;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
@@ -8,8 +8,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
-import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.controller.WorkManager;
+import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.kafkabridge.AbstractOffsetCommitter;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerManager;
 import io.confluent.parallelconsumer.kafkabridge.OffsetCommitter;
@@ -36,7 +35,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     protected final Producer<K, V> producer;
 
-    private final ParallelConsumerOptions options;
+    private final ParallelConsumerOptions<K, V> options;
 
     private final boolean producerIsConfiguredForTransactions;
 
@@ -52,8 +51,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
 
-    public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions options) {
-        super(newConsumer, wm);
+    public ProducerManager(final Producer<K, V> newProducer, ConsumerManager<K, V> newConsumer, AbstractParallelEoSStreamProcessor<?, ?> controller, ParallelConsumerOptions<K, V> options) {
+        super(newConsumer, controller);
         this.producer = newProducer;
         this.options = options;
 

@@ -10,18 +10,20 @@ import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcess
 import io.confluent.parallelconsumer.controller.WorkManager;
 import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.sharedstate.CommitData;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
+import pl.tlinkowski.unij.api.UniSets;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.*;
 
@@ -37,7 +39,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter {
+public class BrokerPollSystem<K, V> implements OffsetCommitter, ConsumerRebalanceListener {
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -60,10 +62,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
-    private final WorkManager<K, V> wm;
+    private final PartitionEpochTracker partitionEpochTracker = new PartitionEpochTracker();
+
+    private final Queue<ThrottleMessage> commitRequestQueue = new ConcurrentLinkedQueue();
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
-        this.wm = wm;
         this.pc = pc;
 
         this.consumerManager = consumerMgr;
@@ -108,16 +111,18 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         Thread.currentThread().setName("pc-broker-poll");
         pc.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
-        committer.ifPresent(x -> x.claim());
+        committer.ifPresent(ConsumerOffsetCommitter::claim);
         try {
             while (runState != closed) {
                 handlePoll();
 
                 maybeDoCommit();
 
+                checkForThrottleSignal();
+
                 switch (runState) {
                     case draining -> {
-                        doPause();
+                        doPause(UniSets.of());
                     }
                     case closing -> {
                         doClose();
@@ -148,7 +153,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private void doClose() {
         log.debug("Doing close...");
-        doPause();
         maybeCloseConsumerManager();
         runState = closed;
     }
@@ -169,6 +173,16 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         return committer.isPresent();
     }
 
+    @Override
+    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+        partitionEpochTracker.incrementPartitionAssignmentEpoch(partitions);
+    }
+
+    @Override
+    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        partitionEpochTracker.incrementPartitionAssignmentEpoch(partitions);
+    }
+
     private EpochAndRecordsMap<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
@@ -183,7 +197,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         log.debug("Poll completed");
 
         // build records map
-        return new EpochAndRecordsMap<>(poll, wm.getPm());
+        return new EpochAndRecordsMap<>(poll, this.partitionEpochTracker);
     }
 
     /**
@@ -198,17 +212,30 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    @EqualsAndHashCode(callSuper = true)
+    @Value
+    static class ThrottleMessage extends Message {
+        Set<TopicPartition> partitionsToPause;
+    }
+
+    private Optional<ThrottleMessage> checkForThrottleSignal() {
+        ThrottleMessage poll = this.commitRequestQueue.poll();
+        if (poll != null) {
+            log.debug("Commit requested, performing...");
+            return Optional.of(poll);
+        }
+        return Optional.empty();
+    }
+
     private final RateLimiter pauseLimiter = new RateLimiter(1);
 
-    private void doPauseMaybe() {
+    private void throttleMaybe(ThrottleMessage throttle) {
         // idempotent
         if (paused) {
             log.trace("Already paused");
         } else {
             if (pauseLimiter.couldPerform()) {
-                pauseLimiter.performIfNotLimited(() -> {
-                    doPause();
-                });
+                pauseLimiter.performIfNotLimited(() -> doPause(throttle.getPartitionsToPause()));
             } else {
                 if (log.isDebugEnabled()) {
                     log.debug("Should pause but pause rate limit exceeded {} vs {}.",
@@ -219,12 +246,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    private void doPause() {
+    private void doPause(Set<TopicPartition> toPause) {
         if (!paused) {
             paused = true;
             log.debug("Pausing subs");
-            Set<TopicPartition> assignment = consumerManager.assignment();
-            consumerManager.pause(assignment);
+            consumerManager.pause(toPause);
         } else {
             log.debug("Already paused, skipping");
         }
@@ -266,10 +292,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * make sure we maintain the keep alive with the broker so as not to cause a rebalance.
      */
     private void managePauseOfSubscription() {
-        boolean throttle = shouldThrottle();
+        Optional<ThrottleMessage> throttle = shouldThrottle();
         log.trace("Need to throttle: {}", throttle);
-        if (throttle) {
-            doPauseMaybe();
+        if (throttle.isPresent()) {
+            throttleMaybe(throttle.get());
         } else {
             resumeIfPaused();
         }
@@ -290,8 +316,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    private boolean shouldThrottle() {
-        return wm.shouldThrottle();
+    private Optional<ThrottleMessage> shouldThrottle() {
+        return checkForThrottleSignal();
     }
 
     /**

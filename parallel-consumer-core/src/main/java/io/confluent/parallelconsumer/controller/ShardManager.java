@@ -34,7 +34,7 @@ import static lombok.AccessLevel.PRIVATE;
  */
 @Slf4j
 @RequiredArgsConstructor
-public class ShardManager<K, V> {
+class ShardManager<K, V> {
 
     @Getter
     private final ParallelConsumerOptions options;

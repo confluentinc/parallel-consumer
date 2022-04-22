@@ -26,7 +26,7 @@ import static lombok.AccessLevel.PRIVATE;
  */
 @Slf4j
 @RequiredArgsConstructor
-public class ProcessingShard<K, V> {
+class ProcessingShard<K, V> {
 
     /**
      * Map of offset to WorkUnits.

@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.PartitionEpochTracker;
 import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.sharedstate.CommitData;
@@ -35,7 +36,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
  */
 @Slf4j
 @RequiredArgsConstructor
-public class PartitionStateManager<K, V> {
+class PartitionStateManager<K, V> {
 
     public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
     /**
@@ -59,16 +60,9 @@ public class PartitionStateManager<K, V> {
      */
     private final Map<TopicPartition, PartitionState<K, V>> partitionStates = new HashMap<>();
 
-    /**
-     * Record the generations of partition assignment, for fencing off invalid work.
-     * <p>
-     * NOTE: This must live outside of {@link PartitionState}, as it must be tracked across partition lifecycles.
-     * <p>
-     * Starts at zero.
-     */
-    private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new HashMap<>();
-
     private final Clock clock;
+
+    private final PartitionEpochTracker partitionEpochTracker = new PartitionEpochTracker();
 
     protected PartitionState<K, V> getPartitionState(TopicPartition tp) {
         return partitionStates.get(tp);
@@ -98,8 +92,13 @@ public class PartitionStateManager<K, V> {
 
         try {
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
-            var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
-            this.partitionStates.putAll(partitionStates);
+            var offsetState = om.loadPartitionStateForAssignment(assignedPartitions);
+            Map<TopicPartition, PartitionState<K, V>> decodedPartitionStates = offsetState.entrySet().stream()
+                    .map(entry ->
+                            new PartitionState<K, V>(entry.getKey(), entry.getValue()))
+                    .collect(Collectors.
+                            toMap(PartitionState::getTopicPartition, y -> y));
+            this.partitionStates.putAll(decodedPartitionStates);
         } catch (Exception e) {
             log.error("Error in onPartitionsAssigned", e);
             throw e;
@@ -187,11 +186,7 @@ public class PartitionStateManager<K, V> {
     }
 
     private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
-        for (final TopicPartition partition : partitions) {
-            Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, PartitionState.KAFKA_OFFSET_ABSENCE);
-            epoch++;
-            partitionsAssignmentEpochs.put(partition, epoch);
-        }
+        partitionEpochTracker.incrementPartitionAssignmentEpoch(partitions);
     }
 
     /**
@@ -346,7 +341,7 @@ public class PartitionStateManager<K, V> {
         var dirties = new CommitData();
         for (var state : getAssignedPartitions().values()) {
             var offsetAndMetadata = state.getCommitDataIfDirty();
-            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTp(), andMetadata));
+            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTopicPartition(), andMetadata));
         }
         return dirties;
     }

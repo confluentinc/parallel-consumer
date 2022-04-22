@@ -53,7 +53,7 @@ class BitSetEncodingTest {
 
             OffsetMapCodecManager.HighestOffsetAndIncompletes result = OffsetMapCodecManager.decodeCompressedOffsets(0, wrapped);
 
-            assertThat(result.getHighestSeenOffset()).contains(10L);
+            assertThat(result.getHighestSucceededOffset()).contains(10L);
 
             assertThat(result.getIncompleteOffsets()).containsExactlyInAnyOrderElementsOf(incompletes);
         }

@@ -56,7 +56,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      */
     private final BlockingQueue<CommitResponse> commitResponseQueue = new LinkedBlockingQueue<>();
 
-    public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, final ParallelConsumerOptions options) {
+    public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, final ParallelConsumerOptions<K, V> options) {
         super(newConsumer, newWorkManager);
         commitMode = options.getCommitMode();
         commitTimeout = options.getOffsetCommitTimeout();

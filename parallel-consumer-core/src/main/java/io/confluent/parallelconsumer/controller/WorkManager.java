@@ -41,6 +41,7 @@ import static lombok.AccessLevel.PACKAGE;
  * @param <V>
  */
 @Slf4j
+// todo make package private
 public class WorkManager<K, V> {
 
     @Getter

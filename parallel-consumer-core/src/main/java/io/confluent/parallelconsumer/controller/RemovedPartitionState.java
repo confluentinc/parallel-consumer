@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.controller;
  */
 
 import io.confluent.csid.utils.KafkaUtils;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -50,7 +51,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public TopicPartition getTp() {
+    public TopicPartition getTopicPartition() {
         return null;
     }
 
@@ -82,13 +83,13 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     @Override
     public long getOffsetHighestSeen() {
         log.debug(NO_OP);
-        return PartitionState.KAFKA_OFFSET_ABSENCE;
+        return ParallelConsumerOptions.KAFKA_OFFSET_ABSENCE;
     }
 
     @Override
     public long getOffsetHighestSucceeded() {
         log.debug(NO_OP);
-        return PartitionState.KAFKA_OFFSET_ABSENCE;
+        return ParallelConsumerOptions.KAFKA_OFFSET_ABSENCE;
     }
 
     @Override

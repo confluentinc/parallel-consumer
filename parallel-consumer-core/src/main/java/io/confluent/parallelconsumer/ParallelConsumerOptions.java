@@ -32,6 +32,12 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 public class ParallelConsumerOptions<K, V> {
 
     /**
+     * Symbolic value for a parameter which is initialised as having an offset absent (instead of using Optional or
+     * null)
+     */
+    public static final long KAFKA_OFFSET_ABSENCE = -1L;
+
+    /**
      * Required parameter for all use.
      */
     private final Consumer<K, V> consumer;

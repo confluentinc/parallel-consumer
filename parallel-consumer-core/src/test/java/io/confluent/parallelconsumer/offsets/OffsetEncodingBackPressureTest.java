@@ -164,7 +164,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 // check offset encoding incomplete payload doesn't contain expected completed messages
                 String metadata = mostRecentCommit.metadata();
                 HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, metadata);
-                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset().get();
+                Long highestSeenOffset = decodedOffsetPayload.getHighestSucceededOffset().get();
                 Set<Long> incompletes = decodedOffsetPayload.getIncompleteOffsets();
                 assertThat(incompletes).isNotEmpty()
                         .contains(offsetToBlock)
@@ -217,7 +217,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                             Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
                                     .that(incompletes.getIncompleteOffsets()).containsExactlyElementsIn(blockedOffsets);
                             int expectedHighestSeen = numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1;
-                            Truth8.assertThat(incompletes.getHighestSeenOffset()).hasValue(expectedHighestSeen);
+                            Truth8.assertThat(incompletes.getHighestSucceededOffset()).hasValue(expectedHighestSeen);
                         }
                 );
             }

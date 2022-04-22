@@ -11,7 +11,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.ProducerManager;
+import io.confluent.parallelconsumer.controller.ProducerManager;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerOffsetCommitter;
 import io.confluent.parallelconsumer.kafkabridge.OffsetCommitter;
 import lombok.SneakyThrows;

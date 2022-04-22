@@ -9,10 +9,10 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.*;
-import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerManager;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler;
 import io.confluent.parallelconsumer.kafkabridge.OffsetCommitter;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import io.confluent.parallelconsumer.sharedstate.ControllerEventMessage;
 import io.confluent.parallelconsumer.sharedstate.PartitionEventMessage;
 import io.confluent.parallelconsumer.sharedstate.PartitionEventMessage.PartitionEventType;
@@ -64,7 +64,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public static final String MDC_OFFSET_MARKER = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<K, V> options;
 
     /**
      * Injectable clock for testing
@@ -110,8 +110,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private final ConsumerRebalanceHandler rebalanceHandler = new ConsumerRebalanceHandler();
 
-
-    private final BrokerPollSystem<K, V> brokerPollSubsystem;
+    private final io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem<K, V> brokerPollSubsystem;
 
     /**
      * Useful for testing async code
@@ -224,10 +223,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
-        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+        this.brokerPollSubsystem = new io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            var value = new ProducerManager<>(options.getProducer(), consumerMgr, this, options);
+            this.producerManager = Optional.of(value);
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else
@@ -336,6 +336,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         notifySomethingToDo();
+
+        brokerPollSubsystem.onPartitionsAssigned(partitions);
     }
 
     /**
@@ -936,6 +938,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     onPartitionsRevoked(event.getPartitions());
                 }
             }
+        } else if (message.isCommitSuccessEvent()) {
+            // todo do commit messages need to be processed first?
+            CommitData commitData = message.getCommitData();
+            wm.onOffsetCommitSuccess(commitData);
         } else {
             throw new IllegalStateException("Unknown message");
         }
@@ -1148,6 +1154,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         workMailBox.add(message);
     }
 
+    // todo extract all to an event bus
+    public void sendOffsetCommitSuccessEvent(CommitData event) {
+        log.debug("Adding {} to mailbox...", event);
+        var message = new ControllerEventMessage<K, V>(event);
+        workMailBox.add(message);
+    }
+
     /**
      * Early notify of work arrived.
      * <p>
@@ -1181,7 +1194,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     public void setLongPollTimeout(Duration ofMillis) {
-        BrokerPollSystem.setLongPollTimeout(ofMillis);
+        io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem.setLongPollTimeout(ofMillis);
     }
 
     /**

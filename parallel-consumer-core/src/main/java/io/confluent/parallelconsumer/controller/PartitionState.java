@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.controller;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -34,16 +35,10 @@ import static lombok.AccessLevel.PRIVATE;
  */
 @ToString
 @Slf4j
-public class PartitionState<K, V> {
-
-    /**
-     * Symbolic value for a parameter which is initialised as having an offset absent (instead of using Optional or
-     * null)
-     */
-    public static final long KAFKA_OFFSET_ABSENCE = -1L;
+class PartitionState<K, V> {
 
     @Getter
-    private final TopicPartition tp;
+    private final TopicPartition topicPartition;
 
     /**
      * Offset data beyond the highest committable offset, which haven't totally succeeded.
@@ -83,7 +78,7 @@ public class PartitionState<K, V> {
      * Highest offset which has completed successfully ("succeeded").
      */
     @Getter(PACKAGE)
-    private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
+    private long offsetHighestSucceeded = ParallelConsumerOptions.KAFKA_OFFSET_ABSENCE;
 
     /**
      * If true, more messages are allowed to process for this partition.
@@ -119,9 +114,9 @@ public class PartitionState<K, V> {
         return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
-    protected PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
-        this.tp = tp;
-        this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
+    protected PartitionState(TopicPartition topicPartition, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+        this.topicPartition = topicPartition;
+        this.offsetHighestSeen = offsetData.getHighestSucceededOffset().orElse(ParallelConsumerOptions.KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
     }
