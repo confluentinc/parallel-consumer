@@ -18,13 +18,13 @@ import java.util.concurrent.ConcurrentSkipListMap;
  * references or {@link Optional}s. By replacing with a no op implementation, we protect for stale messages still in
  * queues which reference it, among other things.
  * <p>
- * The alternative to this implementation, is having {@link PartitionMonitor#getPartitionState(TopicPartition)} return
- * {@link Optional}, which forces the implicit null check everywhere partition state is retrieved. This was drafted to a
- * degree, but found to be extremely invasive, where this solution with decent separation of concerns and encapsulation,
- * is sufficient and potentially more useful as is non-destructive. Potential issue is that of memory leak as the
- * collection will forever expand. However, even massive partition counts to a single consumer would be in the hundreds
- * of thousands, this would only result in hundreds of thousands of {@link TopicPartition} object keys all pointing to
- * the same instance of {@link RemovedPartitionState}.
+ * The alternative to this implementation, is having {@link PartitionStateManager#getPartitionState(TopicPartition)}
+ * return {@link Optional}, which forces the implicit null check everywhere partition state is retrieved. This was
+ * drafted to a degree, but found to be extremely invasive, where this solution with decent separation of concerns and
+ * encapsulation, is sufficient and potentially more useful as is non-destructive. Potential issue is that of memory
+ * leak as the collection will forever expand. However, even massive partition counts to a single consumer would be in
+ * the hundreds of thousands, this would only result in hundreds of thousands of {@link TopicPartition} object keys all
+ * pointing to the same instance of {@link RemovedPartitionState}.
  */
 @Slf4j
 public class RemovedPartitionState<K, V> extends PartitionState<K, V> {

@@ -35,7 +35,7 @@ import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
-import static io.confluent.parallelconsumer.state.PartitionMonitor.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -61,7 +61,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
     @AfterAll
     static void cleanup() {
-        PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
+        PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
     }
 
     /**
@@ -226,7 +226,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             log.debug("// test max payload exceeded, payload dropped");
             {
                 log.debug("// force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)");
-                PartitionMonitor.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(30);
+                PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(30);
                 parallelConsumer.requestCommitAsap();
                 awaitForOneLoopCycle();
 
