@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;

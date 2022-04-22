@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.reactor;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import reactor.core.publisher.Flux;
 
 import java.nio.file.Files;

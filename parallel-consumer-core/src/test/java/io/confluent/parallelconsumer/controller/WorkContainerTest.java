@@ -1,10 +1,11 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ManagedTruth;
+import io.confluent.parallelconsumer.ModelUtils;
 import org.junit.jupiter.api.Test;
 
 class WorkContainerTest {

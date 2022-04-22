@@ -9,7 +9,7 @@ import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.controller.WorkContainer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;

@@ -30,15 +30,15 @@
     <logger name="io.confluent.parallelconsumer" level="info"/>
 
     <!-- Key classes -->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="info"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="info"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor" level="info"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.poller.BrokerPollSystem" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.controller.WorkManager" level="info"/>-->
 
 
     <!--    <logger name="io.confluent.parallelconsumer.vertx.VertxBatchTest" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="debug"/>-->
 
-    <!--    <logger name="io.confluent.parallelconsumer.state.RemovedPartitionState" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.controller.RemovedPartitionState" level="trace"/>-->
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->

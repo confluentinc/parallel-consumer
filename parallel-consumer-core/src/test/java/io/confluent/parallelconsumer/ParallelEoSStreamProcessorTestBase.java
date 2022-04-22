@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;

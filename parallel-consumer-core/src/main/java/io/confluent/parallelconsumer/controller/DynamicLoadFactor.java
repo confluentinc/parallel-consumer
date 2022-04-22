@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.internal;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.

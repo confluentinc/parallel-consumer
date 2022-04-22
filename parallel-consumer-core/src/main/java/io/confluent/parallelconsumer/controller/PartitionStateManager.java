@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
@@ -6,10 +6,9 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +22,6 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
@@ -68,10 +66,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * NOTE: This must live outside of {@link PartitionState}, as it must be tracked across partition lifecycles.
      * <p>
      * Starts at zero.
-     * <p>
-     * NOTE: Must be concurrent because it can be set by one thread, but read by another.
      */
-    private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
+    private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new HashMap<>();
 
     private final Clock clock;
 

@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.PartitionState;
+import io.confluent.parallelconsumer.controller.PartitionState;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 

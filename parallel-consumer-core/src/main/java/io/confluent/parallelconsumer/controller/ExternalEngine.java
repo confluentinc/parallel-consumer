@@ -1,11 +1,10 @@
-package io.confluent.parallelconsumer.internal;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;

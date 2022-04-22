@@ -127,10 +127,10 @@
                     <releaseTarget>8</releaseTarget>
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
-                        <class>io.confluent.parallelconsumer.state.WorkContainer</class>
-                        <class>io.confluent.parallelconsumer.state.WorkManager</class>
-                        <class>io.confluent.parallelconsumer.state.PartitionState</class>
-                        <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.controller.WorkContainer</class>
+                        <class>io.confluent.parallelconsumer.controller.WorkManager</class>
+                        <class>io.confluent.parallelconsumer.controller.PartitionState</class>
+                        <class>io.confluent.parallelconsumer.controller.ProcessingShard</class>
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                     </classes>
                     <legacyClasses>

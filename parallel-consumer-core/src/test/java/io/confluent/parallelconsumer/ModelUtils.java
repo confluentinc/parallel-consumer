@@ -1,10 +1,11 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.controller.WorkContainer;
 import lombok.experimental.UtilityClass;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.mockito.Mockito;

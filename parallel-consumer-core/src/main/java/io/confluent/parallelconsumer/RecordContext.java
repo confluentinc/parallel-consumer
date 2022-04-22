@@ -4,8 +4,8 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.ConsumerRecordId;
-import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.controller.ConsumerRecordId;
+import io.confluent.parallelconsumer.controller.WorkContainer;
 import lombok.*;
 import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

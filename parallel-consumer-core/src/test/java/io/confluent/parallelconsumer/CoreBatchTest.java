@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;

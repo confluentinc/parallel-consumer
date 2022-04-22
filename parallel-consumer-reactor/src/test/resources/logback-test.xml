@@ -30,11 +30,11 @@
     <logger name="io.confluent.parallelconsumer" level="info"/>
 
     <!-- Key classes -->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.ConsumerManager" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="info"/>-->
-        <logger name="io.confluent.parallelconsumer.internal.ExternalEngine" level="info"/>
+    <!--    <logger name="io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.poller.BrokerPollSystem" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.poller.ConsumerManager" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.controller.WorkManager" level="info"/>-->
+    <logger name="io.confluent.parallelconsumer.controller.ExternalEngine" level="info"/>
 
 
     <!--    <logger name="io.confluent.parallelconsumer.vertx.VertxBatchTest" level="debug"/>-->

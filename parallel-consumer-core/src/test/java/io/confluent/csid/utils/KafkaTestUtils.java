@@ -5,9 +5,9 @@ package io.confluent.csid.utils;
  */
 
 import io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.controller.WorkContainer;
+import io.confluent.parallelconsumer.controller.WorkManager;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;

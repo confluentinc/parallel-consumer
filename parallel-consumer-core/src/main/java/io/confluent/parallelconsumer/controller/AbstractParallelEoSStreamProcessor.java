@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.internal;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
@@ -8,9 +8,11 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
-import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType;
-import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.internal.*;
+import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
+import io.confluent.parallelconsumer.kafkabridge.ConsumerManager;
+import io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler;
+import io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler.PartitionEventType;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -40,7 +42,7 @@ import java.util.stream.Collectors;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.internal.State.*;
+import static io.confluent.parallelconsumer.internal.RunState.*;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -185,7 +187,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Instant lastCommitTime;
 
     public boolean isClosedOrFailed() {
-        boolean closed = state == State.closed;
+        boolean closed = runState == RunState.closed;
         boolean doneOrCancelled = false;
         if (this.controlThreadFuture.isPresent()) {
             Future<Boolean> threadFuture = controlThreadFuture.get();
@@ -204,9 +206,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The run state of the controller.
      *
-     * @see State
+     * @see RunState
      */
-    private State state = State.unused;
+    private RunState runState = RunState.unused;
 
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
@@ -340,7 +342,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
     private void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        log.debug("Partitions revoked {}, state: {}", partitions, state);
+        log.debug("Partitions revoked {}, state: {}", partitions, runState);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
             wm.onPartitionsRevoked(partitions);
@@ -399,7 +401,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Close the system, without draining.
      *
-     * @see State#draining
+     * @see RunState#draining
      */
     @Override
     public void close() {
@@ -411,7 +413,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     @SneakyThrows
     public void close(Duration timeout, DrainingMode drainMode) {
-        if (state == closed) {
+        if (runState == closed) {
             log.info("Already closed, checking end state..");
         } else {
             log.info("Signaling to close...");
@@ -441,7 +443,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
-        while (!state.equals(closed)) {
+        while (!runState.equals(closed)) {
             try {
                 Future<Boolean> booleanFuture = this.controlThreadFuture.get();
                 log.debug("Blocking on control future");
@@ -454,7 +456,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             } catch (ExecutionException | TimeoutException e) {
                 log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
                         "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
-                        "draining.", state, e);
+                        "draining.", runState, e);
                 throw e;
             }
             log.trace("Still waiting for system to close...");
@@ -462,7 +464,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException {
-        log.debug("Starting close process (state: {})...", state);
+        log.debug("Starting close process (state: {})...", runState);
 
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerThreadPool.shutdownNow();
@@ -503,7 +505,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         producerManager.ifPresent(x -> x.close(timeout));
 
         log.debug("Close complete.");
-        this.state = closed;
+        this.runState = closed;
     }
 
     /**
@@ -553,7 +555,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
-        this.state = State.draining;
+        this.runState = RunState.draining;
         notifySomethingToDo();
     }
 
@@ -592,11 +594,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
-        if (state != State.unused) {
+        if (runState != RunState.unused) {
             throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
-                    "state is {})", state));
+                    "state is {})", runState));
         } else {
-            state = running;
+            runState = running;
         }
 
         // broker poll subsystem
@@ -618,7 +620,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
             this.blockableControlThread = controlThread;
-            while (state != closed) {
+            while (runState != closed) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
                 } catch (Exception e) {
@@ -628,7 +630,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     throw failureReason;
                 }
             }
-            log.info("Control loop ending clean (state:{})...", state);
+            log.info("Control loop ending clean (state:{})...", runState);
             return true;
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
@@ -651,7 +653,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         //
         int newWork = handleWork(userFunction, callback);
 
-        if (state == running) {
+        if (runState == running) {
             if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -663,7 +665,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
-        if (state == running) {
+        if (runState == running) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
             commitOffsetsMaybe();
@@ -673,8 +675,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
         this.controlLoopHooks.forEach(Runnable::run);
 
-        log.trace("Current state: {}", state);
-        switch (state) {
+        log.trace("Current state: {}", runState);
+        switch (runState) {
             case draining -> {
                 drain();
             }
@@ -696,7 +698,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), runState);
     }
 
     private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
@@ -706,7 +708,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int gotWorkCount = 0;
 
         //
-        if (state == running || state == draining) {
+        if (runState == running || runState == draining) {
             int delta = calculateQuantityToRequest();
             var records = wm.getWorkIfAvailable(delta);
 
@@ -891,10 +893,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void transitionToClosing() {
         log.debug("Transitioning to closing...");
-        if (state == State.unused) {
-            state = closed;
+        if (runState == RunState.unused) {
+            runState = closed;
         } else {
-            state = State.closing;
+            runState = RunState.closing;
         }
         notifySomethingToDo();
     }
@@ -1061,14 +1063,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
-        if (state == running || state == draining) {
+        if (runState == running || runState == draining) {
             Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
             return minus;
         } else {
-            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
+            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, runState);
             return Duration.ZERO;
         }
     }

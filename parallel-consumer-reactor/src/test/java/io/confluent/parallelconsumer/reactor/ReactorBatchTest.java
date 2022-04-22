@@ -9,7 +9,7 @@ import io.confluent.parallelconsumer.BatchTestBase;
 import io.confluent.parallelconsumer.BatchTestMethods;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContext;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;

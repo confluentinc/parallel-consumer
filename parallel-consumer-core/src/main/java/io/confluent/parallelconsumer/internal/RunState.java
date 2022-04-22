@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.internal;
 /**
  * The run state of the controller.
  */
-public enum State {
+public enum RunState {
     unused,
     running,
     /**
@@ -17,5 +17,5 @@ public enum State {
      */
     draining,
     closing,
-    closed;
+    closed
 }

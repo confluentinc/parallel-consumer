@@ -1,10 +1,11 @@
-package io.confluent.parallelconsumer.internal;
+package io.confluent.parallelconsumer.kafkabridge;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.controller.WorkManager;
+import io.confluent.parallelconsumer.internal.OffsetCommitter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;

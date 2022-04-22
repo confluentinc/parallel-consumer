@@ -1,10 +1,10 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -53,11 +53,11 @@ public class PartitionState<K, V> {
      * <p>
      * TreeSet so we can always get the lowest offset.
      * <p>
-     * Needs to be concurrent because, the committer requesting the data to commit may be another thread - the broker
-     * polling sub system - {@link BrokerPollSystem#maybeDoCommit}. The alternative to having this as a concurrent
-     * collection, would be to have the control thread prepare possible commit data on every cycle, and park that data
-     * so that the broker polling thread can grab it, if it wants to commit - i.e. the poller would not prepare/query
-     * the data for itself. See also #200 Refactor: Consider a shared nothing architecture.
+     * NOTE: Needs to be concurrent because, the committer requesting the data to commit may be another thread - the
+     * broker polling sub system - {@link BrokerPollSystem#maybeDoCommit}. The alternative to having this as a
+     * concurrent collection, would be to have the control thread prepare possible commit data on every cycle, and park
+     * that data so that the broker polling thread can grab it, if it wants to commit - i.e. the poller would not
+     * prepare/query the data for itself. See also #200 Refactor: Consider a shared nothing architecture.
      */
     private final ConcurrentSkipListSet<Long> incompleteOffsets;
 

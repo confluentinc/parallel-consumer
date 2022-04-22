@@ -4,7 +4,8 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.state.PartitionStateManager;
+import io.confluent.parallelconsumer.controller.PartitionStateManager;
+import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;

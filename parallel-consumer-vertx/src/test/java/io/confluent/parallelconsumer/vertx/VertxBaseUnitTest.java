@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.vertx;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.ext.web.client.WebClient;

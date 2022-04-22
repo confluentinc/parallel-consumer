@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.state;
+package io.confluent.parallelconsumer.controller;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
@@ -6,10 +6,8 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;

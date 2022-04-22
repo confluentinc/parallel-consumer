@@ -41,7 +41,7 @@ import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
-import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
+import static io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static java.time.Duration.ofMinutes;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;

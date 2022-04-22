@@ -4,8 +4,8 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.controller.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;

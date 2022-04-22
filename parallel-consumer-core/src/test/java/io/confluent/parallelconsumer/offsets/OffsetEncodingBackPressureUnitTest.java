@@ -6,11 +6,11 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.controller.PartitionState;
+import io.confluent.parallelconsumer.controller.PartitionStateManager;
+import io.confluent.parallelconsumer.controller.WorkContainer;
+import io.confluent.parallelconsumer.controller.WorkManager;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.state.PartitionState;
-import io.confluent.parallelconsumer.state.PartitionStateManager;
-import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.LongStreamEx;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
-import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+import static io.confluent.parallelconsumer.controller.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 
 /**

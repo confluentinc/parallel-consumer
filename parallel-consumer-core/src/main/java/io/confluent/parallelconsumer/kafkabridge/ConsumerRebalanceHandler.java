@@ -1,5 +1,6 @@
-package io.confluent.parallelconsumer.internal;
+package io.confluent.parallelconsumer.kafkabridge;
 
+import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -7,8 +8,8 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 
-import static io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType.ASSIGNED;
-import static io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType.REVOKED;
+import static io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler.PartitionEventType.ASSIGNED;
+import static io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler.PartitionEventType.REVOKED;
 
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
@@ -25,12 +26,12 @@ public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener
         controller.sendPartitionEvent(ASSIGNED, partitions);
     }
 
-    enum PartitionEventType {
+    public enum PartitionEventType {
         ASSIGNED, REVOKED
     }
 
     @Value
-    protected static class PartitionEventMessage {
+    public static class PartitionEventMessage {
         PartitionEventType type;
         Collection<TopicPartition> partitions;
     }
