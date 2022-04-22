@@ -10,13 +10,13 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
@@ -132,7 +132,7 @@ public class PartitionStateManager<K, V> {
      * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
      * offset.
      */
-    protected void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    protected void onOffsetCommitSuccess(CommitData committed) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         committed.forEach((tp, meta) -> {
             var partition = getPartitionState(tp);
@@ -342,8 +342,8 @@ public class PartitionStateManager<K, V> {
         }
     }
 
-    protected Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {
-        var dirties = new HashMap<TopicPartition, OffsetAndMetadata>();
+    protected CommitData collectDirtyCommitData() {
+        var dirties = new CommitData();
         for (var state : getAssignedPartitions().values()) {
             var offsetAndMetadata = state.getCommitDataIfDirty();
             offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTp(), andMetadata));

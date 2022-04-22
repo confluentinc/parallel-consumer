@@ -12,8 +12,14 @@ import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerManager;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler;
-import io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler.PartitionEventType;
-import lombok.*;
+import io.confluent.parallelconsumer.kafkabridge.OffsetCommitter;
+import io.confluent.parallelconsumer.sharedstate.ControllerEventMessage;
+import io.confluent.parallelconsumer.sharedstate.PartitionEventMessage;
+import io.confluent.parallelconsumer.sharedstate.PartitionEventMessage.PartitionEventType;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -46,7 +52,6 @@ import static io.confluent.parallelconsumer.internal.RunState.*;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 /**
@@ -103,44 +108,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
-    private ConsumerRebalanceHandler rebalanceHanlder;
+    private final ConsumerRebalanceHandler rebalanceHandler = new ConsumerRebalanceHandler();
 
-    /**
-     * An inbound message to the controller.
-     * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
-     */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    protected static class ControllerEventMessage<K, V> {
-        WorkContainer<K, V> workContainer;
-        EpochAndRecordsMap<K, V> consumerRecords;
-        ConsumerRebalanceHandler.PartitionEventMessage partitionEventMessage;
-
-        private boolean isWorkResult() {
-            return workContainer != null;
-        }
-
-        private boolean isNewConsumerRecords() {
-            return consumerRecords != null;
-        }
-
-        private boolean isPartitionEvent() {
-            return partitionEventMessage != null;
-        }
-
-        protected static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords, null);
-        }
-
-        protected static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<>(work, null, null);
-        }
-
-        public static <K, V> ControllerEventMessage<K, V> of(ConsumerRebalanceHandler.PartitionEventMessage event) {
-            return new ControllerEventMessage<>(null, null, event);
-        }
-    }
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
@@ -313,27 +282,27 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
-        consumer.subscribe(topics, this.rebalanceHanlder);
+        consumer.subscribe(topics, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Pattern pattern) {
         log.debug("Subscribing to {}", pattern);
-        consumer.subscribe(pattern, this.rebalanceHanlder);
+        consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(topics, this.rebalanceHanlder);
+        consumer.subscribe(topics, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(pattern, this.rebalanceHanlder);
+        consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
     /**
@@ -1083,7 +1052,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void commitOffsetsThatAreReady() {
         log.debug("Committing offsets that are ready...");
         synchronized (commitCommand) {
-            committer.retrieveOffsetsAndCommit();
+            committer.retrieveOffsetsAndCommit(wm.collectCommitDataForDirtyPartitions());
             clearCommitCommand();
             this.lastCommitTime = Instant.now();
         }
@@ -1173,7 +1142,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
-        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
+        var event = new PartitionEventMessage(type, partitions);
         log.debug("Adding {} to mailbox...", event);
         var message = ControllerEventMessage.<K, V>of(event);
         workMailBox.add(message);

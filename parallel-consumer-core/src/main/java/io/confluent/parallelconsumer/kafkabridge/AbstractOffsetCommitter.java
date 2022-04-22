@@ -5,14 +5,10 @@ package io.confluent.parallelconsumer.kafkabridge;
  */
 
 import io.confluent.parallelconsumer.controller.WorkManager;
-import io.confluent.parallelconsumer.internal.OffsetCommitter;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
-
-import java.util.Map;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -25,11 +21,10 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
      * Get offsets from {@link WorkManager} that are ready to commit
      */
     @Override
-    public void retrieveOffsetsAndCommit() {
+    public void retrieveOffsetsAndCommit(CommitData offsetsToCommit) {
         log.debug("Commit starting - find completed work to commit offsets");
         preAcquireWork();
         try {
-            var offsetsToCommit = wm.collectCommitDataForDirtyPartitions();
             if (offsetsToCommit.isEmpty()) {
                 log.debug("No offsets ready");
             } else {
@@ -55,10 +50,10 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    private void onOffsetCommitSuccess(final Map<TopicPartition, OffsetAndMetadata> committed) {
+    private void onOffsetCommitSuccess(CommitData committed) {
         wm.onOffsetCommitSuccess(committed);
     }
 
-    protected abstract void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata);
+    protected abstract void commitOffsets(final CommitData offsetsToSend, final ConsumerGroupMetadata groupMetadata);
 
 }

@@ -3,6 +3,8 @@ package io.confluent.parallelconsumer.kafkabridge;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -79,13 +81,13 @@ public class ConsumerManager<K, V> {
         }
     }
 
-    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        // we dont' want to be woken up during a commit, only polls
+    public void commitSync(CommitData offsetsToSend) {
+        // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {
             try {
-                consumer.commitSync(offsetsToSend);
+                consumer.commitSync(offsetsToSend.getOffsetsToCommit());
                 inProgress = false;
             } catch (WakeupException w) {
                 log.debug("Got woken up, retry. errors: " + erroneousWakups + " none: " + noWakeups + " correct:" + correctPollWakeups, w);

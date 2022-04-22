@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.controller.WorkManager;
 import io.confluent.parallelconsumer.internal.*;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -300,14 +301,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     @SneakyThrows
     @Override
-    public void retrieveOffsetsAndCommit() {
+    public void retrieveOffsetsAndCommit(CommitData offsetsToCommit) {
         if (runState == running || runState == draining || runState == closing) {
             // {@link Optional#ifPresentOrElse} only @since 9
             ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
                 // shouldn't be here
                 throw new IllegalStateException("No committer configured");
             });
-            committer.commit();
+            committer.commit(offsetsToCommit);
         } else {
             throw new IllegalStateException(msg("Can't commit - not running (state: {}", runState));
         }

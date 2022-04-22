@@ -1,15 +1,18 @@
 package io.confluent.parallelconsumer.kafkabridge;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import lombok.RequiredArgsConstructor;
-import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 
-import static io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler.PartitionEventType.ASSIGNED;
-import static io.confluent.parallelconsumer.kafkabridge.ConsumerRebalanceHandler.PartitionEventType.REVOKED;
+import static io.confluent.parallelconsumer.sharedstate.PartitionEventMessage.PartitionEventType.ASSIGNED;
+import static io.confluent.parallelconsumer.sharedstate.PartitionEventMessage.PartitionEventType.REVOKED;
 
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
@@ -26,13 +29,4 @@ public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener
         controller.sendPartitionEvent(ASSIGNED, partitions);
     }
 
-    public enum PartitionEventType {
-        ASSIGNED, REVOKED
-    }
-
-    @Value
-    public static class PartitionEventMessage {
-        PartitionEventType type;
-        Collection<TopicPartition> partitions;
-    }
 }

@@ -8,15 +8,18 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.kafkabridge.BrokerPollSystem;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import static java.lang.Boolean.TRUE;
@@ -157,9 +160,9 @@ public class WorkManager<K, V> {
     /**
      * Can run from controller or poller thread, depending on which is responsible for committing
      *
-     * @see PartitionStateManager#onOffsetCommitSuccess(Map)
+     * @see PartitionStateManager#onOffsetCommitSuccess
      */
-    protected void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    protected void onOffsetCommitSuccess(CommitData committed) {
         pm.onOffsetCommitSuccess(committed);
     }
 
@@ -175,7 +178,7 @@ public class WorkManager<K, V> {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    protected Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
+    protected CommitData collectCommitDataForDirtyPartitions() {
         return pm.collectDirtyCommitData();
     }
 

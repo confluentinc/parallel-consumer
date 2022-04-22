@@ -9,18 +9,15 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.controller.WorkManager;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
-import io.confluent.parallelconsumer.internal.OffsetCommitter;
-import lombok.Value;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
+import io.confluent.parallelconsumer.sharedstate.CommitRequest;
+import io.confluent.parallelconsumer.sharedstate.CommitResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -73,23 +70,23 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
-    void commit() {
+    void commit(CommitData offsetsToCommit) {
         if (isOwner()) {
-            retrieveOffsetsAndCommit();
+            retrieveOffsetsAndCommit(offsetsToCommit);
         } else if (isSync()) {
             log.debug("Sync commit");
-            commitAndWait();
+            commitAndWait(offsetsToCommit);
             log.debug("Finished waiting");
         } else {
             // async
             // we just request the commit and hope
             log.debug("Async commit to be requested");
-            requestCommitInternal();
+            requestCommitInternal(offsetsToCommit);
         }
     }
 
     @Override
-    protected void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(final CommitData offsetsToSend, final ConsumerGroupMetadata groupMetadata) {
         if (offsetsToSend.isEmpty()) {
             log.trace("Nothing to commit");
             return;
@@ -102,7 +99,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //
                 log.debug("Committing offsets Async");
-                consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
+                consumerMgr.commitAsync(offsetsToSend.getOffsetsToCommit(), (offsets, exception) -> {
                     if (exception != null) {
                         log.error("Error committing offsets", exception);
                         // todo keep work in limbo until async response is received?
@@ -116,36 +113,20 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     /**
-     * @see #commit()
+     * @see #commit
      */
     @Override
     protected void postCommit() {
+        // no-op
     }
 
     private boolean isOwner() {
         return Thread.currentThread().equals(owningThread.orElse(null));
     }
 
-    /**
-     * Commit request message
-     */
-    @Value
-    public static class CommitRequest {
-        UUID id = UUID.randomUUID();
-        long requestedAtMs = System.currentTimeMillis();
-    }
-
-    /**
-     * Commit response message, linked to a {@link CommitRequest}
-     */
-    @Value
-    public static class CommitResponse {
-        CommitRequest request;
-    }
-
-    private void commitAndWait() {
+    private void commitAndWait(CommitData offsetsToCommit) {
         // request
-        CommitRequest commitRequest = requestCommitInternal();
+        CommitRequest commitRequest = requestCommitInternal(offsetsToCommit);
 
         // wait
         boolean waitingOnCommitResponse = true;
@@ -168,8 +149,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         }
     }
 
-    private CommitRequest requestCommitInternal() {
-        CommitRequest request = new CommitRequest();
+    private CommitRequest requestCommitInternal(CommitData offsetsToCommit) {
+        CommitRequest request = new CommitRequest(offsetsToCommit);
         commitRequestQueue.add(request);
         consumerMgr.wakeup();
         return request;
@@ -179,7 +160,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         CommitRequest poll = commitRequestQueue.poll();
         if (poll != null) {
             log.debug("Commit requested, performing...");
-            retrieveOffsetsAndCommit();
+            CommitData offsetsToCommit = poll.getCommitData();
+            retrieveOffsetsAndCommit(offsetsToCommit);
             // only need to send a response if someone will be waiting
             if (isSync()) {
                 log.debug("Adding commit response to queue...");

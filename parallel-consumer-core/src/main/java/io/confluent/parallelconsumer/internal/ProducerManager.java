@@ -12,20 +12,19 @@ import io.confluent.parallelconsumer.controller.AbstractParallelEoSStreamProcess
 import io.confluent.parallelconsumer.controller.WorkManager;
 import io.confluent.parallelconsumer.kafkabridge.AbstractOffsetCommitter;
 import io.confluent.parallelconsumer.kafkabridge.ConsumerManager;
+import io.confluent.parallelconsumer.kafkabridge.OffsetCommitter;
+import io.confluent.parallelconsumer.sharedstate.CommitData;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.clients.producer.internals.TransactionManager;
 import org.apache.kafka.common.KafkaException;
-import org.apache.kafka.common.TopicPartition;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ConcurrentModificationException;
-import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -170,13 +169,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     @Override
-    protected void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(final CommitData offsetsToSend, final ConsumerGroupMetadata groupMetadata) {
         log.debug("Transactional offset commit starting");
         if (!options.isUsingTransactionalProducer()) {
             throw new IllegalStateException("Bug: cannot use if not using transactional producer");
         }
 
-        producer.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+        producer.sendOffsetsToTransaction(offsetsToSend.getOffsetsToCommit(), groupMetadata);
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
         boolean committed = false;
         int retryCount = 0;
