@@ -53,6 +53,7 @@ import static lombok.AccessLevel.PROTECTED;
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
+    public static final String MDC_OFFSET_MARKER = "offset";
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a

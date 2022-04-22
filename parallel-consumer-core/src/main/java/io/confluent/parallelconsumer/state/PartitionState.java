@@ -28,6 +28,9 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
+/**
+ * @see PartitionStateManager
+ */
 @ToString
 @Slf4j
 public class PartitionState<K, V> {
