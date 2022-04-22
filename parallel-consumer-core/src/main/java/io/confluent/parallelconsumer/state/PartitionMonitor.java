@@ -214,7 +214,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
     private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
         for (final TopicPartition partition : partitions) {
-            Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, -1L);
+            Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, PartitionState.KAFKA_OFFSET_ABSENCE);
             epoch++;
             partitionsAssignmentEpochs.put(partition, epoch);
         }
