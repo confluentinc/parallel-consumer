@@ -316,7 +316,7 @@ public class PartitionState<K, V> {
     }
 
     private double getPressureThresholdValue() {
-        return DefaultMaxMetadataSize * PartitionMonitor.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+        return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {

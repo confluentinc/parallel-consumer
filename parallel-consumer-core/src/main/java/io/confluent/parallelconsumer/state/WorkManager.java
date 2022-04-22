@@ -46,10 +46,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter
     private final ParallelConsumerOptions<K, V> options;
 
-    // todo rename PSM, PartitionStateManager
     // todo make private
     @Getter(PUBLIC)
-    final PartitionMonitor<K, V> pm;
+    final PartitionStateManager<K, V> pm;
 
     // todo make private
     @Getter(PUBLIC)
@@ -88,7 +87,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionMonitor<>(consumer, sm, options, clock);
+        this.pm = new PartitionStateManager<>(consumer, sm, options, clock);
     }
 
     /**
@@ -177,7 +176,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Can run from controller or poller thread, depending on which is responsible for committing
      *
-     * @see PartitionMonitor#onOffsetCommitSuccess(Map)
+     * @see PartitionStateManager#onOffsetCommitSuccess(Map)
      */
     public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
         pm.onOffsetCommitSuccess(committed);

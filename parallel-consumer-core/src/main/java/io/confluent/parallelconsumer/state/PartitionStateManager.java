@@ -38,8 +38,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
  */
 @Slf4j
 @RequiredArgsConstructor
-// todo rename to partition state manager
-public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
+public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
     /**
