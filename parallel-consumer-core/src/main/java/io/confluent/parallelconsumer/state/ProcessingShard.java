@@ -35,6 +35,7 @@ public class ProcessingShard<K, V> {
      * Uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some concurrency
      * errors (missing WorkContainers).
      */
+    @Getter
     private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
 
     @Getter(PRIVATE)
@@ -74,9 +75,19 @@ public class ProcessingShard<K, V> {
     }
 
     public long getCountOfWorkAwaitingSelection() {
-        return entries.values().parallelStream()
+        return entries.values().stream()
                 // todo missing pm.isBlocked(topicPartition) ?
-                .filter(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork())
+                .filter(WorkContainer::isAvailableToTakeAsWork)
+                .count();
+    }
+
+    public long getCountOfWorkTracked() {
+        return entries.size();
+    }
+
+    public long getCountWorkInFlight() {
+        return entries.values().stream()
+                .filter(WorkContainer::isInFlight)
                 .count();
     }
 

@@ -9,11 +9,10 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
@@ -45,7 +44,7 @@ import static lombok.AccessLevel.PUBLIC;
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     @Getter
-    private final ParallelConsumerOptions options;
+    private final ParallelConsumerOptions<K, V> options;
 
     // todo rename PSM, PartitionStateManager
     // todo make private
@@ -63,8 +62,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * We use it here as well to make sure we have a matching number of messages in queues available.
      */
     private final DynamicLoadFactor dynamicLoadFactor;
-
-    private final WorkMailBoxManager<K, V> wmbm;
 
     @Getter
     private int numberRecordsOutForProcessing = 0;
@@ -90,7 +87,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                        final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
-        this.wmbm = new WorkMailBoxManager<>();
         this.sm = new ShardManager<>(options, this, clock);
         this.pm = new PartitionMonitor<>(consumer, sm, options, clock);
     }
@@ -126,40 +122,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        wmbm.onPartitionsRemoved(partitions);
+        // no-op - nothing to do
     }
 
-    public void registerWork(ConsumerRecords<K, V> records) {
-        wmbm.registerWork(records);
-    }
-
-    /**
-     * Moves the requested amount of work from initial queues into work queues, if available.
-     *
-     * @param requestedMaxWorkToRetrieve try to move at least this many messages into the inbound queues
-     * @return the number of extra records ingested due to request
-     */
-    private int ingestPolledRecordsIntoQueues(long requestedMaxWorkToRetrieve) {
-        log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
-                requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
-
-        //
-        var takenWorkCount = 0;
-        boolean continueIngesting;
-        do {
-            ConsumerRecord<K, V> polledRecord = wmbm.internalFlattenedMailQueuePoll();
-            boolean recordAddedAsWork = pm.maybeRegisterNewRecordAsWork(polledRecord);
-            if (recordAddedAsWork) {
-                takenWorkCount++;
-            }
-            boolean polledQueueNotExhausted = polledRecord != null;
-            boolean ingestTargetNotSatisfied = takenWorkCount < requestedMaxWorkToRetrieve;
-            continueIngesting = ingestTargetNotSatisfied && polledQueueNotExhausted;
-        } while (continueIngesting);
-
-        log.debug("{} new records were registered.", takenWorkCount);
-
-        return takenWorkCount;
+    public void registerWork(EpochAndRecordsMap<K, V> records) {
+        pm.maybeRegisterNewRecordAsWork(records);
     }
 
     /**
@@ -178,38 +145,18 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
             return UniLists.of();
         }
 
-        int ingested = tryToEnsureQuantityOfWorkQueuedAvailable(requestedMaxWorkToRetrieve);
-
         //
         var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
 
         //
-        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit (partition) queues: {}", work.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        log.debug("Got {} of {} requested records of work. In-flight: {}, Awaiting in commit (partition) queues: {}",
+                work.size(),
+                requestedMaxWorkToRetrieve,
+                getNumberRecordsOutForProcessing(),
+                getNumberOfEntriesInPartitionQueues());
         numberRecordsOutForProcessing += work.size();
 
         return work;
-    }
-
-    /**
-     * Tries to ensure there are at least this many records available in the queues
-     *
-     * @return the number of extra records ingested due to request
-     */
-    // todo rename - shunt messages from internal buffer into queues
-    // visible for testing
-    public int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
-        // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
-        long available = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-        long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
-        log.debug("Requested: {}, available in shards: {}, will try to process from mailbox the delta of: {}",
-                requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
-
-        int ingested = ingestPolledRecordsIntoQueues(extraNeededFromInboxToSatisfy);
-        log.debug("Ingested an extra {} records", ingested);
-
-        long ingestionOffBy = extraNeededFromInboxToSatisfy - ingested;
-
-        return ingested;
     }
 
     public void onSuccessResult(WorkContainer<K, V> wc) {
@@ -248,10 +195,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    public Integer getAmountOfWorkQueuedWaitingIngestion() {
-        return wmbm.getAmountOfWorkQueuedWaitingIngestion();
-    }
-
     public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
         return pm.collectDirtyCommitData();
     }
@@ -287,7 +230,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getAmountOfWorkQueuedWaitingIngestion() > options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
+        return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -306,17 +249,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
-    /**
-     * @return Work count in mailbox plus work added to the processing shards
-     */
-    public long getTotalWorkAwaitingIngestion() {
-        long workQueuedInShardsCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-        Integer workQueuedInMailboxCount = getAmountOfWorkQueuedWaitingIngestion();
-        return workQueuedInShardsCount + workQueuedInMailboxCount;
-    }
-
-    public boolean hasWorkAwaitingIngestionToShards() {
-        return getAmountOfWorkQueuedWaitingIngestion() > 0;
+    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
 
     public boolean hasWorkInCommitQueues() {
@@ -324,9 +258,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        long partitionWorkRemainingCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-        boolean internalQueuesNotEmpty = hasWorkAwaitingIngestionToShards();
-        return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
+        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
     }
 
     public boolean isRecordsAwaitingToBeCommitted() {
@@ -361,12 +293,4 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getLowestRetryTime();
     }
 
-    /**
-     * @return true if more records are needed to be sent out for processing (not enough in queues to satisfy
-     * concurrency target)
-     */
-    public boolean isStarvedForNewWork() {
-        long queued = getTotalWorkAwaitingIngestion();
-        return queued < options.getTargetAmountOfRecordsInFlight();
-    }
 }

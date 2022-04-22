@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -21,10 +22,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -35,12 +33,15 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * In charge of managing {@link PartitionState}s.
  * <p>
  * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
+ *
+ * @see PartitionState
  */
 @Slf4j
 @RequiredArgsConstructor
-// todo rename to partition manager
+// todo rename to partition state manager
 public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
 
+    public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
     /**
      * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
      * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
@@ -48,7 +49,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      */
     @Getter
     @Setter
-    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = 0.75;
+    // todo remove static
+    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
     private final Consumer<K, V> consumer;
 
@@ -64,20 +66,18 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     /**
      * Record the generations of partition assignment, for fencing off invalid work.
      * <p>
-     * This must live outside of {@link PartitionState}, as it must be tracked across partition lifecycles.
+     * NOTE: This must live outside of {@link PartitionState}, as it must be tracked across partition lifecycles.
      * <p>
      * Starts at zero.
+     * <p>
+     * NOTE: Must be concurrent because it can be set by one thread, but read by another.
      */
-    private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
+    private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
     private final Clock clock;
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
-        // may cause the system to wait for a rebalance to finish
-        // by locking on partitionState, may cause the system to wait for a rebalance to finish
-        synchronized (partitionStates) {
-            return partitionStates.get(tp);
-        }
+        return partitionStates.get(tp);
     }
 
     /**
@@ -86,33 +86,30 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
         log.debug("Partitions assigned: {}", assignedPartitions);
-        synchronized (this.partitionStates) {
 
-            for (final TopicPartition partitionAssignment : assignedPartitions) {
-                boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionAssignment);
-                if (isAlreadyAssigned) {
-                    PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionAssignment);
-                    if (previouslyAssignedState.isRemoved()) {
-                        log.trace("Reassignment of previously revoked partition {} - state: {}", partitionAssignment, previouslyAssignedState);
-                    } else {
-                        log.warn("New assignment of partition which already exists and isn't recorded as removed in " +
-                                "partition state. Could be a state bug - was the partition revocation somehow missed, " +
-                                "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionAssignment, previouslyAssignedState);
-                    }
+        for (final TopicPartition partitionAssignment : assignedPartitions) {
+            boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionAssignment);
+            if (isAlreadyAssigned) {
+                PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionAssignment);
+                if (previouslyAssignedState.isRemoved()) {
+                    log.trace("Reassignment of previously revoked partition {} - state: {}", partitionAssignment, previouslyAssignedState);
+                } else {
+                    log.warn("New assignment of partition which already exists and isn't recorded as removed in " +
+                            "partition state. Could be a state bug - was the partition revocation somehow missed, " +
+                            "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionAssignment, previouslyAssignedState);
                 }
             }
+        }
 
-            incrementPartitionAssignmentEpoch(assignedPartitions);
+        incrementPartitionAssignmentEpoch(assignedPartitions);
 
-            try {
-                OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
-                var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
-                this.partitionStates.putAll(partitionStates);
-            } catch (Exception e) {
-                log.error("Error in onPartitionsAssigned", e);
-                throw e;
-            }
-
+        try {
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
+            var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
+            this.partitionStates.putAll(partitionStates);
+        } catch (Exception e) {
+            log.error("Error in onPartitionsAssigned", e);
+            throw e;
         }
     }
 
@@ -136,10 +133,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        synchronized (this.partitionStates) {
-            incrementPartitionAssignmentEpoch(partitions);
-            resetOffsetMapAndRemoveWork(partitions);
-        }
+        incrementPartitionAssignmentEpoch(partitions);
+        resetOffsetMapAndRemoveWork(partitions);
     }
 
     /**
@@ -198,19 +193,28 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public int getEpoch(final ConsumerRecord<K, V> rec) {
+    /**
+     * @return the current epoch of the partition this record belongs to
+     */
+    public Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
-        Integer epoch = partitionsAssignmentEpochs.get(tp);
-        rec.topic();
+        Long epoch = partitionsAssignmentEpochs.get(tp);
         if (epoch == null) {
             throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
         }
         return epoch;
     }
 
+    /**
+     * @return the current epoch of the partition
+     */
+    public Long getEpochOfPartition(TopicPartition partition) {
+        return partitionsAssignmentEpochs.get(partition);
+    }
+
     private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
         for (final TopicPartition partition : partitions) {
-            int epoch = partitionsAssignmentEpochs.getOrDefault(partition, -1);
+            Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, PartitionState.KAFKA_OFFSET_ABSENCE);
             epoch++;
             partitionsAssignmentEpochs.put(partition, epoch);
         }
@@ -227,8 +231,8 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
         var topicPartitionKey = workContainer.getTopicPartition();
 
-        Integer currentPartitionEpoch = partitionsAssignmentEpochs.get(topicPartitionKey);
-        int workEpoch = workContainer.getEpoch();
+        Long currentPartitionEpoch = partitionsAssignmentEpochs.get(topicPartitionKey);
+        long workEpoch = workContainer.getEpoch();
 
         boolean partitionNotAssigned = isPartitionRemovedOrNeverAssigned(workContainer.getCr());
 
@@ -327,36 +331,40 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     /**
      * Takes a record as work and puts it into internal queues, unless it's been previously recorded as completed as per
      * loaded records.
-     * <p>
-     * Locking on partition state here, means that the check for assignment is in the same sync block as registering the
-     * work with the {@link TopicPartition}'s {@link PartitionState} and the {@link ShardManager}. Keeping the two
-     * different views in sync. Of course now, having a shared nothing architecture would mean all access to the state
-     * is by a single thread, and so this could never occur (see ).
-     *
-     * @return true if the record was taken, false if it was skipped (previously successful)
      */
-    boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec) {
-        if (rec == null) return false;
+    void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
+        for (var partition : recordsMap.partitions()) {
+            var recordsList = recordsMap.records(partition);
+            var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
+            for (var rec : recordsList.getRecords()) {
+                maybeRegisterNewRecordAsWork(epochOfInboundRecords, rec);
+            }
+        }
+    }
 
-        synchronized (partitionStates) {
+    /**
+     * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
+     */
+    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, ConsumerRecord<K, V> rec) {
+        // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
+        var currentPartitionEpoch = getEpochOfPartitionForRecord(rec);
+        if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {
+
             if (isPartitionRemovedOrNeverAssigned(rec)) {
                 log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(rec), rec);
-                return false;
             }
 
             if (isRecordPreviouslyCompleted(rec)) {
                 log.trace("Record previously completed, skipping. offset: {}", rec.offset());
-                return false;
             } else {
-                int currentPartitionEpoch = getEpoch(rec);
-                var wc = new WorkContainer<>(currentPartitionEpoch, rec, options.getRetryDelayProvider(), clock);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, options.getRetryDelayProvider(), clock);
 
-                sm.addWorkContainer(wc);
-
-                addWorkContainer(wc);
-
-                return true;
+                sm.addWorkContainer(work);
+                addWorkContainer(work);
             }
+        } else {
+            log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
+                    epochOfInboundRecords, currentPartitionEpoch);
         }
     }
 

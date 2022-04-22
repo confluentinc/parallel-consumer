@@ -74,7 +74,8 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         //
         allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
 //        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
-        parallelConsumer.waitForProcessedNotCommitted(defaultTimeout.multipliedBy(10));
+
+
         parallelConsumer.close();
 
         // assert quantity of produced messages
@@ -287,7 +288,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             throw new RuntimeException("bad step, expected message(s) is missing: " + missing);
         }
 
-        assertThat(producerSpy.history().size()).as("Finally, all messages expected messages were produced").isEqualTo(quantityOfMessagesToProduce);
+        assertThat(producerSpy.history()).as("Finally, all messages expected messages were produced").hasSize(quantityOfMessagesToProduce);
         if (isUsingTransactionalProducer()) {
             List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> groupOffsetsHistory = producerSpy.consumerGroupOffsetsHistory(); // tx
             assertThat(groupOffsetsHistory).as("No offsets committed").hasSizeGreaterThan(0); // tx

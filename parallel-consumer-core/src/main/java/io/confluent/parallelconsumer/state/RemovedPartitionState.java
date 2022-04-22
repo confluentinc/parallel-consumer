@@ -82,13 +82,13 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     @Override
     public long getOffsetHighestSeen() {
         log.debug(NO_OP);
-        return -1L;
+        return PartitionState.KAFKA_OFFSET_ABSENCE;
     }
 
     @Override
     public long getOffsetHighestSucceeded() {
         log.debug(NO_OP);
-        return -1L;
+        return PartitionState.KAFKA_OFFSET_ABSENCE;
     }
 
     @Override
