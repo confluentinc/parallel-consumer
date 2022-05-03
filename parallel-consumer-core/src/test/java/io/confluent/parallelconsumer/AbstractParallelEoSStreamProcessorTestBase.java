@@ -46,6 +46,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+// todo migrate commit assertion methods in to a Truth Subject
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
@@ -143,7 +144,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
             if (parentParallelConsumer.getFailureCause() != null) {
                 log.error("PC has error - test failed");
             }
-            log.debug("Test finished, closing pc...");
+            log.debug("Test ended (maybe a failure), closing pc...");
             parentParallelConsumer.close();
         } else {
             log.debug("Test finished, pc already closed.");
@@ -287,7 +288,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         loopLatchV = new CountDownLatch(waitForCount);
         try {
             boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
-            if (timeout)
+            if (timeout || parentParallelConsumer.isClosedOrFailed())
                 throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeout, waitForCount, loopLatchV.getCount()));
         } catch (InterruptedException e) {
             log.error("Interrupted while waiting for loop latch - timeout was {}", defaultTimeout);

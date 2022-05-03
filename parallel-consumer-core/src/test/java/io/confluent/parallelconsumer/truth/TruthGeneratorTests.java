@@ -25,7 +25,7 @@ class TruthGeneratorTests {
         // todo check legacy's also contribute to subject graph
         assertTruth(new ConsumerRecords<>(UniMaps.of())).getPartitions().isEmpty();
 
-        assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class)).hasOffsetEqualTo(1);
+        assertTruth(PodamUtils.createInstance(OffsetAndMetadata.class)).getOffset().isNotNull();
 
         assertTruth(PodamUtils.createInstance(TopicPartition.class)).hasTopic().isNotEmpty();
 
