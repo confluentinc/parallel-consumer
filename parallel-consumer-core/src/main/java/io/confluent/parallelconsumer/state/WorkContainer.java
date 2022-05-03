@@ -38,7 +38,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * in the system of in flight.
      */
     @Getter
-    private final int epoch;
+    private final long epoch;
 
     /**
      * Simple way to differentiate treatment based on type
@@ -85,7 +85,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     // static instance so can't access generics - but don't need them as Options class ensures type is correct
     private static Function<Object, Duration> retryDelayProvider;
 
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
         Objects.requireNonNull(workType);
 
         this.epoch = epoch;
@@ -99,7 +99,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         }
     }
 
-    public WorkContainer(int epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, Clock clock) {
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, Clock clock) {
         this(epoch, cr, retryDelayProvider, DEFAULT_TYPE, clock);
     }
 
