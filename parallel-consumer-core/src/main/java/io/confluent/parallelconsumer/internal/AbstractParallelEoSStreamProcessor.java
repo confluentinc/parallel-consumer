@@ -10,10 +10,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -46,6 +43,7 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 /**
@@ -55,6 +53,7 @@ import static lombok.AccessLevel.PROTECTED;
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
+    public static final String MDC_OFFSET_MARKER = "offset";
 
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions options;
@@ -99,7 +98,35 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Collection of work waiting to be
      */
     @Getter(PROTECTED)
-    private final BlockingQueue<WorkContainer<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
+    private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
+
+    /**
+     * An inbound message to the controller.
+     * <p>
+     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
+     */
+    @Value
+    @RequiredArgsConstructor(access = PRIVATE)
+    private static class ControllerEventMessage<K, V> {
+        WorkContainer<K, V> workContainer;
+        EpochAndRecordsMap<K, V> consumerRecords;
+
+        private boolean isWorkResult() {
+            return workContainer != null;
+        }
+
+        private boolean isNewConsumerRecords() {
+            return !isWorkResult();
+        }
+
+        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords);
+        }
+
+        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<K, V>(work, null);
+        }
+    }
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
@@ -496,7 +523,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Block the calling thread until no more messages are being processed.
+     * <p>
+     * Used for testing.
+     *
+     * @deprecated no longer used, will be removed in next version
      */
+    // TODO delete
+    @Deprecated
     @SneakyThrows
     public void waitForProcessedNotCommitted(Duration timeout) {
         log.debug("Waiting processed but not committed...");
@@ -621,9 +654,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         if (state == running) {
             if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
-                // can occur
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getAmountOfWorkQueuedWaitingIngestion(),
+                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
                         options.getTargetAmountOfRecordsInFlight());
                 brokerPollSubsystem.wakeupIfPaused();
             }
@@ -665,7 +697,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getTotalWorkAwaitingIngestion(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
@@ -812,20 +844,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
      */
     protected void checkPipelinePressure() {
-        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getAmountOfWorkQueuedWaitingIngestion() > options.getTargetAmountOfRecordsInFlight();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
-                            "if (isPoolQueueLow() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {} && lastWorkRequestWasFulfilled {}))",
+                            "if (isPoolQueueLow() {} && lastWorkRequestWasFulfilled {}))",
                     getNumberOfUserFunctionsQueued(),
                     getQueueTargetLoaded(),
                     dynamicExtraLoadFactor.getCurrentFactor(),
                     isPoolQueueLow(),
-                    moreWorkInQueuesAvailableThatHaveNotBeenPulled,
                     lastWorkRequestWasFulfilled);
 
-        if (isPoolQueueLow()
-                && moreWorkInQueuesAvailableThatHaveNotBeenPulled
-                && lastWorkRequestWasFulfilled) {
+        if (isPoolQueueLow() && lastWorkRequestWasFulfilled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
@@ -847,10 +875,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int queueSize = getNumberOfUserFunctionsQueued();
         int queueTarget = getPoolLoadTarget();
         boolean workAmountBelowTarget = queueSize <= queueTarget;
-        boolean hasWorkInMailboxes = wm.hasWorkAwaitingIngestionToShards();
-        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
-                workAmountBelowTarget, queueSize, queueTarget, hasWorkInMailboxes);
-        return workAmountBelowTarget && hasWorkInMailboxes;
+        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
+                workAmountBelowTarget, queueSize, queueTarget);
+        return workAmountBelowTarget;
     }
 
     private void drain() {
@@ -880,7 +907,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
-        Set<WorkContainer<K, V>> results = new HashSet<>();
+        Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
@@ -893,7 +920,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
             try {
-                WorkContainer<K, V> firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
+                var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
                     log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
                 } else {
@@ -915,10 +942,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         workMailBox.drainTo(results, size);
 
         log.trace("Processing drained work {}...", results.size());
-        for (var work : results) {
-            MDC.put("offset", work.toString());
-            wm.handleFutureResult(work);
-            MDC.clear();
+        for (var action : results) {
+            if (action.isNewConsumerRecords()) {
+                wm.registerWork(action.getConsumerRecords());
+            } else {
+                WorkContainer<K, V> work = action.getWorkContainer();
+                MDC.put(MDC_OFFSET_MARKER, work.toString());
+                wm.handleFutureResult(work);
+                MDC.remove(MDC_OFFSET_MARKER);
+            }
         }
     }
 
@@ -926,19 +958,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * The amount of time to block poll in this cycle
      *
      * @return either the duration until next commit, or next work retry
-     * @see WorkManager#isStarvedForNewWork()
-     * @see WorkManager#getTotalWorkAwaitingIngestion()
      * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
     private Duration getTimeToBlockFor() {
-        // should not block as not enough work is being done, and there's more work to ingest
-        boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
-        if (ingestionWorkAndStarved) {
-            log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
-            return Duration.ofMillis(0);
-        }
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
-        else if (!wm.isWorkInFlightMeetingTarget()) {
+        if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
             var lowestScheduledOpt = wm.getLowestRetryTime();
             if (lowestScheduledOpt.isPresent()) {
@@ -1015,7 +1039,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
         boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
 
-        // disable - commit frequency takes care of lingering? is this outdated?
+        // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
     }
 
@@ -1117,8 +1141,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     protected void addToMailbox(WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
-        log.debug("Adding {} {} to mailbox...", state, wc);
-        workMailBox.add(wc);
+        log.trace("Adding {} {} to mailbox...", state, wc);
+        workMailBox.add(ControllerEventMessage.of(wc));
+    }
+
+    public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
+        log.debug("Adding {} to mailbox...", polledRecords);
+        workMailBox.add(ControllerEventMessage.of(polledRecords));
     }
 
     /**

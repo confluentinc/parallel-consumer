@@ -291,7 +291,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
         Collection<?> duplicates = toCollection(StandardComparisonStrategy.instance()
                 .duplicatesFrom(getAllConsumedKeys(parallelConsumerRunnablesArray)));
         log.info("Duplicate consumed keys (at least one is expected due to the rebalance): {}", duplicates);
-        double percentageDuplicateTolerance = 0.1;
+        double percentageDuplicateTolerance = 0.2;
         assertThat(duplicates)
                 .as("There should be few duplicate keys")
                 .hasSizeLessThan((int) (expectedMessageCount * percentageDuplicateTolerance)); // in some env, there are a lot more. i.e. Jenkins running parallel suits

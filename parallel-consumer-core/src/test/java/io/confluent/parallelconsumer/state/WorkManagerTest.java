@@ -9,7 +9,9 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -29,14 +31,16 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.threeten.extra.MutableClock;
 import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.stream.Collectors;
 
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
-import static java.util.Comparator.comparingLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -70,32 +74,37 @@ public class WorkManagerTest {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
         });
-        int partition = 0;
-        assignPartition(partition);
+
     }
 
     private void assignPartition(final int partition) {
-        wm.onPartitionsAssigned(UniLists.of(getTopicPartition(partition)));
+        wm.onPartitionsAssigned(UniLists.of(topicPartitionOf(partition)));
     }
 
     @NotNull
-    private TopicPartition getTopicPartition(int partition) {
+    private TopicPartition topicPartitionOf(int partition) {
         return new TopicPartition(INPUT_TOPIC, partition);
+    }
+
+    private void registerSomeWork() {
+        registerSomeWork(0);
     }
 
     /**
      * Adds 3 units of work
      */
-    private void registerSomeWork() {
+    private void registerSomeWork(int partition) {
+        assignPartition(partition);
+
         String key = "key-0";
-        int partition = 0;
+
         var rec0 = makeRec("0", key, partition);
         var rec1 = makeRec("1", key, partition);
         var rec2 = makeRec("2", key, partition);
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(getTopicPartition(partition), of(rec0, rec1, rec2));
+        m.put(topicPartitionOf(partition), of(rec0, rec1, rec2));
         var recs = new ConsumerRecords<>(m);
-        wm.registerWork(recs);
+        wm.registerWork(new EpochAndRecordsMap(recs, wm.getPm()));
     }
 
     private ConsumerRecord<String, String> makeRec(String value, String key, int partition) {
@@ -104,21 +113,41 @@ public class WorkManagerTest {
         return stringStringConsumerRecord;
     }
 
-    @Test
-    void testRemovedUnordered() {
-        setupWorkManager(ParallelConsumerOptions.builder().ordering(UNORDERED).build());
+    @ParameterizedTest
+    @EnumSource
+    void basic(ParallelConsumerOptions.ProcessingOrder order) {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(order)
+                .build());
         registerSomeWork();
 
-        int max = 1;
-        var gottenWork = wm.getWorkIfAvailable(max);
-        assertThat(gottenWork).hasSize(1);
-        assertOffsets(gottenWork, of(0));
+        //
+        var gottenWork = wm.getWorkIfAvailable();
 
+        if (order == UNORDERED) {
+            assertThat(gottenWork).hasSize(3);
+            assertOffsets(gottenWork, of(0, 1, 2));
+        } else {
+            assertThat(gottenWork).hasSize(1);
+            assertOffsets(gottenWork, of(0));
+        }
+
+        //
         wm.onSuccessResult(gottenWork.get(0));
 
-        gottenWork = wm.getWorkIfAvailable(max);
-        assertThat(gottenWork).hasSize(1);
-        assertOffsets(gottenWork, of(1));
+        //
+        gottenWork = wm.getWorkIfAvailable();
+
+        if (order == UNORDERED) {
+            assertThat(gottenWork).isEmpty();
+        } else {
+            assertThat(gottenWork).hasSize(1);
+            assertOffsets(gottenWork, of(1));
+        }
+
+        //
+        gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).isEmpty();
     }
 
     @Test
@@ -336,11 +365,11 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, key, "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, key, "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(getTopicPartition(partition), of(rec2, rec3, rec));
+        m.put(topicPartitionOf(partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         int max = 10;
 
@@ -362,6 +391,11 @@ public class WorkManagerTest {
         works = wm.getWorkIfAvailable(max);
         assertOffsets(works, of(1, 6));
     }
+
+    private void registerWork(ConsumerRecords<String, String> recs) {
+        wm.registerWork(new EpochAndRecordsMap<>(recs, wm.getPm()));
+    }
+
 
     private void fail(WorkContainer<String, String> wc) {
         wc.onUserFunctionFailure(null);
@@ -415,22 +449,6 @@ public class WorkManagerTest {
     }
 
     @Test
-    @Disabled
-    public void multipleFailures() {
-    }
-
-
-    @Test
-    @Disabled
-    public void delayedOrdered() {
-    }
-
-    @Test
-    @Disabled
-    public void delayedUnordered() {
-    }
-
-    @Test
     void orderedByPartitionsParallel() {
         ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder()
                 .ordering(PARTITION)
@@ -445,11 +463,11 @@ public class WorkManagerTest {
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, partition, 6, "66", "value");
         var rec3 = new ConsumerRecord<>(INPUT_TOPIC, partition, 8, "66", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(getTopicPartition(partition), of(rec2, rec3, rec));
+        m.put(topicPartitionOf(partition), of(rec2, rec3, rec));
         var recs = new ConsumerRecords<>(m);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         //
         var works = wm.getWorkIfAvailable();
@@ -491,11 +509,11 @@ public class WorkManagerTest {
         var rec5 = new ConsumerRecord<>(INPUT_TOPIC, partition, 15, "key-a", "value");
         var rec6 = new ConsumerRecord<>(INPUT_TOPIC, partition, 20, "key-c", "value");
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(getTopicPartition(partition), of(rec2, rec3, rec0, rec4, rec5, rec6));
+        m.put(topicPartitionOf(partition), of(rec2, rec3, rec0, rec4, rec5, rec6));
         var recs = new ConsumerRecords<>(m);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
 
         //
         var works = wm.getWorkIfAvailable();
@@ -520,18 +538,14 @@ public class WorkManagerTest {
         assertOffsets(works, of());
     }
 
-    @Test
-    @Disabled
-    public void unorderedPartitionsGreedy() {
-    }
-
-    //        @Test
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 5, 10, 20, 30, 50, 1000})
     void highVolumeKeyOrder(int quantity) {
         int uniqueKeys = 100;
 
-        var build = ParallelConsumerOptions.builder().ordering(KEY).build();
+        var build = ParallelConsumerOptions.builder()
+                .ordering(KEY)
+                .build();
         setupWorkManager(build);
 
         KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
@@ -540,20 +554,24 @@ public class WorkManagerTest {
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());
-        flattened.sort(comparingLong(ConsumerRecord::offset));
 
-        Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(getTopicPartition(0), flattened);
-        var recs = new ConsumerRecords<>(m);
+        int partition = 0;
+        var recs = new ConsumerRecords<>(UniMaps.of(topicPartitionOf(partition), flattened));
+
+        assignPartition(partition);
 
         //
-        wm.registerWork(recs);
+        registerWork(recs);
+
+        //
+        long awaiting = wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection();
+        assertThat(awaiting).isEqualTo(quantity);
 
         //
         List<WorkContainer<String, String>> work = wm.getWorkIfAvailable();
 
         //
-        assertThat(work).hasSameSizeAs(records.keySet());
+        ManagedTruth.assertTruth(work).hasSameSizeAs(records);
     }
 
     @Test
@@ -603,7 +621,7 @@ public class WorkManagerTest {
         var sync = completedFutureOffsets.values().stream().findFirst().get();
         Truth.assertThat(sync.offset()).isEqualTo(3);
         Truth.assertThat(sync.metadata()).isEmpty();
-        PartitionState<String, String> state = wm.getPm().getPartitionState(getTopicPartition(0));
+        PartitionState<String, String> state = wm.getPm().getPartitionState(topicPartitionOf(0));
         Truth.assertThat(state.getAllIncompleteOffsets()).isEmpty();
     }
 
@@ -626,14 +644,14 @@ public class WorkManagerTest {
         assignPartition(2);
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         var rec = new ConsumerRecord<>(INPUT_TOPIC, 1, 11, "11", "value");
-        m.put(getTopicPartition(1), of(rec));
+        m.put(topicPartitionOf(1), of(rec));
         var rec2 = new ConsumerRecord<>(INPUT_TOPIC, 2, 21, "21", "value");
-        m.put(getTopicPartition(2), of(rec2));
+        m.put(topicPartitionOf(2), of(rec2));
         var recs = new ConsumerRecords<>(m);
-        wm.registerWork(recs);
+        registerWork(recs);
 
-        // force ingestion of records - see refactor: Queue unification #219
-        wm.tryToEnsureQuantityOfWorkQueuedAvailable(100);
+//        // force ingestion of records - see refactor: Queue unification #219
+//        wm.tryToEnsureQuantityOfWorkQueuedAvailable(100);
 
         var workContainersOne = wm.getWorkIfAvailable(1);
         var workContainersTwo = wm.getWorkIfAvailable(1);
@@ -656,6 +674,59 @@ public class WorkManagerTest {
             Truth.assertThat(work.get().offset()).isEqualTo(1);
             Truth.assertThat(work.get().getCr().value()).isEqualTo("1");
         }
+    }
+
+
+    /**
+     * Checks that when using shards are not starved when there's enough work queued to satisfy poll request from the
+     * initial request (without needing to iterate to other shards)
+     *
+     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/236">#236</a> Under some conditions, a
+     * shard (by partition or key), can get starved for attention
+     */
+    @Test
+    void starvation() {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(PARTITION)
+                .build());
+
+        registerSomeWork(0);
+        registerSomeWork(1);
+        registerSomeWork(2);
+
+        var allWork = new ArrayList<WorkContainer<String, String>>();
+
+        {
+            var work = wm.getWorkIfAvailable(2);
+            allWork.addAll(work);
+
+            assertWithMessage("Should be able to get 2 records of work, one from each partition shard")
+                    .that(work).hasSize(2);
+
+            //
+            var tpOne = work.get(0).getTopicPartition();
+            var tpTwo = work.get(1).getTopicPartition();
+            assertWithMessage("The partitions should be different")
+                    .that(tpOne).isNotEqualTo(tpTwo);
+
+        }
+
+        {
+            var work = wm.getWorkIfAvailable(2);
+            assertWithMessage("Should be able to get only 1 more, from the third shard")
+                    .that(work).hasSize(1);
+            allWork.addAll(work);
+
+            //
+            var tpOne = work.get(0).getTopicPartition();
+        }
+
+        assertWithMessage("TPs all unique")
+                .that(allWork.stream()
+                        .map(WorkContainer::getTopicPartition)
+                        .collect(Collectors.toList()))
+                .containsNoDuplicates();
+
     }
 
 }

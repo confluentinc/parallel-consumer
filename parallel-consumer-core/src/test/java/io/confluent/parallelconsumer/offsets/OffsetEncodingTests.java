@@ -8,6 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -27,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.in;
@@ -170,14 +172,14 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         ParallelConsumerOptions<String, String> options = parallelConsumer.getWm().getOptions();
         HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
-        recordsMap.put(tp, records);
+        recordsMap.put(tp, new ArrayList<>(records));
         ConsumerRecords<String, String> testRecords = new ConsumerRecords<>(recordsMap);
 
         // write offsets
         {
             WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
-            wmm.registerWork(testRecords);
+            wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
@@ -211,7 +213,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var committed = consumerSpy.committed(UniSets.of(tp)).get(tp);
             assertThat(committed.offset()).isEqualTo(1L);
 
-            if (!encodingsThatFail.contains(encoding)) {
+            if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                 assertThat(committed.metadata()).isNotBlank();
             }
         }
@@ -222,12 +224,12 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             var newWm = new WorkManager<>(options, consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
-            newWm.registerWork(testRecords);
+            newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 
             var pm = newWm.getPm();
             var partitionState = pm.getPartitionState(tp);
 
-            if (!encodingsThatFail.contains(encoding)) {
+            if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                 long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
                 assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
@@ -245,11 +247,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var anIncompleteRecord = records.get(3);
             Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
 
-            // force ingestion early, and check results
+            // check state
             {
-                int ingested = newWm.tryToEnsureQuantityOfWorkQueuedAvailable(Integer.MAX_VALUE);
-
-                if (!encodingsThatFail.contains(encoding)) {
+                if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                     long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
                     assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
@@ -262,7 +262,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                     Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
 
-                    assertThat(ingested).isEqualTo(testRecords.count() - 4); // 4 were succeeded
                     Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
                 }
             }
@@ -270,7 +269,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             var workRetrieved = newWm.getWorkIfAvailable();
             var workRetrievedOffsets = workRetrieved.stream().map(WorkContainer::offset).collect(Collectors.toList());
-            Truth.assertThat(workRetrieved).isNotEmpty();
+            assertTruth(workRetrieved).isNotEmpty();
 
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
@@ -281,14 +280,22 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     assertThat(workRetrievedOffsets).doesNotContainSequence(expected);
                 }
                 default -> {
-                    assertThat(workRetrievedOffsets)
-                            .as("Contains only incomplete records")
-                            .containsExactlyElementsOf(expected);
+                    Truth.assertWithMessage("Contains only incomplete records")
+                            .that(workRetrievedOffsets)
+                            .containsExactlyElementsIn(expected)
+                            .inOrder();
                 }
             }
         }
 
         OffsetSimultaneousEncoder.compressionForced = false;
+    }
+
+    /**
+     * A {@link OffsetEncoding} that works in this test scenario
+     */
+    private boolean assumeWorkingCodec(OffsetEncoding encoding, List<OffsetEncoding> encodingsThatFail) {
+        return !encodingsThatFail.contains(encoding);
     }
 
     /**
