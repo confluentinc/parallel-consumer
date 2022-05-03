@@ -111,8 +111,7 @@
         <truth.version>1.1.3</truth.version>
         <flogger.version>0.7.4</flogger.version>
         <mockito.version>4.4.0</mockito.version>
-        <!-- todo lock -->
-        <truth-generator-maven-plugin.version>0.1-SNAPSHOT</truth-generator-maven-plugin.version>
+        <truth-generator-maven-plugin.version>0.1</truth-generator-maven-plugin.version>
     </properties>
 
     <profiles>
@@ -521,6 +520,7 @@
                 <inherited>false</inherited>
                 <!-- To apply the license run: -->
                 <!-- ↪ mvn com.mycila:license-maven-plugin:format-->
+                <!-- To skip: -Dlicense.skip -->
                 <configuration>
                     <aggregate>true</aggregate>
                     <licenseSets>
@@ -692,17 +692,12 @@
                                 <banDuplicatePomDependencyVersions/>
                                 <requireSameVersions/>
                                 <requireReleaseDeps>
-                                    <!-- todo false -->
-                                    <onlyWhenRelease>true</onlyWhenRelease>
+                                    <onlyWhenRelease>false</onlyWhenRelease>
                                     <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
                                     <excludes>
                                         <exclude>io.confluent.parallelconsumer:</exclude>
                                     </excludes>
                                 </requireReleaseDeps>
-                                <!-- todo false -->
-                                <requirePluginVersions>
-                                    <unCheckedPluginList>io.stubbs.truth:truth-generator-maven-plugin</unCheckedPluginList>
-                                </requirePluginVersions>
                             </rules>
                         </configuration>
                     </execution>

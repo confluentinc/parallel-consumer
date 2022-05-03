@@ -189,7 +189,12 @@ public class OffsetMapCodecManager<K, V> {
     byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
         var incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
         long highestSucceeded = partitionState.getOffsetHighestSucceeded();
-        log.debug("Encoding partition {}: highest suceeded {}, incomplete offsets {}, ", partitionState.getTp(), highestSucceeded, incompleteOffsets);
+        if (log.isDebugEnabled()) {
+            log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
+                    partitionState.getTp(),
+                    highestSucceeded,
+                    partitionState.getIncompleteOffsetsBelowHighestSucceeded());
+        }
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
 
         //

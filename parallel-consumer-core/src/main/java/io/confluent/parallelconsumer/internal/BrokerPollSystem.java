@@ -59,11 +59,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions options) {
+    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
 
         this.consumerManager = consumerMgr;
+
         switch (options.getCommitMode()) {
             case PERIODIC_CONSUMER_SYNC, PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
@@ -107,22 +108,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         committer.ifPresent(x -> x.claim());
         try {
             while (state != closed) {
-                log.trace("Loop: Broker poller: ({})", state);
-                if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
-                    ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
-                    log.debug("Got {} records in poll result", polledRecords.count());
-
-                    if (!polledRecords.isEmpty()) {
-                        log.trace("Loop: Register work");
-                        wm.registerWork(polledRecords);
-
-                        // notify control work has been registered, in case it's sleeping waiting for work that will never come
-                        if (wm.isStarvedForNewWork()) {
-                            log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
-                            pc.notifySomethingToDo();
-                        }
-                    }
-                }
+                handlePoll();
 
                 maybeDoCommit();
 
@@ -140,6 +126,20 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         } catch (Exception e) {
             log.error("Unknown error", e);
             throw e;
+        }
+    }
+
+    private void handlePoll() {
+        log.trace("Loop: Broker poller: ({})", state);
+        if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
+            var polledRecords = pollBrokerForRecords();
+            int count = polledRecords.count();
+            log.debug("Got {} records in poll result", count);
+
+            if (count > 0) {
+                log.trace("Loop: Register work");
+                pc.registerWork(polledRecords);
+            }
         }
     }
 
@@ -166,7 +166,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         return committer.isPresent();
     }
 
-    private ConsumerRecords<K, V> pollBrokerForRecords() {
+    private EpochAndRecordsMap<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
 
@@ -176,8 +176,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
         log.debug("Long polling broker with timeout {}, might appear to sleep here if subs are paused, or no data available on broker. Run state: {}", thisLongPollTimeout, state);
         ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
+
         log.debug("Poll completed");
-        return poll;
+
+        // build records map
+        return new EpochAndRecordsMap<>(poll, wm.getPm());
     }
 
     /**
@@ -205,10 +208,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 });
             } else {
                 if (log.isDebugEnabled()) {
-                    log.debug("Should pause but pause rate limit exceeded {} vs {}. Queued: {}",
+                    log.debug("Should pause but pause rate limit exceeded {} vs {}.",
                             pauseLimiter.getElapsedDuration(),
-                            pauseLimiter.getRate(),
-                            wm.getAmountOfWorkQueuedWaitingIngestion());
+                            pauseLimiter.getRate());
                 }
             }
         }
