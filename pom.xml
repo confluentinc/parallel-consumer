@@ -439,7 +439,7 @@
                 <groupId>org.junit-pioneer</groupId>
                 <artifactId>junit-pioneer</artifactId>
                 <scope>test</scope>
-                <version>1.6.2</version>
+                <version>1.7.0</version>
             </dependency>
             <dependency>
                 <groupId>com.github.tomakehurst</groupId>
