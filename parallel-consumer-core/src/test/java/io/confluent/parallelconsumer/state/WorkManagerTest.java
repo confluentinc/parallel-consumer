@@ -221,6 +221,7 @@ public class WorkManagerTest {
      *
      * @deprecated use {@link CommitHistorySubject} or similar instead
      */
+    @Deprecated
     private AbstractListAssert<?, List<? extends Integer>, Integer, ObjectAssert<Integer>>
     assertOffsets(List<WorkContainer<String, String>> works, List<Integer> expected, String msg) {
         return assertThat(works)
