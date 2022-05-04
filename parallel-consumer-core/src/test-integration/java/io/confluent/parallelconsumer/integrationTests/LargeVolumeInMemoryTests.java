@@ -21,7 +21,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.testcontainers.shaded.com.google.common.collect.Maps;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
@@ -157,7 +156,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             log.info("Duration for Unordered processing in round {} with {} keys was {}", round, defaultNumKeys, unorderedDuration);
         }
 
-        var keyOrderingSizeToResults = Maps.<Integer, Duration>newTreeMap();
+        var keyOrderingSizeToResults = new TreeMap<Integer, Duration>();
         for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
             setupParallelConsumerInstance(baseOptions.toBuilder().ordering(KEY).build());
             log.debug("By key, {} keys", keySize);
@@ -206,7 +205,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
     private void testTiming(int numberOfKeys, int quantityOfMessagesToProduce) {
         log.info("Running test for {} keys and {} messages", numberOfKeys, quantityOfMessagesToProduce);
 
-        List<WorkContainer<String, String>> successfulWork = new Vector<>();
+        List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
         super.injectWorkSuccessListener(parallelConsumer.getWm(), successfulWork);
 
         List<Integer> keys = range(numberOfKeys).list();
