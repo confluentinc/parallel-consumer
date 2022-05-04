@@ -31,7 +31,7 @@
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-core</artifactId>
-            <version>3.4.16</version>
+            <version>3.4.17</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
