@@ -1,13 +1,13 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.presentation.StandardRepresentation;
-import org.testcontainers.shaded.com.google.common.collect.Lists;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -25,33 +25,33 @@ public class TrimListRepresentation extends StandardRepresentation {
     protected static String msg = "Collection has been trimmed...";
 
     @Override
-    public String toStringOf(Object o) {
-        if (o instanceof Set) {
-            Set aSet = (Set) o;
+    public String toStringOf(Object raw) {
+        if (raw instanceof Set) {
+            var aSet = (Set<?>) raw;
             if (aSet.size() > sizeLimit)
-                o = aSet.stream().collect(Collectors.toList());
+                raw = new ArrayList<>(aSet);
         }
-        if (o instanceof Object[]) {
-            Object[] anObjectArray = (Object[]) o;
+        if (raw instanceof Object[]) {
+            Object[] anObjectArray = (Object[]) raw;
             if (anObjectArray.length > sizeLimit)
-                o = Arrays.stream(anObjectArray).collect(Collectors.toList());
+                raw = Arrays.stream(anObjectArray).collect(Collectors.toList());
         }
-        if (o instanceof String[]) {
-            Object[] anObjectArray = (Object[]) o;
+        if (raw instanceof String[]) {
+            var anObjectArray = (String[]) raw;
             if (anObjectArray.length > sizeLimit)
-                o = Arrays.stream(anObjectArray).collect(Collectors.toList());
+                raw = Arrays.stream(anObjectArray).collect(Collectors.toList());
         }
-        if (o instanceof List) {
-            List<?> aList = (List<?>) o;
+        if (raw instanceof List) {
+            List<?> aList = (List<?>) raw;
             if (aList.size() > sizeLimit) {
                 log.trace("List too long ({}), trimmed...", aList.size());
-                List trimmedListView = aList.subList(0, sizeLimit);
+                var trimmedListView = aList.subList(0, sizeLimit);
                 // don't mutate backing lists
-                CopyOnWriteArrayList copy = Lists.newCopyOnWriteArrayList(trimmedListView);
+                var copy = new CopyOnWriteArrayList<Object>(trimmedListView);
                 copy.add(msg);
                 return super.toStringOf(copy);
             }
         }
-        return super.toStringOf(o);
+        return super.toStringOf(raw);
     }
 }
