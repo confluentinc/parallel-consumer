@@ -584,11 +584,12 @@
                         <path>
                             <groupId>com.github.bsideup.jabel</groupId>
                             <artifactId>jabel-javac-plugin</artifactId>
-                            <version>0.2.0</version>
+                            <version>0.4.1</version>
                         </path>
                     </annotationProcessorPaths>
                     <!-- enable language preview features -->
-                    <target>8</target>
+                    <source>17</source>
+                    <target>17</target>
                     <release>8</release>
                     <annotationProcessors>
                         <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
@@ -668,7 +669,7 @@
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>[13,14)</version>
+                                    <version>[17,18)</version>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>3.6.3</version>
