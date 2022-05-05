@@ -112,6 +112,7 @@
         <flogger.version>0.7.4</flogger.version>
         <mockito.version>4.5.1</mockito.version>
         <truth-generator-maven-plugin.version>0.1</truth-generator-maven-plugin.version>
+        <jabel.version>0.4.1</jabel.version>
     </properties>
 
     <profiles>
@@ -584,7 +585,7 @@
                         <path>
                             <groupId>com.github.bsideup.jabel</groupId>
                             <artifactId>jabel-javac-plugin</artifactId>
-                            <version>0.4.1</version>
+                            <version>${jabel.version}</version>
                         </path>
                     </annotationProcessorPaths>
                     <!-- enable language preview features -->

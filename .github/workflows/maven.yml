@@ -41,8 +41,9 @@ jobs:
       - name: Setup JDK 18
         uses: actions/setup-java@v3
         with:
-          java-version: 18.0.1+10
           distribution: 'zulu'
+          java-version: '18'
+          cache: 'maven'
 
       # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
       - name: Show java 18 home
