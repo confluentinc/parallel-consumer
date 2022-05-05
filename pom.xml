@@ -588,18 +588,18 @@
                             <version>${lombok.version}</version>
                         </path>
                         <!-- jabel setup-->
-                        <path>
-                            <groupId>com.github.bsideup.jabel</groupId>
-                            <artifactId>jabel-javac-plugin</artifactId>
-                            <version>${jabel.version}</version>
-                        </path>
+                        <!--                        <path>-->
+                        <!--                            <groupId>com.github.bsideup.jabel</groupId>-->
+                        <!--                            <artifactId>jabel-javac-plugin</artifactId>-->
+                        <!--                            <version>${jabel.version}</version>-->
+                        <!--                        </path>-->
                     </annotationProcessorPaths>
                     <!-- enable language preview features -->
                     <source>17</source>
                     <target>17</target>
                     <release>8</release>
                     <annotationProcessors>
-                        <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
+                        <!--                        <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>-->
                         <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
                         </annotationProcessor>
                     </annotationProcessors>
