@@ -42,7 +42,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
-          java-version: '18'
+          java-version: '17'
           cache: 'maven'
 
       # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
