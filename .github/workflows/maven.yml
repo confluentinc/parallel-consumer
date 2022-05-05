@@ -95,7 +95,7 @@ jobs:
 
       - name: Test with Maven
         #run: mvn -B package -P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.282/x64 -Dkafka.version=${{ matrix.ak }}
-        run: mvn -Pci -B package ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }}
+        run: mvn -Pci -B package ${{ matrix.jdk }} -Dkafka.version=${{ matrix.ak }} -Dlicense.skip
 # - name: Test with Maven on Java 9
 #      run: mvn -B package -P jvm9-release -Djvm9.location=/opt/hostedtoolcache/jdk/9.0.7/x64
 #    - name: Test with Maven on Java
