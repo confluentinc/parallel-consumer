@@ -38,14 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup JDK 1.8
+      - name: Setup JDK 18
         uses: actions/setup-java@v3
         with:
-          java-version: 1.8
+          java-version: 18.0.1+10
           distribution: 'zulu'
 
       # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
-      - name: Show java 1.8 home
+      - name: Show java 18 home
         # /opt/hostedtoolcache/jdk/8.0.282/x64/bin/java
         run: which java
 
@@ -58,13 +58,13 @@ jobs:
       # /opt/hostedtoolcache/jdk/9.0.7/x64
       #      run: which java
 
-      - name: Setup Java JDK 13
-        uses: actions/setup-java@v1.4.3
-        with:
-          java-version: '13.0.2'
-          java-package: jdk
-          architecture: x64
-          distribution: 'zulu'
+#       - name: Setup Java JDK 13
+#         uses: actions/setup-java@v1.4.3
+#         with:
+#           java-version: '13.0.2'
+#           java-package: jdk
+#           architecture: x64
+#           distribution: 'zulu'
 
       #    - name: Show java 13 home
       # /opt/hostedtoolcache/jdk/13.0.2/x64/bin/java
