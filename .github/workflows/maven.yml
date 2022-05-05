@@ -42,6 +42,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           java-version: 1.8
+          distribution: 'zulu'
 
       # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
       - name: Show java 1.8 home
@@ -63,6 +64,7 @@ jobs:
           java-version: '13.0.2'
           java-package: jdk
           architecture: x64
+          distribution: 'zulu'
 
       #    - name: Show java 13 home
       # /opt/hostedtoolcache/jdk/13.0.2/x64/bin/java
