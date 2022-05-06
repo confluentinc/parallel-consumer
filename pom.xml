@@ -812,10 +812,8 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <!-- Jabel marker -->
-                            <additionalJOption>--enable-preview</additionalJOption>
-                            <source>13</source>
-                            <release>13</release>
+                            <source>${source.version}</source>
+                            <release>${source.version}</release>
                             <!-- Source goals - change to true? -->
                             <failOnWarnings>false</failOnWarnings>
                         </configuration>
