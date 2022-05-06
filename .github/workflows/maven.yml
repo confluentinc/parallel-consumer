@@ -20,7 +20,7 @@ jobs:
         # Doesn't mean it couldn't be modified slightly to work...
         ak: [ 2.5.1, 2.6.1, 2.7.0, 2.8.1, 3.0.1, 3.1.0 ]
         #ak: [ 2.7.0 ]
-        jdk: [ '-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/jdk/8.0.292/x64', '' ]
+        jdk: [ '-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/Java_Zulu_jdk/8.0.332-9/x64/bin/java', '' ]
         experimental: [ false ]
         name: [ "Stable AK version" ]
         include:
@@ -46,9 +46,9 @@ jobs:
           distribution: 'zulu'
           cache: 'maven'
 
-      # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var
+      # the patch version will be upgraded silently causing the build to eventually start failing - need to store this as a var - possible?
       - name: Show java 1.8 home
-        # /opt/hostedtoolcache/jdk/8.0.282/x64/bin/java
+        # /opt/hostedtoolcache/Java_Zulu_jdk/8.0.332-9/x64/bin/java
         run: which java
 
       #     - name: Setup JDK 1.9
