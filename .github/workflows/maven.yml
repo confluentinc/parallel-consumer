@@ -19,6 +19,7 @@ jobs:
         # 2.0.1, 2.1.1, 2.2.2, 2.3.1, 2.4.1 don't work - needs zstd and some kafka client libs.
         # Doesn't mean it couldn't be modified slightly to work...
         #ak: [ 2.5.1, 2.6.1, 2.7.0, 2.8.1, 3.0.1, 3.1.0 ]
+        # 25 and 26 include a dep with a vulnerability which ossindex fails the build for
         ak: [ 2.7.0, 2.8.1, 3.0.1, 3.1.0 ]
         #ak: [ 2.7.0 ]
         #jdk: [ '-P jvm8-release -Djvm8.location=/opt/hostedtoolcache/Java_Zulu_jdk/8.0.332-9/x64', '' ]

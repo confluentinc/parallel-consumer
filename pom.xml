@@ -347,14 +347,6 @@
             <version>0.8.1</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- Build dependency -->
-        <dependency>
-            <groupId>com.github.bsideup.jabel</groupId>
-            <artifactId>jabel-javac-plugin</artifactId>
-            <version>${jabel.version}</version>
-            <scope>provided</scope>
-        </dependency>
     </dependencies>
 
     <dependencyManagement>
@@ -617,7 +609,6 @@
                     <target>${release.target}</target>
                     <release>${release.target}</release>
                     <annotationProcessors>
-                        <!--                        <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>-->
                         <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
                         </annotationProcessor>
                     </annotationProcessors>
