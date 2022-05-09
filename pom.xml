@@ -135,10 +135,9 @@
                             <!-- override source and target when working from IDE -->
                             <source>${source.version}</source>
                             <target>${source.version}</target>
-                            <release>${release.target}</release>
-                            <!-- disable jabel -->
+                            <release>${source.version}</release>
+                            <!-- disable Jabel -->
                             <annotationProcessors>
-                                <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
                                 <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
                                 </annotationProcessor>
                             </annotationProcessors>
