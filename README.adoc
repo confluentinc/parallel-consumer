@@ -52,7 +52,7 @@ Parallel Apache Kafka client wrapper with client side queueing, a simpler consum
 
 Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
 
-NOTE: This is not a Confluent supported product.
+NOTE: This is not a part of Confluent's commercial supported offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
 
 IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
