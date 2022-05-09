@@ -15,7 +15,7 @@ def config = jobConfig {
 //  testResultSpecs = ['junit': 'test/results.xml']
     properties = [parameters([RelaseTag])]
     slackChannel = 'csid-build'
-    nodeLabel = 'docker-debian-11-java-adoptiumjdk17'
+    nodeLabel = 'docker-debian-jdk17'
     runMergeCheck = true
 }
 
