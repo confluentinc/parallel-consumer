@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
@@ -21,10 +20,11 @@ import org.apache.kafka.common.TopicPartition;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -114,42 +114,39 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * Produce a message back to the broker.
-     * <p>
-     * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the more common
-     * use case where messages aren't produced.
+     * Produce messages back to the broker.
+     *
+     * <p>Produced messages are not waited for, instead their futures are returned so the caller can
+     * decide when waiting should be done (if at all).
      *
      * @see ParallelConsumer#poll
      * @see ParallelStreamProcessor#pollAndProduceMany
      */
-    public RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
+    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(
+            List<ProducerRecord<K, V>> outMsgs) {
         // only needed if not using tx
-        Callback callback = (RecordMetadata metadata, Exception exception) -> {
-            if (exception != null) {
-                log.error("Error producing result message", exception);
-                throw new RuntimeException("Error producing result message", exception);
-            }
-        };
+        Callback callback =
+                (RecordMetadata metadata, Exception exception) -> {
+                    if (exception != null) {
+                        log.error("Error producing result message", exception);
+                        throw new RuntimeException("Error producing result message", exception);
+                    }
+                };
 
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         readLock.lock();
-        Future<RecordMetadata> send;
+        List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures =
+                new ArrayList<>(outMsgs.size());
         try {
-            send = producer.send(outMsg, callback);
+            for (ProducerRecord<K, V> record : outMsgs) {
+                log.trace("Producing {}", record);
+                futures.add(ParallelConsumer.Tuple.pairOf(record, producer.send(record, callback)));
+            }
         } finally {
             readLock.unlock();
         }
 
-        // wait on the send results
-        try {
-            log.trace("Blocking on produce result");
-            RecordMetadata recordMetadata = TimeUtils.time(() ->
-                    send.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
-            log.trace("Produce result received");
-            return recordMetadata;
-        } catch (Exception e) {
-            throw new InternalRuntimeError(e);
-        }
+        return futures;
     }
 
     @Override
