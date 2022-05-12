@@ -46,6 +46,8 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
+import static org.slf4j.event.Level.DEBUG;
+import static org.slf4j.event.Level.WARN;
 
 /**
  * @see ParallelConsumer
@@ -1120,22 +1122,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.trace("User function future registered");
 
             return intermediateResults;
-        } catch (RetriableException e) {
-            String msg = "Exception caught in user function running stage, registering WC as failed, returning to mailbox";
-            log.debug("Explicit " + RetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
-            handleFailure(workContainerBatch, e);
-            throw e; // trow again to make the future failed
         } catch (Exception e) {
-            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
-            handleFailure(workContainerBatch, e);
+            var level = e instanceof RetriableException ? DEBUG : WARN;
+            var prefix = e instanceof RetriableException ? "Explicit " + RetriableException.class.getSimpleName() + " caught: " : "";
+            log.atLevel(level)
+                    .log(prefix + "Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+            for (var wc : workContainerBatch) {
+                wc.onUserFunctionFailure(e);
+                addToMailbox(wc); // always add on error
+            }
             throw e; // trow again to make the future failed
-        }
-    }
-
-    private void handleFailure(final List<? extends WorkContainer<K, V>> workContainerBatch, final Exception e) {
-        for (var wc : workContainerBatch) {
-            wc.onUserFunctionFailure(e);
-            addToMailbox(wc); // always add on error
         }
     }
 
