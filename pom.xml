@@ -4,7 +4,8 @@
     Copyright (C) 2020-2022 Confluent, Inc.
 
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.confluent.parallelconsumer</groupId>
@@ -55,8 +56,8 @@
         <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
         <url>https://github.com/confluentinc/parallel-consumer.git</url>
-      <tag>HEAD</tag>
-  </scm>
+        <tag>HEAD</tag>
+    </scm>
 
     <distributionManagement>
         <snapshotRepository>
@@ -70,6 +71,9 @@
     </distributionManagement>
 
     <properties>
+        <source.version>17</source.version>
+        <release.target>8</release.target>
+
         <!-- when running mvn locally from cmd line, use default jvm for jvm8 - by default uses the runtime JVM -->
         <jvm.location>${java.home}</jvm.location>
         <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
@@ -80,8 +84,6 @@
 
         <!-- standard props -->
         <maven.version>3.6.3</maven.version>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -112,6 +114,7 @@
         <flogger.version>0.7.4</flogger.version>
         <mockito.version>4.5.1</mockito.version>
         <truth-generator-maven-plugin.version>0.1</truth-generator-maven-plugin.version>
+        <jabel.version>0.4.2</jabel.version>
     </properties>
 
     <profiles>
@@ -130,12 +133,11 @@
                         <artifactId>maven-compiler-plugin</artifactId>
                         <configuration>
                             <!-- override source and target when working from IDE -->
-                            <source>13</source>
-                            <target>13</target>
-                            <release>13</release>
-                            <!-- disable jabel -->
+                            <source>${source.version}</source>
+                            <target>${source.version}</target>
+                            <release>${source.version}</release>
+                            <!-- disable Jabel -->
                             <annotationProcessors>
-                                <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
                                 <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
                                 </annotationProcessor>
                             </annotationProcessors>
@@ -344,6 +346,14 @@
             <version>0.8.1</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Build dependency -->
+        <dependency>
+            <groupId>com.github.bsideup.jabel</groupId>
+            <artifactId>jabel-javac-plugin</artifactId>
+            <version>${jabel.version}</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
@@ -458,6 +468,20 @@
             </testResource>
         </testResources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-help-plugin</artifactId>
+                <version>3.0.1</version>
+                <executions>
+                    <execution>
+                        <id>show-profiles</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>active-profiles</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.sonatype.ossindex.maven</groupId>
                 <artifactId>ossindex-maven-plugin</artifactId>
@@ -584,14 +608,14 @@
                         <path>
                             <groupId>com.github.bsideup.jabel</groupId>
                             <artifactId>jabel-javac-plugin</artifactId>
-                            <version>0.2.0</version>
+                            <version>${jabel.version}</version>
                         </path>
                     </annotationProcessorPaths>
                     <!-- enable language preview features -->
-                    <target>8</target>
-                    <release>8</release>
+                    <source>${source.version}</source>
+                    <target>${release.target}</target>
+                    <release>${release.target}</release>
                     <annotationProcessors>
-                        <annotationProcessor>com.github.bsideup.jabel.JabelJavacProcessor</annotationProcessor>
                         <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
                         </annotationProcessor>
                     </annotationProcessors>
@@ -668,7 +692,7 @@
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>[13,14)</version>
+                                    <version>[${source.version},)</version>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>3.6.3</version>
@@ -688,9 +712,9 @@
                                         <exclude>com.github.javafaker</exclude>
                                     </excludes>
                                 </bannedDependencies>
-                                <reactorModuleConvergence />
-                                <banDuplicatePomDependencyVersions />
-                                <requireSameVersions />
+                                <reactorModuleConvergence/>
+                                <banDuplicatePomDependencyVersions/>
+                                <requireSameVersions/>
                                 <requireReleaseDeps>
                                     <onlyWhenRelease>false</onlyWhenRelease>
                                     <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
@@ -800,10 +824,8 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <!-- Jabel marker -->
-                            <additionalJOption>--enable-preview</additionalJOption>
-                            <source>13</source>
-                            <release>13</release>
+                            <source>${source.version}</source>
+                            <release>${source.version}</release>
                             <!-- Source goals - change to true? -->
                             <failOnWarnings>false</failOnWarnings>
                         </configuration>
