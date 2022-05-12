@@ -1126,7 +1126,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             var level = e instanceof RetriableException ? DEBUG : WARN;
             var prefix = e instanceof RetriableException ? "Explicit " + RetriableException.class.getSimpleName() + " caught: " : "";
             log.atLevel(level)
-                    .log(prefix + "Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+                    .log(prefix + "Exception caught in user function running stage, registering WC as failed, returning to queue", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
                 addToMailbox(wc); // always add on error
