@@ -52,7 +52,7 @@ Parallel Apache Kafka client wrapper with client side queueing, a simpler consum
 
 Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
 
-CAUTION: This is not a Confluent supported product.
+NOTE: This is not a part of Confluent's commercial supported offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
 
 IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
@@ -361,14 +361,13 @@ As an illustrative example of relative performance, given:
 
 == Support and Issues
 
-WARNING: This library is experimental, and Confluent does not currently offer support for this library.
-
 If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
 Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
 
 We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
 
 NOTE: We are very interested to hear about your experiences!
+And please vote on your favourite issues!
 
 If you have questions, head over to the https://launchpass.com/confluentcommunity[Confluent Slack community], or raise an https://github.com/confluentinc/parallel-consumer/issues[issue] on GitHub.
 
@@ -390,11 +389,9 @@ Where `${project.version}` is the version to be used:
 * artifact ID: `parallel-consumer-core`
 * version: image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
-
 .Core Module Dependency
 [source,xml,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/pom.xml[tag=exampleDep]
-
 
 .Reactor Module Dependency
 [source,xml,indent=0]
