@@ -1120,19 +1120,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.trace("User function future registered");
 
             return intermediateResults;
-        } catch (Exception e) {
-            // handle fail
+        } catch (RetriableException e) {
             String msg = "Exception caught in user function running stage, registering WC as failed, returning to mailbox";
-            if (e instanceof RetriableException) {
-                log.debug("Explicit " + RetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
-            } else {
-                log.error(msg, e);
-            }
-            for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure(e);
-                addToMailbox(wc); // always add on error
-            }
+            log.debug("Explicit " + RetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
+            handleFailure(workContainerBatch, e);
             throw e; // trow again to make the future failed
+        } catch (Exception e) {
+            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+            handleFailure(workContainerBatch, e);
+            throw e; // trow again to make the future failed
+        }
+    }
+
+    private void handleFailure(final List<? extends WorkContainer<K, V>> workContainerBatch, final Exception e) {
+        for (var wc : workContainerBatch) {
+            wc.onUserFunctionFailure(e);
+            addToMailbox(wc); // always add on error
         }
     }
 
