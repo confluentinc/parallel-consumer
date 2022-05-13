@@ -1106,7 +1106,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             return handleUserSuccess(callback, workContainerBatch, resultsFromUserFunction);
         } catch (Exception e) {
-            handleUserRetriableFailure(workContainerBatch, e);
+            log.error("Unknown internal error handling user function dispatch, terminating");
+
+            closeDontDrainFirst();
 
             // throw again to make the future failed
             throw e;
@@ -1161,18 +1163,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 throw new InternalRuntimeError(msg("Unsupported reaction config ({}) - submit a bug report.", reaction));
             }
         } catch (Exception e) {
-            log.error("Unknown internal error handling user function dispatch, terminating");
-
-            closeDontDrainFirst();
+            handleUserRetriableFailure(context, e);
 
             // throw again to make the future failed
             throw e;
         }
     }
 
-    private void handleUserRetriableFailure(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
+    private void handleUserRetriableFailure(PollContextInternal<K, V> context, Exception e) {
         logUserFunctionException(e);
-        markRecordsFailed(workContainerBatch, e);
+        markRecordsFailed(context.getWorkContainers(), e);
     }
 
     private void markRecordsFailed(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
