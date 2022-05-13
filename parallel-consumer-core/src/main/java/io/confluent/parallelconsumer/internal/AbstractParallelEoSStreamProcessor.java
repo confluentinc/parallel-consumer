@@ -1134,12 +1134,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
+    /**
+     * If user explicitly throws the {@link RetriableException}, then don't log as user already knows.
+     * <p>
+     * https://english.stackexchange.com/questions/305273/retriable-or-retryable#305274
+     */
     private void logUserFunctionException(Exception e) {
-        boolean retriable = e instanceof RetriableException;
-        var level = retriable ? DEBUG : WARN;
-        var prefix = retriable ? "Explicit " + RetriableException.class.getSimpleName() + " caught: " : "";
-        log.atLevel(level)
-                .log(prefix + "Exception caught in user function running stage, registering WC as failed, returning to queue", e);
+        boolean explicitlyRetryable = e instanceof RetriableException;
+        var level = explicitlyRetryable ? DEBUG : WARN;
+        var prefix = explicitlyRetryable ? "Explicit " + RetriableException.class.getSimpleName() + " caught - " : "";
+        var message = prefix + "Exception in user function, registering record as failed, returning to queue";
+        log.atLevel(level).log(message, e);
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
