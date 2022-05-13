@@ -363,14 +363,13 @@ As an illustrative example of relative performance, given:
 
 == Support and Issues
 
-WARNING: This library is experimental, and Confluent does not currently offer support for this library.
-
 If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
 Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
 
 We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
 
 NOTE: We are very interested to hear about your experiences!
+And please vote on your favourite issues!
 
 If you have questions, head over to the https://launchpass.com/confluentcommunity[Confluent Slack community], or raise an https://github.com/confluentinc/parallel-consumer/issues[issue] on GitHub.
 
