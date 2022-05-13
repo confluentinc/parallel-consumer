@@ -5,10 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.PCRetriableException;
-import io.confluent.parallelconsumer.ParallelConsumer;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.PollContextInternal;
+import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
@@ -1122,17 +1119,45 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.trace("User function future registered");
 
             return intermediateResults;
+        } catch (PCTerminalException e) {
+            handleTerminalFailure(workContainerBatch, e);
+
+            // return empty results
+            return new ArrayList<>();
         } catch (Exception e) {
-            logUserFunctionException(e);
+            handleRetriableFailure(workContainerBatch, e);
 
-            for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure(e);
-                addToMailbox(wc); // always add on error
-            }
-
-            throw e; // throw again to make the future failed
+            // throw again to make the future failed
+            throw e;
         }
     }
+
+    private void handleRetriableFailure(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
+        logUserFunctionException(e);
+
+        for (var wc : workContainerBatch) {
+            wc.onUserFunctionFailure(e);
+            addToMailbox(wc); // always add on error
+        }
+    }
+
+    protected void handleTerminalFailure(List<WorkContainer<K, V>> workContainerBatch, PCTerminalException e) {
+        var reaction = getOptions().getTerminalFailureReaction();
+
+        switch (reaction) {
+            case SKIP -> skip(workContainerBatch);
+            case RETRY -> retry(workContainerBatch);
+            case DIE -> die(workContainerBatch);
+        }
+    }
+
+    protected void die(List<WorkContainer<K, V>> workContainerBatch) {
+        System.exit(69);
+    }
+
+    protected abstract void retry(List<WorkContainer<K, V>> workContainerBatch);
+
+    protected abstract void skip(List<WorkContainer<K, V>> workContainerBatch);
 
     /**
      * If user explicitly throws the {@link PCRetriableException}, then don't log it, as the user is already aware.

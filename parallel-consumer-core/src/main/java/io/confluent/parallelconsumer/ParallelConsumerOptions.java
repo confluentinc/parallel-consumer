@@ -223,6 +223,15 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final int maxFailureHistory = 10;
 
+    private final TerminalFailureReaction terminalFailureReaction;
+
+    public enum TerminalFailureReaction {
+        DIE,
+        SKIP,
+        RETRY,
+        // DLQ, TODO
+    }
+
     /**
      * @return the combined target of the desired concurrency by the configured batch size
      */
