@@ -12,10 +12,20 @@ endif::[]
 
 == Next Version
 
+== v0.5.0.1
+
+=== Fixes and Improvements
+
+- fixes: #225 Build support for Java 17, 18 (#289)
+
+== v0.5.0.0
+
 === Features
 
-* PollContext API - provides central access to result set with various convenience methods as well as metadata about records, such as failure count
-* Batching - all API methods now support batching.
+* feature: Poll Context object for API (#223)
+** PollContext API - provides central access to result set with various convenience methods as well as metadata about records, such as failure count
+* major: Batching feature and Event system improvements
+** Batching - all API methods now support batching.
 See the Options class set batch size for more information.
 
 === Fixes and Improvements
@@ -23,6 +33,36 @@ See the Options class set batch size for more information.
 * Event system - better CPU usage in control thread
 * Concurrency stability improvements
 * Update dependencies
+* #247: Adopt Truth-Generator (#249)
+** Adopt https://github.com/astubbs/truth-generator[Truth Generator] for automatic generation of https://truth.dev/[Google Truth] Subjects
+* Large rewrite of internal architecture for improved maintence and simplicity which fixed some corner case issues
+** refactor: Rename PartitionMonitor to PartitionStateManager (#269)
+** refactor: Queue unification (#219)
+** refactor: Partition state tracking instead of search (#218)
+** refactor: Processing Shard object
+* fix: Concurrency and State improvements (#190)
+
+=== Build
+
+* build: Lock TruthGenerator to 0.1 (#272)
+* build: Deploy SNAPSHOTS to maven central snaphots repo (#265)
+* build: Update Kafka to 3.1.0 (#229)
+* build: Crank up Enforcer rules and turn on ossindex audit
+* build: Fix logback dependency back to stable
+* build: Upgrade TestContainer and CP
+
+== v0.4.0.1
+
+=== Improvements
+
+- Add option to specify timeout for how long to wait offset commits in periodic-consumer-sync commit-mode
+- Add option to specify timeout for how long to wait for blocking Producer#send
+
+=== Docs
+
+- docs: Confluent Cloud configuration links
+- docs: Add Confluent's product page for PC to README
+- docs: Add head of line blocking to README
 
 == v0.4.0.0
 // https://github.com/confluentinc/parallel-consumer/releases/tag/0.4.0.0
