@@ -1105,6 +1105,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             List<R> resultsFromUserFunction = runUserFunction(usersFunction, context);
 
             return handleUserSuccess(callback, workContainerBatch, resultsFromUserFunction);
+        } catch (PCUserException e) {
+            // throw again to make the future failed
+            throw e;
         } catch (Exception e) {
             log.error("Unknown internal error handling user function dispatch, terminating");
 

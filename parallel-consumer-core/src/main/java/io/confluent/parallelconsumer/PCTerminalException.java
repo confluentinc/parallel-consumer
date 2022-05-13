@@ -14,7 +14,7 @@ package io.confluent.parallelconsumer;
  * So in short, if this exception is thrown, nothing will be logged (except at DEBUG level), any other exception will be
  * logged as an error.
  */
-public class PCTerminalException extends RuntimeException {
+public class PCTerminalException extends PCUserException {
     public PCTerminalException(String message) {
         super(message);
     }

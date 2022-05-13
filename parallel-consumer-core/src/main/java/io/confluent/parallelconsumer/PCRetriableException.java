@@ -19,7 +19,7 @@ import java.util.Optional;
  * So in short, if this exception is thrown, nothing will be logged (except at DEBUG level), any other exception will be
  * logged as an error.
  */
-public class PCRetriableException extends RuntimeException {
+public class PCRetriableException extends PCUserException {
 
     @Getter
     private Optional<Offsets> offsetsOptional = Optional.empty();
