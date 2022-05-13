@@ -39,9 +39,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private final boolean producerIsConfiguredForTransactions;
 
     /**
-     * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
-     * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
-     * state COMMITTING_TRANSACTION".
+     * The
+     * {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must be
+     * careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in state
+     * COMMITTING_TRANSACTION".
      */
     private ReentrantReadWriteLock producerTransactionLock;
 
@@ -79,9 +80,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             }
         } else {
             if (producerIsConfiguredForTransactions) {
-                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " +
-                        "the Producer must not have a transaction ID for this option. This is because having such an ID forces the " +
-                        "Producer into transactional mode - i.e. you cannot use it without using transactions.");
+                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " + "the Producer must not have a transaction ID for this option. This is because having such an ID forces the " + "Producer into transactional mode - i.e. you cannot use it without using transactions.");
             }
         }
     }
@@ -122,25 +121,23 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see ParallelConsumer#poll
      * @see ParallelStreamProcessor#pollAndProduceMany
      */
-    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(
-            List<ProducerRecord<K, V>> outMsgs) {
+    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(List<ProducerRecord<K, V>> outMsgs) {
         // only needed if not using tx
-        Callback callback =
-                (RecordMetadata metadata, Exception exception) -> {
-                    if (exception != null) {
-                        log.error("Error producing result message", exception);
-                        throw new RuntimeException("Error producing result message", exception);
-                    }
-                };
+        Callback callback = (RecordMetadata metadata, Exception exception) -> {
+            if (exception != null) {
+                log.error("Error producing result message", exception);
+                throw new RuntimeException("Error producing result message", exception);
+            }
+        };
 
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         readLock.lock();
-        List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures =
-                new ArrayList<>(outMsgs.size());
+        List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
         try {
-            for (ProducerRecord<K, V> record : outMsgs) {
-                log.trace("Producing {}", record);
-                futures.add(ParallelConsumer.Tuple.pairOf(record, producer.send(record, callback)));
+            for (ProducerRecord<K, V> rec : outMsgs) {
+                log.trace("Producing {}", rec);
+                var future = producer.send(rec, callback);
+                futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
             }
         } finally {
             readLock.unlock();
@@ -307,8 +304,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private void releaseCommitLock() {
         log.trace("Release commit lock");
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
-        if (!producerTransactionLock.isWriteLockedByCurrentThread())
-            throw new IllegalStateException("Not held be me");
+        if (!producerTransactionLock.isWriteLockedByCurrentThread()) throw new IllegalStateException("Not held be me");
         writeLock.unlock();
     }
 
