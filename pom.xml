@@ -71,7 +71,7 @@
     </distributionManagement>
 
     <properties>
-        <source.version>17</source.version>
+        <source.version>19</source.version>
         <release.target>8</release.target>
 
         <!-- when running mvn locally from cmd line, use default jvm for jvm8 - by default uses the runtime JVM -->
@@ -457,6 +457,18 @@
                 <version>2.33.2</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>1.12.10</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy-agent</artifactId>
+                <version>1.12.10</version>
+                <scope>compile</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -609,6 +621,16 @@
                             <groupId>com.github.bsideup.jabel</groupId>
                             <artifactId>jabel-javac-plugin</artifactId>
                             <version>${jabel.version}</version>
+                        </path>
+                        <path>
+                            <groupId>net.bytebuddy</groupId>
+                            <artifactId>byte-buddy</artifactId>
+                            <version>1.12.10</version>
+                        </path>
+                        <path>
+                            <groupId>net.bytebuddy</groupId>
+                            <artifactId>byte-buddy-agent</artifactId>
+                            <version>1.12.10</version>
                         </path>
                     </annotationProcessorPaths>
                     <!-- enable language preview features -->
