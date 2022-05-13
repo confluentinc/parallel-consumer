@@ -21,7 +21,8 @@ public interface RecordProcessor {
          * <p>
          * User can throw a {@link PCRetriableException}, if an issue is and PC should handle the process of retrying it
          * later. If an exception is thrown that doesn't extend {@link PCRetriableException}, the error will be logged
-         * at {@code WARN} level.
+         * at {@code WARN} level. Note that, by default, any exception thrown from a users function will cause the
+         * record to be retried, as if a {@link PCRetriableException} had actually been thrown.
          *
          * @param records the Kafka records to process
          * @see PCRetriableException
