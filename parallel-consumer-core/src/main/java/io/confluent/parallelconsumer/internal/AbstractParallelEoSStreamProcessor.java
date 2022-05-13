@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SHUTDOWN;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SKIP;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -1078,11 +1080,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Run the supplied function.
      */
+    // todo extract class from this point
     protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
                                                                                         Consumer<R> callback,
                                                                                         List<WorkContainer<K, V>> workContainerBatch) {
-        // call the user's function
-        List<R> resultsFromUserFunction;
+        // catch and process any internal error
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
@@ -1099,65 +1101,86 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
 
             PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
-            resultsFromUserFunction = usersFunction.apply(context);
 
-            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
-                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
+            List<R> resultsFromUserFunction = runUserFunction(usersFunction, context);
 
-            // capture each result, against the input record
-            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {
-                log.trace("Running users call back...");
-                callback.accept(result);
-            }
-
-            // fail or succeed, either way we're done
-            for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
-            log.trace("User function future registered");
-
-            return intermediateResults;
-        } catch (PCTerminalException e) {
-            handleTerminalFailure(workContainerBatch, e);
-
-            // return empty results
-            return new ArrayList<>();
+            return handleUserSuccess(callback, workContainerBatch, resultsFromUserFunction);
         } catch (Exception e) {
-            handleRetriableFailure(workContainerBatch, e);
+            handleUserRetriableFailure(workContainerBatch, e);
 
             // throw again to make the future failed
             throw e;
         }
     }
 
-    private void handleRetriableFailure(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
-        logUserFunctionException(e);
+    private <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> handleUserSuccess(Consumer<R> callback, List<WorkContainer<K, V>> workContainerBatch, List<R> resultsFromUserFunction) {
+        for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
+            onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+        }
 
+        // capture each result, against the input record
+        var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
+        for (R result : resultsFromUserFunction) {
+            log.trace("Running users call back...");
+            callback.accept(result);
+        }
+
+        // fail or succeed, either way we're done
+        for (var kvWorkContainer : workContainerBatch) {
+            addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+        }
+        log.trace("User function future registered");
+        return intermediateResults;
+    }
+
+    private <R> List<R> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
+                                        PollContextInternal<K, V> context) {
+        try {
+            return usersFunction.apply(context);
+        } catch (PCTerminalException e) {
+            var reaction = getOptions().getTerminalFailureReaction();
+
+            if (reaction == SKIP) {
+                log.warn("Terminal error in user function, skipping record due to configuration in {} - triggering context: {}",
+                        ParallelConsumerOptions.class.getSimpleName(),
+                        context);
+
+                // return empty result to cause system to skip as if it succeeded
+                return new ArrayList<>();
+            } else if (reaction == SHUTDOWN) {
+                log.error("Shutting down upon terminal failure in user function due to {} setting in {} - triggering context: {}",
+                        ParallelConsumerOptions.TerminalFailureReaction.class.getSimpleName(),
+                        ParallelConsumerOptions.class.getSimpleName(),
+                        context);
+
+                closeDontDrainFirst();
+
+                // throw again to make the future failed
+                throw e;
+            } else {
+                throw new InternalRuntimeError(msg("Unsupported reaction config ({}) - submit a bug report.", reaction));
+            }
+        } catch (Exception e) {
+            log.error("Unknown internal error handling user function dispatch, terminating");
+
+            closeDontDrainFirst();
+
+            // throw again to make the future failed
+            throw e;
+        }
+    }
+
+    private void handleUserRetriableFailure(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
+        logUserFunctionException(e);
+        markRecordsFailed(workContainerBatch, e);
+    }
+
+    private void markRecordsFailed(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
         for (var wc : workContainerBatch) {
             wc.onUserFunctionFailure(e);
             addToMailbox(wc); // always add on error
         }
     }
-
-    protected void handleTerminalFailure(List<WorkContainer<K, V>> workContainerBatch, PCTerminalException e) {
-        var reaction = getOptions().getTerminalFailureReaction();
-
-        switch (reaction) {
-            case SKIP -> skip(workContainerBatch);
-            case RETRY -> retry(workContainerBatch);
-            case DIE -> die(workContainerBatch);
-        }
-    }
-
-    protected void die(List<WorkContainer<K, V>> workContainerBatch) {
-        System.exit(69);
-    }
-
-    protected abstract void retry(List<WorkContainer<K, V>> workContainerBatch);
-
-    protected abstract void skip(List<WorkContainer<K, V>> workContainerBatch);
 
     /**
      * If user explicitly throws the {@link PCRetriableException}, then don't log it, as the user is already aware.

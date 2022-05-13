@@ -226,9 +226,8 @@ public class ParallelConsumerOptions<K, V> {
     private final TerminalFailureReaction terminalFailureReaction;
 
     public enum TerminalFailureReaction {
-        DIE,
+        SHUTDOWN,
         SKIP,
-        RETRY,
         // DLQ, TODO
     }
 
