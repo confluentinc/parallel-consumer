@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
@@ -16,6 +17,7 @@ import java.util.stream.Stream;
 /**
  * Internal only view on the {@link PollContext}.
  */
+@ToString
 public class PollContextInternal<K, V> {
 
     @Delegate
