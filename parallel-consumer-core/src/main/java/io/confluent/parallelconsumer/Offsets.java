@@ -4,9 +4,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.Delegate;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class Offsets {
+
     @Delegate
-    final private List<Long> ofssets;
+    private final List<Long> rawOffsets;
+
+    public Offsets(List<RecordContext<?, ?>> records) {
+        rawOffsets = records.stream()
+                .map(RecordContext::offset)
+                .collect(Collectors.toUnmodifiableList());
+    }
 }
