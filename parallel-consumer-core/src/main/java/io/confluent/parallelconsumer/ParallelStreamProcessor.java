@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.RecordProcessor.PollConsumerAndProducer;
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import lombok.Data;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -27,12 +28,11 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     }
 
     /**
-     * Register a function to be applied in parallel to each received message
+     * Register a function to be applied in parallel to each received message.
      *
      * @param usersVoidConsumptionFunction the function
      */
-    void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
-
+    void poll(RecordProcessor.PollConsumer<K, V> usersVoidConsumptionFunction);
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link
@@ -40,7 +40,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
-    void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
+    void pollAndProduceMany(PollConsumerAndProducer<K, V> userFunction,
                             Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**

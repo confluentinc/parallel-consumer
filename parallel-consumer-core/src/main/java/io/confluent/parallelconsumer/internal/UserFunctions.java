@@ -5,10 +5,10 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ErrorInUserFunctionException;
+import io.confluent.parallelconsumer.RecordProcessor;
 import lombok.experimental.UtilityClass;
 
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -56,7 +56,7 @@ public class UserFunctions {
      * @param wrappedFunction the function to run
      * @param userFuncParam   the parameter to pass into the user's function
      */
-    public static <PARAM> void carefullyRun(Consumer<PARAM> wrappedFunction, PARAM userFuncParam) {
+    public static <PARAM> void carefullyRun(RecordProcessor.PollConsumer<PARAM> wrappedFunction, PARAM userFuncParam) {
         try {
             wrappedFunction.accept(userFuncParam);
         } catch (Exception e) {
