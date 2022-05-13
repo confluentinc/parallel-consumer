@@ -956,6 +956,16 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
 ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 ----
 
+=== Recommended IDEA Plugins
+
+* AsciiDoc
+* CheckStyle
+* CodeGlance
+* EditorConfig
+* Rainbow Brackets
+* SonarLint
+* Lombok
+
 === Readme
 
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
