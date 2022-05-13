@@ -1123,16 +1123,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             return intermediateResults;
         } catch (Exception e) {
-            var level = e instanceof RetriableException ? DEBUG : WARN;
-            var prefix = e instanceof RetriableException ? "Explicit " + RetriableException.class.getSimpleName() + " caught: " : "";
-            log.atLevel(level)
-                    .log(prefix + "Exception caught in user function running stage, registering WC as failed, returning to queue", e);
+            logUserFunctionException(e);
+
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
                 addToMailbox(wc); // always add on error
             }
-            throw e; // trow again to make the future failed
+
+            throw e; // throw again to make the future failed
         }
+    }
+
+    private void logUserFunctionException(Exception e) {
+        boolean retriable = e instanceof RetriableException;
+        var level = retriable ? DEBUG : WARN;
+        var prefix = retriable ? "Explicit " + RetriableException.class.getSimpleName() + " caught: " : "";
+        log.atLevel(level)
+                .log(prefix + "Exception caught in user function running stage, registering WC as failed, returning to queue", e);
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
