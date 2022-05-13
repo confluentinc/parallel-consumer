@@ -5,10 +5,10 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.PCRetriableException;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
-import io.confluent.parallelconsumer.RetriableException;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
@@ -1135,14 +1135,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * If user explicitly throws the {@link RetriableException}, then don't log as user already knows.
+     * If user explicitly throws the {@link PCRetriableException}, then don't log it, as the user is already aware.
      * <p>
-     * https://english.stackexchange.com/questions/305273/retriable-or-retryable#305274
+     * <a href=https://english.stackexchange.com/questions/305273/retriable-or-retryable#305274>Retriable or
+     * Retryable?</a> Kafka uses Retriable, so we'll go with that ;)
      */
     private void logUserFunctionException(Exception e) {
-        boolean explicitlyRetryable = e instanceof RetriableException;
+        boolean explicitlyRetryable = e instanceof PCRetriableException;
         var level = explicitlyRetryable ? DEBUG : WARN;
-        var prefix = explicitlyRetryable ? "Explicit " + RetriableException.class.getSimpleName() + " caught - " : "";
+        var prefix = explicitlyRetryable ? "Explicit " + PCRetriableException.class.getSimpleName() + " caught - " : "";
         var message = prefix + "Exception in user function, registering record as failed, returning to queue";
         log.atLevel(level).log(message, e);
     }

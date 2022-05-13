@@ -14,16 +14,16 @@ package io.confluent.parallelconsumer;
  * So in short, if this exception is thrown, nothing will be logged (except at DEBUG level), any other exception will be
  * logged as an error.
  */
-public class RetriableException extends RuntimeException {
-    public RetriableException(String message) {
+public class PCRetriableException extends RuntimeException {
+    public PCRetriableException(String message) {
         super(message);
     }
 
-    public RetriableException(String message, Throwable cause) {
+    public PCRetriableException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    public RetriableException(Throwable cause) {
+    public PCRetriableException(Throwable cause) {
         super(cause);
     }
 }
