@@ -12,6 +12,12 @@ endif::[]
 
 == Next Version
 
+== v0.5.0.1
+
+=== Fixes and Improvements
+
+- fixes: #225 Build support for Java 17, 18 (#289)
+
 == v0.5.0.0
 
 === Features

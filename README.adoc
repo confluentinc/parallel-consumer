@@ -392,7 +392,6 @@ Where `${project.version}` is the version to be used:
 * artifact ID: `parallel-consumer-core`
 * version: image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
-
 .Core Module Dependency
 [source,xml,indent=0]
         <dependency>
@@ -400,7 +399,6 @@ Where `${project.version}` is the version to be used:
             <artifactId>parallel-consumer-core</artifactId>
             <version>${project.version}</version>
         </dependency>
-
 
 .Reactor Module Dependency
 [source,xml,indent=0]
@@ -1160,6 +1158,12 @@ toc::[]
 endif::[]
 
 == Next Version
+
+== v0.5.0.1
+
+=== Fixes and Improvements
+
+- fixes: #225 Build support for Java 17, 18 (#289)
 
 == v0.5.0.0
 
