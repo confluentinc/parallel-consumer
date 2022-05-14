@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import lombok.Getter;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,7 @@ import java.util.Optional;
  * So in short, if this exception is thrown, nothing will be logged (except at DEBUG level), any other exception will be
  * logged as an error.
  */
+@ToString
 public class PCRetriableException extends PCUserException {
 
     @Getter

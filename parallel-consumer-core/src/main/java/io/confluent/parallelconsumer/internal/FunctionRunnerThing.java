@@ -1,14 +1,17 @@
 package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.*;
+import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import io.confluent.parallelconsumer.state.WorkContainer;
-import lombok.Value;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.MDC;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -18,20 +21,18 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFail
 import static org.slf4j.event.Level.DEBUG;
 import static org.slf4j.event.Level.WARN;
 
-@Value
-
+@AllArgsConstructor
 @Slf4j
 public class FunctionRunnerThing<K, V> {
 
-    AbstractParallelEoSStreamProcessor pc;
+    private AbstractParallelEoSStreamProcessor<K, V> pc;
 
     /**
      * Run the supplied function.
      */
-    // todo extract class from this point
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
+    protected <R> List<Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
+                                                                       Consumer<R> callback,
+                                                                       List<WorkContainer<K, V>> workContainerBatch) {
         // catch and process any internal error
         try {
             if (log.isDebugEnabled()) {
@@ -50,9 +51,7 @@ public class FunctionRunnerThing<K, V> {
 
             PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
 
-            List<R> resultsFromUserFunction = runUserFunction(usersFunction, context);
-
-            return handleUserSuccess(callback, workContainerBatch, resultsFromUserFunction);
+            return runWithUserExceptions(usersFunction, context, callback);
         } catch (PCUserException e) {
             // throw again to make the future failed
             throw e;
@@ -66,13 +65,15 @@ public class FunctionRunnerThing<K, V> {
         }
     }
 
-    private <R> ArrayList<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> handleUserSuccess(Consumer<R> callback, List<WorkContainer<K, V>> workContainerBatch, List<R> resultsFromUserFunction) {
+    private <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> handleUserSuccess(Consumer<R> callback,
+                                                                            List<WorkContainer<K, V>> workContainerBatch,
+                                                                            List<R> resultsFromUserFunction) {
         for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
             pc.onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
         }
 
         // capture each result, against the input record
-        var intermediateResults = new ArrayList<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>>();
+        var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
         for (R result : resultsFromUserFunction) {
             log.trace("Running users call back...");
             callback.accept(result);
@@ -82,44 +83,72 @@ public class FunctionRunnerThing<K, V> {
         for (var kvWorkContainer : workContainerBatch) {
             pc.addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
         }
+
         log.trace("User function future registered");
         return intermediateResults;
     }
 
-    private <R> List<R> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                        PollContextInternal<K, V> context) {
+    private <R> List<Tuple<ConsumerRecord<K, V>, R>> runWithUserExceptions(
+            Function<? super PollContextInternal<K, V>, ? extends List<R>> usersFunction,
+            PollContextInternal<K, V> context,
+            Consumer<R> callback) {
         try {
-            return usersFunction.apply(context);
+            var resultsFromUserFunction = usersFunction.apply(context);
+            return handleUserSuccess(callback, context.getWorkContainers(), resultsFromUserFunction);
         } catch (PCTerminalException e) {
-            var reaction = pc.getOptions().getTerminalFailureReaction();
+            return handleTerminalFailure(context, e, callback);
+        } catch (PCRetriableException e) {
+            handleExplicitUserRetriableFailure(context, e);
 
-            if (reaction == SKIP) {
-                log.warn("Terminal error in user function, skipping record due to configuration in {} - triggering context: {}",
-                        ParallelConsumerOptions.class.getSimpleName(),
-                        context);
-
-                // return empty result to cause system to skip as if it succeeded
-                // todo call on success to do all the extra stuff
-                return new ArrayList<>();
-            } else if (reaction == SHUTDOWN) {
-                log.error("Shutting down upon terminal failure in user function due to {} {} setting in {} - triggering context: {}",
-                        reaction,
-                        ParallelConsumerOptions.TerminalFailureReaction.class.getSimpleName(),
-                        ParallelConsumerOptions.class.getSimpleName(),
-                        context);
-
-                pc.closeDontDrainFirst();
-
-                // throw again to make the future failed
-                throw e;
-            } else {
-                throw new InternalRuntimeError(msg("Unsupported reaction config ({}) - submit a bug report.", reaction));
-            }
+            // throw again to make the future failed
+            throw e;
         } catch (Exception e) {
             handleUserRetriableFailure(context, e);
 
             // throw again to make the future failed
             throw e;
+        }
+    }
+
+    private <R> List<Tuple<ConsumerRecord<K, V>, R>> handleTerminalFailure(PollContextInternal<K, V> context,
+                                                                           PCTerminalException e, Consumer<R> callback) {
+        var reaction = pc.getOptions().getTerminalFailureReaction();
+
+        if (reaction == SKIP) {
+            log.warn("Terminal error in user function, skipping record due to configuration in {} - triggering context: {}",
+                    ParallelConsumerOptions.class.getSimpleName(),
+                    context);
+
+            // return empty result to cause system to skip as if it succeeded
+            return handleUserSuccess(callback, context.getWorkContainers(), UniLists.of());
+        } else if (reaction == SHUTDOWN) {
+            log.error("Shutting down upon terminal failure in user function due to {} {} setting in {} - triggering context: {}",
+                    reaction,
+                    ParallelConsumerOptions.TerminalFailureReaction.class.getSimpleName(),
+                    ParallelConsumerOptions.class.getSimpleName(),
+                    context);
+
+            pc.closeDontDrainFirst();
+
+            // throw again to make the future failed
+            throw e;
+        } else {
+            throw new InternalRuntimeError(msg("Unsupported reaction config ({}) - submit a bug report.", reaction));
+        }
+    }
+
+    private void handleExplicitUserRetriableFailure(PollContextInternal<K, V> context, PCRetriableException e) {
+        logUserFunctionException(e);
+
+        Optional<Offsets> offsetsOptional = e.getOffsetsOptional();
+        if (offsetsOptional.isPresent()) {
+            Offsets offsets = offsetsOptional.get();
+            log.debug("Specific offsets present in {}", e.toString());
+            context.streamInternal()
+                    .filter(offsets::contains)
+                    .forEach(work -> markRecordFailed(e, work));
+        } else {
+            markRecordsFailed(context.getWorkContainers(), e);
         }
     }
 
@@ -130,9 +159,17 @@ public class FunctionRunnerThing<K, V> {
 
     private void markRecordsFailed(List<WorkContainer<K, V>> workContainerBatch, Exception e) {
         for (var wc : workContainerBatch) {
-            wc.onUserFunctionFailure(e);
-            pc.addToMailbox(wc); // always add on error
+            markRecordFailed(e, wc);
         }
+    }
+
+    private void markRecordFailed(Exception e, RecordContextInternal<K, V> wc) {
+        markRecordFailed(e, wc.getWorkContainer());
+    }
+
+    private void markRecordFailed(Exception e, WorkContainer<K, V> wc) {
+        wc.onUserFunctionFailure(e);
+        pc.addToMailbox(wc); // always add on error
     }
 
     /**
