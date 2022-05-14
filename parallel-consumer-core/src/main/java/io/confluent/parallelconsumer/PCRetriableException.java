@@ -45,7 +45,7 @@ public class PCRetriableException extends PCUserException {
      */
     public PCRetriableException(String message, List<Long> offsets) {
         super(message);
-        offsetsOptional = Optional.empty();
+        offsetsOptional = Optional.of(Offsets.of(offsets));
     }
 
     public PCRetriableException(String message) {
