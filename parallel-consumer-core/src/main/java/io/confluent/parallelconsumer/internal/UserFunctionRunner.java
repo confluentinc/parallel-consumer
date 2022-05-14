@@ -18,12 +18,10 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SHUTDOWN;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SKIP;
-import static org.slf4j.event.Level.DEBUG;
-import static org.slf4j.event.Level.WARN;
 
 @AllArgsConstructor
 @Slf4j
-public class FunctionRunnerThing<K, V> {
+public class UserFunctionRunner<K, V> {
 
     private AbstractParallelEoSStreamProcessor<K, V> pc;
 
@@ -46,7 +44,7 @@ public class FunctionRunnerThing<K, V> {
             if (workIsStale) {
                 // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
                 log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
-                return null;
+                return UniLists.of();
             }
 
             PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
@@ -65,9 +63,31 @@ public class FunctionRunnerThing<K, V> {
         }
     }
 
-    private <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> handleUserSuccess(Consumer<R> callback,
-                                                                            List<WorkContainer<K, V>> workContainerBatch,
-                                                                            List<R> resultsFromUserFunction) {
+    private <R> List<Tuple<ConsumerRecord<K, V>, R>> runWithUserExceptions(
+            Function<? super PollContextInternal<K, V>, ? extends List<R>> usersFunction,
+            PollContextInternal<K, V> context,
+            Consumer<R> callback) {
+        try {
+            var resultsFromUserFunction = usersFunction.apply(context);
+            return handleUserSuccess(callback, context.getWorkContainers(), resultsFromUserFunction);
+        } catch (PCTerminalException e) {
+            return handleUserTerminalFailure(context, e, callback);
+        } catch (PCRetriableException e) {
+            handleExplicitUserRetriableFailure(context, e);
+
+            // throw again to make the future failed
+            throw e;
+        } catch (Exception e) {
+            handleImplicitUserRetriableFailure(context, e);
+
+            // throw again to make the future failed
+            throw e;
+        }
+    }
+
+    private <R> List<Tuple<ConsumerRecord<K, V>, R>> handleUserSuccess(Consumer<R> callback,
+                                                                       List<WorkContainer<K, V>> workContainerBatch,
+                                                                       List<R> resultsFromUserFunction) {
         for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
             pc.onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
         }
@@ -88,30 +108,8 @@ public class FunctionRunnerThing<K, V> {
         return intermediateResults;
     }
 
-    private <R> List<Tuple<ConsumerRecord<K, V>, R>> runWithUserExceptions(
-            Function<? super PollContextInternal<K, V>, ? extends List<R>> usersFunction,
-            PollContextInternal<K, V> context,
-            Consumer<R> callback) {
-        try {
-            var resultsFromUserFunction = usersFunction.apply(context);
-            return handleUserSuccess(callback, context.getWorkContainers(), resultsFromUserFunction);
-        } catch (PCTerminalException e) {
-            return handleTerminalFailure(context, e, callback);
-        } catch (PCRetriableException e) {
-            handleExplicitUserRetriableFailure(context, e);
-
-            // throw again to make the future failed
-            throw e;
-        } catch (Exception e) {
-            handleUserRetriableFailure(context, e);
-
-            // throw again to make the future failed
-            throw e;
-        }
-    }
-
-    private <R> List<Tuple<ConsumerRecord<K, V>, R>> handleTerminalFailure(PollContextInternal<K, V> context,
-                                                                           PCTerminalException e, Consumer<R> callback) {
+    private <R> List<Tuple<ConsumerRecord<K, V>, R>> handleUserTerminalFailure(PollContextInternal<K, V> context,
+                                                                               PCTerminalException e, Consumer<R> callback) {
         var reaction = pc.getOptions().getTerminalFailureReaction();
 
         if (reaction == SKIP) {
@@ -143,16 +141,22 @@ public class FunctionRunnerThing<K, V> {
         Optional<Offsets> offsetsOptional = e.getOffsetsOptional();
         if (offsetsOptional.isPresent()) {
             Offsets offsets = offsetsOptional.get();
-            log.debug("Specific offsets present in {}", e.toString());
+            log.debug("Specific offsets present in {}", offsets);
             context.streamInternal()
-                    .filter(offsets::contains)
-                    .forEach(work -> markRecordFailed(e, work));
+                    .forEach(work -> {
+                        if (offsets.contains(work)) {
+                            markRecordFailed(e, work.getWorkContainer());
+                        } else {
+                            // mark record succeeded
+                            handleUserSuccess();
+                        }
+                    });
         } else {
             markRecordsFailed(context.getWorkContainers(), e);
         }
     }
 
-    private void handleUserRetriableFailure(PollContextInternal<K, V> context, Exception e) {
+    private void handleImplicitUserRetriableFailure(PollContextInternal<K, V> context, Exception e) {
         logUserFunctionException(e);
         markRecordsFailed(context.getWorkContainers(), e);
     }
@@ -161,10 +165,6 @@ public class FunctionRunnerThing<K, V> {
         for (var wc : workContainerBatch) {
             markRecordFailed(e, wc);
         }
-    }
-
-    private void markRecordFailed(Exception e, RecordContextInternal<K, V> wc) {
-        markRecordFailed(e, wc.getWorkContainer());
     }
 
     private void markRecordFailed(Exception e, WorkContainer<K, V> wc) {
@@ -179,11 +179,13 @@ public class FunctionRunnerThing<K, V> {
      * Retryable?</a> Kafka uses Retriable, so we'll go with that ;)
      */
     private void logUserFunctionException(Exception e) {
-        boolean explicitlyRetryable = e instanceof PCRetriableException;
-        var level = explicitlyRetryable ? DEBUG : WARN;
-        var prefix = explicitlyRetryable ? "Explicit " + PCRetriableException.class.getSimpleName() + " caught - " : "";
-        var message = prefix + "Exception in user function, registering record as failed, returning to queue";
-        log.atLevel(level).log(message, e);
+        var message = "in user function, registering record as failed, returning to queue";
+        if (e instanceof PCRetriableException) {
+            log.debug("Explicit exception {} caught - {}", message, e.toString());
+        } else {
+            log.warn("Exception {}", message, e);
+        }
     }
+
 }
 

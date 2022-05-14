@@ -15,12 +15,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * @see FunctionRunnerThing
+ * @see UserFunctionRunner
  */
-class FunctionRunnerThingTest {
+class UserFunctionRunnerTest {
 
     @Test
-    void test() {
+    void shutdown() {
         run(SHUTDOWN, context -> {
             throw new PCTerminalException("fake");
         });
@@ -33,7 +33,7 @@ class FunctionRunnerThingTest {
                 .terminalFailureReaction(shutdown)
                 .build());
 
-        FunctionRunnerThing<String, String> r = new FunctionRunnerThing<>(mock);
+        UserFunctionRunner<String, String> r = new UserFunctionRunner<>(mock);
         var workFor = ModelUtils.createWorkFor(0);
         r.runUserFunction(fake,
                 o -> {
@@ -41,16 +41,16 @@ class FunctionRunnerThingTest {
     }
 
     @Test
-    void testTwo() {
+    void skip() {
         run(SKIP, context -> {
             throw new PCTerminalException("fake");
         });
     }
 
     @Test
-    void testThree() {
+    void offsets() {
         run(SKIP, context -> {
-            throw new PCRetriableException("fake", Offsets.ofLongs(0, 1));
+            throw new PCRetriableException("fake", Offsets.of(0, 1));
         });
     }
 

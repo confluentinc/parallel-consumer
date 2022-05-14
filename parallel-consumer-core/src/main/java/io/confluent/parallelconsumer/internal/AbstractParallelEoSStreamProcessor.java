@@ -766,8 +766,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Sending work ({}) to pool", batch);
         Future outputRecordFuture = workerThreadPool.submit(() -> {
             addInstanceMDC();
-            FunctionRunnerThing<K, V> objectObjectFunctionRunnerThing = new FunctionRunnerThing<>(this);
-            return objectObjectFunctionRunnerThing.runUserFunction(usersFunction, callback, batch);
+            UserFunctionRunner<K, V> runner = new UserFunctionRunner<>(this);
+            return runner.runUserFunction(usersFunction, callback, batch);
         });
         // for a batch, each message in the batch shares the same result
         for (final WorkContainer<K, V> workContainer : batch) {
