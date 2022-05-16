@@ -17,6 +17,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 
 /**
  * Test for pause/resume feature of the parallel consumer (see {@code GH#193}).
@@ -48,6 +49,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         }
 
         public void unlockProcessing() {
+            log.info("Unlocking processing");
             mutex.unlock();
         }
 
@@ -57,7 +59,8 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
             numInFlightRecords.incrementAndGet();
             try {
                 lockProcessing();
-                numProcessedRecords.incrementAndGet();
+                int numProcessed = numProcessedRecords.incrementAndGet();
+                log.info("Processed complete, incremented to {}", numProcessed);
             } finally {
                 unlockProcessing();
                 numInFlightRecords.decrementAndGet();
@@ -173,14 +176,14 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
     @SneakyThrows
     void testThatInFlightWorkIsFinishedSuccessfullyAndOffsetsAreCommitted(final CommitMode commitMode) {
         int degreeOfParallelism = 3;
-        int numTestRecordsPerBatch = 1_000;
+        int numTestRecordsPerSet = 1_000;
 
         TestUserFunction testUserFunction = createTestSetup(commitMode, degreeOfParallelism);
         // block processing in the user function to ensure we have in flight work once we pause the consumer
         testUserFunction.lockProcessing();
 
         // produce some messages
-        addRecordsWithSetKey(numTestRecordsPerBatch);
+        addRecordsWithSetKey(numTestRecordsPerSet);
 
         // wait until we have enough records in flight
         Awaitility
@@ -217,11 +220,11 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         // other pending messages should be processed now
         Awaitility
                 .waitAtMost(defaultTimeout)
-                .alias(numTestRecordsPerBatch + " records should be processed")
-                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerBatch));
+                .alias(numTestRecordsPerSet + " records should be processed")
+                .untilAsserted(() -> assertThat(testUserFunction.numProcessedRecords.get()).isEqualTo(numTestRecordsPerSet));
 
         // overall committed offset should reach the total number of processed records
-        awaitForCommit(testUserFunction.numProcessedRecords.get());
+        awaitForCommit(numTestRecordsPerSet);
     }
 
 }

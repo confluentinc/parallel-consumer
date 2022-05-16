@@ -336,7 +336,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         assertThat(commits).containsAll(offsets);
     }
 
-    private List<Integer> getCommitHistoryFlattened() {
+    protected List<Integer> getCommitHistoryFlattened() {
         return (isUsingTransactionalProducer())
                 ? ktu.getProducerCommitsFlattened(producerSpy)
                 : extractAllPartitionsOffsetsSequentially(false);
