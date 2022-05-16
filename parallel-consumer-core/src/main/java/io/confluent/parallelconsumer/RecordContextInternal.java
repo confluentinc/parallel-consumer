@@ -6,10 +6,12 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Getter;
+import lombok.ToString;
 
 /**
  * Internal only view of the {@link RecordContext} class.
  */
+@ToString
 public class RecordContextInternal<K, V> {
 
     @Getter

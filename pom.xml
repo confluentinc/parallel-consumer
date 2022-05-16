@@ -471,7 +471,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-help-plugin</artifactId>
-                <version>3.0.1</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>show-profiles</id>
@@ -510,7 +510,7 @@
             <plugin>
                 <groupId>io.whelk.asciidoc</groupId>
                 <artifactId>asciidoc-template-maven-plugin</artifactId>
-                <version>1.0.18</version>
+                <version>1.0.20</version>
                 <executions>
                     <execution>
                         <id>process</id>
@@ -521,8 +521,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <templateDirectory>./</templateDirectory>
-                    <templateFile>src/docs/README.adoc</templateFile>
+                    <templateDirectory>src/docs/</templateDirectory>
+                    <templateFile>README_TEMPLATE.adoc</templateFile>
                     <outputDirectory>./</outputDirectory>
                     <outputFile>README.adoc</outputFile>
                 </configuration>

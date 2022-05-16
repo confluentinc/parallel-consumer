@@ -97,16 +97,19 @@ public class KafkaTestUtils {
     }
 
     public List<Integer> getProducerCommitsFlattened(MockProducer mp) {
+        return getProducerCommitsMeta(mp).stream().map(x -> (int) x.offset()).collect(Collectors.toList());
+    }
+
+    public List<OffsetAndMetadata> getProducerCommitsMeta(MockProducer mp) {
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
-        List<Integer> set = history.stream().flatMap(histories -> {
+        List<OffsetAndMetadata> set = history.stream().flatMap(histories -> {
             // get all partition offsets and flatten
-            var results = new ArrayList<Integer>();
+            ArrayList<OffsetAndMetadata> results = new ArrayList<>();
             var group = histories.get(CONSUMER_GROUP_ID);
             for (var partitionOffsets : group.entrySet()) {
                 OffsetAndMetadata commit = partitionOffsets.getValue();
-                int offset = (int) commit.offset();
-                results.add(offset);
+                results.add(commit);
             }
             return results.stream();
         }).collect(Collectors.toList()); // set - ignore repeated commits ({@link OffsetMap})
