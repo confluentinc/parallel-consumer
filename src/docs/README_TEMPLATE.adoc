@@ -248,7 +248,8 @@ without operational burden or harming the cluster's performance
 * Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
-* Manual Pause / Resume (pausing of partitions is also automatic, whenever back pressure has built up)
+* Manual Pause / Resume of entire PC without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]

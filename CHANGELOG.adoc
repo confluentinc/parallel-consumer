@@ -12,11 +12,17 @@ endif::[]
 
 == Next Version
 
+== v0.5.1.0
+
+=== Features
+
+* #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
+
 == v0.5.0.1
 
 === Fixes and Improvements
 
-- fixes: #225 Build support for Java 17, 18 (#289)
+* fixes: #225 Build support for Java 17, 18 (#289)
 
 == v0.5.0.0
 
