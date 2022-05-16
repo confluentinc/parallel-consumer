@@ -19,10 +19,11 @@ import java.util.function.Function;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
-public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V> implements ParallelStreamProcessor<K, V> {
+public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V>
+        implements ParallelStreamProcessor<K, V> {
 
     /**
-     * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
+     * Construct the AsyncConsumer by wrapping this passed in consumer and producer, which can be configured any which
      * way as per normal.
      *
      * @see ParallelConsumerOptions

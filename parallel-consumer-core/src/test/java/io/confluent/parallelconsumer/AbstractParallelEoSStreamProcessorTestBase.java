@@ -336,13 +336,13 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         assertThat(commits).containsAll(offsets);
     }
 
-    public List<Integer> getCommitHistoryFlattened() {
+    private List<Integer> getCommitHistoryFlattened() {
         return (isUsingTransactionalProducer())
                 ? ktu.getProducerCommitsFlattened(producerSpy)
                 : extractAllPartitionsOffsetsSequentially(false);
     }
 
-    public List<OffsetAndMetadata> getCommitHistoryFlattenedMeta() {
+    private List<OffsetAndMetadata> getCommitHistoryFlattenedMeta() {
         return (isUsingTransactionalProducer())
                 ? ktu.getProducerCommitsMeta(producerSpy)
                 : extractAllPartitionsOffsetsSequentiallyMeta(true);
@@ -396,7 +396,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
                 .flatMap(commits ->
                         {
                             var rawValues = new ArrayList<>(commits.values()).stream(); // 4 debugging
-//                            Stream<Integer> rawOffsets = values.stream().map(meta -> (int) meta.offset());
                             if (trimGenesis)
                                 return rawValues.filter(x -> x.offset() != 0);
                             else
