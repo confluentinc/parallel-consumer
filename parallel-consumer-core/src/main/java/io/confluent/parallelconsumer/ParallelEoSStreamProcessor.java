@@ -78,7 +78,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                     results.add(result);
                 }
             } catch (Exception e) {
-                throw new InternalRuntimeError(e);
+                throw new InternalRuntimeError("Error while waiting for produce results", e);
             }
 
             return results;
