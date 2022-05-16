@@ -306,7 +306,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private void releaseCommitLock() {
         log.trace("Release commit lock");
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
-        if (!producerTransactionLock.isWriteLockedByCurrentThread()) throw new IllegalStateException("Not held be me");
+        if (!producerTransactionLock.isWriteLockedByCurrentThread()) 
+            throw new IllegalStateException("Not held be me");
         writeLock.unlock();
     }
 
