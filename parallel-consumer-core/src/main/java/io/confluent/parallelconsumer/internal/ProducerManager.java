@@ -38,11 +38,11 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     private final boolean producerIsConfiguredForTransactions;
 
+
     /**
-     * The
-     * {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must be
-     * careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in state
-     * COMMITTING_TRANSACTION".
+     * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
+     * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
+     * state COMMITTING_TRANSACTION".
      */
     private ReentrantReadWriteLock producerTransactionLock;
 
@@ -115,10 +115,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * Produce messages back to the broker.
-     *
-     * <p>Produced messages are not waited for, instead their futures are returned so the caller can
-     * decide when waiting should be done (if at all).
+     * Produce a message back to the broker.
+     * <p>
+     * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the more common
+     * use case where messages aren't produced.
      *
      * @see ParallelConsumer#poll
      * @see ParallelStreamProcessor#pollAndProduceMany
