@@ -51,7 +51,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     @SneakyThrows
-    public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction, Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+    public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction, 
+        Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // todo refactor out the producer system to a sub class
         if (!getOptions().isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
