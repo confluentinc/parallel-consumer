@@ -35,9 +35,6 @@ endif::[]
 :issues_link: {base_url}/issues
 
 
-//:project_root: ../../
-
-
 ifdef::env-github[]
 :tip-caption: :bulb:
 :note-caption: :information_source:
@@ -818,7 +815,7 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README_TEMPLATE.adoc[].
 
 === Maven targets
 

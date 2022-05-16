@@ -10,6 +10,18 @@
 //
 
 
+// dynamic include base for editing in IDEA
+:project_root: ./
+// for editing the template to see the includes, this will correctly render includes
+ifeval::["{docname}" == "README_TEMPLATE"]
+
+TIP:: Editing template file
+
+:project_root: ../../
+
+endif::[]
+
+
 = Confluent Parallel Consumer
 :icons:
 :toc: macro
@@ -21,14 +33,6 @@
 :github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
-
-// dynamic include base for editing in IDEA
-:project_root: ./
-
-// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
-// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
-// leave it commented out when committing work)
-//:project_root: ../../
 
 
 ifdef::env-github[]
