@@ -1,9 +1,9 @@
-
-/*-
- * Copyright (C) 2020 Confluent, Inc.
- */
 package io.confluent.parallelconsumer.integrationTests.utils;
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -26,48 +26,63 @@ import static java.time.Duration.ofSeconds;
 public class KafkaClientUtils {
 
     public static final int MAX_POLL_RECORDS = 10_000;
+    public static final String GROUP_ID_PREFIX = "group-1-";
+
     private final KafkaContainer kContainer;
-    public Properties props = new Properties();
 
-    public KafkaConsumer<String, String> consumer;
+    @Getter
+    private KafkaConsumer<String, String> consumer;
 
-    public KafkaProducer<String, String> producer;
+    @Getter
+    private KafkaProducer<String, String> producer;
 
-    public AdminClient admin;
+    @Getter
+    private AdminClient admin;
+    private final String groupId = GROUP_ID_PREFIX + RandomUtils.nextInt();
+
 
     public KafkaClientUtils(KafkaContainer kafkaContainer) {
         kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
         kafkaContainer.addEnv("KAFKA_transaction_state_log_min_isr", "1");
         kafkaContainer.start();
         this.kContainer = kafkaContainer;
-        setupProps();
     }
 
-    public void setupProps() {
+    private Properties setupCommonProps() {
+        var commonProps = new Properties();
         String servers = this.kContainer.getBootstrapServers();
+        commonProps.put("bootstrap.servers", servers);
+        return commonProps;
+    }
 
-        props.put("bootstrap.servers", servers);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt());
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
+    private Properties setupProducerProps() {
+        var producerProps = setupCommonProps();
 
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+
+        return producerProps;
+    }
+
+    private Properties setupConsumerProps() {
+        var consumerProps = setupCommonProps();
 
         //
-        props.put("key.serializer", StringSerializer.class.getName());
-        props.put("value.serializer", StringSerializer.class.getName());
-        props.put("key.deserializer", StringDeserializer.class.getName());
-        props.put("value.deserializer", StringDeserializer.class.getName());
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
+        consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 
         //
-        props.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
-
-        //
-//    props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10);
-//    props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 100);
+        //    consumerProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10);
+        //    consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 100);
 
         // make sure we can download lots of records if they're small. Default is 500
-//        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1_000_000);
-        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+//        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1_000_000);
+        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+
+        return consumerProps;
     }
 
     @BeforeEach
@@ -75,7 +90,7 @@ public class KafkaClientUtils {
         log.info("Setting up clients...");
         consumer = this.createNewConsumer();
         producer = this.createNewProducer(false);
-        admin = AdminClient.create(props);
+        admin = AdminClient.create(setupCommonProps());
     }
 
     @AfterEach
@@ -96,19 +111,31 @@ public class KafkaClientUtils {
         return createNewConsumer(newConsumerGroup, new Properties());
     }
 
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(Properties options) {
+        return createNewConsumer(false, options);
+    }
+
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup, Properties options) {
+        Properties properties = setupConsumerProps();
+
         if (newConsumerGroup) {
-            props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-1-" + RandomUtils.nextInt()); // new group
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + RandomUtils.nextInt()); // new group
         }
-        props.putAll(options);
-        KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(props);
+
+        // override with custom
+        properties.putAll(options);
+
+        KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(properties);
         log.debug("New consume {}", kvKafkaConsumer);
         return kvKafkaConsumer;
     }
 
     public <K, V> KafkaProducer<K, V> createNewProducer(boolean tx) {
+        Properties properties = setupProducerProps();
+
         var txProps = new Properties();
-        txProps.putAll(props);
+        txProps.putAll(properties);
+
         if (tx) {
             // random number so we get a unique producer tx session each time. Normally wouldn't do this in production,
             // but sometimes running in the test suite our producers step on each other between test runs and this causes
@@ -116,8 +143,11 @@ public class KafkaClientUtils {
             // Error looks like: Producer attempted an operation with an old epoch. Either there is a newer producer with
             // the same transactionalId, or the producer's transaction has been expired by the broker.
             txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + RandomUtils.nextInt()); // required for tx
+            txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
+
         }
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
+
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
     }

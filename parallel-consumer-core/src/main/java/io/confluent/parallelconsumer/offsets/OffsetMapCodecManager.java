@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
@@ -16,7 +16,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -56,6 +55,7 @@ public class OffsetMapCodecManager<K, V> {
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
+    // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -67,23 +67,23 @@ public class OffsetMapCodecManager<K, V> {
         /**
          * The highest represented offset in this result.
          */
-        Long highestSeenOffset;
+        Optional<Long> highestSeenOffset;
 
         /**
          * Of the offsets encoded, the incomplete ones.
          */
         Set<Long> incompleteOffsets;
 
-        public static HighestOffsetAndIncompletes of(Long highestSeenOffset) {
-            return new HighestOffsetAndIncompletes(highestSeenOffset, new HashSet<>());
+        public static HighestOffsetAndIncompletes of(long highestSeenOffset) {
+            return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>());
         }
 
         public static HighestOffsetAndIncompletes of(long highestSeenOffset, Set<Long> incompleteOffsets) {
-            return new HighestOffsetAndIncompletes(highestSeenOffset, incompleteOffsets);
+            return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), incompleteOffsets);
         }
 
         public static HighestOffsetAndIncompletes of() {
-            return HighestOffsetAndIncompletes.of(null);
+            return new HighestOffsetAndIncompletes(Optional.empty(), new HashSet<>());
         }
     }
 
@@ -92,28 +92,28 @@ public class OffsetMapCodecManager<K, V> {
      */
     public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
+    // todo remove consumer #233
     public OffsetMapCodecManager(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         this.consumer = consumer;
     }
 
     /**
      * Load all the previously completed offsets that were not committed
-     *
-     * @return
      */
+    // todo this is the only method that needs the consumer - offset encoding is being conflated with decoding upon assignment #233
     // todo make package private?
     // todo rename
-    public Map<TopicPartition, PartitionState<K, V>> loadOffsetMapForPartition(final Set<TopicPartition> assignment) {
+    public Map<TopicPartition, PartitionState<K, V>> loadPartitionStateForAssignment(final Collection<TopicPartition> assignment) {
         // load last committed state / metadata from consumer
         // todo this should be controlled for - improve consumer management so that this can't happen
-        Map<TopicPartition, OffsetAndMetadata> lastCommittedOffsets = null;
+        Map<TopicPartition, OffsetAndMetadata> partitionLastCommittedOffsets = null;
         int attempts = 0;
-        while (lastCommittedOffsets == null) {
+        while (partitionLastCommittedOffsets == null) {
             WakeupException lastWakeupException = null;
             try {
-                lastCommittedOffsets = consumer.committed(assignment);
+                partitionLastCommittedOffsets = consumer.committed(new HashSet<>(assignment));
             } catch (WakeupException exception) {
-                log.warn("Woken up trying to get assignment", exception);
+                log.debug("Woken up trying to get assignment", exception);
                 lastWakeupException = exception;
             }
             attempts++;
@@ -121,15 +121,12 @@ public class OffsetMapCodecManager<K, V> {
                 throw new InternalRuntimeError("Failed to get partition assignment - continuously woken up.", lastWakeupException);
         }
 
-        var states = new HashMap<TopicPartition, PartitionState<K, V>>();
-        lastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
+        var partitionStates = new HashMap<TopicPartition, PartitionState<K, V>>();
+        partitionLastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
-                long nextExpectedOffset = offsetAndMeta.offset();
-                String metadata = offsetAndMeta.metadata();
                 try {
-                    // todo rename
-                    PartitionState<K, V> incompletes = decodeIncompletes(nextExpectedOffset, tp, metadata);
-                    states.put(tp, incompletes);
+                    PartitionState<K, V> state = decodePartitionState(tp, offsetAndMeta);
+                    partitionStates.put(tp, state);
                 } catch (OffsetDecodingError offsetDecodingError) {
                     log.error("Error decoding offsets from assigned partition, dropping offset map (will replay previously completed messages - partition: {}, data: {})",
                             tp, offsetAndMeta, offsetDecodingError);
@@ -138,16 +135,23 @@ public class OffsetMapCodecManager<K, V> {
 
         });
 
-        // for each assignment which isn't now added in the states to return, enter a default entry. Catches multiple other cases.
+        // assigned partitions for which there has never been a commit
+        // for each assignment with no commit history, enter a default entry. Catches multiple other cases.
         assignment.stream()
-                .filter(x -> !states.containsKey(x))
-                .forEach(x ->
-                        states.put(x, new PartitionState<>(x, HighestOffsetAndIncompletes.of())));
+                .filter(topicPartition -> !partitionStates.containsKey(topicPartition))
+                .forEach(topicPartition -> {
+                    PartitionState<K, V> defaultEntry = new PartitionState<>(topicPartition, HighestOffsetAndIncompletes.of());
+                    partitionStates.put(topicPartition, defaultEntry);
+                });
 
-        return states;
+        return partitionStates;
     }
 
-    static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long committedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
+    private HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(OffsetAndMetadata offsetData) throws OffsetDecodingError {
+        return deserialiseIncompleteOffsetMapFromBase64(offsetData.offset(), offsetData.metadata());
+    }
+
+    public static HighestOffsetAndIncompletes deserialiseIncompleteOffsetMapFromBase64(long committedOffsetForPartition, String base64EncodedOffsetPayload) throws OffsetDecodingError {
         byte[] decodedBytes;
         try {
             decodedBytes = OffsetSimpleSerialisation.decodeBase64(base64EncodedOffsetPayload);
@@ -157,19 +161,18 @@ public class OffsetMapCodecManager<K, V> {
         return decodeCompressedOffsets(committedOffsetForPartition, decodedBytes);
     }
 
-    // todo rename
-    PartitionState<K, V> decodeIncompletes(long nextExpectedOffset, TopicPartition tp, String offsetMetadataPayload) throws OffsetDecodingError {
-        HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(nextExpectedOffset, offsetMetadataPayload);
+    PartitionState<K, V> decodePartitionState(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
+        HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
         return new PartitionState<K, V>(tp, incompletes);
     }
 
-    public String makeOffsetMetadataPayload(long finalOffsetForPartition, PartitionState<K, V> state) throws EncodingNotSupportedException {
+    public String makeOffsetMetadataPayload(long finalOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
         String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, state);
         return offsetMap;
     }
 
-    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, PartitionState<K, V> state) throws EncodingNotSupportedException {
+    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
         byte[] compressedEncoding = encodeOffsetsCompressed(finalOffsetForPartition, state);
         String b64 = OffsetSimpleSerialisation.base64(compressedEncoding);
         return b64;
@@ -183,12 +186,16 @@ public class OffsetMapCodecManager<K, V> {
      * <p>
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
-    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partition) throws EncodingNotSupportedException {
-        TopicPartition tp = partition.getTp();
-        Set<Long> incompleteOffsets = partition.getIncompleteOffsets();
-        log.debug("Encoding partition {} incomplete offsets {}", tp, incompleteOffsets);
-        long offsetHighestSucceeded = partition.getOffsetHighestSucceeded();
-        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, offsetHighestSucceeded, incompleteOffsets).invoke();
+    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
+        var incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
+        long highestSucceeded = partitionState.getOffsetHighestSucceeded();
+        if (log.isDebugEnabled()) {
+            log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
+                    partitionState.getTp(),
+                    highestSucceeded,
+                    partitionState.getIncompleteOffsetsBelowHighestSucceeded());
+        }
+        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
 
         //
         if (forcedCodec.isPresent()) {
@@ -197,7 +204,7 @@ public class OffsetMapCodecManager<K, V> {
             Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
             byte[] bytes = encodingMap.get(forcedOffsetEncoding);
             if (bytes == null)
-                throw new EncodingNotSupportedException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
+                throw new NoEncodingPossibleException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
             return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
         } else {
             return simultaneousEncoder.packSmallest();
@@ -220,48 +227,8 @@ public class OffsetMapCodecManager<K, V> {
             return HighestOffsetAndIncompletes.of(highestSeenOffsetIsThen);
         } else {
             var result = EncodedOffsetPair.unwrap(decodedBytes);
-
-            HighestOffsetAndIncompletes incompletesTuple = result.getDecodedIncompletes(nextExpectedOffset);
-
-            Set<Long> incompletes = incompletesTuple.getIncompleteOffsets();
-            long highWater = incompletesTuple.getHighestSeenOffset();
-
-            return HighestOffsetAndIncompletes.of(highWater, incompletes);
+            return result.getDecodedIncompletes(nextExpectedOffset);
         }
-    }
-
-    String incompletesToBitmapString(long finalOffsetForPartition, PartitionState<K, V> state) {
-        var runLengthString = new StringBuilder();
-        Long lowWaterMark = finalOffsetForPartition;
-        Long highWaterMark = state.getOffsetHighestSeen();
-        long end = highWaterMark - lowWaterMark;
-        for (final var relativeOffset : range(end)) {
-            long offset = lowWaterMark + relativeOffset;
-            if (state.getIncompleteOffsets().contains(offset)) {
-                runLengthString.append("o");
-            } else {
-                runLengthString.append("x");
-            }
-        }
-        return runLengthString.toString();
-    }
-
-    static Set<Long> bitmapStringToIncomplete(final long baseOffset, final String inputBitmapString) {
-        final Set<Long> incompleteOffsets = new HashSet<>();
-
-        final long longLength = inputBitmapString.length();
-        range(longLength).forEach(i -> {
-            var bit = inputBitmapString.charAt(i);
-            if (bit == 'o') {
-                incompleteOffsets.add(baseOffset + i);
-            } else if (bit == 'x') {
-                log.trace("Dropping completed offset");
-            } else {
-                throw new IllegalArgumentException("Invalid encoding - unexpected char: " + bit);
-            }
-        });
-
-        return incompleteOffsets;
     }
 
 }

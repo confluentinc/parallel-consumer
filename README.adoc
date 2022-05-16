@@ -1,7 +1,7 @@
 //
-// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
+// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
@@ -10,7 +10,19 @@
 //
 
 
-= parallel-consumer (beta)
+// dynamic include base for editing in IDEA
+:project_root: ./
+// for editing the template to see the includes, this will correctly render includes
+ifeval::["{docname}" == "README_TEMPLATE"]
+
+TIP:: Editing template file
+
+:project_root: ../../
+
+endif::[]
+
+
+= Confluent Parallel Consumer
 :icons:
 :toc: macro
 :toclevels: 3
@@ -21,14 +33,6 @@
 :github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
-
-// dynamic include base for editing in IDEA
-:project_root: ./
-
-// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
-// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
-// leave it commented out when committing work)
-//:project_root: ../../
 
 
 ifdef::env-github[]
@@ -50,9 +54,13 @@ image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelcons
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
-WARNING: This is not a Confluent supported product.
-It is an experimental alpha stage accelerator.
+Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
+
+NOTE: This is not a part of Confluent's commercial support offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
+
+IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
+It is actively maintained by the CSID team at Confluent.
 
 [[intro]]
 This library lets you process messages in parallel via a single Kafka Consumer meaning you can increase consumer parallelism without increasing the number of partitions in the topic you intend to process.
@@ -68,6 +76,30 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 ----
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
+
+[#demo]
+== Demo
+
+.Relative speed demonstration
+--
+.Click on the animated SVG image to open the https://asciinema.org/a/404299[Asciinema.org player].
+image::https://gist.githubusercontent.com/astubbs/26cccaf8b624a53ae26a52dbc00148b1/raw/cbf558b38b0aa624bd7637406579d2a8f00f51db/demo.svg[link="https://asciinema.org/a/404299"]
+--
+
+:talk_link: https://www.confluent.io/en-gb/events/kafka-summit-europe-2021/introducing-confluent-labs-parallel-consumer-client/
+:talk_preview_image: https://play.vidyard.com/5MLb1Xh7joEQ7phxPxiyPK.jpg
+
+[#talk]
+== Video Overview
+
+.Kafka Summit Europe 2021 Presentation
+--
+.A video presentation overview can be found {talk_link}[from the Kafka Summit Europe 2021] page for the presentatoin, along with slides.
+[link = {talk_link}]
+image::{talk_preview_image}[Talk]
+--
+
+'''
 
 toc::[]
 
@@ -195,24 +227,31 @@ The end-to-end latency of the responses to these answers needs to be as low as t
 We can break out as described below into the tool for processing that step, then return to the Kafka Streams context.
 * Provisioning extra machines (either virtual machines or real machines) to run multiple clients has a cost, using this library instead avoids the need for extra instances to be deployed in any respect.
 
-== Feature List
+== Features List
 
-* Have massively parallel consumption processing without running hundreds or thousands of
-** Kafka consumer clients
-** topic partitions
+* Have massively parallel consumption processing without running hundreds or thousands of:
+** Kafka consumer clients,
+** topic partitions,
 +
-without operational burden or harming the clusters performance
+without operational burden or harming the cluster's performance
 * Client side queueing system on top of Apache Kafka consumer
 ** Efficient individual message acknowledgement system (without local or third party external system state storage) to massively reduce (and usually completely eliminate) message replay upon failure - see <<offset_map>> section for more details
+* Solution for the https://en.wikipedia.org/wiki/Head-of-line_blocking["head of line"] blocking problem where continued failure of a single message, prevents progress for messages behind it in the queue
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
-* Vert.x non-blocking library integration (HTTP and any Vert.x future support)
-* Reactor non-blocking library integration
+* Batch support in all versions of the API to process batches of messages in parallel instead of single messages.
+** Particularly useful for when your processing function can work with more than a single record at a time - e.g. sending records to an API which has a batch version like Elasticsearch
+* Vert.x and Reactor.io non-blocking library integration
+** Non-blocking I/O work management
+** Vert.x's WebClient and general Vert.x Future support
+** Reactor.io Publisher (Mono/Flux) and Java's CompletableFuture (through `Mono#fromFuture`)
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
+* Manual Pause / Resume of entire PC without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
@@ -330,14 +369,13 @@ As an illustrative example of relative performance, given:
 
 == Support and Issues
 
-WARNING: This library is experimental, and Confluent does not currently offer support for this library.
-
 If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
 Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
 
 We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
 
 NOTE: We are very interested to hear about your experiences!
+And please vote on your favourite issues!
 
 If you have questions, head over to the https://launchpass.com/confluentcommunity[Confluent Slack community], or raise an https://github.com/confluentinc/parallel-consumer/issues[issue] on GitHub.
 
@@ -349,7 +387,7 @@ This library is copyright Confluent Inc, and licensed under the Apache License V
 
 === Maven
 
-This project is available in maven central, https://repo1.maven.org/maven2/io/confluent/parallelconsumer/[repo1].
+This project is available in maven central, https://repo1.maven.org/maven2/io/confluent/parallelconsumer/[repo1], along with SNAPSHOT builds (starting with 0.5-SNAPSHOT) in https://oss.sonatype.org/content/repositories/snapshots/io/confluent/parallelconsumer/[repo1's SNAPSHOTS repo].
 
 Latest version can be seen https://search.maven.org/artifact/io.confluent.parallelconsumer/parallel-consumer-core[here].
 
@@ -359,12 +397,19 @@ Where `${project.version}` is the version to be used:
 * artifact ID: `parallel-consumer-core`
 * version: image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
 
-
 .Core Module Dependency
 [source,xml,indent=0]
         <dependency>
             <groupId>io.confluent.parallelconsumer</groupId>
             <artifactId>parallel-consumer-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+.Reactor Module Dependency
+[source,xml,indent=0]
+        <dependency>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-reactor</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -376,6 +421,7 @@ Where `${project.version}` is the version to be used:
             <version>${project.version}</version>
         </dependency>
 
+[[common_preparation]]
 === Common Preparation
 
 .Setup the client
@@ -398,6 +444,7 @@ Where `${project.version}` is the version to be used:
 
         return eosStreamProcessor;
 ----
+
 <1> Setup your clients as per normal.
 A Producer is only required if using the `produce` flows.
 <2> Choose your ordering type, `KEY` in this case.
@@ -430,7 +477,6 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
  * @see AbstractParallelEoSStreamProcessor
- * @see #poll(Consumer)
  */
 ----
 
@@ -455,9 +501,10 @@ You can also optionally provide a callback function to be run after the message(
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.pollAndProduce(record -> {
-                    var result = processBrokerRecord(record);
-                    return new ProducerRecord<>(outputTopic, record.key(), result.payload);
+        parallelConsumer.pollAndProduce(context -> {
+                    var consumerRecord = context.getSingleRecord().getConsumerRecord();
+                    var result = processBrokerRecord(consumerRecord);
+                    return new ProducerRecord<>(outputTopic, consumerRecord.key(), result.payload);
                 }, consumeProduceResult -> {
                     log.debug("Message {} saved to broker at offset {}",
                             consumeProduceResult.getOut(),
@@ -474,18 +521,60 @@ You have the option to either use callbacks to be notified of events, or use the
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
 
+[[batching]]
+=== Batching
+
+The library also supports sending a batch or records as input to the users processing function in parallel.
+Using this, you can process several records in your function at once.
+
+To use it, set a `batch size` in the options class.
+
+There are then various access methods for the batch of records - see the `PollContext` object for more information.
+
+IMPORTANT: If an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
+There is no guarantee that the messages will be retried again in the same batch.
+
+==== Usage
+
+[source,java,indent=0]
+----
+        ParallelStreamProcessor.createEosStreamProcessor(ParallelConsumerOptions.<String, String>builder()
+                .consumer(getKafkaConsumer())
+                .producer(getKafkaProducer())
+                .maxConcurrency(100)
+                .batchSize(5) // <1>
+                .build());
+        parallelConsumer.poll(context -> {
+            // convert the batch into the payload for our processing
+            List<String> payload = context.stream()
+                    .map(this::preparePayload)
+                    .collect(Collectors.toList());
+            // process the entire batch payload at once
+            processBatchPayload(payload);
+        });
+----
+
+<1> Choose your batch size.
+
+==== Restrictions
+
+- If using a batch version of the API, you must choose a batch size in the options class.
+- If a batch size is chosen, the "normal" APIs cannot be used, and an error will be thrown.
+
 [[http-with-vertx]]
 === HTTP with the Vert.x Module
 
 .Call an HTTP endpoint for each message usage
 [source,java,indent=0]
 ----
-        var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
-            log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
-            Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
+        var resultStream = parallelConsumer.vertxHttpReqInfoStream(context -> {
+            var consumerRecord = context.getSingleConsumerRecord();
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", consumerRecord);
+            Map<String, String> params = UniMaps.of("recordKey", consumerRecord.key(), "payload", consumerRecord.value());
             return new RequestInfo("localhost", port, "/api", params); // <1>
         });
 ----
+
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/parallelconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
@@ -537,10 +626,34 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
         });
     }
 ----
+
 <1> Setup your Kafka Streams stage as per normal, performing any type of preprocessing in Kafka Streams
 <2> For the slow consumer part of your Topology, drop down into the parallel consumer, and use massive concurrency
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-streams/src/main/java/io/confluent/parallelconsumer/examples/streams/StreamsApp.java[Kafka Streams example] project, and it's test.
+
+[[confluent-cloud]]
+=== Confluent Cloud
+
+. Provision your fully managed Kafka cluster in Confluent Cloud
+.. Sign up for https://www.confluent.io/confluent-cloud/tryfree/[Confluent Cloud], a fully-managed Apache Kafka service.
+.. After you log in to Confluent Cloud, click on `Add cloud environment` and name the environment `learn-kafka`.
+Using a new environment keeps your learning resources separate from your other Confluent Cloud resources.
+.. Click on https://confluent.cloud/learn[LEARN] and follow the instructions to launch a Kafka cluster and to enable Schema Registry.
+. Access the client configuration settings
+.. From the Confluent Cloud Console, navigate to your Kafka cluster.
+From the `Clients` view, get the connection information customized to your cluster (select `Java`).
+.. Create new credentials for your Kafka cluster, and then Confluent Cloud will show a configuration block with your new credentials automatically populated (make sure `show API keys` is checked).
+.. Use these settings presented to https://docs.confluent.io/clients-kafka-java/current/overview.html[configure your clients].
+. Use these clients for steps outlined in the <<common_preparation>> section.
+
+[[upgrading]]
+== Upgrading
+
+=== From 0.4 to 0.5
+
+This version has a breaking change in the API - instead of passing in `ConsumerRecord` instances, it passes in a `PollContext` object which has extra information and utility methods.
+See the `PollContext` class for more information.
 
 [[ordering-guarantees]]
 == Ordering Guarantees
@@ -611,6 +724,126 @@ image::https://lucid.app/publicSegments/view/f7a05e99-24e6-4ea3-b3d0-978e306aa56
 
 Even during retries, offsets will always be committed only after successful processing, and in order.
 
+== Retries
+
+If processing of a record fails, the record will be placed back into it's queue and retried with a configurable delay (see the `ParallelConsumerOptions` class).
+Ordering guarantees will always be adhered to, regardless of failure.
+
+A failure is denoted by *any* exception being thrown from the user's processing function.
+The system catches these exceptions, logs them and replaces the record in the queue for processing later.
+All types of Exceptions thrown are considered retriable.
+To not retry a record, do not throw an exception from your processing fuction.
+
+If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the system will treat the same way.
+
+To configure the retry delay, see `ParallelConsumerOptions#defaultRetryDelay`.
+
+At the moment there is no terminal error support, so messages will continue to be retried forever as long as an exception continues to be thrown from the user function (see <<skipping-records>>).
+But still this will not hold up the queues in `KEY` or `UNORDERED` modes, however in `PARTITION` mode it *will* block progress.
+Offsets will also continue to be committed (see <<commit-mode>> and <<Offset Map>>).
+
+=== Retry Delay Function
+
+As part of the https://github.com/confluentinc/parallel-consumer/issues/65[enhanced retry epic], the ability to https://github.com/confluentinc/parallel-consumer/issues/82[dynamically determine the retry delay] was added.
+This can be used to customise retry delay for a record, such as exponential back off or have different delays for different types of records, or have the delay determined by the status of a system etc.
+
+You can access the retry count of a record through it's wrapped `WorkContainer` class, which is the input variable to the retry delay function.
+
+.Example retry delay function implementing exponential backoff
+[source,java,indent=0]
+----
+        final double multiplier = 0.5;
+        final int baseDelaySecond = 1;
+
+        ParallelConsumerOptions.<String, String>builder()
+                .retryDelayProvider(recordContext -> {
+                    int numberOfFailedAttempts = recordContext.getNumberOfFailedAttempts();
+                    long delayMillis = (long) (baseDelaySecond * Math.pow(multiplier, numberOfFailedAttempts) * 1000);
+                    return Duration.ofMillis(delayMillis);
+                });
+----
+
+[[skipping-records]]
+=== Skipping Records
+
+If for whatever reason you want to skip a record, simply do not throw an exception, or catch any exception being thrown, log and swallow it and return from the user function normally.
+The system will treat this as a record processing success, mark the record as completed and move on as though it was a normal operation.
+
+A user may choose to skip a record for example, if it has been retried too many times or if the record is invalid or doesn't need processing.
+
+Implementing a https://github.com/confluentinc/parallel-consumer/issues/196[max retries feature] as a part of the system is planned.
+
+.Example of skipping a record after a maximum number of retries is reached
+[source,java,indent=0]
+----
+        final int maxRetries = 10;
+        final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
+
+        pc.poll(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
+            Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
+            if (retryCount < maxRetries) {
+                processRecord(consumerRecord);
+                // no exception, so completed - remove from map
+                retriesCount.remove(consumerRecord);
+            } else {
+                log.warn("Retry count {} exceeded max of {} for record {}", retryCount, maxRetries, consumerRecord);
+                // giving up, remove from map
+                retriesCount.remove(consumerRecord);
+            }
+        });
+----
+
+=== Circuit Breaker Pattern
+
+Although the system doesn't have an https://github.com/confluentinc/parallel-consumer/issues/110[explicit circuit breaker pattern feature], one can be created by combining the custom retry delay function and proactive failure.
+For example, the retry delay can be calculated based upon the status of an external system - i.e. if the external system is currently out of action, use a higher retry.
+Then in the processing function, again check the status of the external system first, and if it's still offline, throw an exception proactively without attempting to process the message.
+This will put the message back in the queue.
+
+.Example of circuit break implementation
+[source,java,indent=0]
+----
+        final Map<String, Boolean> upMap = new ConcurrentHashMap<>();
+
+        pc.poll(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
+            String serverId = extractServerId(consumerRecord);
+            boolean up = upMap.computeIfAbsent(serverId, ignore -> true);
+
+            if (!up) {
+                up = updateStatusOfSever(serverId);
+            }
+
+            if (up) {
+                try {
+                    processRecord(consumerRecord);
+                } catch (CircuitBreakingException e) {
+                    log.warn("Server {} is circuitBroken, will retry message when server is up. Record: {}", serverId, consumerRecord);
+                    upMap.put(serverId, false);
+                }
+                // no exception, so set server status UP
+                upMap.put(serverId, true);
+            } else {
+                throw new RuntimeException(msg("Server {} currently down, will retry record latter {}", up, consumerRecord));
+            }
+        });
+----
+
+=== Head of Line Blocking
+
+In order to have a failing record not block progress of a partition, one of the ordering modes other than `PARTITION` must be used, so that the system is allowed to process other messages that are perhaps in `KEY` order or in the case of `UNORDERED` processing - any message.
+This is because in `PARTITION` ordering mode, records are always processed in order of partition, and so the Head of Line blocking feature is effectively disabled.
+
+=== Future Work
+
+Improvements to this system are planned, see the following issues:
+
+* https://github.com/confluentinc/parallel-consumer/issues/65[Enhanced retry epic #65]
+* https://github.com/confluentinc/parallel-consumer/issues/48[Support scheduled message processing (scheduled retry)]
+* https://github.com/confluentinc/parallel-consumer/issues/196[Provide option for max retires, and a call back when reached (potential DLQ) #196]
+* https://github.com/confluentinc/parallel-consumer/issues/34[Monitor for progress and optionally shutdown (leave consumer group), skip message or send to DLQ #34]
+
 == Result Models
 
 * Void
@@ -626,6 +859,7 @@ When your function is actually run, a result object will be streamed back to you
 After your operation completes, you can also choose to publish a result message back to Kafka.
 The message publishing metadata can be streamed back to your client code.
 
+[[commit-mode]]
 == Commit Mode
 
 The system gives you three choices for how to do offset commits.
@@ -635,7 +869,7 @@ The `transactional` mode is explained in the next section.
 
 `Asynchronous` mode is faster, as it doesn't block the control loop.
 
-`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `Options` class.
+`Synchronous` will block the processing loop until a successful commit response is received, however, `Asynchronous` will still be capped by the max processing settings in the `ParallelConsumerOptions` class.
 
 If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.
@@ -670,28 +904,20 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 == Roadmap
 
 For released changes, see the link:CHANGELOG.adoc[CHANGELOG].
-
-=== Short Term - What we're working on nowish ⏰
-
-* Depth~ first or breadth first partition traversal
-* JavaRX and other streaming modules
+For features in development, have a look at the https://github.com/confluentinc/parallel-consumer/issues[GitHub issues].
 
 === Medium Term - What's up next ⏲
 
-* https://github.com/confluentinc/parallel-consumer/issues/21[Automatic fanout] (automatic selection of concurrency level based on downstream back pressure) (https://github.com/confluentinc/parallel-consumer/pull/22[draft PR])
-* Support for general Vert.x Verticles (non-blocking libraries)
-* Dead Letter Queue (DLQ) handling
-* Non-blocking I/O work management
-** More customisable handling of HTTP interactions
-** Chance to batch multiple consumer records into a single or multiple http request objects
 * https://github.com/confluentinc/parallel-consumer/issues/28[Distributed tracing integration]
 * https://github.com/confluentinc/parallel-consumer/issues/24[Distributed rate limiting]
 * https://github.com/confluentinc/parallel-consumer/issues/27[Metrics]
+* More customisable handling[https://github.com/confluentinc/parallel-consumer/issues/65] of HTTP interactions
 
 === Long Term - The future ☁️
 
-* Apache Kafka KIP?
-* Call backs only offset has been committed
+* https://github.com/confluentinc/parallel-consumer/issues/21[Automatic fanout] (automatic selection of concurrency level based on downstream back pressure) (https://github.com/confluentinc/parallel-consumer/pull/22[draft PR])
+* Dead Letter Queue (DLQ) handling
+* Call backs only once offset has been committed
 
 == Usage Requirements
 
@@ -734,7 +960,7 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README_TEMPLATE.adoc[].
 
 === Maven targets
 
@@ -764,8 +990,8 @@ Run a specific integration test method in a submodule project, skipping unit tes
 `mvn -Dit.test=TransactionAndCommitModeTest#testLowMaxPoll -DskipUTs=true verify  -DfailIfNoTests=false --projects parallel-consumer-core`
 
 Run `git bisect` to find a bad commit, edit the Maven command in `bisect.sh` and run::
-[source=bash]
 
+[source=bash]
 ----
 git bisect start good bad
 git bisect run ./bisect.sh
@@ -921,3 +1147,263 @@ Also the information density in the map (i.e. a single not yet completed message
 == Attribution
 
 http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.
+
+:leveloffset: +1
+:toc: macro
+:toclevels: 1
+
+= Change Log
+
+// git log --pretty="* %s" 0.3.0.2..HEAD
+
+// only show TOC if this is the root document (not in the README)
+ifndef::github_name[]
+toc::[]
+endif::[]
+
+== Next Version
+
+== v0.5.1.0
+
+=== Features
+
+* #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
+
+== v0.5.0.1
+
+=== Fixes and Improvements
+
+* fixes: #225 Build support for Java 17, 18 (#289)
+
+== v0.5.0.0
+
+=== Features
+
+* feature: Poll Context object for API (#223)
+** PollContext API - provides central access to result set with various convenience methods as well as metadata about records, such as failure count
+* major: Batching feature and Event system improvements
+** Batching - all API methods now support batching.
+See the Options class set batch size for more information.
+
+=== Fixes and Improvements
+
+* Event system - better CPU usage in control thread
+* Concurrency stability improvements
+* Update dependencies
+* #247: Adopt Truth-Generator (#249)
+** Adopt https://github.com/astubbs/truth-generator[Truth Generator] for automatic generation of https://truth.dev/[Google Truth] Subjects
+* Large rewrite of internal architecture for improved maintence and simplicity which fixed some corner case issues
+** refactor: Rename PartitionMonitor to PartitionStateManager (#269)
+** refactor: Queue unification (#219)
+** refactor: Partition state tracking instead of search (#218)
+** refactor: Processing Shard object
+* fix: Concurrency and State improvements (#190)
+
+=== Build
+
+* build: Lock TruthGenerator to 0.1 (#272)
+* build: Deploy SNAPSHOTS to maven central snaphots repo (#265)
+* build: Update Kafka to 3.1.0 (#229)
+* build: Crank up Enforcer rules and turn on ossindex audit
+* build: Fix logback dependency back to stable
+* build: Upgrade TestContainer and CP
+
+== v0.4.0.1
+
+=== Improvements
+
+- Add option to specify timeout for how long to wait offset commits in periodic-consumer-sync commit-mode
+- Add option to specify timeout for how long to wait for blocking Producer#send
+
+=== Docs
+
+- docs: Confluent Cloud configuration links
+- docs: Add Confluent's product page for PC to README
+- docs: Add head of line blocking to README
+
+== v0.4.0.0
+// https://github.com/confluentinc/parallel-consumer/releases/tag/0.4.0.0
+
+=== Features
+
+* https://projectreactor.io/[Project Reactor] non-blocking threading adapter module
+* Generic Vert.x Future support - i.e. FileSystem, db etc...
+
+=== Fixes and Improvements
+
+* Vert.x concurrency control via WebClient host limits fixed - see #maxCurrency
+* Vert.x API cleanup of invalid usage
+* Out of bounds for empty collections
+* Use ConcurrentSkipListMap instead of TreeMap to prevent concurrency issues under high pressure
+* log: Show record topic in slow-work warning message
+
+== v0.3.2.0
+
+=== Fixes and Improvements
+
+* Major: Upgrade to Apache Kafka 2.8 (still compatible with 2.6 and 2.7 though)
+* Adds support for managed executor service (Java EE Compatibility feature)
+* #65 support for custom retry delay providers
+
+== v0.3.1.0
+
+=== Fixes and Improvements
+
+* Major refactor to code base - primarily the two large God classes
+** Partition state now tracked separately
+** Code moved into packages
+* Busy spin in some cases fixed (lower CPU usage)
+* Reduce use of static data for test assertions - remaining identified for later removal
+* Various fixes for parallel testing stability
+
+== v0.3.0.3
+
+=== Fixes and Improvements
+
+==== Overview
+
+* Tests now run in parallel
+* License fixing / updating and code formatting
+* License format runs properly now when local, check on CI
+* Fix running on Windows and Linux
+* Fix JAVA_HOME issues
+
+==== Details:
+
+* tests: Enable the fail fast feature now that it's merged upstream
+* tests: Turn on parallel test runs
+* format: Format license, fix placement
+* format: Apply Idea formatting (fix license layout)
+* format: Update mycila license-plugin
+* test: Disable redundant vert.x test - too complicated to fix for little gain
+* test: Fix thread counting test by closing PC @After
+* test: Test bug due to static state overrides when run as a suite
+* format: Apply license format and run every All Idea build
+* format: Organise imports
+* fix: Apply license format when in dev laptops - CI only checks
+* fix: javadoc command for various OS and envs when JAVA_HOME missing
+* fix: By default, correctly run time JVM as jvm.location
+
+== v0.3.0.2
+
+=== Fixes and Improvements
+
+* ci: Add CODEOWNER
+* fix: #101 Validate GroupId is configured on managed consumer
+* Use 8B1DA6120C2BF624 GPG Key For Signing
+* ci: Bump jdk8 version path
+* fix: #97 Vert.x thread and connection pools setup incorrect
+* Disable Travis and Codecov
+* ci: Apache Kafka and JDK build matrix
+* fix: Set Serdes for MockProducer for AK 2.7 partition fix KAFKA-10503 to fix new NPE
+* Only log slow message warnings periodically, once per sweep
+* Upgrade Kafka container version to 6.0.2
+* Clean up stalled message warning logs
+* Reduce log-level if no results are returned from user-function (warn -> debug)
+* Enable java 8 Github
+* Fixes #87 - Upgrade UniJ version for UnsupportedClassVersion error
+* Bump TestContainers to stable release to specifically fix #3574
+* Clarify offset management capabilities
+
+== v0.3.0.1
+
+* fixes #62: Off by one error when restoring offsets when no offsets are encoded in metadata
+* fix: Actually skip work that is found as stale
+
+== v0.3.0.0
+
+=== Features
+
+* Queueing and pressure system now self tuning, performance over default old tuning values (`softMaxNumberMessagesBeyondBaseCommitOffset` and `maxMessagesToQueue`) has doubled.
+** These options have been removed from the system.
+* Offset payload encoding back pressure system
+** If the payload begins to take more than a certain threshold amount of the maximum available, no more messages will be brought in for processing, until the space need beings to reduce back below the threshold.
+This is to try to prevent the situation where the payload is too large to fit at all, and must be dropped entirely.
+** See Proper offset encoding back pressure system so that offset payloads can't ever be too large https://github.com/confluentinc/parallel-consumer/issues/47[#47]
+** Messages that have failed to process, will always be allowed to retry, in order to reduce this pressure.
+
+=== Improvements
+
+* Default ordering mode is now `KEY` ordering (was `UNORDERED`).
+** This is a better default as it's the safest mode yet high performing mode.
+It maintains the partition ordering characteristic that all keys are processed in log order, yet for most use cases will be close to as fast as `UNORDERED` when the key space is large enough.
+* https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37] - adds new serialisation formats that supports wider range of offsets - (32,767 vs 2,147,483,647) for both BitSet and run-length encoding.
+* Commit modes have been renamed to make it clearer that they are periodic, not per message.
+* Minor performance improvement, switching away from concurrent collections.
+
+=== Fixes
+
+* Maximum offset payload space increased to correctly not be inversely proportional to assigned partition quantity.
+* Run-length encoding now supports compacted topics, plus other bug fixes as well as fixes to Bitset encoding.
+
+== v0.2.0.3
+
+=== Fixes
+
+** https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)] - gracefully drop BitSet or Runlength encoding as an option if offset difference too large (short overflow)
+*** A new serialisation format will be added in next version - see https://github.com/confluentinc/parallel-consumer/issues/37[Support BitSet encoding lengths longer than Short.MAX_VALUE #37]
+** Gracefully drops encoding attempts if they can't be run
+** Fixes a bug in the offset drop if it can't fit in the offset metadata payload
+
+== v0.2.0.2
+
+=== Fixes
+
+** Turns back on the https://github.com/confluentinc/parallel-consumer/issues/35[Bitset overflow check (#35)]
+
+== v0.2.0.1 DO NOT USE - has critical bug
+
+=== Fixes
+
+** Incorrectly turns off an over-flow check in https://github.com/confluentinc/parallel-consumer/issues/35[offset serialisation system (#35)]
+
+== v0.2.0.0
+
+=== Features
+
+** Choice of commit modes: Consumer Asynchronous, Synchronous and Producer Transactions
+** Producer instance is now optional
+** Using a _transactional_ Producer is now optional
+** Use the Kafka Consumer to commit `offsets` Synchronously or Asynchronously
+
+=== Improvements
+
+** Memory performance - garbage collect empty shards when in KEY ordering mode
+** Select tests adapted to non transactional (multiple commit modes) as well
+** Adds supervision to broker poller
+** Fixes a performance issue with the async committer not being woken up
+** Make committer thread revoke partitions and commit
+** Have onPartitionsRevoked be responsible for committing on close, instead of an explicit call to commit by controller
+** Make sure Broker Poller now drains properly, committing any waiting work
+
+=== Fixes
+
+** Fixes bug in commit linger, remove genesis offset (0) from testing (avoid races), add ability to request commit
+** Fixes #25 https://github.com/confluentinc/parallel-consumer/issues/25:
+*** Sometimes a transaction error occurs - Cannot call send in state COMMITTING_TRANSACTION #25
+** ReentrantReadWrite lock protects non-thread safe transactional producer from incorrect multithreaded use
+** Wider lock to prevent transaction's containing produced messages that they shouldn't
+** Must start tx in MockProducer as well
+** Fixes example app tests - incorrectly testing wrong thing and MockProducer not configured to auto complete
+** Add missing revoke flow to MockConsumer wrapper
+** Add missing latch timeout check
+
+== v0.1
+
+=== Features:
+
+** Have massively parallel consumption processing without running hundreds or thousands of
+*** Kafka consumer clients
+*** topic partitions
++
+without operational burden or harming the clusters performance
+** Efficient individual message acknowledgement system (without local or third system state) to massively reduce message replay upon failure
+** Per `key` concurrent processing, per `partition` and unordered message processing
+** `Offsets` committed correctly, in order, of only processed messages, regardless of concurrency level or retries
+** Vert.x non-blocking library integration (HTTP currently)
+** Fair partition traversal
+** Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
+** Java 8 compatibility
+** Throttle control and broker liveliness management
+** Clean draining shutdown cycle
+//:leveloffset: -1 - Duplicate key leveloffset (attempted merging values +1 and -1): https://github.com/whelk-io/asciidoc-template-maven-plugin/issues/118

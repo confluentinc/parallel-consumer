@@ -1,7 +1,6 @@
 package io.confluent.parallelconsumer.integrationTests;
-
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
@@ -61,7 +60,7 @@ public class LoadTest extends DbTest {
     void timedNormalKafkaConsumerTest() {
         setupTestData();
         // subscribe in advance, it can be a few seconds
-        kcu.consumer.subscribe(UniLists.of(topic));
+        kcu.getConsumer().subscribe(UniLists.of(topic));
 
         readRecordsPlainConsumer(total, topic);
     }
@@ -128,7 +127,7 @@ public class LoadTest extends DbTest {
 
             Executors.newCachedThreadPool().submit(() -> {
                 while (allRecords.size() < total) {
-                    ConsumerRecords<String, String> poll = kcu.consumer.poll(ofMillis(500));
+                    ConsumerRecords<String, String> poll = kcu.getConsumer().poll(ofMillis(500));
                     log.info("Polled batch of {} messages", poll.count());
 
                     //save
@@ -177,7 +176,7 @@ public class LoadTest extends DbTest {
                 String value = RandomStringUtils.randomAlphabetic(messageSizeInBytes);
                 var producerRecord = new ProducerRecord<>(topic, key, value);
                 try {
-                    var meta = kcu.producer.send(producerRecord);
+                    var meta = kcu.getProducer().send(producerRecord);
                     futureMetadataResultsFromPublishing.add(meta);
                 } catch (Exception e) {
                     throw new RuntimeException(e);

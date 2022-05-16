@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +35,7 @@ public enum OffsetEncoding {
     RunLengthV2(v2, (byte) 'e'),
     RunLengthV2Compressed(v2, (byte) 'p');
 
-    enum Version {
+    public enum Version {
         v1, v2
     }
 

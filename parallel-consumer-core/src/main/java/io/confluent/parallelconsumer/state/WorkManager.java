@@ -1,36 +1,28 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.LoopingResumingIterator;
-import io.confluent.csid.utils.WallClock;
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
-import io.confluent.parallelconsumer.internal.RateLimiter;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
-import pl.tlinkowski.unij.api.UniMaps;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-import static io.confluent.csid.utils.BackportUtils.toSeconds;
-import static io.confluent.csid.utils.KafkaUtils.toTP;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static lombok.AccessLevel.PACKAGE;
+import static java.lang.Boolean.TRUE;
 import static lombok.AccessLevel.PUBLIC;
 
 /**
@@ -42,6 +34,8 @@ import static lombok.AccessLevel.PUBLIC;
  * High Water Mark - the highest offset which has succeeded (previous may be incomplete)
  * <p>
  * Highest seen offset - the highest ever seen offset
+ * <p>
+ * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
  *
  * @param <K>
  * @param <V>
@@ -50,11 +44,11 @@ import static lombok.AccessLevel.PUBLIC;
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     @Getter
-    private final ParallelConsumerOptions options;
+    private final ParallelConsumerOptions<K, V> options;
 
-    // todo rename PSM, PartitionStateManager
+    // todo make private
     @Getter(PUBLIC)
-    final PartitionMonitor<K, V> pm;
+    final PartitionStateManager<K, V> pm;
 
     // todo make private
     @Getter(PUBLIC)
@@ -68,14 +62,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     private final DynamicLoadFactor dynamicLoadFactor;
 
-    private final WorkMailBoxManager<K, V> wmbm;
-
-    /**
-     * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
-     * shard.
-     */
-    private Optional<Object> iterationResumePoint = Optional.empty();
-
     @Getter
     private int numberRecordsOutForProcessing = 0;
 
@@ -85,38 +71,23 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    @Setter(PACKAGE)
-    private WallClock clock = new WallClock();
-
-    org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
-
-    /**
-     * Get's set to true whenever work is returned completed, so that we know when a commit needs to be made.
-     * <p>
-     * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
-     * chances no work has completed in the last second.
-     */
-    private final AtomicBoolean workStateIsDirtyNeedsCommitting = new AtomicBoolean(false);
-
-    // too aggressive for some situations? make configurable?
-    private final Duration thresholdForTimeSpentInQueueWarning = Duration.ofSeconds(10);
-
-    private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
+    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        this(options, consumer, new DynamicLoadFactor(), TimeUtils.getClock());
+    }
 
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this(options, consumer, new DynamicLoadFactor());
+    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
+        this(options, consumer, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer, final DynamicLoadFactor dynamicExtraLoadFactor) {
+    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
+                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
         this.options = newOptions;
-        this.consumer = consumer;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
-        this.wmbm = new WorkMailBoxManager<>();
-        this.sm = new ShardManager<K, V>(options);
-        this.pm = new PartitionMonitor<>(consumer, sm);
+        this.sm = new ShardManager<>(options, this, clock);
+        this.pm = new PartitionStateManager<>(consumer, sm, options, clock);
     }
 
     /**
@@ -150,261 +121,72 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        wmbm.onPartitionsRemoved(partitions);
+        // no-op - nothing to do
     }
 
-    public void registerWork(ConsumerRecords<K, V> records) {
-        wmbm.registerWork(records);
-    }
-
-    /**
-     * @param requestedMaxWorkToRetrieve try to move at least this many messages into the inbound queues
-     */
-    private void ingestPolledRecordsIntoQueues(final int requestedMaxWorkToRetrieve) {
-        log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
-                requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
-
-        //
-        var taken = 0;
-        @SuppressWarnings("BooleanVariableAlwaysNegated")
-        boolean stillProcessing;
-        do {
-            ConsumerRecord<K, V> poll = wmbm.internalFlattenedMailQueuePoll();
-            boolean takenAsWork = maybeRegisterNewRecordAsWork(poll);
-            if (takenAsWork) {
-                taken++;
-            }
-            stillProcessing = taken < requestedMaxWorkToRetrieve && poll != null;
-        } while (stillProcessing);
-
-        log.debug("{} new records were registered.", taken);
-    }
-
-    /**
-     * Takes a record as work and puts it into internal queues, unless it's been previously as completed as per loaded
-     * records.
-     *
-     * @return true if the record was taken, false if it was skipped (previously successful)
-     */
-    // todo rename to maybeTakeRecord
-    // todo move to PM, if returns true, sm.addWorkContainer
-    private boolean maybeRegisterNewRecordAsWork(final ConsumerRecord<K, V> rec) {
-        if (rec == null) return false;
-
-        if (!pm.isPartitionAssigned(rec)) {
-            log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTP(rec), rec);
-            return false;
-        }
-
-        if (pm.isRecordPreviouslyProcessed(rec)) {
-            log.trace("Record previously processed, skipping. offset: {}", rec.offset());
-            return false;
-        } else {
-            TopicPartition tp = toTP(rec);
-
-            int currentPartitionEpoch = pm.getEpoch(rec, tp);
-            var wc = new WorkContainer<>(currentPartitionEpoch, rec);
-
-            sm.addWorkContainer(wc);
-
-            pm.addWorkContainer(wc);
-
-            return true;
-        }
+    public void registerWork(EpochAndRecordsMap<K, V> records) {
+        pm.maybeRegisterNewRecordAsWork(records);
     }
 
     /**
      * Get work with no limit on quantity, useful for testing.
      */
-    public <R> List<WorkContainer<K, V>> maybeGetWork() {
-        return maybeGetWork(Integer.MAX_VALUE);
+    public List<WorkContainer<K, V>> getWorkIfAvailable() {
+        return getWorkIfAvailable(Integer.MAX_VALUE);
     }
 
     /**
      * Depth first work retrieval.
      */
-    // todo refactor
-    public List<WorkContainer<K, V>> maybeGetWork(int requestedMaxWorkToRetrieve) {
-        int workToGetDelta = requestedMaxWorkToRetrieve;
-
+    public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
         // optimise early
-        if (workToGetDelta < 1) {
+        if (requestedMaxWorkToRetrieve < 1) {
             return UniLists.of();
         }
 
-        tryToEnsureAvailableCapacity(requestedMaxWorkToRetrieve);
+        //
+        var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
 
         //
-        List<WorkContainer<K, V>> work = new ArrayList<>();
-
-        //
-        LoopingResumingIterator<Object, NavigableMap<Long, WorkContainer<K, V>>> it =
-                sm.getIterator(iterationResumePoint);
-
-        var staleWorkToRemove = new ArrayList<WorkContainer<K, V>>();
-
-        var slowWorkCount = 0;
-        var slowWorkTopics = new HashSet<String>();
-
-        //
-        for (var shard : it) {
-            log.trace("Looking for work on shard: {}", shard.getKey());
-            if (work.size() >= workToGetDelta) {
-                this.iterationResumePoint = Optional.of(shard.getKey());
-                log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
-                break;
-            }
-
-            ArrayList<WorkContainer<K, V>> shardWork = new ArrayList<>();
-            SortedMap<Long, WorkContainer<K, V>> shardQueue = shard.getValue();
-
-            // then iterate over shardQueue queue
-            Set<Map.Entry<Long, WorkContainer<K, V>>> shardQueueEntries = shardQueue.entrySet();
-            for (var queueEntry : shardQueueEntries) {
-                int taken = work.size() + shardWork.size();
-                if (taken >= workToGetDelta) {
-                    log.trace("Work taken ({}) exceeds max ({})", taken, workToGetDelta);
-                    break;
-                }
-
-                var workContainer = queueEntry.getValue();
-
-                {
-                    if (checkEpochIsStale(workContainer)) {
-                        // this state should never happen, as work should get removed from shards upon partition revocation
-                        log.debug("Work is in queue with stale epoch. Will remove now. Was it not removed properly on revoke? Or are we in a race state? {}", workContainer);
-                        staleWorkToRemove.add(workContainer);
-                        continue; // skip
-                    }
-                }
-
-                // TODO refactor this and the rest of the partition state monitoring code out
-                // check we have capacity in offset storage to process more messages
-                TopicPartition topicPartition = workContainer.getTopicPartition();
-                boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
-                // If the record is below the highest succeeded offset, it is already represented in the current offset encoding,
-                // and may in fact be the message holding up the partition so must be retried, in which case we don't want to skip it.
-                // Generally speaking, completing more offsets below the highest succeeded (and thus the set represented in the encoded payload),
-                // should usually reduce the payload size requirements
-                boolean representedInEncodedPayloadAlready = workContainer.offset() < pm.getState(topicPartition).getOffsetHighestSucceeded();
-                if (notAllowedMoreRecords && !representedInEncodedPayloadAlready && workContainer.isNotInFlight()) {
-                    log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
-                                    "record ({}) belongs to due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
-                                    "not in flight ({}), continuing on to next container in shard.",
-                            topicPartition, workContainer.offset(), workContainer.isNotInFlight());
-                    continue;
-                }
-
-                // check if work can be taken
-                boolean hasNotSucceededAlready = !workContainer.isUserFunctionSucceeded();
-                boolean delayHasPassed = workContainer.hasDelayPassed(clock);
-                if (delayHasPassed && workContainer.isNotInFlight() && hasNotSucceededAlready) {
-                    log.trace("Taking {} as work", workContainer);
-                    workContainer.queueingForExecution();
-                    shardWork.add(workContainer);
-                } else {
-                    Duration timeInFlight = workContainer.getTimeInFlight();
-                    String msg = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
-                    if (toSeconds(timeInFlight) > toSeconds(thresholdForTimeSpentInQueueWarning)) {
-                        slowWorkCount++;
-                        slowWorkTopics.add(workContainer.getCr().topic());
-                        log.trace("Work has spent over " + thresholdForTimeSpentInQueueWarning + " in queue! "
-                                + msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
-                    } else {
-                        log.trace(msg, workContainer, delayHasPassed, workContainer.isNotInFlight(), hasNotSucceededAlready, timeInFlight);
-                    }
-                }
-
-                ProcessingOrder ordering = options.getOrdering();
-                if (ordering == UNORDERED) {
-                    // continue - we don't care about processing order, so check the next message
-                    continue;
-                } else {
-                    // can't take any more from this partition until this work is finished
-                    // processing blocked on this partition, continue to next partition
-                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shard.", this.options.getOrdering(), shard.getKey());
-                    break;
-                }
-            }
-            work.addAll(shardWork);
-        }
-
-        if (slowWorkCount > 0) {
-            final int finalSlowWorkCount = slowWorkCount;
-            slowWarningRateLimit.performIfNotLimited(() -> log.warn("Warning: {} records in the queue have been " +
-                            "waiting longer than {}s for following topics {}.",
-                    finalSlowWorkCount, toSeconds(thresholdForTimeSpentInQueueWarning), slowWorkTopics));
-        }
-
-        // remove found stale work outside of loop
-        for (final WorkContainer<K, V> kvWorkContainer : staleWorkToRemove) {
-            sm.removeWorkFromShard(kvWorkContainer);
-        }
-
-        log.debug("Got {} records of work. In-flight: {}, Awaiting in commit queues: {}", work.size(), getNumberRecordsOutForProcessing(), getNumberOfEntriesInPartitionQueues());
+        log.debug("Got {} of {} requested records of work. In-flight: {}, Awaiting in commit (partition) queues: {}",
+                work.size(),
+                requestedMaxWorkToRetrieve,
+                getNumberRecordsOutForProcessing(),
+                getNumberOfEntriesInPartitionQueues());
         numberRecordsOutForProcessing += work.size();
 
         return work;
     }
 
-    /**
-     * Tries to ensure there are at least this many records available in the queues
-     */
-    // todo rename - shunt messages from internal buffer into queues
-    private void tryToEnsureAvailableCapacity(final int requestedMaxWorkToRetrieve) {
-        // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
-        int available = sm.getWorkQueuedInShardsCount();
-        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
-        log.debug("Requested: {}, available in shards: {}, will try to process from mailbox the delta of: {}",
-                requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
-
-        ingestPolledRecordsIntoQueues(extraNeededFromInboxToSatisfy);
-    }
-
-    // todo move most to ShardManager
-    public void onSuccess(WorkContainer<K, V> wc) {
-        log.trace("Processing success...");
-        workStateIsDirtyNeedsCommitting.set(true);
-        ConsumerRecord<K, V> cr = wc.getCr();
+    public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
-        wc.succeed();
+
+        wc.endFlight();
 
         // update as we go
         pm.onSuccess(wc);
-        sm.onSuccess(cr);
+        sm.onSuccess(wc);
 
         // notify listeners
-        successfulWorkListeners.forEach((c) -> c.accept(wc));
+        successfulWorkListeners.forEach(c -> c.accept(wc));
 
         numberRecordsOutForProcessing--;
     }
 
     /**
-     * @see PartitionMonitor#onOffsetCommitSuccess(Map)
+     * Can run from controller or poller thread, depending on which is responsible for committing
+     *
+     * @see PartitionStateManager#onOffsetCommitSuccess(Map)
      */
-    // todo remove?
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        pm.onOffsetCommitSuccess(offsetsToSend);
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+        pm.onOffsetCommitSuccess(committed);
     }
 
-    public void onFailure(WorkContainer<K, V> wc) {
+    public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        // if not explicitly retriable, put it back in with an try counter so it can be later given up on
-        wc.fail(clock);
-        putBack(wc);
-    }
-
-    /**
-     * Idempotent - work may have not been removed, either way it's put back
-     */
-    // todo move to ShardManager
-    private void putBack(WorkContainer<K, V> wc) {
-        log.debug("Work FAILED, returning to shard");
-        ConsumerRecord<K, V> cr = wc.getCr();
-        Object key = sm.computeShardKey(cr);
-        var shard = sm.getShard(key);
-        long offset = wc.getCr().offset();
-        shard.put(offset, wc);
+        wc.endFlight();
+        pm.onFailure(wc);
+        sm.onFailure(wc);
         numberRecordsOutForProcessing--;
     }
 
@@ -412,118 +194,21 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    public Integer getWorkQueuedInMailboxCount() {
-        return wmbm.getWorkQueuedInMailboxCount();
-    }
-
-    // todo rename
-    public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
-        return findCompletedEligibleOffsetsAndRemove(true);
-    }
-
-    public boolean hasCommittableOffsets() {
-        return isDirty();
+    public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
+        return pm.collectDirtyCommitData();
     }
 
     /**
-     * TODO: This entire loop could be possibly redundant, if we instead track low water mark, and incomplete offsets as
-     * work is submitted and returned.
-     * <p>
-     * todo: refactor into smaller methods?
-     * <p>
-     * todo docs
-     * <p>
-     * Finds eligible offset positions to commit in each assigned partition
+     * Have our partitions been revoked? Can a batch contain messages of different epochs?
+     *
+     * @return true if any epoch is stale, false if not
+     * @see #checkIfWorkIsStale(WorkContainer)
      */
-    // todo move to PartitionMonitor / PartitionState
-    // todo rename
-    // todo remove completely as state of offsets should be tracked live, no need to scan for them
-    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
-
-        //
-        if (!isDirty()) {
-            // nothing to commit
-            return UniMaps.of();
+    public boolean checkIfWorkIsStale(final List<WorkContainer<K, V>> workContainers) {
+        for (final WorkContainer<K, V> workContainer : workContainers) {
+            if (checkIfWorkIsStale(workContainer)) return true;
         }
-
-        //
-        Map<TopicPartition, OffsetAndMetadata> offsetsToSend = new HashMap<>();
-        int count = 0;
-        int removed = 0;
-        log.trace("Scanning for in order in-flight work that has completed...");
-
-        //
-        Set<Map.Entry<TopicPartition, PartitionState<K, V>>> set = pm.getPartitionStates().entrySet();
-        for (final Map.Entry<TopicPartition, PartitionState<K, V>> partitionStateEntry : set) {
-            var partitionState = partitionStateEntry.getValue();
-            Map<Long, WorkContainer<K, V>> partitionQueue = partitionState.getCommitQueues();
-            TopicPartition topicPartitionKey = partitionStateEntry.getKey();
-            log.trace("Starting scan of partition: {}", topicPartitionKey);
-
-            count += partitionQueue.size();
-            var workToRemove = new LinkedList<WorkContainer<K, V>>();
-            var incompleteOffsets = new LinkedHashSet<Long>();
-            long lowWaterMark = -1;
-            var highestSucceeded = partitionState.getOffsetHighestSucceeded();
-            // can't commit this offset or beyond, as this is the latest offset that is incomplete
-            // i.e. only commit offsets that come before the current one, and stop looking for more
-            boolean beyondSuccessiveSucceededOffsets = false;
-            for (final var offsetAndItsWorkContainer : partitionQueue.entrySet()) {
-                // ordered iteration via offset keys thanks to the tree-map
-                WorkContainer<K, V> container = offsetAndItsWorkContainer.getValue();
-
-                //
-                long offset = container.getCr().offset();
-                if (offset > highestSucceeded) {
-                    break; // no more to encode
-                }
-
-                //
-                boolean complete = container.isUserFunctionComplete();
-                if (complete) {
-                    if (container.getUserFunctionSucceeded().get() && !beyondSuccessiveSucceededOffsets) {
-                        log.trace("Found offset candidate ({}) to add to offset commit map", container);
-                        workToRemove.add(container);
-                        // as in flights are processed in order, this will keep getting overwritten with the highest offset available
-                        // current offset is the highest successful offset, so commit +1 - offset to be committed is defined as the offset of the next expected message to be read
-                        long offsetOfNextExpectedMessageToBeCommitted = offset + 1;
-                        OffsetAndMetadata offsetData = new OffsetAndMetadata(offsetOfNextExpectedMessageToBeCommitted);
-                        offsetsToSend.put(topicPartitionKey, offsetData);
-                    } else if (container.getUserFunctionSucceeded().get() && beyondSuccessiveSucceededOffsets) {
-                        // todo lookup the low water mark and include here
-                        log.trace("Offset {} is complete and succeeded, but we've iterated past the lowest committable offset ({}). Will mark as complete in the offset map.",
-                                container.getCr().offset(), lowWaterMark);
-                        // no-op - offset map is only for not succeeded or completed offsets
-                    } else {
-                        log.trace("Offset {} is complete, but failed processing. Will track in offset map as failed. Can't do normal offset commit past this point.", container.getCr().offset());
-                        beyondSuccessiveSucceededOffsets = true;
-                        incompleteOffsets.add(offset);
-                    }
-                } else {
-                    lowWaterMark = container.offset();
-                    beyondSuccessiveSucceededOffsets = true;
-                    log.trace("Offset ({}) is incomplete, holding up the queue ({}) of size {}.",
-                            container.getCr().offset(),
-                            topicPartitionKey,
-                            partitionQueue.size());
-                    incompleteOffsets.add(offset);
-                }
-            }
-
-            pm.addEncodedOffsets(offsetsToSend, topicPartitionKey, incompleteOffsets);
-
-            if (remove) {
-                removed += workToRemove.size();
-                for (var workContainer : workToRemove) {
-                    var offset = workContainer.getCr().offset();
-                    partitionQueue.remove(offset);
-                }
-            }
-        }
-
-        log.debug("Scan finished, {} were in flight, {} completed offsets removed, coalesced to {} offset(s) ({}) to be committed",
-                count, removed, offsetsToSend.size(), offsetsToSend);
-        return offsetsToSend;
+        return false;
     }
 
     /**
@@ -531,8 +216,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    public boolean checkEpochIsStale(final WorkContainer<K, V> workContainer) {
-        return pm.checkEpochIsStale(workContainer);
+    public boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
+        return pm.checkIfWorkIsStale(workContainer);
     }
 
     public boolean shouldThrottle() {
@@ -544,7 +229,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
+        return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -559,25 +244,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() != 0;
     }
 
-    public boolean isClean() {
-        return !isDirty();
+    public boolean isWorkInFlightMeetingTarget() {
+        return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
-    private boolean isDirty() {
-        return this.workStateIsDirtyNeedsCommitting.get();
-    }
-
-    /**
-     * @return Work count in mailbox plus work added to the processing shards
-     */
-    public int getTotalWorkWaitingProcessing() {
-        int workQueuedInShardsCount = sm.getWorkQueuedInShardsCount();
-        Integer workQueuedInMailboxCount = getWorkQueuedInMailboxCount();
-        return workQueuedInShardsCount + workQueuedInMailboxCount;
-    }
-
-    public boolean hasWorkInMailboxes() {
-        return getWorkQueuedInMailboxCount() > 0;
+    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
 
     public boolean hasWorkInCommitQueues() {
@@ -585,9 +257,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        int partitionWorkRemainingCount = sm.getWorkQueuedInShardsCount();
-        boolean internalQueuesNotEmpty = hasWorkInMailboxes();
-        return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
+        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
     }
 
     public boolean isRecordsAwaitingToBeCommitted() {
@@ -597,24 +267,29 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public void handleFutureResult(WorkContainer<K, V> wc) {
-        // todo need to make sure epoch's match, as partition may have been re-assigned after being revoked see PR #46
-        // partition may be revoked by a different thread (broker poller) - need to synchronise?
-        // https://github.com/confluentinc/parallel-consumer/pull/46 (partition epochs)
-        if (checkEpochIsStale(wc)) {
+        if (checkIfWorkIsStale(wc)) {
             // no op, partition has been revoked
             log.debug("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
-            // todo mark work as to be skipped, instead of just returning null - related to retry system https://github.com/confluentinc/parallel-consumer/issues/48
-            return;
-        }
-
-        if (wc.getUserFunctionSucceeded().get()) {
-            onSuccess(wc);
         } else {
-            onFailure(wc);
+            Optional<Boolean> userFunctionSucceeded = wc.getMaybeUserFunctionSucceeded();
+            if (userFunctionSucceeded.isPresent()) {
+                if (TRUE.equals(userFunctionSucceeded.get())) {
+                    onSuccessResult(wc);
+                } else {
+                    onFailureResult(wc);
+                }
+            } else {
+                throw new IllegalStateException("Work returned, but without a success flag - report a bug");
+            }
         }
     }
 
-    public boolean isSystemIdle() {
+    public boolean isNoRecordsOutForProcessing() {
         return getNumberRecordsOutForProcessing() == 0;
     }
+
+    public Optional<Duration> getLowestRetryTime() {
+        return sm.getLowestRetryTime();
+    }
+
 }

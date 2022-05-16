@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
@@ -96,7 +96,7 @@ class RunLengthEncoderTest {
 
                 HighestOffsetAndIncompletes result = OffsetMapCodecManager.decodeCompressedOffsets(0, wrapped);
 
-                assertThat(result.getHighestSeenOffset()).isEqualTo(10);
+                assertThat(result.getHighestSeenOffset()).contains(10L);
 
                 assertThat(result.getIncompleteOffsets()).containsExactlyElementsOf(incompletes);
             }

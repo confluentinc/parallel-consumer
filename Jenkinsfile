@@ -15,8 +15,8 @@ def config = jobConfig {
 //  testResultSpecs = ['junit': 'test/results.xml']
     properties = [parameters([RelaseTag])]
     slackChannel = 'csid-build'
-    nodeLabel = 'docker-openjdk13'
-    runMergeCheck = false
+    nodeLabel = 'docker-debian-jdk17'
+    runMergeCheck = true
 }
 
 def job = {
@@ -44,8 +44,10 @@ def job = {
                            ["gpg/confluent-packaging-private-8B1DA6120C2BF624", "private_key", "confluent-packaging-private.key", "GPG_PRIVATE_KEY"]]) {
                 withMaven(globalMavenSettingsFilePath: "${env.MAVEN_GLOBAL_SETTINGS_FILE}") {
                     withDockerServer([uri: dockerHost()]) {
+                        def isPrBuild = env.CHANGE_TARGET ? true : false
+                        def buildPhase = isPrBuild ? "install" : "deploy"
                         if (params.RELEASE_TAG.trim().equals('')) {
-                            sh "mvn --batch-mode -Pjenkins -Pci clean verify install dependency:analyze site validate -U"
+                            sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                             sh '''

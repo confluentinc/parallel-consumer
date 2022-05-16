@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
@@ -11,6 +11,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
+import java.util.Comparator;
 
 import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrap;
 import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrapToIncompletes;
@@ -25,8 +26,9 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
  * @see #unwrap
  */
 @Slf4j
-final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
+public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
 
+    public static final Comparator<EncodedOffsetPair> SIZE_COMPARATOR = Comparator.comparingInt(x -> x.data.capacity());
     @Getter
     OffsetEncoding encoding;
     @Getter
@@ -42,7 +44,7 @@ final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
 
     @Override
     public int compareTo(EncodedOffsetPair o) {
-        return Integer.compare(data.capacity(), o.getData().capacity());
+        return SIZE_COMPARATOR.compare(this, o);
     }
 
     /**

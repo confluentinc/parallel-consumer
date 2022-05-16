@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -42,6 +42,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
     private final CommitMode commitMode;
 
+    private final Duration commitTimeout;
+
     private Optional<Thread> owningThread = Optional.empty();
 
     /**
@@ -57,6 +59,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, final ParallelConsumerOptions options) {
         super(newConsumer, newWorkManager);
         commitMode = options.getCommitMode();
+        commitTimeout = options.getOffsetCommitTimeout();
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
         }
@@ -124,7 +127,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      * Commit request message
      */
     @Value
-    static class CommitRequest {
+    public static class CommitRequest {
         UUID id = UUID.randomUUID();
         long requestedAtMs = System.currentTimeMillis();
     }
@@ -133,7 +136,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      * Commit response message, linked to a {@link CommitRequest}
      */
     @Value
-    static class CommitResponse {
+    public static class CommitResponse {
         CommitRequest request;
     }
 
@@ -151,7 +154,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             try {
                 log.debug("Waiting on a commit response");
                 Duration timeout = AbstractParallelEoSStreamProcessor.DEFAULT_TIMEOUT;
-                CommitResponse take = commitResponseQueue.poll(timeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
+                CommitResponse take = commitResponseQueue.poll(commitTimeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
                 if (take == null)
                     throw new InternalRuntimeError(msg("Timeout waiting for commit response {} to request {}", timeout, commitRequest));
                 waitingOnCommitResponse = take.getRequest().getId() != commitRequest.getId();

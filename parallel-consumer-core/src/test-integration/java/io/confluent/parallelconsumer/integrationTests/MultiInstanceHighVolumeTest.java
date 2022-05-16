@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
@@ -43,7 +43,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
     public AtomicInteger processedCount = new AtomicInteger(0);
     public AtomicInteger producedCount = new AtomicInteger(0);
 
-    int maxPoll = 500;
+    int maxPoll = 500; // 500 is the kafka default
 
     ParallelConsumerOptions.CommitMode commitMode = ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
     ParallelConsumerOptions.ProcessingOrder order = ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -118,7 +118,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
         pc.setMyId(Optional.of("id: " + barId));
         barId++;
         pc.poll(record -> {
-                    processRecord(bar, record, consumed);
+                    processRecord(bar, record.getSingleConsumerRecord(), consumed);
                 }
 //                , consumeProduceResult -> {
 //                    callBack(consumeProduceResult);
@@ -163,6 +163,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
                 .maxConcurrency(100)
                 .build());
         pc.subscribe(of(inputName));
+        pc.setTimeBetweenCommits(ofSeconds(1));
 
         // sanity
         return pc;

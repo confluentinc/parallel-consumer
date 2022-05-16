@@ -1,7 +1,10 @@
-package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+package io.confluent.parallelconsumer.integrationTests;
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
@@ -38,7 +41,7 @@ public abstract class BrokerIntegrationTest<K, V> {
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
-    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.0.2"))
+    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.0.1"))
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
@@ -87,7 +90,7 @@ public abstract class BrokerIntegrationTest<K, V> {
 
     protected void ensureTopic(String topic, int numPartitions) {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
-        CreateTopicsResult topics = kcu.admin.createTopics(UniLists.of(e1));
+        CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
             Void all = topics.all().get();
         } catch (ExecutionException e) {

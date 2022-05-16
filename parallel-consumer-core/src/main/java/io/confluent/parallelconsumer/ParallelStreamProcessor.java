@@ -1,13 +1,11 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import lombok.Data;
-import lombok.SneakyThrows;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 
@@ -33,7 +31,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      *
      * @param usersVoidConsumptionFunction the function
      */
-    void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction);
+    void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
 
 
     /**
@@ -42,23 +40,20 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
-    @SneakyThrows
-    void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction,
+    void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
                             Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or many {@link
      * ProducerRecord}s to be sent back to the broker.
      */
-    @SneakyThrows
-    void pollAndProduceMany(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction);
+    void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction);
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns a {@link
      * ProducerRecord} to be sent back to the broker.
      */
-    @SneakyThrows
-    void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction);
+    void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction);
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns a {@link
@@ -66,8 +61,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
-    @SneakyThrows
-    void pollAndProduce(Function<ConsumerRecord<K, V>, ProducerRecord<K, V>> userFunction,
+    void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
                         Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**
@@ -86,7 +80,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      */
     @Data
     class ConsumeProduceResult<K, V, KK, VV> {
-        private final ConsumerRecord<K, V> in;
+        private final PollContext<K, V> in;
         private final ProducerRecord<KK, VV> out;
         private final RecordMetadata meta;
     }

@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import lombok.SneakyThrows;
@@ -14,11 +14,11 @@ import java.nio.ByteBuffer;
  * Base OffsetEncoder
  */
 @Slf4j
-abstract class OffsetEncoder {
+public abstract class OffsetEncoder {
 
     private final OffsetSimultaneousEncoder offsetSimultaneousEncoder;
 
-    public OffsetEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
+    protected OffsetEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
         this.offsetSimultaneousEncoder = offsetSimultaneousEncoder;
     }
 
@@ -50,7 +50,8 @@ abstract class OffsetEncoder {
 
     private void register(final OffsetEncoding type, final byte[] bytes) {
         log.debug("Registering {}, with site {}", type, bytes.length);
-        offsetSimultaneousEncoder.sortedEncodings.add(new EncodedOffsetPair(type, ByteBuffer.wrap(bytes)));
+        EncodedOffsetPair encodedPair = new EncodedOffsetPair(type, ByteBuffer.wrap(bytes));
+        offsetSimultaneousEncoder.sortedEncodings.add(encodedPair);
         offsetSimultaneousEncoder.encodingMap.put(type, bytes);
     }
 

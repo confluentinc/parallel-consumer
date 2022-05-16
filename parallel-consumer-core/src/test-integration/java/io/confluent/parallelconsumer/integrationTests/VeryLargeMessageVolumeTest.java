@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
@@ -62,14 +62,18 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 
 
     /**
-     * See #35, $37
+     * See #35 RuntimeException when running with very high options in 0.2.0.0 (Bitset too long to encode)
      * <p>
      * https://github.com/confluentinc/parallel-consumer/issues/35
+     *
      * <p>
-     * https://github.com/confluentinc/parallel-consumer/issues/35
+     * See $37 Support BitSet and RunLength encoding lengths longer than Short.MAX_VALUE
+     * <p>
+     * https://github.com/confluentinc/parallel-consumer/issues/37
+     * <p>
      */
     @Test
-    public void shouldNotThrowBitSetTooLongException() {
+    void shouldNotThrowBitSetTooLongException() {
         runTest(HIGH_MAX_POLL_RECORDS_CONFIG, CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, ProcessingOrder.KEY);
     }
 
@@ -81,7 +85,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         // pre-produce messages to input-topic
         List<String> expectedKeys = new ArrayList<>();
 //        int expectedMessageCount = 2_000_000;
-        int expectedMessageCount = 100_0000;
+        long expectedMessageCount = 1_000_000;
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
@@ -102,7 +106,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         for (Future<RecordMetadata> send : sends) {
             send.get();
         }
-        assertThat(sends).hasSize(expectedMessageCount);
+        assertThat(sends).hasSize((int) expectedMessageCount);
 
         // run parallel-consumer
         log.debug("Starting test");
@@ -112,12 +116,11 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(true, consumerProps);
 
-        var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
+        var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .consumer(newConsumer)
                 .producer(newProducer)
                 .commitMode(commitMode)
-//                .numberOfThreads(1)
                 .maxConcurrency(1000)
                 .build());
         pc.subscribe(of(inputName));
@@ -126,13 +129,13 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
         TopicPartition tp = new TopicPartition(inputName, 0);
         Map<TopicPartition, Long> beginOffsets = newConsumer.beginningOffsets(of(tp));
         Map<TopicPartition, Long> endOffsets = newConsumer.endOffsets(of(tp));
-        assertThat(endOffsets.get(tp)).isEqualTo(expectedMessageCount);
-        assertThat(beginOffsets.get(tp)).isEqualTo(0L);
+        assertThat(endOffsets).containsEntry(tp, expectedMessageCount);
+        assertThat(beginOffsets).containsEntry(tp, 0L);
 
 
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
         pc.pollAndProduce(record -> {
-                    // by not having any sleep here, this test really test the overhead of the system
+                    // by not having any sleep here, this test really tests the overhead of the system
 //                    try {
 //                        Thread.sleep(5);
 //                    } catch (InterruptedException e) {

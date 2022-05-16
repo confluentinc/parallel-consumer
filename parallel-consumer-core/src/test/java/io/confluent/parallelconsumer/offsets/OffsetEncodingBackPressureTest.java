@@ -1,28 +1,32 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
+import com.google.common.truth.Truth8;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
-import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.state.*;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -30,6 +34,8 @@ import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.csid.utils.JavaUtils.getOnlyOne;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
+import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
+import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -45,10 +51,18 @@ import static org.awaitility.Awaitility.waitAtMost;
  * indirectly on the behaviour of the metadata size, even if not so explicitly.
  * <p>
  * See {@link OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK}
+ *
+ * @see OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK
+ * @see OffsetEncodingBackPressureUnitTest
  */
 @Isolated // messes with static state - breaks other tests running in parallel
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
+
+    @AfterAll
+    static void cleanup() {
+        PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
+    }
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
@@ -61,8 +75,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         // mock messages downloaded for processing > MAX_TO_QUEUE
         // make sure work manager doesn't queue more than MAX_TO_QUEUE
 //        final int numRecords = 1_000_0;
-        final int numRecords = 1_00;
-        parallelConsumer.setLongPollTimeout(ofMillis(200));
+        final int numberOfRecords = 1_00;
+        parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
         // todo - very smelly - store for restoring
         var realMax = OffsetMapCodecManager.DefaultMaxMetadataSize;
@@ -71,35 +85,54 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         OffsetMapCodecManager.DefaultMaxMetadataSize = 40; // reduce available to make testing easier
         OffsetMapCodecManager.forcedCodec = Optional.of(OffsetEncoding.BitSetV2); // force one that takes a predictable large amount of space
 
-        ktu.send(consumerSpy, ktu.generateRecords(numRecords));
+        //
+        List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
+        ktu.send(consumerSpy, records);
 
-        AtomicInteger processedCount = new AtomicInteger(0);
+        AtomicInteger userFuncFinishedCount = new AtomicInteger();
+        AtomicInteger userFuncStartCount = new AtomicInteger();
+
         CountDownLatch msgLock = new CountDownLatch(1);
         CountDownLatch msgLockTwo = new CountDownLatch(1);
+        CountDownLatch msgLockThree = new CountDownLatch(1);
         AtomicInteger attempts = new AtomicInteger(0);
         long offsetToBlock = 0;
+        List<Long> blockedOffsets = UniLists.of(0L, 2L);
+        final int numberOfBlockedMessages = blockedOffsets.size();
+
+        WorkManager<String, String> wm = parallelConsumer.getWm();
+        final PartitionState<String, String> partitionState = wm.getPm().getPartitionState(topicPartition);
+
+        ConcurrentLinkedQueue<Long> seen = new ConcurrentLinkedQueue<>();
 
         parallelConsumer.poll((rec) -> {
-
+            seen.add(rec.offset());
+            userFuncStartCount.incrementAndGet();
             // block the partition to create bigger and bigger offset encoding blocks
             // don't let offset 0 finish
             if (rec.offset() == offsetToBlock) {
                 int attemptNumber = attempts.incrementAndGet();
                 if (attemptNumber == 1) {
-                    log.debug("force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark");
-                    awaitLatch(msgLock, 120);
-                    log.debug("very slow message awoken, throwing exception");
+                    log.debug("Force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark. Waiting for msgLock countdown.");
+                    int timeout = 120;
+                    awaitLatch(msgLock, timeout);
+                    log.debug("Very slow message awoken, throwing exception");
                     throw new FakeRuntimeError("Fake error");
                 } else {
-                    log.debug("Second attempt, sleeping");
+                    log.debug("Second attempt, waiting for msgLockTwo countdown");
                     awaitLatch(msgLockTwo, 60);
                     log.debug("Second attempt, unlocked, succeeding");
                 }
+            } else if (rec.offset() == 2L) {
+                awaitLatch(msgLockThree);
+                log.debug("// msg 2L unblocked");
             } else {
                 sleepQuietly(1);
             }
-            processedCount.getAndIncrement();
+            userFuncFinishedCount.incrementAndGet();
         });
+
+        ShardManager<String, String> sm = wm.getSm();
 
         try {
 
@@ -110,34 +143,36 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .pollInterval(1, SECONDS)
                     .untilAsserted(() -> {
-                        assertThat(processedCount.get()).isEqualTo(99L);
+                        assertThat(userFuncFinishedCount.get()).isEqualTo(numberOfRecords - numberOfBlockedMessages);
                     });
 
-            // assert commit ok - nothing blocked
+            // # assert commit ok - nothing blocked
             {
                 //
-                waitForSomeLoopCycles(1);
+                awaitForSomeLoopCycles(1);
                 parallelConsumer.requestCommitAsap();
-                waitForSomeLoopCycles(1);
+                awaitForSomeLoopCycles(1);
 
-                //
+                // initial 0 offset is committed with they offset encoded payload
+                assertThatConsumer("Initial commit has been executed")
+                        .hasCommittedToAnyPartition()
+                        .offset(0);
                 List<OffsetAndMetadata> offsetAndMetadataList = extractAllPartitionsOffsetsAndMetadataSequentially();
-                assertThat(offsetAndMetadataList).isNotEmpty();
-                OffsetAndMetadata offsetAndMetadata = offsetAndMetadataList.get(offsetAndMetadataList.size() - 1);
-                assertThat(offsetAndMetadata.offset()).isZero();
+                OffsetAndMetadata mostRecentCommit = getLast(offsetAndMetadataList).get();
+                assertThat(mostRecentCommit.offset()).isZero();
 
-                //
-                String metadata = offsetAndMetadata.metadata();
-                HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(offsetToBlock, metadata);
-                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset();
+                // check offset encoding incomplete payload doesn't contain expected completed messages
+                String metadata = mostRecentCommit.metadata();
+                HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, metadata);
+                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset().get();
                 Set<Long> incompletes = decodedOffsetPayload.getIncompleteOffsets();
                 assertThat(incompletes).isNotEmpty()
                         .contains(offsetToBlock)
-                        .doesNotContain(1L, 50L, 99L, (long) numRecords - 1); // some sampling of completed offsets, 99 being the highest
-                assertThat(highestSeenOffset).isEqualTo(99L);
+                        .doesNotContain(1L, 50L, 99L, (long) numberOfRecords - numberOfBlockedMessages); // some sampling of completed offsets, 99 being the highest
+                int expectedHighestSeenOffset = numberOfRecords - 1;
+                assertThat(highestSeenOffset).as("offset 99 is encoded as having been seen").isEqualTo(expectedHighestSeenOffset);
             }
 
-            WorkManager<String, String> wm = parallelConsumer.getWm();
 
             // partition not blocked
             {
@@ -145,29 +180,32 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 assertThat(partitionBlocked).isFalse();
             }
 
-            // feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's gauranteed to block
-            int extraRecordsToBlockWithThresholdBlocks = numRecords / 2;
+            //
+            log.debug("// feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's guaranteed to block");
+            int extraRecordsToBlockWithThresholdBlocks = numberOfRecords / 2;
             {
                 assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue(); // should initially be not blocked
 
                 ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
 
-                // assert partition now blocked from threshold
-                waitAtMost(ofSeconds(30)).untilAsserted(() -> assertThat(wm.getPm().isBlocked(topicPartition))
-                        .as("Partition SHOULD be blocked due to back pressure")
-                        .isTrue()); // blocked
+                log.debug("// assert partition now blocked from threshold");
+                waitAtMost(ofSeconds(10))
+                        .untilAsserted(
+                                () -> assertWithMessage("Partition SHOULD be blocked due to back pressure")
+                                        .that(partitionState)
+                                        .isBlocked()); // blocked
 
                 Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
                 assertThat(partitionOffsetHighWaterMarks)
-                        .isGreaterThan(numRecords); // high watermark is beyond our initial processed count upon blocking
+                        .isGreaterThan(numberOfRecords); // high watermark is beyond our initial processed count upon blocking
 
                 parallelConsumer.requestCommitAsap();
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
 
-                // assert blocked, but can still write payload
+                log.debug("// assert blocked, but can still write payload");
                 // assert the committed offset metadata contains a payload
-                waitAtMost(ofSeconds(120)).untilAsserted(() ->
+                waitAtMost(defaultTimeout).untilAsserted(() ->
                         {
                             OffsetAndMetadata partitionCommit = getLastCommit();
                             //
@@ -177,27 +215,43 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                             HighestOffsetAndIncompletes incompletes = OffsetMapCodecManager
                                     .deserialiseIncompleteOffsetMapFromBase64(0L, meta);
                             Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
-                                    .that(incompletes.getIncompleteOffsets()).containsExactly(0L);
-                            assertThat(incompletes.getHighestSeenOffset()).isEqualTo(processedCount.get());
+                                    .that(incompletes.getIncompleteOffsets()).containsExactlyElementsIn(blockedOffsets);
+                            int expectedHighestSeen = numberOfRecords + extraRecordsToBlockWithThresholdBlocks - 1;
+                            Truth8.assertThat(incompletes.getHighestSeenOffset()).hasValue(expectedHighestSeen);
                         }
                 );
             }
 
-            // test max payload exceeded, payload dropped
-            int processedBeforePartitionBlock = processedCount.get();
-            int extraMessages = numRecords + extraRecordsToBlockWithThresholdBlocks / 2;
+            // recreates the situation where the payload size is too large and must be dropped
+            log.debug("// test max payload exceeded, payload dropped");
             {
-                // force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)
-                wm.getPm().setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(2);
+                log.debug("// force system to allow more records (i.e. the actual system attempts to never allow the payload to grow this big)");
+                PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(30);
+                parallelConsumer.requestCommitAsap();
+                awaitForOneLoopCycle();
+
 
                 //
+                log.debug("// unlock to make state dirty to get a commit");
+
+                msgLockThree.countDown();
+                int processedBeforePartitionBlock = userFuncFinishedCount.get();
+                int extraMessages = numberOfRecords + extraRecordsToBlockWithThresholdBlocks / 2;
+                log.debug("// send {} more messages", extraMessages);
                 ktu.send(consumerSpy, ktu.generateRecords(extraMessages));
 
-                //
-                await().atMost(ofSeconds(60)).untilAsserted(() ->
-                        assertThat(processedCount.get()).isEqualTo(processedBeforePartitionBlock + extraMessages) // some new message processed
+                awaitForOneLoopCycle();
+                parallelConsumer.requestCommitAsap();
+
+                log.debug("// wait for the new message to be processed");
+                await().atMost(defaultTimeout).untilAsserted(() ->
+                        {
+                            int expectedUserFunctionFinishedCount = processedBeforePartitionBlock + extraMessages + 1;
+                            assertThat(userFuncFinishedCount.get()).isEqualTo(expectedUserFunctionFinishedCount);
+                        }
                 );
-                // assert payload missing from commit now
+
+                log.debug("// assert payload missing from commit now");
                 await().untilAsserted(() -> {
                     OffsetAndMetadata partitionCommit = getLastCommit();
                     assertThat(partitionCommit.offset()).isZero();
@@ -205,7 +259,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 });
             }
 
-            // test failed messages can retry
+            log.debug("// test failed messages can retry");
             {
                 Duration aggressiveDelay = ofMillis(100);
                 WorkContainer.setDefaultRetryDelay(aggressiveDelay); // more aggressive retry
@@ -215,12 +269,12 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 msgLock.countDown();
 
                 // wait for the retry
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 sleepQuietly(aggressiveDelay.toMillis());
                 await().until(() -> attempts.get() >= 2);
 
                 // assert partition still blocked
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isFalse());
 
                 // release the message for the second time, allowing it to succeed
@@ -229,23 +283,19 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
             // assert partition is now not blocked
             {
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
             }
 
             // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
             {
                 await().untilAsserted(() -> {
-                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
-                    assertThat(offsets).contains(processedCount.get());
+                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
+                    assertThat(offsets).contains(userFuncFinishedCount.get());
                 });
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
             }
         } finally {
-            // make sure to unlock threads - speeds up failed tests, instead of waiting for latch or close timeouts
-            msgLock.countDown();
-            msgLockTwo.countDown();
-
             // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
             OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient
             OffsetMapCodecManager.forcedCodec = Optional.empty();

@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.reactor;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -53,9 +53,10 @@ public class ReactorApp {
         int port = getPort();
 
         // tag::example[]
-        parallelConsumer.react(record -> {
-            log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
-            Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
+        parallelConsumer.react(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", consumerRecord);
+            Map<String, String> params = UniMaps.of("recordKey", consumerRecord.key(), "payload", consumerRecord.value());
             return Mono.just("something todo"); // <1>
         });
         // end::example[]

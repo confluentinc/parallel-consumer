@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
@@ -49,7 +49,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Field txManagerField;
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
-    private final long sendTimeoutSeconds = 5L;
 
     public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions options) {
         super(newConsumer, wm);
@@ -145,7 +144,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         try {
             log.trace("Blocking on produce result");
             RecordMetadata recordMetadata = TimeUtils.time(() ->
-                    send.get(sendTimeoutSeconds, TimeUnit.SECONDS));
+                    send.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
             log.trace("Produce result received");
             return recordMetadata;
         } catch (Exception e) {

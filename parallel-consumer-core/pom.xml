@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright (C) 2020 Confluent, Inc.
+    Copyright (C) 2020-2022 Confluent, Inc.
 
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.4.0.0-SNAPSHOT</version>
+        <version>0.5.1.0-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -16,14 +16,24 @@
     <artifactId>parallel-consumer-core</artifactId>
     <name>Confluent Parallel Consumer Core</name>
 
-    <properties>
-    </properties>
-
     <dependencies>
+        <!-- Main -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
             <version>${kafka.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>1.5.2-3</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.1.8.4</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- Testing -->
@@ -35,13 +45,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit-pioneer</groupId>
             <artifactId>junit-pioneer</artifactId>
-            <version>1.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -62,51 +70,88 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.11</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>me.tongfei</groupId>
             <artifactId>progressbar</artifactId>
-            <version>0.9.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.2.18.jre7</version>
+            <version>42.3.5</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.github.tomakehurst</groupId>
             <artifactId>wiremock</artifactId>
-            <version>2.27.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.google.truth</groupId>
-            <artifactId>truth</artifactId>
+            <groupId>org.threeten</groupId>
+            <artifactId>threeten-extra</artifactId>
+            <version>1.7.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.google.truth.extensions</groupId>
-            <artifactId>truth-java8-extension</artifactId>
+            <groupId>io.stubbs.truth</groupId>
+            <artifactId>truth-generator-api</artifactId>
+            <version>${truth-generator-maven-plugin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>uk.co.jemos.podam</groupId>
+            <artifactId>podam</artifactId>
+            <version>7.2.9.RELEASE</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.flogger</groupId>
-            <artifactId>flogger</artifactId>
-            <version>0.6</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.flogger</groupId>
-            <artifactId>flogger-slf4j-backend</artifactId>
-            <version>0.6</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.stubbs.truth</groupId>
+                <artifactId>truth-generator-maven-plugin</artifactId>
+                <version>${truth-generator-maven-plugin.version}</version>
+                <configuration>
+                    <cleanTargetDir>true</cleanTargetDir>
+                    <useHas>false</useHas>
+                    <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
+                    <releaseTarget>8</releaseTarget>
+                    <classes>
+                        <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.state.WorkContainer</class>
+                        <class>io.confluent.parallelconsumer.state.WorkManager</class>
+                        <class>io.confluent.parallelconsumer.state.PartitionState</class>
+                        <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
+                    </classes>
+                    <legacyClasses>
+                        <!-- todo check legacy is recursive -->
+                        <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
+                        <class>org.apache.kafka.clients.consumer.ConsumerRecord</class>
+                        <class>org.apache.kafka.clients.consumer.ConsumerRecords</class>
+                        <class>org.apache.kafka.clients.producer.RecordMetadata</class>
+                        <class>org.apache.kafka.clients.producer.ProducerRecord</class>
+                    </legacyClasses>
+                    <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 
 </project>

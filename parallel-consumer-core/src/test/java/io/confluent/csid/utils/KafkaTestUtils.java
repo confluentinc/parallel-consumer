@@ -1,9 +1,10 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -35,10 +36,12 @@ public class KafkaTestUtils {
     private final String INPUT_TOPIC;
     private final String CONSUMER_GROUP_ID;
 
-    private final MockConsumer consumerSpy;
+    @Getter
+    private final LongPollingMockConsumer consumerSpy;
 
     int offset = 0;
 
+    // todo not used anymore - delete?
     public void assignConsumerToTopic(final MockConsumer mc) {
         TopicPartition tp1 = new TopicPartition(INPUT_TOPIC, 1);
         TopicPartition tp0 = new TopicPartition(INPUT_TOPIC, 0);
@@ -52,15 +55,10 @@ public class KafkaTestUtils {
 
     /**
      * It's a race to see if the genesis offset gets committed or not. So lets remove it if it exists, and all tests can
-     * assume it doesnt.
+     * assume it doesn't.
      */
-    public static List<Integer> trimAllGeneisOffset(final List<Integer> collect) {
-        while (!collect.isEmpty() && collect.get(0) == 0) {
-            int genesisOffset = collect.get(0);
-            if (genesisOffset == 0)
-                collect.remove(0);
-        }
-        return collect;
+    public static List<Integer> trimAllGenesisOffset(final List<Integer> collect) {
+        return collect.stream().filter(x -> x != 0).collect(Collectors.toList());
     }
 
     public ConsumerRecord<String, String> makeRecord(String key, String value) {
@@ -78,29 +76,44 @@ public class KafkaTestUtils {
     }
 
     /**
-     * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager})
+     * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager}).
+     * <p>
+     * Like {@link AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)} but for a {@link
+     * MockProducer}.
      *
+     * @see AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)
      * @see OffsetMapCodecManager
      */
     public void assertCommits(MockProducer mp, List<Integer> expectedOffsets, Optional<String> description) {
         log.debug("Asserting commits of {}", expectedOffsets);
+        List<Integer> offsets = getProducerCommitsFlattened(mp);
+
+        if (!expectedOffsets.contains(0)) {
+            offsets = KafkaTestUtils.trimAllGenesisOffset(offsets);
+        }
+
+        assertThat(offsets).describedAs(description.orElse("Which offsets are committed and in the expected order"))
+                .containsExactlyElementsOf(expectedOffsets);
+    }
+
+    public List<Integer> getProducerCommitsFlattened(MockProducer mp) {
+        return getProducerCommitsMeta(mp).stream().map(x -> (int) x.offset()).collect(Collectors.toList());
+    }
+
+    public List<OffsetAndMetadata> getProducerCommitsMeta(MockProducer mp) {
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
-        List<Integer> set = history.stream().flatMap(histories -> {
+        List<OffsetAndMetadata> set = history.stream().flatMap(histories -> {
             // get all partition offsets and flatten
-            var results = new ArrayList<Integer>();
+            ArrayList<OffsetAndMetadata> results = new ArrayList<>();
             var group = histories.get(CONSUMER_GROUP_ID);
             for (var partitionOffsets : group.entrySet()) {
                 OffsetAndMetadata commit = partitionOffsets.getValue();
-                int offset = (int) commit.offset();
-                results.add(offset);
+                results.add(commit);
             }
-            List<Integer> integers = KafkaTestUtils.trimAllGeneisOffset(results);
-            return integers.stream();
+            return results.stream();
         }).collect(Collectors.toList()); // set - ignore repeated commits ({@link OffsetMap})
-
-        assertThat(set).describedAs(description.orElse("Which offsets are committed and in the expected order"))
-                .containsExactlyElementsOf(expectedOffsets);
+        return set;
     }
 
     public void assertCommitLists(MockProducer mp, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
@@ -160,7 +173,8 @@ public class KafkaTestUtils {
 
     public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
         HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(defaultKeys, quantity);
-        return flatten(integerListHashMap.values());
+        Collection<List<ConsumerRecord<String, String>>> values = integerListHashMap.values();
+        return flatten(values);
     }
 
     /**
@@ -200,12 +214,12 @@ public class KafkaTestUtils {
         return records;
     }
 
-    public <T> List<T> flatten(Collection<List<T>> listlist) {
-        List<T> all = new ArrayList<>();
-        for (Collection<T> value : listlist) {
+    public <KEY, VALUE> List<ConsumerRecord<KEY, VALUE>> flatten(Collection<List<ConsumerRecord<KEY, VALUE>>> listlist) {
+        SortedSet<ConsumerRecord<KEY, VALUE>> all = new TreeSet<>(Comparator.comparing(ConsumerRecord::offset));
+        for (Collection<ConsumerRecord<KEY, VALUE>> value : listlist) {
             all.addAll(value);
         }
-        return all;
+        return new ArrayList<>(all);
     }
 
     @Setter
@@ -236,9 +250,10 @@ public class KafkaTestUtils {
     }
 
     public void send(MockConsumer<String, String> consumerSpy, List<ConsumerRecord<String, String>> records) {
+        log.debug("Sending {} more messages to the consumer stub", records.size());
         // send records in `correct` offset order as declared by the input data, regardless of the order of the input list
-        List<ConsumerRecord<String, String>> sorted = new ArrayList(records);
-        Collections.sort(sorted, Comparator.comparingLong(ConsumerRecord::offset));
+        List<ConsumerRecord<String, String>> sorted = new ArrayList<>(records);
+        sorted.sort(Comparator.comparingLong(ConsumerRecord::offset));
         for (ConsumerRecord<String, String> record : sorted) {
             consumerSpy.addRecord(record);
         }
@@ -260,7 +275,13 @@ public class KafkaTestUtils {
         assertThat(future).isDone();
         wc.setFuture(future);
         wc.onUserFunctionSuccess();
-        wmm.onSuccess(wc);
+        wmm.onSuccessResult(wc);
         assertThat(wc.isUserFunctionComplete()).isTrue();
+    }
+
+    public List<ConsumerRecord<String, String>> sendRecords(final int i) {
+        var consumerRecords = generateRecords(i);
+        send(consumerSpy, consumerRecords);
+        return consumerRecords;
     }
 }
