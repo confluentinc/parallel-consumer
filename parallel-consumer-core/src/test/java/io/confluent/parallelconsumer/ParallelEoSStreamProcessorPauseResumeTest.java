@@ -76,6 +76,8 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         return ParallelConsumerOptions.<String, String>builder()
                 .commitMode(commitMode)
                 .consumer(consumerSpy)
+                // UNORDERED so that we get nice linear offsets in our processing order (PARTITION has no concurrency, KEY depends on your keys
+                .ordering(UNORDERED)
                 .maxConcurrency(maxConcurrency)
                 .build();
     }
