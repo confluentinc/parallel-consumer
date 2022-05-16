@@ -22,7 +22,7 @@ import java.util.function.Function;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
-public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V> 
+public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V>
         implements ParallelStreamProcessor<K, V> {
 
     /**
@@ -51,7 +51,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     @SneakyThrows
-    public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction, 
+    public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
         Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // todo refactor out the producer system to a sub class
         if (!getOptions().isProducerSupplied()) {
