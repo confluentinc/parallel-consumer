@@ -80,7 +80,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             }
         } else {
             if (producerIsConfiguredForTransactions) {
-                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " + "the Producer must not have a transaction ID for this option. This is because having such an ID forces the " + "Producer into transactional mode - i.e. you cannot use it without using transactions.");
+                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " + "
+                the Producer must not have a transaction ID for this option. This is because having such an ID forces the " + 
+                "Producer into transactional mode - i.e. you cannot use it without using transactions.");
             }
         }
     }
