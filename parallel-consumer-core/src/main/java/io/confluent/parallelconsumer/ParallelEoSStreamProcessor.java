@@ -73,7 +73,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
             var futures = super.getProducerManager().get().produceMessages(recordListToProduce);
             try {
                 for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> future : futures) {
-                    var recordMetadata = future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                    var recordMetadata = TimeUtils.time(() ->
+                        future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
                     var result = new ConsumeProduceResult<>(context.getPollContext(), future.getLeft(), recordMetadata);
                     results.add(result);
                 }
