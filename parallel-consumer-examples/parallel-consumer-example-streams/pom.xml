@@ -10,7 +10,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-examples</artifactId>
-        <version>0.5.1.0-SNAPSHOT</version>
+        <version>0.5.1.0</version>
     </parent>
 
     <artifactId>parallel-consumer-example-streams</artifactId>
@@ -67,4 +67,8 @@
             <artifactId>commons-lang3</artifactId>
         </dependency>
     </dependencies>
+
+  <scm>
+    <tag>0.5.1.0</tag>
+  </scm>
 </project>
