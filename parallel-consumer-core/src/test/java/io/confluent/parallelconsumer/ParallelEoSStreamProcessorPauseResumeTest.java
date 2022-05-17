@@ -49,7 +49,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
         }
 
         public void unlockProcessing() {
-            log.info("Unlocking processing");
+            log.debug("Unlocking processing");
             mutex.unlock();
         }
 
@@ -60,7 +60,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
             try {
                 lockProcessing();
                 int numProcessed = numProcessedRecords.incrementAndGet();
-                log.info("Processed complete, incremented to {}", numProcessed);
+                log.debug("Processed complete, incremented to {}", numProcessed);
             } finally {
                 unlockProcessing();
                 numInFlightRecords.decrementAndGet();
