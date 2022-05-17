@@ -23,7 +23,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         implements ParallelStreamProcessor<K, V> {
 
     /**
-     * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
+     * Construct the AsyncConsumer by wrapping this passed in consumer and producer, which can be configured any which
      * way as per normal.
      *
      * @see ParallelConsumerOptions

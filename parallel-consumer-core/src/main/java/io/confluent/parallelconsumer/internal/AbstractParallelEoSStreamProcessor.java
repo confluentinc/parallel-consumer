@@ -55,6 +55,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public static final String MDC_INSTANCE_ID = "pcId";
     public static final String MDC_OFFSET_MARKER = "offset";
 
+    /**
+     * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
+     * user function.
+     */
+    private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
+
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions options;
 
@@ -664,7 +670,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
-        if (state == running) {
+        if (isIdlingOrRunning()) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
             commitOffsetsMaybe();
@@ -947,9 +953,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.registerWork(action.getConsumerRecords());
             } else {
                 WorkContainer<K, V> work = action.getWorkContainer();
-                MDC.put(MDC_OFFSET_MARKER, work.toString());
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
                 wm.handleFutureResult(work);
-                MDC.remove(MDC_OFFSET_MARKER);
+                MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
             }
         }
     }
@@ -983,6 +989,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
     }
+
+    private boolean isIdlingOrRunning() {
+        return state == running || state == draining || state == paused;
+    }
+
 
     /**
      * Conditionally commit offsets to broker
@@ -1045,7 +1056,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
-        if (state == running || state == draining) {
+        if (isIdlingOrRunning()) {
             Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
@@ -1065,6 +1076,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void commitOffsetsThatAreReady() {
         log.debug("Committing offsets that are ready...");
         synchronized (commitCommand) {
+            log.debug("Committing offsets that are ready...");
             committer.retrieveOffsetsAndCommit();
             clearCommitCommand();
             this.lastCommitTime = Instant.now();
@@ -1086,7 +1098,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
-                MDC.put("offset", workContainerBatch.get(0).offset() + "");
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
             }
             log.trace("Pool received: {}", workContainerBatch);
 
@@ -1209,6 +1221,27 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.debug("Command to commit asap received, clearing");
                 this.commitCommand.set(false);
             }
+        }
+    }
+
+    @Override
+    public void pauseIfRunning() {
+        if (this.state == State.running) {
+            log.info("Transitioning parallel consumer to state paused.");
+            this.state = State.paused;
+        } else {
+            log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
+        }
+    }
+
+    @Override
+    public void resumeIfPaused() {
+        if (this.state == State.paused) {
+            log.info("Transitioning paarallel consumer to state running.");
+            this.state = State.running;
+            notifySomethingToDo();
+        } else {
+            log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
     }
 

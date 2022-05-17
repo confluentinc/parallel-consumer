@@ -9,8 +9,10 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.model.CommitHistory;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +33,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -335,10 +336,16 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         assertThat(commits).containsAll(offsets);
     }
 
-    private List<Integer> getCommitHistoryFlattened() {
+    protected List<Integer> getCommitHistoryFlattened() {
         return (isUsingTransactionalProducer())
                 ? ktu.getProducerCommitsFlattened(producerSpy)
                 : extractAllPartitionsOffsetsSequentially(false);
+    }
+
+    private List<OffsetAndMetadata> getCommitHistoryFlattenedMeta() {
+        return (isUsingTransactionalProducer())
+                ? ktu.getProducerCommitsMeta(producerSpy)
+                : extractAllPartitionsOffsetsSequentiallyMeta(true);
     }
 
     public void assertCommits(List<Integer> offsets, String description) {
@@ -374,17 +381,25 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      * Flattens the offsets of all partitions into a single sequential list
      */
     protected List<Integer> extractAllPartitionsOffsetsSequentially(boolean trimGenesis) {
+        return extractAllPartitionsOffsetsSequentiallyMeta(trimGenesis).stream().
+                map(x -> (int) x.offset()) // int cast a luxury in test context - no big offsets
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Flattens the offsets of all partitions into a single sequential list
+     */
+    protected List<OffsetAndMetadata> extractAllPartitionsOffsetsSequentiallyMeta(boolean trimGenesis) {
         // copy the list for safe concurrent access
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
         return history.stream()
                 .flatMap(commits ->
                         {
-                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values()); // 4 debugging
-                            Stream<Integer> rawOffsets = values.stream().map(meta -> (int) meta.offset());
+                            var rawValues = new ArrayList<>(commits.values()).stream(); // 4 debugging
                             if (trimGenesis)
-                                return rawOffsets.filter(x -> x != 0);
+                                return rawValues.filter(x -> x.offset() != 0);
                             else
-                                return rawOffsets; // int cast a luxury in test context - no big offsets
+                                return rawValues; // int cast a luxury in test context - no big offsets
                         }
                 ).collect(Collectors.toList());
     }
@@ -404,6 +419,12 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     public void assertCommits(List<Integer> offsets) {
         assertCommits(offsets, Optional.empty());
+    }
+
+    public CommitHistorySubject assertCommits() {
+        List<OffsetAndMetadata> commitHistoryFlattened = getCommitHistoryFlattenedMeta();
+        CommitHistory actual = new CommitHistory(commitHistoryFlattened);
+        return CommitHistorySubject.assertThat(actual);
     }
 
     /**

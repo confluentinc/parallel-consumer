@@ -21,15 +21,14 @@
         </encoder>
     </appender>
 
-    <root level="warn">
+    <root level="info">
         <!--    <root level="debug">-->
         <appender-ref ref="STDOUT"/>
     </root>
 
     <!-- primary -->
     <logger name="io.confluent.parallelconsumer" level="info"/>
-<!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
-    <logger name="io.confluent.csid" level="info"/>
+<!--        <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
 
     <!--    <logger name="io.confluent.csid.utils.LatchTestUtils" level="trace"/>-->
@@ -60,6 +59,10 @@
 
     <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="trace"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.state.RemovedPartitionState" level="trace"/>-->
+
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorPauseResumeTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase" level="debug"/>-->
+    <!--    <logger name="io.confluent.csid.utils.LongPollingMockConsumer" level="trace"/>-->
 
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
