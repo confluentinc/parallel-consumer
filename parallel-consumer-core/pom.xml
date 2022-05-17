@@ -103,6 +103,7 @@
             <groupId>io.stubbs.truth</groupId>
             <artifactId>truth-generator-api</artifactId>
             <version>${truth-generator-maven-plugin.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>uk.co.jemos.podam</groupId>

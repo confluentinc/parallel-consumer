@@ -250,7 +250,8 @@ without operational burden or harming the cluster's performance
 * Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
-* Manual Pause / Resume of entire PC without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+* Manual global pause / resume of all partitions, without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+** Circuit breaker patterns for individual paritions or keys can be done through throwing failure exceptions in the processing function (see https://github.com/confluentinc/parallel-consumer/pull/291[PR #291 Explicit terminal and retriable exceptions] for further refinement)
 ** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
@@ -1169,11 +1170,11 @@ endif::[]
 
 * #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
 
-== v0.5.0.1
-
 === Fixes and Improvements
 
-* fixes: #225 Build support for Java 17, 18 (#289)
+* #225: Build and runtime support for Java 16+ (#289)
+* #306: Change Truth-Generator dependency from compile to test
+* #298: Improve PollAndProduce performance by first producing all records, and then waiting for the produce results.Previously, this was done for each ProduceRecord individually.
 
 == v0.5.0.0
 
