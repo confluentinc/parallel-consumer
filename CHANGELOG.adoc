@@ -18,11 +18,10 @@ endif::[]
 
 * #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
 
-== v0.5.0.1
-
 === Fixes and Improvements
 
 * fixes: #225 Build support for Java 17, 18 (#289)
+* fix #306: Change TG dependency from compile to test
 
 == v0.5.0.0
 
