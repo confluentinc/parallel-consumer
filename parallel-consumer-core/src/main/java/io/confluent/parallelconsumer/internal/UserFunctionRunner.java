@@ -23,11 +23,14 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFail
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SKIP;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_WORK_CONTAINER_DESCRIPTOR;
 
+/**
+ * Manages the result of running the user's function, particularly error handling.
+ */
 @AllArgsConstructor
 @Slf4j
 public class UserFunctionRunner<K, V> {
 
-    private AbstractParallelEoSStreamProcessor<K, V> pc;
+    private final AbstractParallelEoSStreamProcessor<K, V> pc;
 
     /**
      * Run the supplied function.
