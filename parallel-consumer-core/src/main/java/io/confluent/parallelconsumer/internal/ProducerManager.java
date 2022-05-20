@@ -34,6 +34,10 @@ import java.util.stream.Stream;
 import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
+ * Central control point for {@link KafkaProducer} where it's needed in some scenarios, like transactions.
+ * <p>
+ * Also has useful wrapping methods.
+ * <p>
  * todo docs
  */
 @Slf4j
@@ -45,9 +49,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     private final boolean producerIsConfiguredForTransactions;
 
-
     /**
-     * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
+     * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transactionally. We must
      * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
      * state COMMITTING_TRANSACTION".
      */

@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.AllArgsConstructor;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -218,10 +217,10 @@ public class UserFunctionRunner<K, V> {
         root.initCause(userError);
     }
 
-    @NonNull
-    private Throwable getRootCause(final Exception sendError) {
-        if (sendError.getCause() == null) return sendError;
-        else return getRootCause(sendError);
+    private Throwable getRootCause(Throwable sendError) {
+        Throwable cause = sendError.getCause();
+        if (cause == null) return sendError;
+        else return getRootCause(cause);
     }
 
     @SuppressWarnings("FeatureEnvy")
