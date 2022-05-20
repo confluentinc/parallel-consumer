@@ -5,8 +5,10 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -25,10 +27,16 @@ import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 
+/**
+ * todo docs
+ */
 @Slf4j
 public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
@@ -123,7 +131,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see ParallelConsumer#poll
      * @see ParallelStreamProcessor#pollAndProduceMany
      */
-    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(List<ProducerRecord<K, V>> outMsgs) {
+    public List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(List<ProducerRecord<K, V>> outMsgs) {
         // only needed if not using tx
         Callback callback = (RecordMetadata metadata, Exception exception) -> {
             if (exception != null) {
@@ -134,18 +142,45 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         readLock.lock();
-        List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
+        List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
         try {
             for (ProducerRecord<K, V> rec : outMsgs) {
                 log.trace("Producing {}", rec);
                 var future = producer.send(rec, callback);
-                futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
+                futures.add(Tuple.pairOf(rec, future));
             }
         } finally {
             readLock.unlock();
         }
 
         return futures;
+    }
+
+    public List<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> produceMessagesSyncWithContext(PollContext<K, V> context, List<ProducerRecord<K, V>> outMsgs) {
+        return produceMessagesSync(outMsgs).map(tuple -> {
+            RecordMetadata recordMetadata = tuple.getRight();
+            ProducerRecord<K, V> producerRecord = tuple.getLeft();
+            return new ParallelStreamProcessor.ConsumeProduceResult<>(context, producerRecord, recordMetadata);
+        }).collect(Collectors.toList());
+    }
+
+    public Stream<Tuple<ProducerRecord<K, V>, RecordMetadata>> produceMessagesSync(List<ProducerRecord<K, V>> outMsgs) {
+        var futures = produceMessages(outMsgs);
+
+        try {
+            return futures.stream().map(tuple -> {
+                Future<RecordMetadata> futureSendResult = tuple.getRight();
+                ProducerRecord<K, V> producerRecord = tuple.getLeft();
+                try {
+                    RecordMetadata recordMetadata = futureSendResult.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                    return new Tuple<>(producerRecord, recordMetadata);
+                } catch (Exception e) {
+                    throw new RuntimeException(msg("Error while waiting on individual produce result {}", producerRecord), e);
+                }
+            });
+        } catch (Exception e) {
+            throw new InternalRuntimeError(msg("Error while waiting for produce results {}", outMsgs), e);
+        }
     }
 
     @Override

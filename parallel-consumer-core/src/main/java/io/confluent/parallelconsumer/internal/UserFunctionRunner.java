@@ -8,26 +8,45 @@ import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.ParallelConsumer.Tuple;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.AllArgsConstructor;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.internals.RecordHeader;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.serialization.Serializer;
 import org.slf4j.MDC;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SHUTDOWN;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SKIP;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.*;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_WORK_CONTAINER_DESCRIPTOR;
 
 @AllArgsConstructor
 @Slf4j
 public class UserFunctionRunner<K, V> {
 
+    private static final String FAILURE_COUNT_KEY = "pc-failure-count";
+
+    private static final String LAST_FAILURE_KEY = "pc-last-failure-at";
+    private static final Serializer<String> serializer = Serdes.String().serializer();
+
     private AbstractParallelEoSStreamProcessor<K, V> pc;
+
+    private final Clock clock;
+
+    private final Optional<ProducerManager<K, V>> producer;
+
 
     /**
      * Run the supplied function.
@@ -113,7 +132,8 @@ public class UserFunctionRunner<K, V> {
     }
 
     private <R> List<Tuple<ConsumerRecord<K, V>, R>> handleUserTerminalFailure(PollContextInternal<K, V> context,
-                                                                               PCTerminalException e, Consumer<R> callback) {
+                                                                               PCTerminalException e,
+                                                                               Consumer<R> callback) {
         var reaction = pc.getOptions().getTerminalFailureReaction();
 
         if (reaction == SKIP) {
@@ -134,9 +154,69 @@ public class UserFunctionRunner<K, V> {
 
             // throw again to make the future failed
             throw e;
+        } else if (reaction == DLQ) {
+            handleDlqReaction(context, e);
+            // othewise pretend to succeed
+            return handleUserSuccess(callback, context.getWorkContainers(), UniLists.of());
         } else {
             throw new InternalRuntimeError(msg("Unsupported reaction config ({}) - submit a bug report.", reaction));
         }
+    }
+
+    private void handleDlqReaction(PollContextInternal<K, V> context, PCTerminalException userError) {
+        try {
+            var producerRecords = prepareDlqMsgs(context);
+            //noinspection OptionalGetWithoutIsPresent - presence handled in Options verifier
+            producer.get().produceMessagesSync(producerRecords);
+        } catch (Exception sendError) {
+            InternalRuntimeError multiRoot = new InternalRuntimeError(
+                    msg("Error sending record to DLQ, while reacting to the user failure: {}", userError.getMessage()),
+                    sendError);
+            attachRootCause(sendError, userError);
+            multiRoot.addSuppressed(userError);
+            throw multiRoot;
+        }
+    }
+
+    private void attachRootCause(final Exception sendError, final PCTerminalException userError) {
+        //noinspection ThrowableNotThrown
+        Throwable root = getRootCause(sendError);
+        root.initCause(userError);
+    }
+
+    @NonNull
+    private Throwable getRootCause(final Exception sendError) {
+        if (sendError.getCause() == null) return sendError;
+        else return getRootCause(sendError);
+    }
+
+    @SuppressWarnings("FeatureEnvy")
+    private List<ProducerRecord<K, V>> prepareDlqMsgs(PollContextInternal<K, V> context) {
+        return context.stream().map(recordContext -> {
+            Iterable<Header> headers = makeDlqHeaders(recordContext);
+            Integer partition = null;
+            return new ProducerRecord<>(recordContext.topic(),
+                    partition,
+                    recordContext.key(),
+                    recordContext.value(),
+                    headers);
+        }).collect(Collectors.toList());
+    }
+
+    @SuppressWarnings("FeatureEnvy")
+    private Iterable<Header> makeDlqHeaders(RecordContext<K, V> recordContext) {
+        int numberOfFailedAttempts = recordContext.getNumberOfFailedAttempts();
+        Optional<Instant> lastFailureAt = recordContext.getLastFailureAt();
+
+        byte[] failures = serializer.serialize(recordContext.topic(), Integer.toString(numberOfFailedAttempts));
+
+        Instant resolvedInstant = lastFailureAt.orElse(clock.instant());
+        byte[] last = serializer.serialize(recordContext.topic(), resolvedInstant.toString());
+
+        return UniLists.of(
+                new RecordHeader(FAILURE_COUNT_KEY, failures),
+                new RecordHeader(LAST_FAILURE_KEY, last)
+        );
     }
 
     private void handleExplicitUserRetriableFailure(PollContextInternal<K, V> context, PCRetriableException e) {

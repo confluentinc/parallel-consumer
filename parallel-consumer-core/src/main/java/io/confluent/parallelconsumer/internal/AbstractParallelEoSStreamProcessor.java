@@ -104,32 +104,49 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
+    private final UserFunctionRunner<K, V> runner;
+
     /**
-     * An inbound message to the controller.
-     * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
+     * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
+     * way as per normal.
+     *
+     * @see ParallelConsumerOptions
      */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
-        WorkContainer<K, V> workContainer;
-        EpochAndRecordsMap<K, V> consumerRecords;
+    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
+        Objects.requireNonNull(newOptions, "Options must be supplied");
 
-        private boolean isWorkResult() {
-            return workContainer != null;
+        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
+
+        options = newOptions;
+        options.validate();
+
+        this.dynamicExtraLoadFactor = new DynamicLoadFactor();
+        this.consumer = options.getConsumer();
+
+        checkGroupIdConfigured(consumer);
+        checkNotSubscribed(consumer);
+        checkAutoCommitIsDisabled(consumer);
+
+        workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
+
+        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
+
+        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
+
+        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+
+        if (options.isProducerSupplied()) {
+            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            if (options.isUsingTransactionalProducer())
+                this.committer = this.producerManager.get();
+            else
+                this.committer = this.brokerPollSubsystem;
+        } else {
+            this.producerManager = Optional.empty();
+            this.committer = this.brokerPollSubsystem;
         }
 
-        private boolean isNewConsumerRecords() {
-            return !isWorkResult();
-        }
-
-        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords);
-        }
-
-        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<K, V>(work, null);
-        }
+        this.runner = new UserFunctionRunner<K, V>(this, clock, getProducerManager());
     }
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
@@ -217,44 +234,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
-    /**
-     * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
-     * way as per normal.
-     *
-     * @see ParallelConsumerOptions
-     */
-    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
-        Objects.requireNonNull(newOptions, "Options must be supplied");
-
-        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
-
-        options = newOptions;
-        options.validate();
-
-        this.dynamicExtraLoadFactor = new DynamicLoadFactor();
-        this.consumer = options.getConsumer();
-
-        checkGroupIdConfigured(consumer);
-        checkNotSubscribed(consumer);
-        checkAutoCommitIsDisabled(consumer);
-
-        workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
-
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
-
-        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
-
-        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
-
-        if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
-            if (options.isUsingTransactionalProducer())
-                this.committer = this.producerManager.get();
-            else
-                this.committer = this.brokerPollSubsystem;
-        } else {
-            this.producerManager = Optional.empty();
-            this.committer = this.brokerPollSubsystem;
+    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
+                                           final Consumer<R> callback,
+                                           final List<WorkContainer<K, V>> batch) {
+        // for each record, construct dispatch to the executor and capture a Future
+        log.trace("Sending work ({}) to pool", batch);
+        Future outputRecordFuture = workerThreadPool.submit(() -> {
+            addInstanceMDC();
+            return this.runner.runUserFunction(usersFunction, callback, batch);
+        });
+        // for a batch, each message in the batch shares the same result
+        for (final WorkContainer<K, V> workContainer : batch) {
+            workContainer.setFuture(outputRecordFuture);
         }
     }
 
@@ -763,20 +754,32 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
+    /**
+     * An inbound message to the controller.
+     * <p>
+     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
+     */
+    @Value
+    @RequiredArgsConstructor(access = PRIVATE)
+    // todo refactor - this has been extracted in #270
+    private static class ControllerEventMessage<K, V> {
+        WorkContainer<K, V> workContainer;
+        EpochAndRecordsMap<K, V> consumerRecords;
 
-    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                           final Consumer<R> callback,
-                                           final List<WorkContainer<K, V>> batch) {
-        // for each record, construct dispatch to the executor and capture a Future
-        log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerThreadPool.submit(() -> {
-            addInstanceMDC();
-            UserFunctionRunner<K, V> runner = new UserFunctionRunner<>(this);
-            return runner.runUserFunction(usersFunction, callback, batch);
-        });
-        // for a batch, each message in the batch shares the same result
-        for (final WorkContainer<K, V> workContainer : batch) {
-            workContainer.setFuture(outputRecordFuture);
+        private boolean isWorkResult() {
+            return workContainer != null;
+        }
+
+        private boolean isNewConsumerRecords() {
+            return !isWorkResult();
+        }
+
+        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords);
+        }
+
+        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<K, V>(work, null);
         }
     }
 

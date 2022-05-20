@@ -4,19 +4,14 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -68,22 +63,9 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
             }
             log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
 
-            List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
             log.trace("Producing {} messages in result...", recordListToProduce.size());
-
-            var futures = super.getProducerManager().get().produceMessages(recordListToProduce);
-            try {
-                for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> future : futures) {
-                    var recordMetadata = TimeUtils.time(() ->
-                        future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
-                    var result = new ConsumeProduceResult<>(context.getPollContext(), future.getLeft(), recordMetadata);
-                    results.add(result);
-                }
-            } catch (Exception e) {
-                throw new InternalRuntimeError("Error while waiting for produce results", e);
-            }
-
-            return results;
+            ProducerManager<K, V> producer = super.getProducerManager().get();
+            return producer.produceMessagesSyncWithContext(context.getPollContext(), recordListToProduce);
         };
 
         supervisorLoop(wrappedUserFunc, callback);

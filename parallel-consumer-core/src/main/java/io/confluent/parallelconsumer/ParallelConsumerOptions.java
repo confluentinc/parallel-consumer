@@ -19,6 +19,7 @@ import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.DLQ;
 
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
@@ -225,19 +226,6 @@ public class ParallelConsumerOptions<K, V> {
 
     private final TerminalFailureReaction terminalFailureReaction;
 
-    public enum TerminalFailureReaction {
-        SHUTDOWN,
-        SKIP,
-        // DLQ, TODO
-    }
-
-    /**
-     * @return the combined target of the desired concurrency by the configured batch size
-     */
-    public int getTargetAmountOfRecordsInFlight() {
-        return getMaxConcurrency() * getBatchSize();
-    }
-
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
@@ -248,6 +236,26 @@ public class ParallelConsumerOptions<K, V> {
 
         //
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
+
+        //
+        if (!isProducerSupplied() && getTerminalFailureReaction() == DLQ) {
+            throw new IllegalArgumentException(msg("Wanting to use DQL failure mode ({}) without supplying a Producer instance",
+                    getTerminalFailureReaction()));
+        }
+
+    }
+
+    /**
+     * @return the combined target of the desired concurrency by the configured batch size
+     */
+    public int getTargetAmountOfRecordsInFlight() {
+        return getMaxConcurrency() * getBatchSize();
+    }
+
+    public enum TerminalFailureReaction {
+        SHUTDOWN,
+        SKIP,
+        DLQ
     }
 
     public boolean isUsingTransactionalProducer() {
