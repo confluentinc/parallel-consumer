@@ -4,11 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import lombok.Getter;
 import lombok.ToString;
-
-import java.util.List;
-import java.util.Optional;
 
 /**
  * A user's processing function can throw this exception, which signals to PC that processing of the message has failed,
@@ -22,31 +18,6 @@ import java.util.Optional;
  */
 @ToString
 public class PCRetriableException extends PCUserException {
-
-    @Getter
-    private Optional<Offsets> offsetsOptional = Optional.empty();
-
-    /**
-     * todo
-     *
-     * @param message
-     * @param offsets
-     */
-    public PCRetriableException(String message, Offsets offsets) {
-        super(message);
-        this.offsetsOptional = Optional.of(offsets);
-    }
-
-    /**
-     * todo
-     *
-     * @param message
-     * @param offsets
-     */
-    public PCRetriableException(String message, List<Long> offsets) {
-        super(message);
-        offsetsOptional = Optional.of(Offsets.of(offsets));
-    }
 
     public PCRetriableException(String message) {
         super(message);

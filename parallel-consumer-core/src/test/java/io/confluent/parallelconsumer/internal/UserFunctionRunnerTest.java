@@ -4,8 +4,10 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.*;
+import io.confluent.parallelconsumer.PCTerminalException;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import io.confluent.parallelconsumer.state.WorkManager;
 import org.junit.jupiter.api.Test;
@@ -48,13 +50,6 @@ class UserFunctionRunnerTest {
     void skip() {
         run(SKIP, context -> {
             throw new PCTerminalException("fake");
-        });
-    }
-
-    @Test
-    void offsets() {
-        run(SKIP, context -> {
-            throw new PCRetriableException("fake", Offsets.of(0, 1));
         });
     }
 

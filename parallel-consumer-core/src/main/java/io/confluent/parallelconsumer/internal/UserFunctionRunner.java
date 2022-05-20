@@ -15,7 +15,6 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -142,23 +141,7 @@ public class UserFunctionRunner<K, V> {
 
     private void handleExplicitUserRetriableFailure(PollContextInternal<K, V> context, PCRetriableException e) {
         logUserFunctionException(e);
-
-        Optional<Offsets> offsetsOptional = e.getOffsetsOptional();
-        if (offsetsOptional.isPresent()) {
-            Offsets offsets = offsetsOptional.get();
-            log.debug("Specific offsets present in {}", offsets);
-            context.streamInternal()
-                    .forEach(work -> {
-                        if (offsets.contains(work)) {
-                            markRecordFailed(e, work.getWorkContainer());
-                        } else {
-                            // mark record succeeded
-                            handleUserSuccess();
-                        }
-                    });
-        } else {
-            markRecordsFailed(context.getWorkContainers(), e);
-        }
+        markRecordsFailed(context.getWorkContainers(), e);
     }
 
     private void handleImplicitUserRetriableFailure(PollContextInternal<K, V> context, Exception e) {
