@@ -36,9 +36,14 @@ import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamPr
 @Slf4j
 public class UserFunctionRunner<K, V> {
 
-    private static final String FAILURE_COUNT_KEY = "pc-failure-count";
+    public static final String HEADER_PREFIX = "pc-";
 
-    private static final String LAST_FAILURE_KEY = "pc-last-failure-at";
+    private static final String FAILURE_COUNT_KEY = HEADER_PREFIX + "failure-count";
+
+    private static final String LAST_FAILURE_KEY = HEADER_PREFIX + "last-failure-at";
+
+    private static final String FAILURE_CAUSE_KEY = HEADER_PREFIX + "last-failure-cause";
+
     private static final Serializer<String> serializer = Serdes.String().serializer();
 
     private AbstractParallelEoSStreamProcessor<K, V> pc;
@@ -165,7 +170,7 @@ public class UserFunctionRunner<K, V> {
 
     private void handleDlqReaction(PollContextInternal<K, V> context, PCTerminalException userError) {
         try {
-            var producerRecords = prepareDlqMsgs(context);
+            var producerRecords = prepareDlqMsgs(context, userError);
             //noinspection OptionalGetWithoutIsPresent - presence handled in Options verifier
             producer.get().produceMessagesSync(producerRecords);
         } catch (Exception sendError) {
@@ -191,9 +196,9 @@ public class UserFunctionRunner<K, V> {
     }
 
     @SuppressWarnings("FeatureEnvy")
-    private List<ProducerRecord<K, V>> prepareDlqMsgs(PollContextInternal<K, V> context) {
+    private List<ProducerRecord<K, V>> prepareDlqMsgs(PollContextInternal<K, V> context, final PCTerminalException userError) {
         return context.stream().map(recordContext -> {
-            Iterable<Header> headers = makeDlqHeaders(recordContext);
+            Iterable<Header> headers = makeDlqHeaders(recordContext, userError);
             Integer partition = null;
             return new ProducerRecord<>(recordContext.topic(),
                     partition,
@@ -204,18 +209,23 @@ public class UserFunctionRunner<K, V> {
     }
 
     @SuppressWarnings("FeatureEnvy")
-    private Iterable<Header> makeDlqHeaders(RecordContext<K, V> recordContext) {
+    private Iterable<Header> makeDlqHeaders(RecordContext<K, V> recordContext, final PCTerminalException userError) {
         int numberOfFailedAttempts = recordContext.getNumberOfFailedAttempts();
         Optional<Instant> lastFailureAt = recordContext.getLastFailureAt();
 
-        byte[] failures = serializer.serialize(recordContext.topic(), Integer.toString(numberOfFailedAttempts));
+        String topic = recordContext.topic();
+
+        byte[] failures = serializer.serialize(topic, Integer.toString(numberOfFailedAttempts));
 
         Instant resolvedInstant = lastFailureAt.orElse(clock.instant());
-        byte[] last = serializer.serialize(recordContext.topic(), resolvedInstant.toString());
+        byte[] last = serializer.serialize(topic, resolvedInstant.toString());
+
+        byte[] cause = serializer.serialize(topic, userError.getMessage());
 
         return UniLists.of(
                 new RecordHeader(FAILURE_COUNT_KEY, failures),
-                new RecordHeader(LAST_FAILURE_KEY, last)
+                new RecordHeader(LAST_FAILURE_KEY, last),
+                new RecordHeader(FAILURE_CAUSE_KEY, cause)
         );
     }
 
