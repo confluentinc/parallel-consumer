@@ -49,6 +49,10 @@ public class UserFunctionRunner<K, V> {
 
     private static final String FAILURE_CAUSE_KEY = HEADER_PREFIX + "last-failure-cause";
 
+    private static final String PARTITION_KEY = HEADER_PREFIX + "partition";
+
+    private static final String OFFSET_KEY = HEADER_PREFIX + "offset";
+
     private static final Serializer<String> serializer = Serdes.String().serializer();
 
     private static final String DLQ_SUFFIX = ".DLQ";
@@ -240,17 +244,23 @@ public class UserFunctionRunner<K, V> {
 
         String topic = recordContext.topic();
 
-        byte[] failures = serializer.serialize(topic, Integer.toString(numberOfFailedAttempts));
+        var failures = serializer.serialize(topic, Integer.toString(numberOfFailedAttempts));
 
         Instant resolvedInstant = lastFailureAt.orElse(clock.instant());
-        byte[] last = serializer.serialize(topic, resolvedInstant.toString());
+        var last = serializer.serialize(topic, resolvedInstant.toString());
 
-        byte[] cause = serializer.serialize(topic, userError.getMessage());
+        var cause = serializer.serialize(topic, userError.getMessage());
+
+        var offset = serializer.serialize(topic, String.valueOf(recordContext.offset()));
+
+        var partition = serializer.serialize(topic, String.valueOf(recordContext.partition()));
 
         return UniLists.of(
                 new RecordHeader(FAILURE_COUNT_KEY, failures),
                 new RecordHeader(LAST_FAILURE_KEY, last),
-                new RecordHeader(FAILURE_CAUSE_KEY, cause)
+                new RecordHeader(FAILURE_CAUSE_KEY, cause),
+                new RecordHeader(PARTITION_KEY, partition),
+                new RecordHeader(OFFSET_KEY, offset)
         );
     }
 
