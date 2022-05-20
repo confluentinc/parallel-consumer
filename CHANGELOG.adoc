@@ -12,11 +12,17 @@ endif::[]
 
 == Next Version
 
-== v0.5.0.1
+== v0.5.1.0
+
+=== Features
+
+* #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
 
 === Fixes and Improvements
 
-- fixes: #225 Build support for Java 17, 18 (#289)
+* #225: Build and runtime support for Java 16+ (#289)
+* #306: Change Truth-Generator dependency from compile to test
+* #298: Improve PollAndProduce performance by first producing all records, and then waiting for the produce results.Previously, this was done for each ProduceRecord individually.
 
 == v0.5.0.0
 

@@ -22,6 +22,7 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SHUTDOWN;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReaction.SKIP;
+import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_WORK_CONTAINER_DESCRIPTOR;
 
 @AllArgsConstructor
 @Slf4j
@@ -39,7 +40,7 @@ public class UserFunctionRunner<K, V> {
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
-                MDC.put("offset", workContainerBatch.get(0).offset() + "");
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
             }
             log.trace("Pool received: {}", workContainerBatch);
 

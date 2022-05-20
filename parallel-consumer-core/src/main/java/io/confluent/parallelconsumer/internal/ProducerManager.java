@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
@@ -21,10 +20,11 @@ import org.apache.kafka.common.TopicPartition;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -37,6 +37,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private final ParallelConsumerOptions options;
 
     private final boolean producerIsConfiguredForTransactions;
+
 
     /**
      * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
@@ -122,7 +123,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see ParallelConsumer#poll
      * @see ParallelStreamProcessor#pollAndProduceMany
      */
-    public RecordMetadata produceMessage(ProducerRecord<K, V> outMsg) {
+    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(List<ProducerRecord<K, V>> outMsgs) {
         // only needed if not using tx
         Callback callback = (RecordMetadata metadata, Exception exception) -> {
             if (exception != null) {
@@ -133,23 +134,18 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         readLock.lock();
-        Future<RecordMetadata> send;
+        List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
         try {
-            send = producer.send(outMsg, callback);
+            for (ProducerRecord<K, V> rec : outMsgs) {
+                log.trace("Producing {}", rec);
+                var future = producer.send(rec, callback);
+                futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
+            }
         } finally {
             readLock.unlock();
         }
 
-        // wait on the send results
-        try {
-            log.trace("Blocking on produce result");
-            RecordMetadata recordMetadata = TimeUtils.time(() ->
-                    send.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
-            log.trace("Produce result received");
-            return recordMetadata;
-        } catch (Exception e) {
-            throw new InternalRuntimeError(e);
-        }
+        return futures;
     }
 
     @Override

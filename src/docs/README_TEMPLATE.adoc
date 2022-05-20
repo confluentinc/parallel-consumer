@@ -1,13 +1,25 @@
 //
-// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
+// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
 //
 // To render the README directly, run `mvn asciidoc-template::build`
 //
+
+
+// dynamic include base for editing in IDEA
+:project_root: ./
+// for editing the template to see the includes, this will correctly render includes
+ifeval::["{docname}" == "README_TEMPLATE"]
+
+TIP:: Editing template file
+
+:project_root: ../../
+
+endif::[]
 
 
 = Confluent Parallel Consumer
@@ -21,14 +33,6 @@
 :github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
-
-// dynamic include base for editing in IDEA
-:project_root: ./
-
-// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
-// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
-// leave it commented out when committing work)
-//:project_root: ../../
 
 
 ifdef::env-github[]
@@ -244,6 +248,9 @@ without operational burden or harming the cluster's performance
 * Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
+* Manual global pause / resume of all partitions, without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+** Circuit breaker patterns for individual paritions or keys can be done through throwing failure exceptions in the processing function (see https://github.com/confluentinc/parallel-consumer/pull/291[PR #291 Explicit terminal and retriable exceptions] for further refinement)
+** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
@@ -806,12 +813,22 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
 ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 ----
 
+=== Recommended IDEA Plugins
+
+* AsciiDoc
+* CheckStyle
+* CodeGlance
+* EditorConfig
+* Rainbow Brackets
+* SonarLint
+* Lombok
+
 === Readme
 
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README_TEMPLATE.adoc[].
 
 === Maven targets
 
