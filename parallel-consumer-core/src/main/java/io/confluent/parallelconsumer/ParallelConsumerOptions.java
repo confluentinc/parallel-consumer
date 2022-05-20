@@ -226,6 +226,19 @@ public class ParallelConsumerOptions<K, V> {
 
     private final TerminalFailureReaction terminalFailureReaction;
 
+    public enum TerminalFailureReaction {
+        SHUTDOWN,
+        SKIP,
+        DLQ
+    }
+
+    /**
+     * @return the combined target of the desired concurrency by the configured batch size
+     */
+    public int getTargetAmountOfRecordsInFlight() {
+        return getMaxConcurrency() * getBatchSize();
+    }
+
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
@@ -245,18 +258,6 @@ public class ParallelConsumerOptions<K, V> {
 
     }
 
-    /**
-     * @return the combined target of the desired concurrency by the configured batch size
-     */
-    public int getTargetAmountOfRecordsInFlight() {
-        return getMaxConcurrency() * getBatchSize();
-    }
-
-    public enum TerminalFailureReaction {
-        SHUTDOWN,
-        SKIP,
-        DLQ
-    }
 
     public boolean isUsingTransactionalProducer() {
         return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
