@@ -89,8 +89,8 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
      * Tests with very large numbers of parallel consumer instances to try to reproduce state and concurrency issues
      * (#188, #189).
      * <p>
-     * This test takes some time, but seems required in order to expose some race conditions without syntehticly
-     * creatign them.
+     * This test takes some time, but seems required in order to expose some race conditions without synthetically
+     * creating them.
      */
     @Disabled
     @Test
