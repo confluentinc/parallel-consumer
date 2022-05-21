@@ -31,6 +31,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -231,5 +232,9 @@ public class KafkaClientUtils {
 
     public KafkaConsumer<String, String> getLastConsumerConstructed() {
         return lastConsumerConstructed;
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc() {
+        return buildPc(KEY);
     }
 }

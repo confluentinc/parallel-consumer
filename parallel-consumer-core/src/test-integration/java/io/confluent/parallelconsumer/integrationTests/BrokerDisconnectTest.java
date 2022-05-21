@@ -1,6 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.shaded.org.hamcrest.Matchers;
@@ -15,12 +16,15 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 @Slf4j
 class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
 
+    @SneakyThrows
     @Test
     void brokerRestart() {
         var recordsProduced = 100000;
-        setupTestData();
-        ParallelEoSStreamProcessor<String, String> pc = setupPc();
+        String topicName = setupTopic();
+        getKcu().produceMessages(topicName, recordsProduced);
 
+        //
+        ParallelEoSStreamProcessor<String, String> pc = getKcu().buildPc();
         AtomicInteger processedCount = new AtomicInteger();
         pc.poll(recordContexts -> {
             log.debug(recordContexts.toString());
@@ -37,7 +41,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
         checkPCState();
 
         //
-        resumeBroker();
+        startNewBroker();
 
         //
         checkPCState();
@@ -48,22 +52,8 @@ class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
 
     }
 
-    private void resumeBroker() {
-
-    }
-
     private void checkPCState() {
+        log.debug("");
     }
 
-    private void terminateBroker() {
-
-    }
-
-    private ParallelEoSStreamProcessor<String, String> setupPc() {
-        return null;
-    }
-
-    private void setupTestData() {
-
-    }
 }

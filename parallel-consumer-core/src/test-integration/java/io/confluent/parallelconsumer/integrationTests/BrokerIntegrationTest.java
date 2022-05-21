@@ -42,13 +42,18 @@ public abstract class BrokerIntegrationTest<K, V> {
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
-    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.0.1"))
-            .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
-            .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
-            .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
-            // try to speed up initial consumer group formation
-            .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
-            .withReuse(true);
+    @Getter
+    public static KafkaContainer kafkaContainer = createKafkaContainer();
+
+    public static KafkaContainer createKafkaContainer() {
+        return new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.0.1"))
+                .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
+                .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
+                .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
+                // try to speed up initial consumer group formation
+                .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
+                .withReuse(true);
+    }
 
     static {
         kafkaContainer.start();
@@ -75,9 +80,9 @@ public abstract class BrokerIntegrationTest<K, V> {
         kcu.close();
     }
 
-    void setupTopic() {
+    String setupTopic() {
         String name = LoadTest.class.getSimpleName();
-        setupTopic(name);
+        return setupTopic(name);
     }
 
     protected String setupTopic(String name) {
@@ -102,4 +107,15 @@ public abstract class BrokerIntegrationTest<K, V> {
         }
     }
 
+    protected void terminateBroker() {
+        String containerId = getKafkaContainer().getContainerId();
+        getKafkaContainer().getDockerClient().killContainerCmd(containerId);
+    }
+
+    protected void startNewBroker() {
+        BrokerIntegrationTest.kafkaContainer = BrokerIntegrationTest.createKafkaContainer();
+        kafkaContainer.start();
+        BrokerIntegrationTest.followKafkaLogs();
+        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
+    }
 }
