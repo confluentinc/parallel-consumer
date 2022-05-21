@@ -3,31 +3,23 @@ package io.confluent.parallelconsumer.integrationTests;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.shaded.org.hamcrest.Matchers;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
+
+/**
+ * Exercises PC's reaction to the broker connection being lost of the broker being restarted
+ */
 @Slf4j
-public class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
+class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
 
     @Test
     void brokerRestart() {
+        var recordsProduced = 100000;
         setupTestData();
         ParallelEoSStreamProcessor<String, String> pc = setupPc();
-
-//        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
-//        //
-//        boolean tx = true;
-//        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
-//                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
-//                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-//                .producer(kcu.createNewProducer(tx))
-//                .consumer(newConsumer)
-//                .maxConcurrency(3)
-//                .build();
-//
-//        ParallelEoSStreamProcessor<String, String> async = new ParallelEoSStreamProcessor<>(options);
-//        async.subscribe(Pattern.compile(topic));
 
         AtomicInteger processedCount = new AtomicInteger();
         pc.poll(recordContexts -> {
@@ -35,7 +27,35 @@ public class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> 
             processedCount.incrementAndGet();
         });
 
-        Awaitility.await().untilAtomic(processedCount, )
+        //
+        await().untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(100)));
+
+        //
+        terminateBroker();
+
+        //
+        checkPCState();
+
+        //
+        resumeBroker();
+
+        //
+        checkPCState();
+
+        //
+        await().untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(recordsProduced)));
+
+
+    }
+
+    private void resumeBroker() {
+
+    }
+
+    private void checkPCState() {
+    }
+
+    private void terminateBroker() {
 
     }
 
