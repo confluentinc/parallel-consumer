@@ -113,7 +113,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    // todo refactor - this has been extracted in #270
+    // todo refactor - this has been extracted in PR#270
     private static class ControllerEventMessage<K, V> {
         WorkContainer<K, V> workContainer;
         EpochAndRecordsMap<K, V> consumerRecords;
