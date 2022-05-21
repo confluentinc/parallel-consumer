@@ -3,24 +3,37 @@ package io.confluent.parallelconsumer.integrationTests.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import one.util.streamex.IntStreamEx;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static java.time.Duration.ofSeconds;
+import static java.util.Optional.empty;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 public class KafkaClientUtils {
@@ -39,6 +52,11 @@ public class KafkaClientUtils {
     @Getter
     private AdminClient admin;
     private final String groupId = GROUP_ID_PREFIX + RandomUtils.nextInt();
+
+    /**
+     * todo docs
+     */
+    private KafkaConsumer<String, String> lastConsumerConstructed;
 
 
     public KafkaClientUtils(KafkaContainer kafkaContainer) {
@@ -150,5 +168,68 @@ public class KafkaClientUtils {
 
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
+    }
+
+    @SneakyThrows
+    public List<NewTopic> createTopics(int numTopics) {
+        List<NewTopic> newTopics = IntStreamEx.range(numTopics).mapToObj(i -> new NewTopic("in-" + i, empty(), empty())).toList();
+        getAdmin().createTopics(newTopics).all().get();
+        return newTopics;
+    }
+
+    public List<String> produceMessages(String inputName, int numberToSend) throws InterruptedException, ExecutionException {
+        log.info("Producing {} messages to {}", numberToSend, inputName);
+        final List<String> expectedKeys = new ArrayList<>();
+        List<Future<RecordMetadata>> sends = new ArrayList<>();
+        try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
+            for (int i = 0; i < numberToSend; i++) {
+                String key = "key-" + i;
+                Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
+                    if (exception != null) {
+                        log.error("Error sending, ", exception);
+                    }
+                });
+                sends.add(send);
+                expectedKeys.add(key);
+            }
+            log.debug("Finished sending test data");
+        }
+        // make sure we finish sending before next stage
+        log.debug("Waiting for broker acks");
+        for (Future<RecordMetadata> send : sends) {
+            RecordMetadata recordMetadata = send.get();
+            boolean b = recordMetadata.hasOffset();
+            assertThat(b).isTrue();
+            long offset = recordMetadata.offset();
+        }
+        assertThat(sends).hasSize(numberToSend);
+        return expectedKeys;
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll) {
+        Properties consumerProps = new Properties();
+        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
+        KafkaConsumer<String, String> newConsumer = createNewConsumer(false, consumerProps);
+        lastConsumerConstructed = newConsumer;
+
+        var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
+                .ordering(order)
+                .consumer(newConsumer)
+                .commitMode(commitMode)
+                .maxConcurrency(100)
+                .build());
+
+        pc.setTimeBetweenCommits(ofSeconds(1));
+
+        // sanity
+        return pc;
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key) {
+        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500);
+    }
+
+    public KafkaConsumer<String, String> getLastConsumerConstructed() {
+        return lastConsumerConstructed;
     }
 }
