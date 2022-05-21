@@ -1,9 +1,9 @@
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.ManagedTruth;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 
@@ -18,16 +18,19 @@ import static org.hamcrest.Matchers.equalTo;
  * Originally created to investigate issue report #184
  */
 @Slf4j
-class MultiTopicTest {
+class MultiTopicTest extends BrokerIntegrationTest<String, String> {
+
     @Test
     void multiTopic() {
         int numTopics = 3;
-        List<TopicPartition> topics = createTopics(numTopics);
+        List<NewTopic> topics = getKcu().createTopics(numTopics);
         int recordsPerTopic = 333;
         topics.forEach(topic -> sendMessages(topic, recordsPerTopic));
-        ParallelEoSStreamProcessor pc;
-        ParallelConsumerOptions.builder().ordering(KEY);
+
+        var pc = getKcu().buildPc(KEY);
+
         AtomicInteger messageProcessedCount = new AtomicInteger();
+
         pc.poll(pollContext -> {
             log.debug(pollContext.toString());
             messageProcessedCount.incrementAndGet();
@@ -43,15 +46,16 @@ class MultiTopicTest {
         });
     }
 
-    private void sendMessages(TopicPartition topic, int recordsPerTopic) {
 
+    @SneakyThrows
+    private void sendMessages(NewTopic topic, int recordsPerTopic) {
+        getKcu().produceMessages(topic.name(), recordsPerTopic);
     }
 
-    private List<TopicPartition> createTopics(int numTopics) {
-
+    private void assertCommit(NewTopic topic, int recordsPerTopic) {
+        ManagedTruth.assertThat(getKcu().getLastConsumerConstructed())
+                .hasCommittedToPartition(topic)
+                .offset(recordsPerTopic);
     }
 
-    private void assertCommit(TopicPartition topic, int recordsPerTopic) {
-
-    }
 }
