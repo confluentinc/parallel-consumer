@@ -13,6 +13,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -111,6 +112,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         log.debug("Test step: Terminating broker");
         String containerId = getKafkaContainer().getContainerId();
         getKafkaContainer().getDockerClient().killContainerCmd(containerId).exec();
+        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isFalse());
     }
 
     protected void startNewBroker() {

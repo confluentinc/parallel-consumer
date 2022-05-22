@@ -199,7 +199,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         var tp = toTopicPartition(rec);
         Long epoch = partitionsAssignmentEpochs.get(tp);
         if (epoch == null) {
-            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
+            throw new InternalRuntimeError(msg("Received message for a partition which we don't have an epoch for (is not assigned): {}", rec));
         }
         return epoch;
     }

@@ -310,7 +310,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void subscribe(String topics) {
-        consumer.subscribe(UniLists.of(topics));
+        subscribe(UniLists.of(topics));
     }
 
     @Override
