@@ -54,17 +54,16 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
         numPartitions = 12;
         String inputTopicName = setupTopic(this.getClass().getSimpleName() + "-input");
 
-        List<String> expectedKeys = new ArrayList<>();
 //        int expectedMessageCount = 10_000_000;
         int expectedMessageCount = 30_000_00;
         log.info("Producing {} messages before starting test", expectedMessageCount);
 
-        produceMessages(inputTopicName, expectedKeys, expectedMessageCount);
+        List<String> expectedKeys = getKcu().produceMessages(inputTopicName, expectedMessageCount);
 
         // setup
-        ParallelEoSStreamProcessor<String, String> pcOne = buildPc(inputTopicName, expectedMessageCount, maxPoll, order, commitMode);
-        ParallelEoSStreamProcessor<String, String> pcTwo = buildPc(inputTopicName, expectedMessageCount, maxPoll, order, commitMode);
-        ParallelEoSStreamProcessor<String, String> pcThree = buildPc(inputTopicName, expectedMessageCount, maxPoll, order, commitMode);
+        ParallelEoSStreamProcessor<String, String> pcOne = buildPc(inputTopicName, maxPoll, order, commitMode);
+        ParallelEoSStreamProcessor<String, String> pcTwo = buildPc(inputTopicName, maxPoll, order, commitMode);
+        ParallelEoSStreamProcessor<String, String> pcThree = buildPc(inputTopicName, maxPoll, order, commitMode);
 
         // run
         var consumedByOne = Collections.synchronizedList(new ArrayList<ConsumerRecord<?, ?>>());

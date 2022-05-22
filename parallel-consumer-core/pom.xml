@@ -137,10 +137,10 @@
                         <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
                         <class>org.apache.kafka.clients.consumer.ConsumerRecord</class>
                         <class>org.apache.kafka.clients.consumer.ConsumerRecords</class>
-                        <class>org.apache.kafka.clients.consumer.KafkaConsumer</class>
+                        <class>org.apache.kafka.clients.consumer.Consumer</class>
                         <class>org.apache.kafka.clients.producer.RecordMetadata</class>
                         <class>org.apache.kafka.clients.producer.ProducerRecord</class>
-                        <class>org.apache.kafka.clients.producer.KafkaProducer</class>
+                        <class>org.apache.kafka.clients.producer.Producer</class>
                     </legacyClasses>
                     <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
                 </configuration>

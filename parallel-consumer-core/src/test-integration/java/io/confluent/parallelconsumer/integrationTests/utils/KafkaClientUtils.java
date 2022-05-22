@@ -33,6 +33,7 @@ import java.util.concurrent.Future;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
+import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
@@ -172,7 +173,7 @@ public class KafkaClientUtils {
 
     @SneakyThrows
     public List<NewTopic> createTopics(int numTopics) {
-        List<NewTopic> newTopics = IntStreamEx.range(numTopics).mapToObj(i -> new NewTopic("in-" + i, empty(), empty())).toList();
+        List<NewTopic> newTopics = IntStreamEx.range(numTopics).mapToObj(i -> new NewTopic("in-" + i + "-" + nextInt(), empty(), empty())).toList();
         getAdmin().createTopics(newTopics).all().get();
         return newTopics;
     }
