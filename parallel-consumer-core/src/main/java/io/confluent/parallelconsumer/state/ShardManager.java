@@ -12,7 +12,6 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
@@ -58,7 +57,7 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    private final Map<Object, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
 
@@ -66,31 +65,23 @@ public class ShardManager<K, V> {
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
      * shard.
      */
-    private Optional<Object> iterationResumePoint = Optional.empty();
+    private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
     /**
      * The shard belonging to the given key
      *
      * @return may return empty if the shard has since been removed
      */
-    // todo don't expose inner data structures - wrap instead
-    Optional<ProcessingShard<K, V>> getShard(Object key) {
+    Optional<ProcessingShard<K, V>> getShard(ShardKey key) {
         return Optional.ofNullable(processingShards.get(key));
     }
 
-    private LoopingResumingIterator<Object, ProcessingShard<K, V>> getIterator(final Optional<Object> iterationResumePoint) {
+    private LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> getIterator(final Optional<ShardKey> iterationResumePoint) {
         return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
     }
 
-    Object computeShardKey(ConsumerRecord<?, ?> rec) {
-        return switch (options.getOrdering()) {
-            case KEY -> rec.key();
-            case PARTITION, UNORDERED -> new TopicPartition(rec.topic(), rec.partition());
-        };
-    }
-
-    Object computeShardKey(WorkContainer<?, ?> wc) {
-        return computeShardKey(wc.getCr());
+    ShardKey computeShardKey(WorkContainer<?, ?> wc) {
+        return ShardKey.of(wc, options.getOrdering());
     }
 
     /**
@@ -120,7 +111,7 @@ public class ShardManager<K, V> {
     }
 
     private void removeShardFor(final WorkContainer<K, V> work) {
-        Object shardKey = computeShardKey(work.getCr());
+        ShardKey shardKey = computeShardKey(work);
 
         if (processingShards.containsKey(shardKey)) {
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
@@ -134,14 +125,14 @@ public class ShardManager<K, V> {
         this.retryQueue.remove(work);
     }
 
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
-        Object shardKey = computeShardKey(wc.getCr());
+    public void addWorkContainer(WorkContainer<K, V> wc) {
+        ShardKey shardKey = computeShardKey(wc);
         var shard = processingShards.computeIfAbsent(shardKey,
                 (ignore) -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
     }
 
-    void removeShardIfEmpty(final Object key) {
+    void removeShardIfEmpty(ShardKey key) {
         Optional<ProcessingShard<K, V>> shardOpt = getShard(key);
 
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
@@ -157,7 +148,7 @@ public class ShardManager<K, V> {
         this.retryQueue.remove(wc);
 
         // remove from processing queues
-        Object key = computeShardKey(wc);
+        var key = computeShardKey(wc);
         var shardOptional = getShard(key);
         if (shardOptional.isPresent()) {
             //
@@ -191,7 +182,7 @@ public class ShardManager<K, V> {
     }
 
     public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
-        LoopingResumingIterator<Object, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
+        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
 
         //
         List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
@@ -218,7 +209,7 @@ public class ShardManager<K, V> {
         return workFromAllShards;
     }
 
-    private void updateResumePoint(LoopingResumingIterator<Object, ProcessingShard<K, V>> shardQueueIterator) {
+    private void updateResumePoint(LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator) {
         if (shardQueueIterator.hasNext()) {
             var shardEntry = shardQueueIterator.next();
             this.iterationResumePoint = Optional.of(shardEntry.getKey());
