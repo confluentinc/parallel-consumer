@@ -130,6 +130,7 @@
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>
                         <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.state.ShardKey</class>
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                     </classes>
                     <legacyClasses>
