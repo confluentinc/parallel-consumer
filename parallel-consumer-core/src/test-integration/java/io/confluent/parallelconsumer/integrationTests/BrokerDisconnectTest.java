@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.shaded.org.hamcrest.Matchers;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
@@ -26,13 +27,14 @@ class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
         //
         ParallelEoSStreamProcessor<String, String> pc = getKcu().buildPc();
         AtomicInteger processedCount = new AtomicInteger();
+        pc.subscribe(topicName);
         pc.poll(recordContexts -> {
             log.debug(recordContexts.toString());
             processedCount.incrementAndGet();
         });
 
         //
-        await().untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(100)));
+        await().atMost(Duration.ofSeconds(60)).untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(100)));
 
         //
         terminateBroker();

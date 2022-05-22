@@ -20,6 +20,7 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
+import pl.tlinkowski.unij.api.UniLists;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -305,6 +306,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
         consumer.subscribe(topics, this);
+    }
+
+    @Override
+    public void subscribe(String topics) {
+        consumer.subscribe(UniLists.of(topics));
     }
 
     @Override

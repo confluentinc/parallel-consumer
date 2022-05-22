@@ -81,7 +81,7 @@ public abstract class BrokerIntegrationTest<K, V> {
     }
 
     String setupTopic() {
-        String name = LoadTest.class.getSimpleName();
+        String name = getClass().getSimpleName();
         return setupTopic(name);
     }
 
@@ -108,11 +108,13 @@ public abstract class BrokerIntegrationTest<K, V> {
     }
 
     protected void terminateBroker() {
+        log.debug("Test step: Terminating broker");
         String containerId = getKafkaContainer().getContainerId();
-        getKafkaContainer().getDockerClient().killContainerCmd(containerId);
+        getKafkaContainer().getDockerClient().killContainerCmd(containerId).exec();
     }
 
     protected void startNewBroker() {
+        log.debug("Test step: Starting a new broker");
         BrokerIntegrationTest.kafkaContainer = BrokerIntegrationTest.createKafkaContainer();
         kafkaContainer.start();
         BrokerIntegrationTest.followKafkaLogs();

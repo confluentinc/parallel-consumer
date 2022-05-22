@@ -49,6 +49,13 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
     void subscribe(Pattern pattern, ConsumerRebalanceListener callback);
 
     /**
+     * Alias for #scribe(List.of(topicName))
+     *
+     * @see #subscribe(Collection)
+     */
+    void subscribe(String topicName);
+
+    /**
      * Pause this consumer (i.e. stop processing of messages).
      * <p>
      * This operation only has an effect if the consumer is currently running. In all other cases calling this method
