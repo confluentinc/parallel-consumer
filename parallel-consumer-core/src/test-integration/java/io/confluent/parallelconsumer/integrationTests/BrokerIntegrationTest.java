@@ -108,8 +108,18 @@ public abstract class BrokerIntegrationTest<K, V> {
         }
     }
 
+    int outPort = -1;
+
     protected void terminateBroker() {
+        log.warn(kafkaContainer.getPortBindings().toString());
+        log.warn(kafkaContainer.getExposedPorts().toString());
+        log.warn(kafkaContainer.getBoundPortNumbers().toString());
+        log.warn(kafkaContainer.getLivenessCheckPortNumbers().toString());
+
+        outPort = kafkaContainer.getMappedPort(9093);
+
         log.debug("Test step: Terminating broker");
+//        getKafkaContainer().getDockerClient()
         String containerId = getKafkaContainer().getContainerId();
         getKafkaContainer().getDockerClient().killContainerCmd(containerId).exec();
         Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isFalse());
@@ -117,9 +127,20 @@ public abstract class BrokerIntegrationTest<K, V> {
 
     protected void startNewBroker() {
         log.debug("Test step: Starting a new broker");
+
+        String mapping = "9093:" + outPort;
         BrokerIntegrationTest.kafkaContainer = BrokerIntegrationTest.createKafkaContainer();
+        kafkaContainer.setPortBindings(UniLists.of(mapping));
         kafkaContainer.start();
+
         BrokerIntegrationTest.followKafkaLogs();
-        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
+//        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
+        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isTrue());
+
+
+        log.warn(kafkaContainer.getLivenessCheckPortNumbers().toString());
+        log.warn(kafkaContainer.getPortBindings().toString());
+        log.warn(kafkaContainer.getPortBindings().toString());
+
     }
 }
