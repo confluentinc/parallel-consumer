@@ -726,8 +726,8 @@
                                 <banDuplicatePomDependencyVersions/>
                                 <requireSameVersions/>
                                 <requireReleaseDeps>
-                                    <onlyWhenRelease>false</onlyWhenRelease>
-                                    <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                    <onlyWhenRelease>true</onlyWhenRelease>
+                                    <failWhenParentIsSnapshot>true</failWhenParentIsSnapshot>
                                     <excludes>
                                         <exclude>io.confluent.parallelconsumer:</exclude>
                                     </excludes>
