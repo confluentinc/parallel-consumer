@@ -46,11 +46,11 @@ public class ShardKey {
          * Note: We use just the topic name here, and not the partition, so that if we were to receive records from the
          * same key from the partitions we're assigned, they will be put into the same queue.
          */
-        String topicName;
+        TopicPartition topicName;
         Object key;
 
         public KeyOrderedKey(final ConsumerRecord<?, ?> rec) {
-            this(rec.topic(), rec.key());
+            this(new TopicPartition(rec.topic(), rec.partition()), rec.key());
         }
     }
 
