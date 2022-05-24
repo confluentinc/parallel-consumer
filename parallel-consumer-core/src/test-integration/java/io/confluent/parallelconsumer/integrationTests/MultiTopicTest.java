@@ -11,6 +11,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -89,8 +90,9 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         var reck3 = new ConsumerRecord<>("t2", 0, 0, keyOne, "v");
         assertThat(key1).isNotEqualTo(ShardKey.of(reck3, ordering));
 
-        KeyOrderedKey keyOrderedKey = new KeyOrderedKey(topicOne, keyOne);
-        KeyOrderedKey keyOrderedKeyTwo = new KeyOrderedKey(topicOne, keyOne);
+        var tp = new TopicPartition(topicOne, 0);
+        KeyOrderedKey keyOrderedKey = new KeyOrderedKey(tp, keyOne);
+        KeyOrderedKey keyOrderedKeyTwo = new KeyOrderedKey(tp, keyOne);
         assertThat(keyOrderedKey).isEqualTo(keyOrderedKeyTwo);
     }
 

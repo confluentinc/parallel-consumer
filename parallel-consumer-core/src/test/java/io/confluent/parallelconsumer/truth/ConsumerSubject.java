@@ -34,8 +34,6 @@ import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHis
 @Generated(value = "io.stubbs.truth.generator.internal.TruthGenerator", date = "2022-05-17T12:20:38.207945Z")
 public class ConsumerSubject extends ConsumerParentSubject {
 
-    private final Duration timeout = Duration.ofSeconds(10);
-
     protected ConsumerSubject(FailureMetadata failureMetadata, org.apache.kafka.clients.consumer.Consumer actual) {
         super(failureMetadata, actual);
     }
@@ -48,10 +46,13 @@ public class ConsumerSubject extends ConsumerParentSubject {
         return ConsumerSubject::new;
     }
 
+    private final Duration timeout = Duration.ofSeconds(10);
+
     public CommitHistorySubject hasCommittedToPartition(NewTopic topic) {
         var committed = actual.committed(UniSets.of(topic), timeout);
         List<OffsetAndMetadata> offsets = (List<OffsetAndMetadata>) committed.get(topic);
         CommitHistory commitHistory = new CommitHistory(offsets);
         return check("getCommitHistory(%s)", topic).about(commitHistories()).that(commitHistory);
     }
+
 }
