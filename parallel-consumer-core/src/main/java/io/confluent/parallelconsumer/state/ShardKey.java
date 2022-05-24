@@ -54,7 +54,7 @@ public class ShardKey {
     @ToString(callSuper = true)
     @EqualsAndHashCode(callSuper = true)
     @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
-    public static class KeyOrderedKey extends ShardKey {
+    public abstract static class KeyOrderedKey extends ShardKey {
         Object key;
 
         public KeyOrderedKey(final ConsumerRecord<?, ?> rec) {
