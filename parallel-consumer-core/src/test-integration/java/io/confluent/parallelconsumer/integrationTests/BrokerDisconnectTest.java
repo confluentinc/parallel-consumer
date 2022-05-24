@@ -35,6 +35,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
 
         //
         await().atMost(Duration.ofSeconds(60)).untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(100)));
+        log.warn("Consumed 100");
 
         //
         terminateBroker();

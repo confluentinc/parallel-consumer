@@ -13,15 +13,16 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import static org.apache.commons.lang3.RandomUtils.nextInt;
@@ -120,23 +121,35 @@ public abstract class BrokerIntegrationTest<K, V> {
 
         log.debug("Test step: Terminating broker");
 //        getKafkaContainer().getDockerClient()
-        String containerId = getKafkaContainer().getContainerId();
-        getKafkaContainer().getDockerClient().killContainerCmd(containerId).exec();
-        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isFalse());
+//        String containerId = getKafkaContainer().getContainerId();
+//        getKafkaContainer().getDockerClient().killContainerCmd(containerId).exec();
+//        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isFalse());
+
+
+        Network network = kafkaContainer.getNetwork();
+        List<com.github.dockerjava.api.model.Network> exec1 = kafkaContainer.getDockerClient().listNetworksCmd().exec();
+        com.github.dockerjava.api.model.Network exec = kafkaContainer.getDockerClient().inspectNetworkCmd().exec();
+        List<String> networkAliases = kafkaContainer.getNetworkAliases();
+        getKafkaContainer().getDockerClient()
+                .disconnectFromNetworkCmd()
+                .withContainerId(kafkaContainer.getContainerId())
+                .withNetworkId(networkAliases.stream().findFirst().get())
+                .exec();
     }
 
     protected void startNewBroker() {
         log.debug("Test step: Starting a new broker");
 
         String mapping = "9093:" + outPort;
-        BrokerIntegrationTest.kafkaContainer = BrokerIntegrationTest.createKafkaContainer();
-        kafkaContainer.setPortBindings(UniLists.of(mapping));
-        kafkaContainer.start();
+//        BrokerIntegrationTest.kafkaContainer = BrokerIntegrationTest.createKafkaContainer();
+//        kafkaContainer.setPortBindings(UniLists.of(mapping));
+//        kafkaContainer.start();
 
-        BrokerIntegrationTest.followKafkaLogs();
+//        BrokerIntegrationTest.followKafkaLogs();
 //        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
-        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isTrue());
+//        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isTrue());
 
+        getKafkaContainer().getDockerClient().connectToNetworkCmd().exec();
 
         log.warn(kafkaContainer.getLivenessCheckPortNumbers().toString());
         log.warn(kafkaContainer.getPortBindings().toString());
