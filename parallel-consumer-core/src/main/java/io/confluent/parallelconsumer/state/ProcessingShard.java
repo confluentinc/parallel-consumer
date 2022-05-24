@@ -42,7 +42,7 @@ public class ProcessingShard<K, V> {
     private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
 
     @Getter(PRIVATE)
-    private final Object key;
+    private final ShardKey key;
 
     private final ParallelConsumerOptions<?, ?> options;
 
