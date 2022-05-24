@@ -57,7 +57,9 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    todo extract
+    to wrapper
+    private final Map<ShardKey, Map<TopicPartition, ProcessingShard<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
 
