@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.PriorityBlockingQueue;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -29,6 +28,13 @@ import static lombok.AccessLevel.PRIVATE;
 @RequiredArgsConstructor
 public class ProcessingShard<K, V> {
 
+    public static final Comparator<WorkContainer<?, ?>> OFFSET_COMPARATOR = Comparator
+            .<WorkContainer<?, ?>>comparingLong(WorkContainer::offset)
+            .thenComparingLong(WorkContainer::timestamp);
+
+    public static final Comparator<WorkContainer<?, ?>> TIMESTAMP_COMPARATOR = Comparator
+            .comparingLong(value -> value.getCr().timestamp());
+
     /**
      * Map of offset to WorkUnits.
      * <p>
@@ -41,11 +47,11 @@ public class ProcessingShard<K, V> {
     @Getter
 //    private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
     // todo switch to PriorityQueue from blocking, when PR#270 merges
-    private final PriorityQueue<WorkContainer<K, V>> entries = new PriorityBlockingQueue<>();
-
+    // todo blocked by PR#270 merge
+    private final TreeSet<WorkContainer<K, V>> entries;
 
     @Getter(PRIVATE)
-    private final Object key;
+    private final ShardKey key;
 
     private final ParallelConsumerOptions<?, ?> options;
 
@@ -53,24 +59,40 @@ public class ProcessingShard<K, V> {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
+    public ProcessingShard(ShardKey key, ParallelConsumerOptions<?, ?> options, PartitionStateManager<K, V> pm) {
+        this.key = key;
+        this.options = options;
+        this.pm = pm;
+
+        // entry queue
+        ParallelConsumerOptions.KeyOrderSorting keyOrderSorting = options.getKeyOrderSorting();
+
+        Comparator<WorkContainer<?, ?>> comparator = switch (keyOrderSorting) {
+            case OFFSET -> OFFSET_COMPARATOR;
+            case PRODUCE_TIMESTAMP -> TIMESTAMP_COMPARATOR;
+            default -> throw new IllegalStateException("Unexpected value: " + keyOrderSorting);
+        };
+        this.entries = new TreeSet<>(comparator);
+    }
+
     public boolean workIsWaitingToBeProcessed() {
-        return entries.values().parallelStream()
+        return entries.parallelStream()
                 .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
-        long key = wc.offset();
-        if (entries.containsKey(key)) {
-            log.debug("Entry for {} already exists in shard queue, dropping record", wc);
-        } else {
-            entries.put(key, wc);
-            entries.add(wc);
-        }
+//        long key = wc.offset();
+//        if (entries.containsKey(key)) {
+//            log.debug("Entry for {} already exists in shard queue, dropping record", wc);
+//        } else {
+//            entries.put(key, wc);
+        entries.add(wc);
+//        }
     }
 
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove work from shard's queue
-        entries.remove(wc.offset());
+//        entries.remove(wc.offset());
     }
 
     public boolean isEmpty() {
@@ -78,7 +100,8 @@ public class ProcessingShard<K, V> {
     }
 
     public long getCountOfWorkAwaitingSelection() {
-        return entries.values().stream()
+        // cache?
+        return entries.stream()
                 // todo missing pm.isBlocked(topicPartition) ?
                 .filter(WorkContainer::isAvailableToTakeAsWork)
                 .count();
@@ -89,13 +112,14 @@ public class ProcessingShard<K, V> {
     }
 
     public long getCountWorkInFlight() {
-        return entries.values().stream()
+        // cache?
+        return entries.stream()
                 .filter(WorkContainer::isInFlight)
                 .count();
     }
 
-    WorkContainer<K, V> remove(WorkContainer<?, ?> workContainer) {
-        return entries.remove(workContainer.offset());
+    void remove(WorkContainer<?, ?> workContainer) {
+        entries.remove(workContainer);
     }
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
@@ -104,9 +128,9 @@ public class ProcessingShard<K, V> {
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
-        var iterator = entries.entrySet().iterator();
+        var iterator = entries.iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
-            var workContainer = iterator.next().getValue();
+            var workContainer = iterator.next();
 
             if (pm.couldBeTakenAsWork(workContainer)) {
 
@@ -148,6 +172,9 @@ public class ProcessingShard<K, V> {
         }
     }
 
+    /**
+     * todo docs
+     */
     private void addToSlowWorkMaybe(Set<WorkContainer<?, ?>> slowWork, WorkContainer<?, ?> workContainer) {
         var msgTemplate = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
         Duration timeInFlight = workContainer.getTimeInFlight();

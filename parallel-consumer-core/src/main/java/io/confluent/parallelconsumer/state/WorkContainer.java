@@ -10,6 +10,7 @@ import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -48,6 +49,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     // todo change to enum, remove setter - #241
     private String workType;
 
+    @Delegate
     @Getter
     private final ConsumerRecord<K, V> cr;
 
@@ -214,10 +216,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         }
         long millis = System.currentTimeMillis() - timeTakenAsWorkMs.get();
         return Duration.ofMillis(millis);
-    }
-
-    public long offset() {
-        return getCr().offset();
     }
 
     public boolean hasPreviouslyFailed() {

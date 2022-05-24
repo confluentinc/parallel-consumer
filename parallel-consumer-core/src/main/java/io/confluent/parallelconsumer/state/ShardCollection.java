@@ -1,20 +1,30 @@
 package io.confluent.parallelconsumer.state;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+import static lombok.AccessLevel.PROTECTED;
 
 @Slf4j
+@RequiredArgsConstructor
 public class ShardCollection<K, V> {
 
     private final ParallelConsumerOptions options;
+
+    private final WorkManager<K, V> wm;
 
     /**
      * Map of keys to TP to shard
@@ -30,10 +40,12 @@ public class ShardCollection<K, V> {
     //        todo need to use TP actually, so that IF KEY mode, and same keys exists on multiple partitions, they don't overwrite each other, and progress is still made
 //        - need to also add indirection to SM to map my TP
 //    private final Map<ShardKey, Map<TopicPartition, ProcessingShard<K, V>>> processingShards = new ConcurrentHashMap<>();
-    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    // todo blocked by PR#270 merge
+    @Getter(PROTECTED)
+    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new HashMap<>();
 
     ShardKey computeShardKey(WorkContainer<?, ?> wc) {
-        return ShardKey.of(wc, options.getOrdering());
+        return ShardKey.of(wc, options);
     }
 
     /**
@@ -58,14 +70,8 @@ public class ShardCollection<K, V> {
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         ShardKey shardKey = computeShardKey(wc);
-
-        ParallelConsumerOptions.KeyIsolation isolation;
-        ParallelConsumerOptions.KeyOrderSorting sorting;
-
-        if (isolation ==)
-
-            var shard = processingShards.computeIfAbsent(shardKey,
-                    (ignore) -> new ProcessingShard<>(shardKey, options, wm.getPm()));
+        var shard = processingShards.computeIfAbsent(shardKey,
+                ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
     }
 
@@ -88,12 +94,9 @@ public class ShardCollection<K, V> {
         if (processingShards.containsKey(shardKey)) {
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             shard.remove(work);
-            removeShardIfEmpty(shardKey);
+            removeShardIfEmpty(work);
         } else {
             log.trace("Shard referenced by WC: {} with shard key: {} already removed", work, shardKey);
         }
-
-        //
-        this.retryQueue.remove(work);
     }
 }

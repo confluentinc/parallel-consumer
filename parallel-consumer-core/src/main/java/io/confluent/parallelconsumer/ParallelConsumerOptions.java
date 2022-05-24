@@ -85,10 +85,16 @@ public class ParallelConsumerOptions<K, V> {
         COMBINE_TOPICS
     }
 
+    @Builder.Default
+    private final KeyIsolation keyIsolation = KeyIsolation.ISOLATE;
+
     public enum KeyOrderSorting {
         OFFSET,
         PRODUCE_TIMESTAMP
     }
+
+    @Builder.Default
+    private final KeyOrderSorting keyOrderSorting = KeyOrderSorting.PRODUCE_TIMESTAMP;
 
     /**
      * The type of commit to be made, with either a transactions configured Producer where messages produced are

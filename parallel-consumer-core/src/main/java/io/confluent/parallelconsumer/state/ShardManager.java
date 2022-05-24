@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
@@ -31,7 +30,7 @@ import static lombok.AccessLevel.PRIVATE;
  * must be thread safe.
  */
 @Slf4j
-@RequiredArgsConstructor
+//@RequiredArgsConstructor
 public class ShardManager<K, V> {
 
     @Getter
@@ -47,9 +46,12 @@ public class ShardManager<K, V> {
      *
      * @see WorkManager#getWorkIfAvailable()
      */
-    private final ShardCollection<K, V> processingShards = new ShardCollection<>();
+    private final ShardCollection<K, V> processingShards;
 
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
+    /**
+     * Cache of next record that needs to be retried
+     */
+    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(WorkContainer::getDelayUntilRetryDue));
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -57,8 +59,16 @@ public class ShardManager<K, V> {
      */
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
+    public ShardManager(final ParallelConsumerOptions<K, V> newOptions, final WorkManager<K, V> newWorkManager, final Clock newClock) {
+        this.options = newOptions;
+        this.wm = newWorkManager;
+        this.clock = newClock;
+
+        this.processingShards = new ShardCollection<>(newOptions, wm);
+    }
+
     private LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> getIterator(final Optional<ShardKey> iterationResumePoint) {
-        return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
+        return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards.getProcessingShards());
     }
 
     /**
@@ -84,6 +94,10 @@ public class ShardManager<K, V> {
     void removeAnyShardsReferencedBy(NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition) {
         for (WorkContainer<K, V> work : workFromRemovedPartition.values()) {
             processingShards.removeShardFor(work);
+
+
+            //
+            this.retryQueue.remove(work);
         }
     }
 
@@ -107,7 +121,7 @@ public class ShardManager<K, V> {
 
             removeShardIfEmpty(wc);
         } else {
-            log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());
+            log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", wc.key(), wc.getCr());
         }
     }
 
