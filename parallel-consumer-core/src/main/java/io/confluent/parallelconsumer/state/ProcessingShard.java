@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -39,7 +39,10 @@ public class ProcessingShard<K, V> {
      * mode).
      */
     @Getter
-    private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
+//    private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
+    // todo switch to PriorityQueue from blocking, when PR#270 merges
+    private final PriorityQueue<WorkContainer<K, V>> entries = new PriorityBlockingQueue<>();
+
 
     @Getter(PRIVATE)
     private final Object key;
@@ -61,6 +64,7 @@ public class ProcessingShard<K, V> {
             log.debug("Entry for {} already exists in shard queue, dropping record", wc);
         } else {
             entries.put(key, wc);
+            entries.add(wc);
         }
     }
 
@@ -90,8 +94,8 @@ public class ProcessingShard<K, V> {
                 .count();
     }
 
-    public WorkContainer<K, V> remove(long offset) {
-        return entries.remove(offset);
+    WorkContainer<K, V> remove(WorkContainer<?, ?> workContainer) {
+        return entries.remove(workContainer.offset());
     }
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {

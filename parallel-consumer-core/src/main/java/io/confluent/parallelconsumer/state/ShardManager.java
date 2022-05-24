@@ -12,14 +12,11 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.TopicPartition;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.PRIVATE;
@@ -46,20 +43,11 @@ public class ShardManager<K, V> {
     private final Clock clock;
 
     /**
-     * Map of Object keys to Shard
-     * <p>
-     * Object Type is either the K key type, or it is a {@link TopicPartition}
-     * <p>
      * Used to collate together a queue of work units for each unique key consumed
      *
-     * @see ProcessingShard
-     * @see K
      * @see WorkManager#getWorkIfAvailable()
      */
-    // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    todo extract
-    to wrapper
-    private final Map<ShardKey, Map<TopicPartition, ProcessingShard<K, V>>> processingShards = new ConcurrentHashMap<>();
+    private final ShardCollection<K, V> processingShards = new ShardCollection<>();
 
     private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
 
@@ -69,21 +57,8 @@ public class ShardManager<K, V> {
      */
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
-    /**
-     * The shard belonging to the given key
-     *
-     * @return may return empty if the shard has since been removed
-     */
-    Optional<ProcessingShard<K, V>> getShard(ShardKey key) {
-        return Optional.ofNullable(processingShards.get(key));
-    }
-
     private LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> getIterator(final Optional<ShardKey> iterationResumePoint) {
         return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
-    }
-
-    ShardKey computeShardKey(WorkContainer<?, ?> wc) {
-        return ShardKey.of(wc, options.getOrdering());
     }
 
     /**
@@ -108,41 +83,16 @@ public class ShardManager<K, V> {
      */
     void removeAnyShardsReferencedBy(NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition) {
         for (WorkContainer<K, V> work : workFromRemovedPartition.values()) {
-            removeShardFor(work);
+            processingShards.removeShardFor(work);
         }
-    }
-
-    private void removeShardFor(final WorkContainer<K, V> work) {
-        ShardKey shardKey = computeShardKey(work);
-
-        if (processingShards.containsKey(shardKey)) {
-            ProcessingShard<K, V> shard = processingShards.get(shardKey);
-            shard.remove(work.offset());
-            removeShardIfEmpty(shardKey);
-        } else {
-            log.trace("Shard referenced by WC: {} with shard key: {} already removed", work, shardKey);
-        }
-
-        //
-        this.retryQueue.remove(work);
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
-        ShardKey shardKey = computeShardKey(wc);
-        var shard = processingShards.computeIfAbsent(shardKey,
-                ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
-        shard.addWorkContainer(wc);
+        processingShards.addWorkContainer(wc);
     }
 
-    void removeShardIfEmpty(ShardKey key) {
-        Optional<ProcessingShard<K, V>> shardOpt = getShard(key);
-
-        // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
-        boolean keyOrdering = options.getOrdering().equals(KEY);
-        if (keyOrdering && shardOpt.isPresent() && shardOpt.get().isEmpty()) {
-            log.trace("Removing empty shard (key: {})", key);
-            this.processingShards.remove(key);
-        }
+    void removeShardIfEmpty(WorkContainer<?, ?> key) {
+        processingShards.removeShardIfEmpty(key);
     }
 
     public void onSuccess(WorkContainer<?, ?> wc) {
@@ -150,13 +100,12 @@ public class ShardManager<K, V> {
         this.retryQueue.remove(wc);
 
         // remove from processing queues
-        var key = computeShardKey(wc);
-        var shardOptional = getShard(key);
+        var shardOptional = processingShards.getShard(wc);
         if (shardOptional.isPresent()) {
             //
             shardOptional.get().onSuccess(wc);
 
-            removeShardIfEmpty(key);
+            removeShardIfEmpty(wc);
         } else {
             log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());
         }

@@ -82,16 +82,26 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         ShardKey key1 = ShardKey.of(reck1, ordering);
         assertThat(key1).isEqualTo(ShardKey.of(reck1, ordering));
 
+        // same topic, same partition, different key
         var reck2 = new ConsumerRecord<>(topicOne, 0, 0, "k2", "v");
         ShardKey of3 = ShardKey.of(reck2, ordering);
         assertThat(key1).isNotEqualTo(of3);
 
+        // different topic, same key
         var reck3 = new ConsumerRecord<>("t2", 0, 0, keyOne, "v");
         assertThat(key1).isNotEqualTo(ShardKey.of(reck3, ordering));
 
+        // same topic, same key
         KeyOrderedKey keyOrderedKey = new KeyOrderedKey(topicOne, keyOne);
         KeyOrderedKey keyOrderedKeyTwo = new KeyOrderedKey(topicOne, keyOne);
         assertThat(keyOrderedKey).isEqualTo(keyOrderedKeyTwo);
+
+        // same topic, same key, different partition
+        var reck4 = new ConsumerRecord<>(topicOne, 1, 0, keyOne, "v");
+        ShardKey of4 = ShardKey.of(reck2, ordering);
+        assertThat(key1).isNotEqualTo(of3);
+        // check both exist in queue too
+        assertThat("false").isEmpty();
     }
 
 }

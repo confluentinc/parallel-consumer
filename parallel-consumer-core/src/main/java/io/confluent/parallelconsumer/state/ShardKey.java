@@ -46,22 +46,9 @@ public class ShardKey {
          * Note: We use just the topic name here, and not the partition, so that if we were to receive records from the
          * same key from the partitions we're assigned, they will be put into the same queue.
          */
-        todo need
-        to use
-        TP actually, so
-        that IF
-        KEY mode, and
-        same keys
-        exists on
-        multiple partitions, they
-        don't overwrite each other, and progress is still made
-                -
-        need to
-        also add
-        indirection to
-        SM to
-        map my
-        TP
+//        todo need to use TP actually, so that IF KEY mode, and same keys exists on multiple partitions, they don't overwrite each other, and progress is still made
+//        - need to also add indirection to SM to map my TP
+        // - needs documenting
         String topicName;
         Object key;
 

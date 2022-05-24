@@ -79,6 +79,17 @@ public class ParallelConsumerOptions<K, V> {
         KEY
     }
 
+    public enum KeyIsolation {
+        ISOLATE,
+        COMBINE_PARTITIONS,
+        COMBINE_TOPICS
+    }
+
+    public enum KeyOrderSorting {
+        OFFSET,
+        PRODUCE_TIMESTAMP
+    }
+
     /**
      * The type of commit to be made, with either a transactions configured Producer where messages produced are
      * committed back to the Broker along with the offsets they originated from, or with the faster simpler Consumer
