@@ -10,6 +10,8 @@ import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.record.TimestampType;
 
 import java.time.Duration;
 import java.util.*;
@@ -23,6 +25,8 @@ import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Models the queue of work to be processed, based on the {@link ProcessingOrder} modes.
+ *
+ * @see ShardKey
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -33,7 +37,12 @@ public class ProcessingShard<K, V> {
             .thenComparingLong(WorkContainer::timestamp);
 
     public static final Comparator<WorkContainer<?, ?>> TIMESTAMP_COMPARATOR = Comparator
-            .comparingLong(value -> value.getCr().timestamp());
+            .comparingLong(value -> {
+                final ConsumerRecord<?, ?> cr = value.getCr();
+                final TimestampType timestampType = cr.timestampType();
+                log.debug("Record uses {} time", timestampType);
+                return cr.timestamp();
+            });
 
     /**
      * Map of offset to WorkUnits.
@@ -69,7 +78,7 @@ public class ProcessingShard<K, V> {
 
         Comparator<WorkContainer<?, ?>> comparator = switch (keyOrderSorting) {
             case OFFSET -> OFFSET_COMPARATOR;
-            case PRODUCE_TIMESTAMP -> TIMESTAMP_COMPARATOR;
+            case TIMESTAMP -> TIMESTAMP_COMPARATOR;
             default -> throw new IllegalStateException("Unexpected value: " + keyOrderSorting);
         };
         this.entries = new TreeSet<>(comparator);
