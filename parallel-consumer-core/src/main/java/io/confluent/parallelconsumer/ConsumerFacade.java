@@ -1,5 +1,10 @@
 package io.confluent.parallelconsumer;
 
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler;
+import lombok.EqualsAndHashCode;
+import lombok.RequiredArgsConstructor;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.Metric;
@@ -9,17 +14,41 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.Exchanger;
+import java.util.concurrent.LinkedTransferQueue;
 import java.util.regex.Pattern;
 
 /**
  * todo docs
+ * All methods must be multi thread safe.
  */
 @Slf4j
+@RequiredArgsConstructor
 public class ConsumerFacade implements Consumer {
+
+    static class Bus {
+        Queue<ConsumerRebalanceHandler.Message> queue;
+        Exchanger<ConsumerRebalanceHandler.Message> exchanger;
+        LinkedTransferQueue<ConsumerRebalanceHandler.Message> transferQueue;
+
+        public void blockingEnqueue(SeekMessage seekMessage) {
+            queue.add(seekMessage);
+            exchanger.exchange(seekMessage);
+            transferQueue.transfer(seekMessage.);
+        }
+
+        public SeekMessage poll() {
+            exchanger.
+        }
+    }
+
+    private final Bus bus;
+    private final AbstractParallelEoSStreamProcessor<?, ?> controller;
 
     /// above
     @Override
     public Set<TopicPartition> assignment() {
+        controller.getWm().getPm().assignment();
         return null;
     }
 
@@ -44,9 +73,16 @@ public class ConsumerFacade implements Consumer {
     }
 
 
+    @Value
+    @EqualsAndHashCode(callSuper = true)
+    static class SeekMessage extends ConsumerRebalanceHandler.Message {
+        TopicPartition partition;
+        long offset;
+    }
+
     @Override
     public void seek(final TopicPartition partition, final long offset) {
-
+        bus.blockingEnqueue(new SeekMessage(partition, offset));
     }
 
     @Override
