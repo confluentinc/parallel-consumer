@@ -50,7 +50,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements org.apache.kafka.clients.consumer.Consumer<K, V>, ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
     public static final String MDC_OFFSET_MARKER = "offset";
