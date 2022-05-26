@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
@@ -13,7 +14,10 @@ import java.util.regex.Pattern;
 /**
  * todo docs
  */
+@Slf4j
 public class ConsumerFacade implements Consumer {
+
+    /// above
     @Override
     public Set<TopicPartition> assignment() {
         return null;
@@ -39,6 +43,7 @@ public class ConsumerFacade implements Consumer {
 
     }
 
+
     @Override
     public void seek(final TopicPartition partition, final long offset) {
 
@@ -57,6 +62,16 @@ public class ConsumerFacade implements Consumer {
     @Override
     public long position(final TopicPartition partition, final Duration timeout) {
         return 0;
+    }
+
+    @Override
+    public OffsetAndMetadata committed(final TopicPartition partition) {
+        return null;
+    }
+
+    @Override
+    public OffsetAndMetadata committed(final TopicPartition partition, final Duration timeout) {
+        return null;
     }
 
     @Override
@@ -89,6 +104,7 @@ public class ConsumerFacade implements Consumer {
         return null;
     }
 
+
     @Override
     public OptionalLong currentLag(final TopicPartition topicPartition) {
         return null;
@@ -103,6 +119,17 @@ public class ConsumerFacade implements Consumer {
     public void enforceRebalance() {
 
     }
+
+    @Override
+    public void close() {
+
+    }
+
+    @Override
+    public void close(final Duration timeout) {
+
+    }
+
 
     @Override
     public Map<TopicPartition, Long> endOffsets(final Collection collection, final Duration timeout) {
@@ -171,4 +198,64 @@ public class ConsumerFacade implements Consumer {
 
     // no-ops
 
+
+    @Override
+    public ConsumerRecords poll(final long timeout) {
+        return null;
+    }
+
+    @Override
+    public ConsumerRecords poll(final Duration timeout) {
+        return null;
+    }
+
+    @Override
+    public void commitSync() {
+
+    }
+
+    @Override
+    public void commitSync(final Duration timeout) {
+
+    }
+
+    @Override
+    public void commitAsync() {
+
+    }
+
+    @Override
+    public void commitAsync(final OffsetCommitCallback callback) {
+
+    }
+
+    @Override
+    public void commitAsync(final Map offsets, final OffsetCommitCallback callback) {
+
+    }
+
+    @Override
+    public void commitSync(final Map offsets, final Duration timeout) {
+
+    }
+
+    @Override
+    public void commitSync(final Map offsets) {
+
+    }
+
+    @Override
+    public void resume(final Collection collection) {
+
+    }
+
+    @Override
+    public void pause(final Collection collection) {
+
+    }
+
+    @Override
+    public void wakeup() {
+
+    }
 }

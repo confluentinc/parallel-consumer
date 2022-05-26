@@ -20,7 +20,7 @@ import java.util.function.Function;
  * @see #pollAndProduce
  * @see #pollAndProduceMany
  */
-public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
+public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable, org.apache.kafka.clients.consumer.Consumer<K, V> {
 
     static <KK, VV> ParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
         return new ParallelEoSStreamProcessor(options);

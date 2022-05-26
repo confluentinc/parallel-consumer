@@ -5,12 +5,14 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.ConsumerFacade;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
+import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -50,10 +52,14 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements org.apache.kafka.clients.consumer.Consumer<K, V>, ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements org.apache.kafka.clients.consumer.Consumer<K, V>,
+        ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
     public static final String MDC_OFFSET_MARKER = "offset";
+
+    @Delegate
+    private final ConsumerFacade consumerFacade = new ConsumerFacade();
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
@@ -301,6 +307,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements org.ap
         }
     }
 
+    // replace with facade delegate
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);

@@ -28,9 +28,9 @@ public interface DrainingCloseable extends Closeable {
      * @see #DEFAULT_TIMEOUT
      * @see #close(Duration, DrainingMode)
      */
-    default void close() {
-        closeDontDrainFirst();
-    }
+//    default void close() {
+//        closeDontDrainFirst();
+//    }
 
     /**
      * @see DrainingMode#DRAIN
