@@ -5,6 +5,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -12,6 +13,7 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -49,9 +51,11 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         await().untilAtomic(messageProcessedCount, Matchers.is(equalTo(expectedMessagesCount)));
 
         // commits
-//        await().untilAsserted(() -> {
-//            multiTopics.forEach(singleTopic -> assertCommit(singleTopic, recordsPerTopic));
-//        });
+//        pc.closeWithoutClosingClients();
+        pc.close();
+        await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
+            multiTopics.forEach(singleTopic -> assertCommit(pc, singleTopic, recordsPerTopic + 1));
+        });
     }
 
 
@@ -60,8 +64,9 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         getKcu().produceMessages(newTopic.name(), recordsPerTopic);
     }
 
-    private void assertCommit(NewTopic newTopic, int recordsPerTopic) {
-        assertThat(getKcu().getLastConsumerConstructed())
+    private void assertCommit(final ParallelEoSStreamProcessor<String, String> pc, NewTopic newTopic, int recordsPerTopic) {
+        var committer = getKcu().getLastConsumerConstructed();
+        assertThat(committer)
                 .hasCommittedToPartition(newTopic)
                 .offset(recordsPerTopic);
     }

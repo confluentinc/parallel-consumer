@@ -162,6 +162,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private void maybeCloseConsumerManager() {
         if (isResponsibleForCommits()) {
             log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
+// remove to keep consumer open
             this.consumerManager.close(DrainingCloseable.DEFAULT_TIMEOUT);
             log.debug("Consumer closed.");
         }

@@ -2,6 +2,7 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -13,6 +14,7 @@ class ShardKeyTest {
     void keyTest() {
         ParallelConsumerOptions.ProcessingOrder ordering = KEY;
         String topicOne = "t1";
+        TopicPartition topicOneP0 = new TopicPartition("t1", 0);
         String keyOne = "k1";
 
         var reck1 = new ConsumerRecord<>(topicOne, 0, 0, keyOne, "v");
@@ -29,8 +31,8 @@ class ShardKeyTest {
         assertThat(key1).isNotEqualTo(ShardKey.of(reck3, ordering));
 
         // same topic, same key
-        ShardKey.KeyOrderedKey keyOrderedKey = new ShardKey.KeyOrderedKey(topicOne, keyOne);
-        ShardKey.KeyOrderedKey keyOrderedKeyTwo = new ShardKey.KeyOrderedKey(topicOne, keyOne);
+        ShardKey.KeyOrderedKey keyOrderedKey = new ShardKey.KeyOrderedKey(topicOneP0, keyOne);
+        ShardKey.KeyOrderedKey keyOrderedKeyTwo = new ShardKey.KeyOrderedKey(topicOneP0, keyOne);
         assertThat(keyOrderedKey).isEqualTo(keyOrderedKeyTwo);
 
         // same topic, same key, different partition

@@ -12,11 +12,13 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
+import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import javax.annotation.Generated;
 import java.time.Duration;
-import java.util.List;
+import java.util.Map;
 
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
@@ -49,10 +51,21 @@ public class ConsumerSubject extends ConsumerParentSubject {
     private final Duration timeout = Duration.ofSeconds(10);
 
     public CommitHistorySubject hasCommittedToPartition(NewTopic topic) {
-        var committed = actual.committed(UniSets.of(topic), timeout);
-        List<OffsetAndMetadata> offsets = (List<OffsetAndMetadata>) committed.get(topic);
-        CommitHistory commitHistory = new CommitHistory(offsets);
+        int defaultPartition = 0;
+        TopicPartition tp = new TopicPartition(topic.name(), defaultPartition);
+        var committed = (Map<TopicPartition, OffsetAndMetadata>) actual.committed(UniSets.of(tp), timeout);
+        OffsetAndMetadata offsets = committed.get(tp);
+        CommitHistory commitHistory = new CommitHistory(UniLists.of(offsets));
         return check("getCommitHistory(%s)", topic).about(commitHistories()).that(commitHistory);
     }
+
+//    @Override
+//    protected String actualCustomStringRepresentation() {
+//        String assignors = ReflectionToStringBuilder.toStringExclude(actual,
+//                "assignors", "client", "time", "kafkaConsumerMetrics", "coordinator", "log", "metrics", "fetcher",
+//                "keyDeserializer", "valueDeserializer", "interceptors", "cachedSubscriptionHashAllFetchPositions", "metadata"
+//        );
+//        return assignors;
+//    }
 
 }

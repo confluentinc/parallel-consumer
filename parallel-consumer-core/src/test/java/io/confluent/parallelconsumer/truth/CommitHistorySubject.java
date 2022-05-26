@@ -46,7 +46,7 @@ public class CommitHistorySubject extends Subject {
     }
 
     public void offset(long quantity) {
-        check("atLeastOffset()").that(actual.getOffsetHistory()).contains(quantity);
+        check("getOffsetHistory()").that(actual.getOffsetHistory()).contains(quantity);
     }
 
     public void anything() {
@@ -60,5 +60,10 @@ public class CommitHistorySubject extends Subject {
     public void isEmpty() {
         nothing();
     }
-
+//
+//    @Override
+//    protected String actualCustomStringRepresentation() {
+////        String s = actual.;
+//        return super.actualCustomStringRepresentation();
+//    }
 }
