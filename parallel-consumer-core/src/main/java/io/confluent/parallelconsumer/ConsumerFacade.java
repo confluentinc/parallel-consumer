@@ -20,7 +20,12 @@ import java.util.regex.Pattern;
 
 /**
  * todo docs
- * All methods must be multi thread safe.
+ * <p>
+ * This exposes a limited subset of the {@link Consumer} interface that is valid to be used within the PC context.
+ * <p>
+ * Generally, you can only... And you can't...
+ * <p>
+ * All methods are / must be thread safe.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -32,14 +37,14 @@ public class ConsumerFacade implements Consumer {
         LinkedTransferQueue<ConsumerRebalanceHandler.Message> transferQueue;
 
         public void blockingEnqueue(SeekMessage seekMessage) {
-            queue.add(seekMessage);
-            exchanger.exchange(seekMessage);
-            transferQueue.transfer(seekMessage.);
+//            queue.add(seekMessage);
+//            exchanger.exchange(seekMessage);
+//            transferQueue.transfer(seekMessage);
         }
 
-        public SeekMessage poll() {
-            exchanger.
-        }
+//        public SeekMessage poll() {
+////            exchanger.
+//        }
     }
 
     private final Bus bus;
@@ -48,7 +53,7 @@ public class ConsumerFacade implements Consumer {
     /// above
     @Override
     public Set<TopicPartition> assignment() {
-        controller.getWm().getPm().assignment();
+//        controller.getWm().getPm().assignment();
         return null;
     }
 

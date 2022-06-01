@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.Partition
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
-import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -53,14 +52,15 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements org.apache.kafka.clients.consumer.Consumer<K, V>,
-        ParallelConsumer<K, V>, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
+
+    // todo removed?
     public static final String MDC_OFFSET_MARKER = "offset";
 
-    @Delegate
-    private final ConsumerFacade consumerFacade = new ConsumerFacade();
+    @Getter
+    private final ConsumerFacade consumerFacade = new ConsumerFacade(null, this);
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a

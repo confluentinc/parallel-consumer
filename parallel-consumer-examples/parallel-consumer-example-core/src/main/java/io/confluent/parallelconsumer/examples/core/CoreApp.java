@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.examples.core;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.RecordContext;
 import lombok.Value;
@@ -47,7 +48,7 @@ public class CoreApp {
         return new KafkaProducer<>(new Properties());
     }
 
-    ParallelStreamProcessor<String, String> parallelConsumer;
+    ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
     @SuppressWarnings("UnqualifiedFieldAccess")
     void run() {
@@ -55,8 +56,11 @@ public class CoreApp {
 
         postSetup();
 
-        // tag::example[]
-        parallelConsumer.poll(record ->
+        var consumer = parallelConsumer.getConsumerFacade();
+        consumer.
+
+                // tag::example[]
+                        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
         // end::example[]
@@ -67,7 +71,7 @@ public class CoreApp {
     }
 
     @SuppressWarnings({"FeatureEnvy", "MagicNumber"})
-    ParallelStreamProcessor<String, String> setupParallelConsumer() {
+    ParallelEoSStreamProcessor<String, String> setupParallelConsumer() {
         // tag::exampleSetup[]
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
         Producer<String, String> kafkaProducer = getKafkaProducer();
@@ -79,7 +83,7 @@ public class CoreApp {
                 .producer(kafkaProducer)
                 .build();
 
-        ParallelStreamProcessor<String, String> eosStreamProcessor =
+        ParallelEoSStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
