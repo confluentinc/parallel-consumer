@@ -11,7 +11,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
 /**
- * todo docs
+ * Simple value class for processing {@link ShardKey}s to make the various key systems type safe and extendable.
+ *
+ * @see ShardKeyTest
  */
 @Getter
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
@@ -42,11 +44,16 @@ public class ShardKey {
     @RequiredArgsConstructor
     @EqualsAndHashCode(callSuper = true)
     public static class KeyOrderedKey extends ShardKey {
+
         /**
          * Note: We use just the topic name here, and not the partition, so that if we were to receive records from the
          * same key from the partitions we're assigned, they will be put into the same queue.
          */
         TopicPartition topicName;
+
+        /**
+         * The key of the record being referenced. Nullable if record is produced with a null key.
+         */
         Object key;
 
         public KeyOrderedKey(final ConsumerRecord<?, ?> rec) {

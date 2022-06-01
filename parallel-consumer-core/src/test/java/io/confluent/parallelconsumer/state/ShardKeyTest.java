@@ -7,9 +7,31 @@ import org.junit.jupiter.api.Test;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+/**
+ * @see ShardKey
+ */
 class ShardKeyTest {
 
+    /**
+     * Tests when KEY ordering with `null` keyed records
+     */
+    @Test
+    void nullKey() {
+        var cr = mock(ConsumerRecord.class);
+        when(cr.partition()).thenReturn(0);
+        when(cr.topic()).thenReturn("atopic");
+        when(cr.key()).thenReturn(null);
+
+        var wc = mock(WorkContainer.class);
+        when(wc.getCr()).thenReturn(cr);
+
+        ShardKey.of(wc, KEY);
+    }
+
+    // todo split
     @Test
     void keyTest() {
         ParallelConsumerOptions.ProcessingOrder ordering = KEY;
