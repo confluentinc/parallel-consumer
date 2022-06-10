@@ -8,6 +8,8 @@ import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.model.CommitHistory;
+import io.stubbs.truth.generator.SubjectFactoryMethod;
+import io.stubbs.truth.generator.UserManagedTruth;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
 import static com.google.common.truth.Truth.assertAbout;
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
+@UserManagedTruth(LongPollingMockConsumer.class)
 public class LongPollingMockConsumerSubject<K, V> extends Subject {
 
     private final LongPollingMockConsumer<K, V> actual;
@@ -28,6 +31,7 @@ public class LongPollingMockConsumerSubject<K, V> extends Subject {
         this.actual = actual;
     }
 
+    @SubjectFactoryMethod
     public static <K, V> Factory<LongPollingMockConsumerSubject<K, V>, LongPollingMockConsumer<K, V>> mockConsumers() {
         return LongPollingMockConsumerSubject::new;
     }
@@ -37,7 +41,7 @@ public class LongPollingMockConsumerSubject<K, V> extends Subject {
     }
 
     public static <K, V> LongPollingMockConsumerSubject<K, V> assertThat(final LongPollingMockConsumer<K, V> actual) {
-        Factory<LongPollingMockConsumerSubject<K, V>, LongPollingMockConsumer<K, V>> factory = LongPollingMockConsumerSubject.<K, V>mockConsumers();
+        Factory<LongPollingMockConsumerSubject<K, V>, LongPollingMockConsumer<K, V>> factory = LongPollingMockConsumerSubject.mockConsumers();
         return assertAbout(factory).that(actual);
     }
 
