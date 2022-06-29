@@ -120,7 +120,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             while (state != closed) {
                 handlePoll();
 
-                maybeDoCommit();
+                getMyActor().processBounded();
 
                 switch (state) {
                     case draining -> {
@@ -321,12 +321,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    /**
-     * Will silently skip if not configured with a committer
-     */
-    private void maybeDoCommit() {
-        committer.ifPresent(ConsumerOffsetCommitter::maybeDoCommit);
-    }
+//    /**
+//     * Will silently skip if not configured with a committer
+//     */
+//    private void maybeDoCommit() {
+//        committer.ifPresent(ConsumerOffsetCommitter::maybeDoCommit);
+//    }
 
     /**
      * Wakeup if colling the broker

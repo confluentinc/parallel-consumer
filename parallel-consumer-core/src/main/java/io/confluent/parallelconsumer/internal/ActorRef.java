@@ -81,8 +81,10 @@ public class ActorRef<T> implements IActor<T>, Executor {
      * Given the elements currently in the queue, processes them, but no more. In other words - processes all elements
      * currently in the queue, but not new ones which are added during processing. We do this so that we finish
      * predictably and have no chance of processing forever.
+     * <p>
+     * Does not execute scheduled - todo remove scheduled to subclass?
      */
-    private void processBounded() {
+    public void processBounded() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
         // check for more work to batch up, there may be more work queued up behind the head that we can also take
