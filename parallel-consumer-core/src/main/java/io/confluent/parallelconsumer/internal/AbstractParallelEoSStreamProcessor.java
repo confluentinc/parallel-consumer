@@ -1039,7 +1039,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
         Duration timeToBlockFor = calculateTimeUntilNextAction();
 
-        getMyActor().later(controller -> controller.commitOffsetsMaybe(), timeToBlockFor);
+        getMyActor().tellLater(controller -> controller.commitOffsetsMaybe(), timeToBlockFor);
     }
 
     private boolean isShouldCommitNow() {

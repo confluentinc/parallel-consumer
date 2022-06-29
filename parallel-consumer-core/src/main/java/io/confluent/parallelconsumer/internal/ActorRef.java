@@ -30,6 +30,8 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 // todo rename just to actor? move to csid,
 public class ActorRef<T> implements IActor<T>, Executor {
 
+    private final Clock clock;
+
     private final T actor;
 
     //    /**
@@ -40,7 +42,7 @@ public class ActorRef<T> implements IActor<T>, Executor {
     private final LinkedBlockingQueue<Runnable> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
 
     @Getter
-    private final PriorityQueue<Scheduled> scheduled = new PriorityQueue<>();
+    private final PriorityQueue<Scheduled> scheduledQueue = new PriorityQueue<>();
 
     @Override
     public void tell(final Consumer<T> action) {
@@ -67,10 +69,12 @@ public class ActorRef<T> implements IActor<T>, Executor {
         return task;
     }
 
-    private final ScheduledExecutorService timer;
+//    private final ScheduledExecutorService timer;
 
-    public void later(Consumer<T> action, Duration when) {
-        timer.schedule(() -> action.accept(actor), when.toMillis(), TimeUnit.MILLISECONDS);
+    public void tellLater(Consumer<T> action, Duration when) {
+        Instant atTime = clock.instant().plus(when);
+        Scheduled scheduledAction = new Scheduled(atTime, () -> action.accept(actor), clock);
+        tell(ignore -> scheduledQueue.add(scheduledAction));
     }
 
     /**
@@ -127,18 +131,16 @@ public class ActorRef<T> implements IActor<T>, Executor {
         }
     }
 
-    private final Clock time;
-
     private Duration lowerOfScheduledOrTimeout(Duration timeout) {
-        Scheduled task = getScheduled().peek();
-        Instant now = time.instant();
+        Scheduled task = getScheduledQueue().peek();
+        Instant now = clock.instant();
         boolean taskIsScheduledBeforeTimeout = task.getWhen().isBefore(now.plus(timeout));
         return taskIsScheduledBeforeTimeout ? Duration.between(now, task.getWhen()) : timeout;
     }
 
     private void maybeExecuteScheduled() {
-        Scheduled task = getScheduled().peek();
-        if (task.itsTime()) {
+        Scheduled task = getScheduledQueue().peek();
+        if (task.isItTimeToRun()) {
             execute(task.getWhat());
         }
     }
@@ -154,7 +156,7 @@ public class ActorRef<T> implements IActor<T>, Executor {
         Runnable what;
         Clock time;
 
-        public boolean itsTime() {
+        public boolean isItTimeToRun() {
             return time.instant().isAfter(getWhen());
         }
     }
