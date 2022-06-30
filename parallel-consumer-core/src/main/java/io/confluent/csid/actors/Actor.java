@@ -11,7 +11,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -25,7 +28,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
-public class Actor<T> implements IActor<T>, Executor {
+public class Actor<T> implements IActor<T> {
 
     private final Clock clock;
 
@@ -34,7 +37,7 @@ public class Actor<T> implements IActor<T>, Executor {
     //    /**
 //     * Object because there's no common interface between {@link Function} and {@link Consumer}
 //     */
-    @Getter
+    @Getter(AccessLevel.PROTECTED)
 //    private final BlockingQueue<Callable<Optional<Object>>> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
     private final LinkedBlockingQueue<Runnable> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
 
@@ -61,6 +64,12 @@ public class Actor<T> implements IActor<T>, Executor {
 //        future.newIncompleteFuture();
 
         return task;
+    }
+
+    // todo only used from one place which is deprecated
+    @Override
+    public boolean isEmpty() {
+        return this.getActionMailbox().isEmpty();
     }
 
     /**
@@ -117,8 +126,7 @@ public class Actor<T> implements IActor<T>, Executor {
         }
     }
 
-    @Override
-    public void execute(@NonNull final Runnable command) {
+    private void execute(@NonNull final Runnable command) {
         command.run();
     }
 

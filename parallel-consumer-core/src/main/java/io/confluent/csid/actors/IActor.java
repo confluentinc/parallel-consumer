@@ -18,4 +18,5 @@ public interface IActor<T> {
 
     <R> Future<R> ask(Function<T, R> action);
 
+    boolean isEmpty();
 }
