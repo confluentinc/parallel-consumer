@@ -912,10 +912,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
     }
 
-    private void registerNewConsumerRecords(EpochAndRecordsMap<K, V> message) {
-        wm.registerWork(message);
-    }
-
     /**
      * The amount of time to block poll in this cycle
      *
@@ -1093,35 +1089,37 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                sendWorkResultEvent(wc); // always add on error
+                sendWorkResultAsync(wc); // always add on error
             }
             throw e; // trow again to make the future failed
         }
     }
 
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        sendWorkResultEvent(wc);
+    /**
+     * @param resultsFromUserFunction not used in this implementation
+     * @see ExternalEngine#onUserFunctionSuccess
+     * @see ExternalEngine#isAsyncFutureWork
+     */
+    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
+        sendWorkResultAsync(wc);
     }
 
-    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    /**
+     * @param resultsFromUserFunction not used in this implementation
+     * @see ExternalEngine#onUserFunctionSuccess
+     * @see ExternalEngine#isAsyncFutureWork
+     */
+    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
         log.trace("User function success");
         wc.onUserFunctionSuccess();
     }
 
-    // todo replace with actor
-    protected void sendWorkResultEvent(WorkContainer<K, V> wc) {
+    protected void sendWorkResultAsync(WorkContainer<K, V> wc) {
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
     }
 
-//    // todo delete
-//    private void addMessage(ControllerEventMessage<K, V> message) {
-//        log.debug("Adding {} to mailbox...", message);
-//        workMailBox.add(message);
-//    }
-
-    // todo replace with actor
     public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
-        getMyActor().tell(controller -> controller.registerNewConsumerRecords(polledRecords));
+        getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
 
     /**
