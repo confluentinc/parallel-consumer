@@ -45,14 +45,15 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.PRIVATE;
-import static lombok.AccessLevel.PROTECTED;
+import static lombok.AccessLevel.*;
 
 /**
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
+        ParallelConsumer<K, V>,
+        Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -111,6 +112,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Collection of work waiting to be
      */
     @Getter(PROTECTED)
+    // \/ old version -- todo move this toa blocking version of process
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private ConsumerRebalanceHandler rebalanceHanlder;
@@ -352,7 +354,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
-    private void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
@@ -372,7 +374,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    private void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+    protected void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
@@ -918,10 +920,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Can be interrupted if something else needs doing.
      */
     private void processWorkCompleteMailBox() {
+        //
+        myActor.processBounded();
+
+        // \/ old version -- todo move this toa blocking version of process
         log.trace("Processing mailbox (might block waiting for results)...");
         Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
 
-        final Duration timeToBlockFor = getTimeToBlockFor();
+        final Duration timeToBlockFor = calculateTimeUntilNextAction();
 
         if (timeToBlockFor.toMillis() > 0) {
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
@@ -959,6 +965,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
+    @Getter(PUBLIC)
+    private final ActorRef<AbstractParallelEoSStreamProcessor> myActor = new ActorRef<>(this);
+
+    // \/ old version -- delete
     private void processEvent(ControllerEventMessage<K, V> message) {
         if (message.isNewConsumerRecords()) {
             wm.registerWork(message.getConsumerRecords());
@@ -989,7 +999,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return either the duration until next commit, or next work retry
      * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
-    private Duration getTimeToBlockFor() {
+    private Duration calculateTimeUntilNextAction() {
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
         if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
@@ -1026,6 +1036,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             commitOffsetsThatAreReady();
         }
         updateLastCommitCheckTime();
+
+        Duration timeToBlockFor = calculateTimeUntilNextAction();
+
+        getMyActor().later(controller -> controller.commitOffsetsMaybe(), timeToBlockFor);
     }
 
     private boolean isShouldCommitNow() {
@@ -1174,26 +1188,37 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
+    // todo replace with actor
     protected void sendWorkResultEvent(WorkContainer<K, V> wc) {
         var message = ControllerEventMessage.of(wc);
         addMessage(message);
     }
 
+    // todo delete
     private void addMessage(ControllerEventMessage<K, V> message) {
         log.debug("Adding {} to mailbox...", message);
         workMailBox.add(message);
     }
 
+    // todo replace with actor
     public void sendConsumerRecordsEvent(EpochAndRecordsMap<K, V> polledRecords) {
         var message = ControllerEventMessage.of(polledRecords);
         addMessage(message);
     }
 
+    // todo replace with actor - delete
     public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
         var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
         log.debug("Adding {} to mailbox...", event);
         var message = ControllerEventMessage.<K, V>of(event);
         workMailBox.add(message);
+
+        //
+//        actionMailbox.add(controller -> {
+//            AbstractParallelEoSStreamProcessor controller1 = (AbstractParallelEoSStreamProcessor) controller;
+//            controller1.onass
+//            controller1.getWm().
+//        })
     }
 
     /**

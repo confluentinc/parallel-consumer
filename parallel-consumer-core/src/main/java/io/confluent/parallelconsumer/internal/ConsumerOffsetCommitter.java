@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.SneakyThrows;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
@@ -18,10 +19,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
@@ -33,7 +33,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
  * @see CommitMode
  */
 @Slf4j
-public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
+public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter, IActor<ConsumerOffsetCommitter<K, V>> {
 
     /**
      * Chosen arbitrarily - retries should never be needed, if they are it's an invalid state
@@ -123,6 +123,16 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         return Thread.currentThread().equals(owningThread.orElse(null));
     }
 
+    @Override
+    public void tell(final Consumer<ConsumerOffsetCommitter<K, V>> action) {
+//        action.
+    }
+
+    @Override
+    public <R> CompletableFuture<R> ask(final Function<ConsumerOffsetCommitter<K, V>, R> action) {
+        return null;
+    }
+
     /**
      * Commit request message
      */
@@ -140,7 +150,22 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         CommitRequest request;
     }
 
+
+    private final ActorRef<ConsumerOffsetCommitter<K, V>> myActor = new ActorRef<>(this);
+
+    // replace with Actors
+    @SneakyThrows
     private void commitAndWait() {
+        // new version
+        Future<Class<Void>> ask = myActor.ask(committer -> {
+            committer.retrieveOffsetsAndCommit();
+            return Void.class;
+        });
+        @SuppressWarnings("unused")
+        Class<Void> voidClass = ask.get();
+
+        // \/ old version!
+
         // request
         CommitRequest commitRequest = requestCommitInternal();
 
@@ -173,6 +198,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     void maybeDoCommit() {
+        // todo poll mail box instead
         CommitRequest poll = commitRequestQueue.poll();
         if (poll != null) {
             log.debug("Commit requested, performing...");

@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -36,6 +37,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @Slf4j
 public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
+    @Getter(AccessLevel.PUBLIC) // TODO PROTECTED
     private final ConsumerManager<K, V> consumerManager;
 
     private State state = running;
@@ -63,6 +65,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
     private final WorkManager<K, V> wm;
+
+    @Getter
+    private final ActorRef<BrokerPollSystem> myActor = new ActorRef<>(this);
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;

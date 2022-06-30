@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -8,22 +12,28 @@ import org.apache.kafka.common.TopicPartition;
 import java.util.Collection;
 import java.util.Queue;
 
-import static io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType.ASSIGNED;
 import static io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType.REVOKED;
 
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 
-    AbstractParallelEoSStreamProcessor<K, V> controller;
+    AbstractParallelEoSStreamProcessor<K, V> baseController;
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        controller.sendPartitionEvent(REVOKED, partitions);
+        baseController.sendPartitionEvent(REVOKED, partitions);
+
+        //
+        baseController.getMyActor()
+                .tell(controller -> controller.onPartitionsRevoked(partitions));
     }
 
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        controller.sendPartitionEvent(ASSIGNED, partitions);
+//        baseController.sendPartitionEvent(ASSIGNED, partitions);
+
+        baseController.getMyActor()
+                .tell(controller -> controller.onPartitionsAssigned(partitions));
     }
 
     enum PartitionEventType {

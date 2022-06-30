@@ -1,9 +1,16 @@
 package io.confluent.parallelconsumer;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.ActorRef;
+import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler;
 import lombok.EqualsAndHashCode;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -14,9 +21,11 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.Exchanger;
-import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.*;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+
+import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT;
 
 /**
  * todo docs
@@ -27,9 +36,10 @@ import java.util.regex.Pattern;
  * <p>
  * All methods are / must be thread safe.
  */
+// todo rename suffix Async (is it must implement consumer, but is an ASYNC implementation)
 @Slf4j
 @RequiredArgsConstructor
-public class ConsumerFacade implements Consumer {
+public class ConsumerFacade<K, V> implements Consumer<K, V> {
 
     static class Bus {
         Queue<ConsumerRebalanceHandler.Message> queue;
@@ -49,29 +59,63 @@ public class ConsumerFacade implements Consumer {
 
     private final Bus bus;
     private final AbstractParallelEoSStreamProcessor<?, ?> controller;
+    private final BrokerPollSystem<?, ?> basePollerRef;
 
+    /**
+     * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
+     * loop. Uses a default timeout of {@link io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT}
+     */
     /// above
+    @SneakyThrows
     @Override
     public Set<TopicPartition> assignment() {
 //        controller.getWm().getPm().assignment();
-        return null;
+        Future<Set<TopicPartition>> ask = consumer().ask(poller -> poller.getConsumerManager().assignment());
+        return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
+    private ActorRef<BrokerPollSystem<K, V>> consumer() {
+        return basePollerRef.getMyActor();
+    }
+
+    /**
+     * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
+     * loop. Uses a default timeout of {@link io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT}
+     */
+    @SneakyThrows
     @Override
     public Set<String> subscription() {
-        return null;
+        return blockingAsk((poller) -> poller.getConsumerManager().subscription());
     }
 
+    private Set blockingAsk(final Function<BrokerPollSystem, Set> brokerPollSystemSetFunction) throws InterruptedException, ExecutionException, TimeoutException {
+        Future<Set> ask = consumer().ask(brokerPollSystemSetFunction);
+        return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
+     * loop. Uses a default timeout of {@link io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT}
+     */
     @Override
-    public void subscribe(final Pattern pattern, final ConsumerRebalanceListener callback) {
-
+    public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
+        Future<Set> ask = consumer().ask((poller) -> poller.getConsumerManager().subscribe(pattern, callback));
+        return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
+     * loop. Uses a default timeout of {@link io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT}
+     */
     @Override
     public void subscribe(final Pattern pattern) {
 
     }
 
+    /**
+     * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
+     * loop. Uses a default timeout of {@link io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT}
+     */
     @Override
     public void unsubscribe() {
 
