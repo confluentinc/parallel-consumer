@@ -42,6 +42,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private Optional<Future<Boolean>> pollControlThreadFuture;
 
+    /**
+     * While {@link io.confluent.parallelconsumer.internal.State#paused paused} is an externally controlled state that
+     * temporarily stops polling and work registration, the {@code paused} flag is used internally to pause
+     * subscriptions if polling needs to be throttled.
+     */
     @Getter
     private volatile boolean paused = false;
 
@@ -138,7 +143,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
             if (count > 0) {
                 log.trace("Loop: Register work");
-                pc.sendConsumerRecordsEvent(polledRecords);
+                pc.registerWorkAsync(polledRecords);
             }
         }
     }
@@ -324,5 +329,37 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     public void wakeupIfPaused() {
         if (paused)
             consumerManager.wakeup();
+    }
+
+    /**
+     * Pause polling from the underlying Kafka Broker.
+     * <p>
+     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#running
+     * running}, calling this method will be a no-op.
+     * </p>
+     */
+    public void pausePollingAndWorkRegistrationIfRunning() {
+        if (this.state == State.running) {
+            log.info("Transitioning broker poll system to state paused.");
+            this.state = State.paused;
+        } else {
+            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.state);
+        }
+    }
+
+    /**
+     * Resume polling from the underlying Kafka Broker.
+     * <p>
+     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#paused
+     * paused}, calling this method will be a no-op.
+     * </p>
+     */
+    public void resumePollingAndWorkRegistrationIfPaused() {
+        if (this.state == State.paused) {
+            log.info("Transitioning broker poll system to state running.");
+            this.state = State.running;
+        } else {
+            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.state);
+        }
     }
 }

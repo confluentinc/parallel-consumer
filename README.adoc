@@ -1,13 +1,25 @@
 //
-// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
+// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
 //
 // To render the README directly, run `mvn asciidoc-template::build`
 //
+
+
+// dynamic include base for editing in IDEA
+:project_root: ./
+// for editing the template to see the includes, this will correctly render includes
+ifeval::["{docname}" == "README_TEMPLATE"]
+
+TIP:: Editing template file
+
+:project_root: ../../
+
+endif::[]
 
 
 = Confluent Parallel Consumer
@@ -21,14 +33,6 @@
 :github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
-
-// dynamic include base for editing in IDEA
-:project_root: ./
-
-// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
-// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
-// leave it commented out when committing work)
-//:project_root: ../../
 
 
 ifdef::env-github[]
@@ -52,7 +56,7 @@ Parallel Apache Kafka client wrapper with client side queueing, a simpler consum
 
 Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
 
-CAUTION: This is not a Confluent supported product.
+NOTE: This is not a part of Confluent's commercial support offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
 
 IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
@@ -66,7 +70,7 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        parallelConsumer.poll(record ->
+                        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
 ----
@@ -246,6 +250,9 @@ without operational burden or harming the cluster's performance
 * Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
+* Manual global pause / resume of all partitions, without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+** Circuit breaker patterns for individual paritions or keys can be done through throwing failure exceptions in the processing function (see https://github.com/confluentinc/parallel-consumer/pull/291[PR #291 Explicit terminal and retriable exceptions] for further refinement)
+** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
@@ -363,14 +370,13 @@ As an illustrative example of relative performance, given:
 
 == Support and Issues
 
-WARNING: This library is experimental, and Confluent does not currently offer support for this library.
-
 If you encounter any issues, or have any suggestions or future requests, please create issues in the {issues_link}[github issue tracker].
 Issues will be dealt with on a good faith, best efforts basis, by the small team maintaining this library.
 
 We also encourage participation, so if you have any feature ideas etc, please get in touch, and we will help you work on submitting a PR!
 
 NOTE: We are very interested to hear about your experiences!
+And please vote on your favourite issues!
 
 If you have questions, head over to the https://launchpass.com/confluentcommunity[Confluent Slack community], or raise an https://github.com/confluentinc/parallel-consumer/issues[issue] on GitHub.
 
@@ -432,7 +438,7 @@ Where `${project.version}` is the version to be used:
                 .producer(kafkaProducer)
                 .build();
 
-        ParallelStreamProcessor<String, String> eosStreamProcessor =
+        ParallelEoSStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
@@ -472,7 +478,6 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
  * @see AbstractParallelEoSStreamProcessor
- * @see #poll(Consumer)
  */
 ----
 
@@ -484,7 +489,7 @@ This is the only thing you need to do, in order to get massively concurrent proc
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.poll(record ->
+                        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
 
@@ -951,12 +956,22 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
 ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 ----
 
+=== Recommended IDEA Plugins
+
+* AsciiDoc
+* CheckStyle
+* CodeGlance
+* EditorConfig
+* Rainbow Brackets
+* SonarLint
+* Lombok
+
 === Readme
 
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README_TEMPLATE.adoc[].
 
 === Maven targets
 
@@ -1159,10 +1174,26 @@ endif::[]
 
 == Next Version
 
+== v0.5.1.0
+
 === Features
 
-* PollContext API - provides central access to result set with various convenience methods as well as metadata about records, such as failure count
-* Batching - all API methods now support batching.
+* #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
+
+=== Fixes and Improvements
+
+* #225: Build and runtime support for Java 16+ (#289)
+* #306: Change Truth-Generator dependency from compile to test
+* #298: Improve PollAndProduce performance by first producing all records, and then waiting for the produce results.Previously, this was done for each ProduceRecord individually.
+
+== v0.5.0.0
+
+=== Features
+
+* feature: Poll Context object for API (#223)
+** PollContext API - provides central access to result set with various convenience methods as well as metadata about records, such as failure count
+* major: Batching feature and Event system improvements
+** Batching - all API methods now support batching.
 See the Options class set batch size for more information.
 
 === Fixes and Improvements
@@ -1170,6 +1201,36 @@ See the Options class set batch size for more information.
 * Event system - better CPU usage in control thread
 * Concurrency stability improvements
 * Update dependencies
+* #247: Adopt Truth-Generator (#249)
+** Adopt https://github.com/astubbs/truth-generator[Truth Generator] for automatic generation of https://truth.dev/[Google Truth] Subjects
+* Large rewrite of internal architecture for improved maintence and simplicity which fixed some corner case issues
+** refactor: Rename PartitionMonitor to PartitionStateManager (#269)
+** refactor: Queue unification (#219)
+** refactor: Partition state tracking instead of search (#218)
+** refactor: Processing Shard object
+* fix: Concurrency and State improvements (#190)
+
+=== Build
+
+* build: Lock TruthGenerator to 0.1 (#272)
+* build: Deploy SNAPSHOTS to maven central snaphots repo (#265)
+* build: Update Kafka to 3.1.0 (#229)
+* build: Crank up Enforcer rules and turn on ossindex audit
+* build: Fix logback dependency back to stable
+* build: Upgrade TestContainer and CP
+
+== v0.4.0.1
+
+=== Improvements
+
+- Add option to specify timeout for how long to wait offset commits in periodic-consumer-sync commit-mode
+- Add option to specify timeout for how long to wait for blocking Producer#send
+
+=== Docs
+
+- docs: Confluent Cloud configuration links
+- docs: Add Confluent's product page for PC to README
+- docs: Add head of line blocking to README
 
 == v0.4.0.0
 // https://github.com/confluentinc/parallel-consumer/releases/tag/0.4.0.0
