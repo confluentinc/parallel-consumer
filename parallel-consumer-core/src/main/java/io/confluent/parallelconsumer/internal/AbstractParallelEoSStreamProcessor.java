@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.actors.Actor;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ConsumerFacade;
 import io.confluent.parallelconsumer.ParallelConsumer;
@@ -12,7 +13,10 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -55,6 +59,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         ParallelConsumer<K, V>,
         Closeable {
 
+    /*
+     * This is a bit of a GOD class now, and so care should be taken not to expand it's scope furhter. Where possible,
+     * refactor out functionality as we go.
+     */
+
     public static final String MDC_INSTANCE_ID = "pcId";
 
     // todo removed?
@@ -92,6 +101,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
     private Instant lastCommitCheckTime = Instant.now();
 
+    /**
+     * todo docs
+     */
+    @Getter(PUBLIC)
+    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(clock, this);
+
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
@@ -105,54 +120,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
     // todo make package level
-    @Getter(AccessLevel.PUBLIC)
+    @Getter(PUBLIC)
     protected final WorkManager<K, V> wm;
 
     /**
-     * Collection of work waiting to be
+     * todo docs
      */
-    @Getter(PROTECTED)
-    // \/ old version -- todo move this toa blocking version of process
-    private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
-
     private ConsumerRebalanceHandler rebalanceHanlder;
-
-    /**
-     * An inbound message to the controller.
-     * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
-     */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    protected static class ControllerEventMessage<K, V> {
-        WorkContainer<K, V> workContainer;
-        EpochAndRecordsMap<K, V> consumerRecords;
-        ConsumerRebalanceHandler.PartitionEventMessage partitionEventMessage;
-
-        private boolean isWorkResult() {
-            return workContainer != null;
-        }
-
-        private boolean isNewConsumerRecords() {
-            return consumerRecords != null;
-        }
-
-        private boolean isPartitionEvent() {
-            return partitionEventMessage != null;
-        }
-
-        protected static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords, null);
-        }
-
-        protected static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<>(work, null, null);
-        }
-
-        public static <K, V> ControllerEventMessage<K, V> of(ConsumerRebalanceHandler.PartitionEventMessage event) {
-            return new ControllerEventMessage<>(null, null, event);
-        }
-    }
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
@@ -921,76 +895,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     private void processWorkCompleteMailBox() {
         //
-        myActor.processBounded();
-
-        // \/ old version -- todo move this toa blocking version of process
-        log.trace("Processing mailbox (might block waiting for results)...");
-        Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
-
         final Duration timeToBlockFor = calculateTimeUntilNextAction();
 
-        if (timeToBlockFor.toMillis() > 0) {
-            currentlyPollingWorkCompleteMailBox.getAndSet(true);
-            if (log.isDebugEnabled()) {
-                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                        timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
-            }
-            // wait for work, with a timeToBlockFor for sanity
-            log.trace("Blocking poll {}", timeToBlockFor);
-            try {
-                var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
-                if (firstBlockingPoll == null) {
-                    log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
-                } else {
-                    log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeToBlockFor);
-                    results.add(firstBlockingPoll);
-                }
-            } catch (InterruptedException e) {
-                log.debug("Interrupted waiting on work results");
-            } finally {
-                currentlyPollingWorkCompleteMailBox.getAndSet(false);
-            }
-            log.trace("Blocking poll finish");
-        }
-
-        // check for more work to batch up, there may be more work queued up behind the head that we can also take
-        // see how big the queue is now, and poll that many times
-        int size = workMailBox.size();
-        log.trace("Draining {} more, got {} already...", size, results.size());
-        workMailBox.drainTo(results, size);
-
-        log.trace("Processing drained work {}...", results.size());
-        for (var action : results) {
-            processEvent(action);
-        }
+        // can remove currentlyPollingWorkCompleteMailBox
+        currentlyPollingWorkCompleteMailBox.getAndSet(true);
+        getMyActor().processBlocking(timeToBlockFor);
+        currentlyPollingWorkCompleteMailBox.getAndSet(false);
     }
 
-    @Getter(PUBLIC)
-    private final ActorRef<AbstractParallelEoSStreamProcessor> myActor = new ActorRef<>(this);
-
-    // \/ old version -- delete
-    private void processEvent(ControllerEventMessage<K, V> message) {
-        if (message.isNewConsumerRecords()) {
-            wm.registerWork(message.getConsumerRecords());
-        } else if (message.isWorkResult()) {
-            WorkContainer<K, V> work = message.getWorkContainer();
-            MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
-            wm.handleFutureResult(work);
-            MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
-        } else if (message.isPartitionEvent()) {
-            var event = message.getPartitionEventMessage();
-            var type = event.getType();
-            switch (type) {
-                case ASSIGNED: {
-                    onPartitionsAssigned(event.getPartitions());
-                }
-                case REVOKED: {
-                    onPartitionsRevoked(event.getPartitions());
-                }
-            }
-        } else {
-            throw new IllegalStateException("Unknown message");
-        }
+    // todo move these out and have WM be an actor that's shared and has async methods?
+    private void handleWorkResult(WorkContainer<K, V> work) {
+        MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
+        wm.handleFutureResult(work);
+        MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
     }
 
     /**
@@ -1075,13 +992,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      *
      * @return true if waiting to commit would help performance
      */
+    @Deprecated // ?
     private boolean lingeringOnCommitWouldBeBeneficial() {
         // work is waiting to be done
         boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
         // no work is currently being done
         boolean workInFlight = wm.hasWorkInFlight();
         // work mailbox is empty
-        boolean workWaitingInMailbox = !workMailBox.isEmpty();
+        boolean workWaitingInMailbox = !getMyActor().isEmpty();
         boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
         log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};",
                 workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
@@ -1173,52 +1091,37 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                sendWorkResultEvent(wc); // always add on error
+                sendWorkResultAsync(wc); // always add on error
             }
             throw e; // trow again to make the future failed
         }
     }
 
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        sendWorkResultEvent(wc);
+    /**
+     * @param resultsFromUserFunction not used in this implementation
+     * @see ExternalEngine#onUserFunctionSuccess
+     * @see ExternalEngine#isAsyncFutureWork
+     */
+    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
+        sendWorkResultAsync(wc);
     }
 
-    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    /**
+     * @param resultsFromUserFunction not used in this implementation
+     * @see ExternalEngine#onUserFunctionSuccess
+     * @see ExternalEngine#isAsyncFutureWork
+     */
+    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
         log.trace("User function success");
         wc.onUserFunctionSuccess();
     }
 
-    // todo replace with actor
-    protected void sendWorkResultEvent(WorkContainer<K, V> wc) {
-        var message = ControllerEventMessage.of(wc);
-        addMessage(message);
+    protected void sendWorkResultAsync(WorkContainer<K, V> wc) {
+        getMyActor().tell(controller -> controller.handleWorkResult(wc));
     }
 
-    // todo delete
-    private void addMessage(ControllerEventMessage<K, V> message) {
-        log.debug("Adding {} to mailbox...", message);
-        workMailBox.add(message);
-    }
-
-    // todo replace with actor
-    public void sendConsumerRecordsEvent(EpochAndRecordsMap<K, V> polledRecords) {
-        var message = ControllerEventMessage.of(polledRecords);
-        addMessage(message);
-    }
-
-    // todo replace with actor - delete
-    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
-        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
-        log.debug("Adding {} to mailbox...", event);
-        var message = ControllerEventMessage.<K, V>of(event);
-        workMailBox.add(message);
-
-        //
-//        actionMailbox.add(controller -> {
-//            AbstractParallelEoSStreamProcessor controller1 = (AbstractParallelEoSStreamProcessor) controller;
-//            controller1.onass
-//            controller1.getWm().
-//        })
+    public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
+        getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
 
     /**
