@@ -142,7 +142,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Used to request a commit asap
+     *
+     * @see #requestCommitAsap
      */
+    // todo delete?
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
 
     /**
@@ -1160,6 +1163,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Request a commit as soon as possible (ASAP), overriding other constraints.
+     * <p>
+     * Useful for testing, but otherwise the close methods will commit and clean up properly.
      */
     public void requestCommitAsap() {
         log.debug("Registering command to commit next chance");
@@ -1169,12 +1174,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         notifySomethingToDo();
     }
 
+    /**
+     * @see #requestCommitAsap
+     */
     private boolean isCommandedToCommit() {
         synchronized (commitCommand) {
             return this.commitCommand.get();
         }
     }
 
+    /**
+     * @see #requestCommitAsap
+     */
     private void clearCommitCommand() {
         synchronized (commitCommand) {
             if (commitCommand.get()) {
