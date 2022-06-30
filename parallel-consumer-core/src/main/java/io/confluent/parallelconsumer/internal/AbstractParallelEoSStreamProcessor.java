@@ -1209,7 +1209,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //    }
 
     // todo replace with actor
-    public void sendConsumerRecordsEvent(EpochAndRecordsMap<K, V> polledRecords) {
+    public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
         getMyActor().tell(controller -> controller.registerNewConsumerRecords(polledRecords));
     }
 
