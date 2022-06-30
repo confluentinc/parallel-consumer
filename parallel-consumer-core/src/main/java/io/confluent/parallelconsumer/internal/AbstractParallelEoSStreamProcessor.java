@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.csid.actors.Actor;
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.ConsumerFacade;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -69,7 +68,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     public static final String MDC_OFFSET_MARKER = "offset";
 
     @Getter
-    private final ConsumerFacade consumerFacade = new ConsumerFacade(null, this);
+    private final ConsumerFacade consumerFacade;
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
@@ -244,6 +243,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+
+        this.consumerFacade = new ConsumerFacade(brokerPollSubsystem);
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
@@ -963,10 +964,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
             commitOffsetsThatAreReady();
         }
         updateLastCommitCheckTime();
-
-        Duration timeToBlockFor = calculateTimeUntilNextAction();
-
-        getMyActor().tellLater(controller -> controller.commitOffsetsMaybe(), timeToBlockFor);
     }
 
     private boolean isShouldCommitNow() {

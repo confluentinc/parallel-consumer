@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -67,7 +68,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private final WorkManager<K, V> wm;
 
     @Getter
-    private final ActorRef<BrokerPollSystem> myActor = new ActorRef<>(this);
+    private final ActorRef<BrokerPollSystem<K, V>> myActor = new ActorRef<>(TimeUtils.getClock(), this);
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;

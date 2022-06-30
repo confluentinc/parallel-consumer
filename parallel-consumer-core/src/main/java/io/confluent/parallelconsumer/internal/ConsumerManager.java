@@ -124,7 +124,7 @@ public class ConsumerManager<K, V> {
         return consumer.assignment();
     }
 
-    public Set subscription() {
+    public Set<String> subscription() {
         return getConsumer().subscription();
     }
 

@@ -12,4 +12,8 @@ public class ParallelConsumerException extends RuntimeException {
     public ParallelConsumerException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    public ParallelConsumerException(String msg) {
+        super(msg);
+    }
 }
