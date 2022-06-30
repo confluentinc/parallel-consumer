@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.ConsumerFacade;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
-import io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.AccessLevel;
@@ -123,12 +122,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Getter(PUBLIC)
     protected final WorkManager<K, V> wm;
 
+    private final BrokerPollSystem<K, V> brokerPollSubsystem;
+
     /**
      * todo docs
      */
-    private ConsumerRebalanceHandler rebalanceHanlder;
-
-    private final BrokerPollSystem<K, V> brokerPollSubsystem;
+    private ConsumerRebalanceHandler rebalanceHandler;
 
     /**
      * Useful for testing async code
@@ -303,27 +302,31 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
-        consumer.subscribe(topics, this.rebalanceHanlder);
+        consumer.subscribe(topics, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Pattern pattern) {
         log.debug("Subscribing to {}", pattern);
-        consumer.subscribe(pattern, this.rebalanceHanlder);
+        consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(topics, this.rebalanceHanlder);
+        consumer.subscribe(topics, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(pattern, this.rebalanceHanlder);
+        consumer.subscribe(pattern, this.rebalanceHandler);
+    }
+
+    public void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
+        getMyActor().tell(controller -> controller.onPartitionsRevokedInternal(partitions));
     }
 
     /**
@@ -331,7 +334,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * <p>
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
-    protected void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevokedInternal(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
@@ -346,12 +349,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         }
     }
 
+    public void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
+        getMyActor().tell(controller -> controller.onPartitionsAssignedInternal(partitions));
+    }
+
     /**
      * Delegate to {@link WorkManager}
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    protected void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+    protected void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
         numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
@@ -1126,6 +1133,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
         getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
+//
+//    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
+//        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
+//        log.debug("Adding {} to mailbox...", event);
+//        var message = ControllerEventMessage.<K, V>of(event);
+//        workMailBox.add(message);
+//    }
 
     /**
      * Early notify of work arrived.
