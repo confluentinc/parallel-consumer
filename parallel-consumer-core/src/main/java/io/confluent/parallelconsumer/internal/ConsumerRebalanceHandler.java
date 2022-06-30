@@ -1,15 +1,13 @@
 package io.confluent.parallelconsumer.internal;
 
 import lombok.RequiredArgsConstructor;
-import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 
-import static io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType.ASSIGNED;
-import static io.confluent.parallelconsumer.internal.ConsumerRebalanceHandler.PartitionEventType.REVOKED;
 
+// todo inline into controller
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 
@@ -17,21 +15,23 @@ public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        controller.sendPartitionEvent(REVOKED, partitions);
+        controller.onPartitionsRevokedTellAsync(partitions);
+//        controller.sendPartitionEvent(REVOKED, partitions);
     }
 
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        controller.sendPartitionEvent(ASSIGNED, partitions);
+        controller.onPartitionsAssignedTellAsync(partitions);
+//        controller.sendPartitionEvent(ASSIGNED, partitions);
     }
 
-    enum PartitionEventType {
-        ASSIGNED, REVOKED
-    }
+//    enum PartitionEventType {
+//        ASSIGNED, REVOKED
+//    }
 
-    @Value
-    protected static class PartitionEventMessage {
-        PartitionEventType type;
-        Collection<TopicPartition> partitions;
-    }
+//    @Value
+//    protected static class PartitionEventMessage {
+//        PartitionEventType type;
+//        Collection<TopicPartition> partitions;
+//    }
 }
