@@ -21,6 +21,8 @@ import java.util.function.Function;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
+ * todo docs
+ *
  * @param <T>
  * @author Antony Stubbs
  */

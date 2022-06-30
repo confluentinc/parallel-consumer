@@ -117,41 +117,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PUBLIC)
     protected final WorkManager<K, V> wm;
 
-    /**
-     * Collection of work waiting to be
-     */
-//    @Getter(PROTECTED)
-//    // \/ old version -- todo move this toa blocking version of process
-//    private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
-
-//    /**
-//     * An inbound message to the controller.
-//     * <p>
-//     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
-//     */
-//    @Value
-//    @RequiredArgsConstructor(access = PRIVATE)
-//    private static class ControllerEventMessage<K, V> {
-//        WorkContainer<K, V> workContainer;
-//        EpochAndRecordsMap<K, V> consumerRecords;
-//
-//        private boolean isWorkResult() {
-//            return workContainer != null;
-//        }
-//
-//        private boolean isNewConsumerRecords() {
-//            return consumerRecords != null;
-//        }
-//
-//        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-//            return new ControllerEventMessage<>(null, polledRecords);
-//        }
-//
-//        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-//            return new ControllerEventMessage<K, V>(work, null);
-//        }
-//    }
-
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
     /**
@@ -938,61 +903,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         currentlyPollingWorkCompleteMailBox.getAndSet(true);
         getMyActor().processBlocking(timeToBlockFor);
         currentlyPollingWorkCompleteMailBox.getAndSet(false);
-
-
-////         \/ old version -- todo move this toa blocking version of process
-//        log.trace("Processing mailbox (might block waiting for results)...");
-//        Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
-//
-//        final Duration timeToBlockFor = calculateTimeUntilNextAction();
-//
-//
-//        if (timeToBlockFor.toMillis() > 0) {
-//            currentlyPollingWorkCompleteMailBox.getAndSet(true);
-//            if (log.isDebugEnabled()) {
-//                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-//                        timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
-//            }
-//            // wait for work, with a timeToBlockFor for sanity
-//            log.trace("Blocking poll {}", timeToBlockFor);
-//            try {
-//                var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
-//                if (firstBlockingPoll == null) {
-//                    log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
-//                } else {
-//                    log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeToBlockFor);
-//                    results.add(firstBlockingPoll);
-//                }
-//            } catch (InterruptedException e) {
-//                log.debug("Interrupted waiting on work results");
-//            } finally {
-//                currentlyPollingWorkCompleteMailBox.getAndSet(false);
-//            }
-//            log.trace("Blocking poll finish");
-//        }
-//
-//        // check for more work to batch up, there may be more work queued up behind the head that we can also take
-//        // see how big the queue is now, and poll that many times
-//        int size = workMailBox.size();
-//        log.trace("Draining {} more, got {} already...", size, results.size());
-//        workMailBox.drainTo(results, size);
-//
-//        log.trace("Processing drained work {}...", results.size());
-//        for (var action : results) {
-//            processEvent(action);
-//        }
     }
-
-    // \/ old version -- delete
-
-    // \/ old version -- delete
-//    private void processEvent(ControllerEventMessage<K, V> message) {
-//        if (message.isNewConsumerRecords()) {
-//            registerNewConsumerRecords(message);
-//        } else if (message.isWorkResult()) {
-//            handleWorkResult(message);
-//        }
-//    }
 
     // todo move these out and have WM be an actor that's shared and has async methods?
     private void handleWorkResult(WorkContainer<K, V> work) {

@@ -9,6 +9,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
+ * todo docs
+ *
  * @param <T>
  * @author Antony Stubbs
  */
