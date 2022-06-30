@@ -47,8 +47,7 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.PROTECTED;
-import static lombok.AccessLevel.PUBLIC;
+import static lombok.AccessLevel.*;
 
 /**
  * @see ParallelConsumer
@@ -98,7 +97,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * todo docs
      */
-    @Getter(PUBLIC)
+    @Getter(PRIVATE)
     private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(clock, this);
 
     @Getter(PROTECTED)
