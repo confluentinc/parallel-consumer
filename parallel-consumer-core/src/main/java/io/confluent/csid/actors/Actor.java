@@ -118,9 +118,13 @@ public class Actor<T> implements IActor<T> {
      *
      * @param timeout
      */
-    @SneakyThrows // todo remove
     private void maybeBlockUntilScheduledOrAction(Duration timeout) {
-        var interrupted = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+        Runnable interrupted = null;
+        try {
+            interrupted = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         if (interrupted != null) {
             execute(interrupted);

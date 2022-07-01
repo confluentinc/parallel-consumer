@@ -1,6 +1,7 @@
 package io.confluent.csid.actors;
 
 import io.confluent.csid.utils.TimeUtils;
+import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -15,36 +16,40 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 @Slf4j
 class ActorTest {
 
+    public static final String MESSAGE = "tell";
     Greeter greeter = new Greeter();
     Actor<Greeter> actor = new Actor<>(TimeUtils.getClock(), greeter);
 
-    static class Greeter {
-        String prefix = "kiwi-";
+    @Data
+    public static class Greeter {
+        public static final String PREFIX = "kiwi-";
+        String told = "";
 
         public String greet(String msg) {
-            return prefix + msg;
+            return PREFIX + msg;
         }
     }
 
     @Test
     void tell() {
-        actor.tell(g -> g.greet("tell"));
+        actor.tell(g -> g.setTold(MESSAGE));
+        actor.processBounded();
+        //        ManagedTruth.assertThat(greeter). // todo get TG working with Greeter class
+        assertThat(greeter.getTold()).isEqualTo(MESSAGE);
+
     }
 
     @SneakyThrows
     @Test
     void ask() {
-        Future<String> tell = actor.ask(g -> g.greet("tell"));
+        Future<String> tell = actor.ask(g -> g.greet(MESSAGE));
         actor.processBounded();
         String s = tell.get();
-        assertThat(s).isEqualTo("kiwi-tell");
-    }
-
-    @Test
-    void processBounded() {
+        assertThat(s).isEqualTo(Greeter.PREFIX + MESSAGE);
     }
 
     @Test
     void processBlocking() {
+        //todo
     }
 }
