@@ -11,7 +11,7 @@ import java.util.Collection;
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 
-    AbstractParallelEoSStreamProcessor<K, V> controller;
+    private final AbstractParallelEoSStreamProcessor<K, V> controller;
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {

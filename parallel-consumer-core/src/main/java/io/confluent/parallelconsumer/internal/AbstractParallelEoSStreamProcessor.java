@@ -118,7 +118,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
-    private ConsumerRebalanceHandler rebalanceHandler;
+    private final ConsumerRebalanceHandler rebalanceHandler;
 
     /**
      * Useful for testing async code
@@ -192,6 +192,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
      */
+    // todo this needs to be reconciled with all subscription flows
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
     // todo move into PartitionStateManager
@@ -235,6 +236,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+
+        this.rebalanceHandler = new ConsumerRebalanceHandler(this);
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
