@@ -61,7 +61,8 @@ public class InterruptibleThread {
         }
 
         //
-        Thread.currentThread().interrupt();
+        // out of scope for branch change - significant impact - move to experimental branch
+//        Thread.currentThread().interrupt();
     }
 
     private static Optional<String> getLocationString() {

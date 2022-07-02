@@ -493,7 +493,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     boolean terminated = workerThreadPool.isTerminated();
                 }
             } catch (InterruptedException e) {
-                InterruptibleThread.logInterrupted(log, Level.ERROR, e);
+                InterruptibleThread.logInterrupted(log, Level.WARN, e);
                 interrupted = true;
             }
         }
