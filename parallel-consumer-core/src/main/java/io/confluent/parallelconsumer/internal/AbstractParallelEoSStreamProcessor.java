@@ -939,7 +939,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     results.add(firstBlockingPoll);
                 }
             } catch (InterruptedException e) {
-                InterruptibleThread.logInterrupted(Level.DEBUG, "Interrupted waiting on work results", e);
+                InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted waiting on work results", e);
             } finally {
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
             }
