@@ -4,8 +4,10 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.InterruptibleThread;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.event.Level;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -124,7 +126,7 @@ public class Actor<T> implements IActor<T> {
         try {
             polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
         } catch (InterruptedException e) {
-            log.warn("Interrupted while polling Actor mailbox", e); // change to debug
+            InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted while polling Actor mailbox", e);
             Thread.currentThread().interrupt();
         }
 
