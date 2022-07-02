@@ -551,7 +551,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to inform
+     * Control thread can be blocked waiting for work, but is interruptable. Interrupting it can be useful to inform
      * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
      * BrokerPollSystem} so that less messages are downloaded and queued.
      */

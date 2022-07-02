@@ -30,6 +30,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
+// rename to ActorRef? Also clashes with field name.
 public class Actor<T> implements IActor<T> {
 
     private final Clock clock;
@@ -119,15 +120,16 @@ public class Actor<T> implements IActor<T> {
      * @param timeout
      */
     private void maybeBlockUntilScheduledOrAction(Duration timeout) {
-        Runnable interrupted = null;
+        Runnable polled = null;
         try {
-            interrupted = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+            polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            log.warn("Interrupted while polling Actor mailbox", e); // change to debug
+            Thread.currentThread().interrupt();
         }
 
-        if (interrupted != null) {
-            execute(interrupted);
+        if (polled != null) {
+            execute(polled);
             processBounded();
         }
     }
