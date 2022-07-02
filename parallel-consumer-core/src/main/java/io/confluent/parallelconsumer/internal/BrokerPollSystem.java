@@ -249,7 +249,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         log.warn("Broker poll control thread not closed cleanly.");
                     }
                 } catch (InterruptedException e) {
-                    InterruptibleThread.logInterrupted(Level.DEBUG, "Interrupted waiting for broker poller thread to finish", e);
+                    InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted waiting for broker poller thread to finish", e);
                 } catch (ExecutionException | TimeoutException e) {
                     log.error("Execution or timeout exception waiting for broker poller thread to finish", e);
                     throw e;
