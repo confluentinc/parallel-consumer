@@ -460,7 +460,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
             } catch (InterruptedException e) {
                 // ignore
-                InterruptibleThread.logInterrupted(e);
+                InterruptibleThread.logInterrupted(log, e);
             } catch (ExecutionException | TimeoutException e) {
                 log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
                         "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
@@ -493,7 +493,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     boolean terminated = workerThreadPool.isTerminated();
                 }
             } catch (InterruptedException e) {
-                InterruptibleThread.logInterrupted(Level.ERROR, e);
+                InterruptibleThread.logInterrupted(log, Level.ERROR, e);
                 interrupted = true;
             }
         }
@@ -575,8 +575,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void interruptControlThread(Reason reason) {
         if (blockableControlThread != null) {
-            log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
-            blockableControlThread.interrupt(reason);
+            String msg = msg("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
+            blockableControlThread.interrupt(log, new Reason(msg, reason));
         }
     }
 
@@ -702,7 +702,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             Thread.sleep(duration.toMillis());
         } catch (InterruptedException e) {
-            InterruptibleThread.logInterrupted(e);
+            InterruptibleThread.logInterrupted(log, e);
         }
 
         // end of loop
