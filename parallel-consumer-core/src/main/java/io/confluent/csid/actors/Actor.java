@@ -4,8 +4,10 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.InterruptibleThread;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.event.Level;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -30,6 +32,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
+// rename to ActorRef? Also clashes with field name.
 public class Actor<T> implements IActor<T> {
 
     private final Clock clock;
@@ -119,15 +122,16 @@ public class Actor<T> implements IActor<T> {
      * @param timeout
      */
     private void maybeBlockUntilScheduledOrAction(Duration timeout) {
-        Runnable interrupted = null;
+        Runnable polled = null;
         try {
-            interrupted = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+            polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted while polling Actor mailbox", e);
+            Thread.currentThread().interrupt();
         }
 
-        if (interrupted != null) {
-            execute(interrupted);
+        if (polled != null) {
+            execute(polled);
             processBounded();
         }
     }
