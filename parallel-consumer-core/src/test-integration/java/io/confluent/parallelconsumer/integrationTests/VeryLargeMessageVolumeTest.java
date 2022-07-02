@@ -140,6 +140,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest<String, St
 //                        Thread.sleep(5);
 //                    } catch (InterruptedException e) {
 //                        e.printStackTrace();
+//                          InterruptibleThread.logInterrupted(e);
 //                    }
 //                    try {
 //                        // 1/5 chance of taking a long time
