@@ -4,6 +4,8 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.InterruptibleThread;
+import io.confluent.csid.utils.InterruptibleThread.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -20,6 +22,7 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
+import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -147,7 +150,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see #processWorkCompleteMailBox
      */
-    private Thread blockableControlThread;
+    private InterruptibleThread blockableControlThread;
 
     /**
      * @see #notifySomethingToDo
@@ -359,7 +362,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        notifySomethingToDo();
+        notifySomethingToDo(new Reason("New partitions assigned"));
     }
 
     /**
@@ -457,7 +460,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
             } catch (InterruptedException e) {
                 // ignore
-                log.trace("Interrupted", e);
+                InterruptibleThread.logInterrupted(e);
             } catch (ExecutionException | TimeoutException e) {
                 log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
                         "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
@@ -490,7 +493,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     boolean terminated = workerThreadPool.isTerminated();
                 }
             } catch (InterruptedException e) {
-                log.error("InterruptedException", e);
+                InterruptibleThread.logInterrupted(Level.ERROR, e);
                 interrupted = true;
             }
         }
@@ -559,9 +562,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void transitionToDraining() {
-        log.debug("Transitioning to draining...");
+        String msg = "Transitioning to draining...";
+        log.debug(msg);
         this.state = State.draining;
-        notifySomethingToDo();
+        notifySomethingToDo(new Reason(msg));
     }
 
     /**
@@ -569,10 +573,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
      * BrokerPollSystem} so that less messages are downloaded and queued.
      */
-    private void interruptControlThread() {
+    private void interruptControlThread(Reason reason) {
         if (blockableControlThread != null) {
             log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
-            blockableControlThread.interrupt();
+            blockableControlThread.interrupt(reason);
         }
     }
 
@@ -624,7 +628,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
-            this.blockableControlThread = controlThread;
+            this.blockableControlThread = new InterruptibleThread(controlThread);
             while (state != closed) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
@@ -698,7 +702,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             Thread.sleep(duration.toMillis());
         } catch (InterruptedException e) {
-            log.trace("Woke up", e);
+            InterruptibleThread.logInterrupted(e);
         }
 
         // end of loop
@@ -897,13 +901,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void transitionToClosing() {
-        log.debug("Transitioning to closing...");
+        String msg = "Transitioning to closing...";
+        log.debug(msg);
         if (state == State.unused) {
             state = closed;
         } else {
             state = State.closing;
         }
-        notifySomethingToDo();
+        notifySomethingToDo(new Reason(msg));
     }
 
     /**
@@ -934,7 +939,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     results.add(firstBlockingPoll);
                 }
             } catch (InterruptedException e) {
-                log.debug("Interrupted waiting on work results");
+                InterruptibleThread.logInterrupted(Level.DEBUG, "Interrupted waiting on work results", e);
             } finally {
                 currentlyPollingWorkCompleteMailBox.getAndSet(false);
             }
@@ -1170,11 +1175,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #processWorkCompleteMailBox
      * @see #blockableControlThread
      */
-    public void notifySomethingToDo() {
+    public void notifySomethingToDo(Reason reason) {
         boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
         if (noTransactionInProgress) {
             log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-            interruptControlThread();
+            interruptControlThread(reason);
         } else {
             log.trace("Would have interrupted control thread, but TX in progress");
         }
@@ -1202,11 +1207,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Request a commit as soon as possible (ASAP), overriding other constraints.
      */
     public void requestCommitAsap() {
-        log.debug("Registering command to commit next chance");
+        String msg = "Registering command to commit next chance";
+        log.debug(msg);
         synchronized (commitCommand) {
             this.commitCommand.set(true);
         }
-        notifySomethingToDo();
+        notifySomethingToDo(new Reason(msg));
     }
 
     private boolean isCommandedToCommit() {
@@ -1237,9 +1243,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
-            log.info("Transitioning paarallel consumer to state running.");
+            final String msg = "Transitioning parallel consumer to state " + running;
+            log.info(msg);
             this.state = State.running;
-            notifySomethingToDo();
+            notifySomethingToDo(new Reason(msg));
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }

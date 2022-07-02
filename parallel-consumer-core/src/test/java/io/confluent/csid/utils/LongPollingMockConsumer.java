@@ -71,7 +71,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
                 } else if (statePretendingToLongPoll.get() && timeoutReached(sleepUntil)) {
                     log.debug("Simulated long poll of ({}) finished. Now: {} vs sleep until: {}", timeout, Instant.now(), sleepUntil);
                 } else if (!statePretendingToLongPoll.get()) {
-                    log.debug("Simulated long poll was interrupted by by WAKEUP command...");
+                    log.debug("Simulated long poll was interrupted by WAKEUP command...");
                 }
                 statePretendingToLongPoll.set(false);
             }
