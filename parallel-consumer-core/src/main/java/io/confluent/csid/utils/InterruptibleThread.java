@@ -35,7 +35,15 @@ public class InterruptibleThread {
     }
 
     public static void logInterrupted(Level level, String msg, InterruptedException e) {
-        log.atLevel(level).setCause(e).log(msg + ": " + getInterruptReasonTL());
+        String msgCombined = msg + ": " + getInterruptReasonTL();
+        // only Slf4j2 allows for dynamic levels - so use our own for now, until slf4j2 is widely adopted, if ever
+        switch (level) {
+            case ERROR -> log.error(msgCombined, e);
+            case WARN -> log.warn(msgCombined, e);
+            case INFO -> log.info(msgCombined, e);
+            case DEBUG -> log.debug(msgCombined, e);
+            case TRACE -> log.trace(msgCombined, e);
+        }
     }
 
     private static Reason getInterruptReasonTL() {
