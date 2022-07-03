@@ -52,7 +52,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private volatile boolean paused = false;
 
-    private final AbstractParallelEoSStreamProcessor<K, V> pc;
+    //    private final AbstractParallelEoSStreamProcessor<K, V> pc;
+    private final ControllerAPI<K, V> pc;
+
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
