@@ -14,9 +14,11 @@ import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -36,7 +38,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
     private final CommitMode commitMode;
 
-//    private final Duration commitTimeout;
+    private final Duration commitTimeout;
 
     private Optional<Thread> owningThread = Optional.empty();
 
@@ -143,7 +145,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         Future<Class<Void>> ask = commitRequestSend();
         log.debug("Waiting on a commit response");
         @SuppressWarnings("unused")
-        Class<Void> voidClass = ask.get();
+        Class<Void> voidClass = ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
 //        // \/ old version!
 //

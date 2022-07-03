@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
+import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -149,7 +150,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
             if (count > 0) {
                 log.trace("Loop: Register work");
-                pc.registerWorkAsync(polledRecords);
+                pc.sendNewPolledRecordsAsync(polledRecords);
             }
         }
     }
@@ -253,7 +254,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         log.warn("Broker poll control thread not closed cleanly.");
                     }
                 } catch (InterruptedException e) {
-                    log.debug("Interrupted waiting for broker poller thread to finish", e);
+                    InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted waiting for broker poller thread to finish", e);
                 } catch (ExecutionException | TimeoutException e) {
                     log.error("Execution or timeout exception waiting for broker poller thread to finish", e);
                     throw e;
