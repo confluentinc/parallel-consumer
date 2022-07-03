@@ -16,7 +16,7 @@ import java.util.Deque;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -41,11 +41,16 @@ public class Actor<T> implements IActor<T> {
     private final T actor;
 
     @Getter(AccessLevel.PROTECTED)
-    private final LinkedBlockingQueue<Runnable> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
+    private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>(); // Thread safe, highly performant, non-blocking
 
     @Override
     public void tell(final Consumer<T> action) {
         getActionMailbox().add(() -> action.accept(actor));
+    }
+
+    @Override
+    public void tellImmediately(final Consumer<T> action) {
+        getActionMailbox().addFirst(() -> action.accept(actor));
     }
 
     @Override
@@ -58,11 +63,19 @@ public class Actor<T> implements IActor<T> {
         return task;
     }
 
+    @Override
+    public <R> Future<R> askImmediately(final Function<T, R> action) {
+        FutureTask<R> task = new FutureTask<>(() -> action.apply(actor));
+        getActionMailbox().addFirst(task);
+        return task;
+    }
+
     // todo only used from one place which is deprecated
     @Override
     public boolean isEmpty() {
         return this.getActionMailbox().isEmpty();
     }
+
 
     /**
      * Given the elements currently in the queue, processes them, but no more. In other words - processes all elements
