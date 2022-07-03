@@ -145,7 +145,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
             if (count > 0) {
                 log.trace("Loop: Register work");
-                pc.registerWorkAsync(polledRecords);
+                pc.sendNewPolledRecordsAsync(polledRecords);
             }
         }
     }

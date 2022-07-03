@@ -1127,7 +1127,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
     }
 
-    public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
+    public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
         log.debug("Sending new polled records signal to controller - total partitions: {} records: {}",
                 polledRecords.partitions().size(),
                 polledRecords.count());

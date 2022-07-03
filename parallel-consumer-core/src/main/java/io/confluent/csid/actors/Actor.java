@@ -40,35 +40,21 @@ public class Actor<T> implements IActor<T> {
 
     private final T actor;
 
-    //    /**
-//     * Object because there's no common interface between {@link Function} and {@link Consumer}
-//     */
     @Getter(AccessLevel.PROTECTED)
-//    private final BlockingQueue<Callable<Optional<Object>>> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
     private final LinkedBlockingQueue<Runnable> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
 
     @Override
     public void tell(final Consumer<T> action) {
         getActionMailbox().add(() -> action.accept(actor));
-
-//        getActionMailbox().add(() -> {
-//            action.accept(actor);
-//            return Optional.empty();
-//        });
     }
 
     @Override
     public <R> Future<R> ask(final Function<T, R> action) {
-//        Callable<Optional<R>> task = () -> Optional.of(action.apply(actor));
+        /*
+         * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
+         */
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actor));
-//        getActionMailbox().add((Callable) task);
         getActionMailbox().add(task);
-
-// how to use CompletableFuture instead?
-//        CompletableFuture<R> future = new CompletableFuture<>();
-//        future.handleAsync()
-//        future.newIncompleteFuture();
-
         return task;
     }
 
