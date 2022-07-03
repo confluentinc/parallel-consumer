@@ -20,6 +20,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -84,6 +85,7 @@ public class Actor<T> implements IActor<T> {
      * <p>
      * Does not execute scheduled - todo remove scheduled to subclass?
      */
+    // todo in interface?
     public void processBounded() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
@@ -111,6 +113,7 @@ public class Actor<T> implements IActor<T> {
      *
      * @param timeout
      */
+    // todo in interface?
     public void processBlocking(Duration timeout) {
         processBounded();
         maybeBlockUntilScheduledOrAction(timeout);
@@ -119,11 +122,14 @@ public class Actor<T> implements IActor<T> {
     /**
      * May return without executing any scheduled actions
      *
-     * @param timeout
+     * @param timeout time to block for if mailbox is empty
      */
     private void maybeBlockUntilScheduledOrAction(Duration timeout) {
         Runnable polled = null;
         try {
+            if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
+                log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
+            }
             polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
         } catch (InterruptedException e) {
             InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted while polling Actor mailbox", e);
@@ -131,6 +137,7 @@ public class Actor<T> implements IActor<T> {
         }
 
         if (polled != null) {
+            log.debug("Message received in mailbox, processing");
             execute(polled);
             processBounded();
         }
@@ -140,4 +147,20 @@ public class Actor<T> implements IActor<T> {
         command.run();
     }
 
+    public void interruptProcessBlockingMaybe(InterruptibleThread.Reason reason) {
+        log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
+        getActionMailbox().add(() -> interruptInternal(reason));
+    }
+
+    private String getActorName() {
+        return actor.getClass().getSimpleName();
+    }
+
+    /**
+     * Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on the
+     * queue.
+     */
+    private void interruptInternal(InterruptibleThread.Reason reason) {
+        log.debug("Interruption signal processed: {}", reason);
+    }
 }

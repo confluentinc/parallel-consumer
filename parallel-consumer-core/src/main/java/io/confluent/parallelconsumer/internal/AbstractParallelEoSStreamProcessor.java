@@ -467,6 +467,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.debug("Awaiting worker pool termination...");
+        // todo with new actor / interrupt process, is interrupted test still needed? - try remove
         boolean interrupted = true;
         while (interrupted) {
             log.debug("Still interrupted");
@@ -554,17 +555,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         notifySomethingToDo(new Reason(msg));
     }
 
-    /**
-     * Control thread can be blocked waiting for work, but is interruptable. Interrupting it can be useful to inform
-     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
-     * BrokerPollSystem} so that less messages are downloaded and queued.
-     */
-    private void interruptControlThread(Reason reason) {
-        if (blockableControlThread != null) {
-            String msg = msg("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
-            blockableControlThread.interrupt(log, new Reason(msg, reason));
-        }
-    }
+//    /**
+//     * Control thread can be blocked waiting for work, but is interruptable. Interrupting it can be useful to inform
+//     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
+//     * BrokerPollSystem} so that fewer messages are downloaded and queued.
+//     */
+//    private void interruptControlThread(Reason reason) {
+//        if (blockableControlThread != null) {
+//            String msg = msg("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
+//            blockableControlThread.interrupt(log, new Reason(msg, reason));
+//        }
+//    }
 
     private boolean areMyThreadsDone() {
         if (isEmpty(controlThreadFuture)) {
@@ -945,7 +946,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         //
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
-        log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
+        log.debug("Time to block until next action calculated as {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
     }
 
@@ -1122,29 +1123,34 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     protected void sendWorkResultAsync(WorkContainer<K, V> wc) {
+        log.trace("Sending new work result to controller {}", wc);
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
     }
 
     public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
+        log.debug("Sending new polled records signal to controller - total partitions: {} records: {}",
+                polledRecords.partitions().size(),
+                polledRecords.count());
         getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
 
     /**
      * Early notify of work arrived.
      * <p>
-     * Only wake up the thread if it's sleeping while polling the mail box.
+     * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
      *
      * @see #processWorkCompleteMailBox
-     * @see #blockableControlThread
+//     * @see #blockableControlThread
      */
     public void notifySomethingToDo(Reason reason) {
-        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
-        if (noTransactionInProgress) {
-            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-            interruptControlThread(reason);
-        } else {
-            log.trace("Would have interrupted control thread, but TX in progress");
-        }
+        getMyActor().interruptProcessBlockingMaybe(reason);
+//        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
+//        if (noTransactionInProgress) {
+//            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
+//            interruptControlThread(reason);
+//        } else {
+//            log.trace("Would have interrupted control thread, but TX in progress");
+//        }
     }
 
     @Override
