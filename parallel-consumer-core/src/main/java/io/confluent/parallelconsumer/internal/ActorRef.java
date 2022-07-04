@@ -121,7 +121,7 @@ public class ActorRef<T> implements IActor<T>, Executor {
      *
      * @param timeout
      */
-    private void maybeBlockUntilScheduledOrAction(final Duration timeout) {
+    private void maybeBlockUntilScheduledOrAction(final Duration timeout) throws InterruptedException {
         Duration timeToBlockFor = lowerOfScheduledOrTimeout(timeout);
         var interrupted = getActionMailbox().poll(timeToBlockFor.toMillis(), MILLISECONDS);
 

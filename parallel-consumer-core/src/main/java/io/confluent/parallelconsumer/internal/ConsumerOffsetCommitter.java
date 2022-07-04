@@ -54,7 +54,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, ParallelConsumerOptions options) {
         super(newConsumer, newWorkManager);
         commitMode = options.getCommitMode();
-//        commitTimeout = options.getOffsetCommitTimeout();
+        commitTimeout = options.getOffsetCommitTimeout();
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
         }

@@ -15,7 +15,7 @@ import static java.util.Optional.of;
  *
  * @author Antony Stubbs
  */
-@Data
+@Data // todo remove
 @Slf4j
 public class InterruptibleThread {
 
