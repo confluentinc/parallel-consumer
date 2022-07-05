@@ -111,7 +111,7 @@ public class ActorRef<T> implements IActor<T>, Executor {
      *
      * @param timeout
      */
-    public void processBlocking(Duration timeout) {
+    public void processBlocking(Duration timeout) throws InterruptedException {
         processBounded();
         maybeBlockUntilScheduledOrAction(timeout);
     }

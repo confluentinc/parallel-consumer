@@ -70,9 +70,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     // todo removed?
     public static final String MDC_OFFSET_MARKER = "offset";
 
-    @Getter
-    private final ConsumerFacade consumerFacade;
-
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
      * user function.
@@ -239,8 +236,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
-
-        this.consumerFacade = new ConsumerFacade(brokerPollSubsystem);
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));

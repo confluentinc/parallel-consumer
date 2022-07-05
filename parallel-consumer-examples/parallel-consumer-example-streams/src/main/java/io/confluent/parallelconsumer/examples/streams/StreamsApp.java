@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.examples.streams;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -104,6 +105,7 @@ public class StreamsApp {
         return "add your server here";
     }
 
+    @SneakyThrows
     void close() {
         streams.close();
         parallelConsumer.close();

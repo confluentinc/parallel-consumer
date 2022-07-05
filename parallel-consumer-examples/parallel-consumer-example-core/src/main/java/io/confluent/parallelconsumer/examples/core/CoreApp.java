@@ -56,11 +56,8 @@ public class CoreApp {
 
         postSetup();
 
-        var consumer = parallelConsumer.getConsumerFacade();
-        consumer.
-
-                // tag::example[]
-                        parallelConsumer.poll(record ->
+        // tag::example[]
+        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
         // end::example[]
