@@ -80,6 +80,12 @@ public class PartitionState<K, V> {
 
     /**
      * Highest offset which has completed successfully ("succeeded").
+     * <p>
+     * Note that this may in some conditions, actually be a virtual pointer the highest Succeeded offset - that being,
+     * it either points to the highest succeeded offset, or potentially some number of transaction marker records above
+     * it. A virtual model that either points to the highest succeeded record, or the next 'user' type record (which is
+     * by definition not completed) on the partition (which may be several non `user` type records such as transaction
+     * markers) beyond, minus one.
      */
     @Getter(PUBLIC)
     private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
