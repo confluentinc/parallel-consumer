@@ -297,7 +297,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Set<String> subscription = consumerToCheck.subscription();
         Set<TopicPartition> assignment = consumerToCheck.assignment();
         if (!subscription.isEmpty() || !assignment.isEmpty()) {
-            throw new IllegalStateException("Consumer subscription must be managed by this class. Use " + this.getClass().getName() + "#subcribe methods instead.");
+            throw new IllegalStateException("Consumer subscription must be managed by the Parallel Consumer. Use " + this.getClass().getName() + "#subcribe methods instead.");
         }
     }
 

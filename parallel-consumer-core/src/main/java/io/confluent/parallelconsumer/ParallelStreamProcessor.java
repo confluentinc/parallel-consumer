@@ -31,6 +31,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      *
      * @param usersVoidConsumptionFunction the function
      */
+    // todo why isn't this in ParallelConsumer ?
     void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
 
 
