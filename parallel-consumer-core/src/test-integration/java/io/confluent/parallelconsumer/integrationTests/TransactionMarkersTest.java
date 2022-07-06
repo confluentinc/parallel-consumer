@@ -37,7 +37,7 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     /**
      * Block all records beyond the second record
      */
-    private static final int LIMIT = 2;
+    private static final int LIMIT = 1;
 
     Producer<String, String> txProducer;
     Producer<String, String> normalProducer;
@@ -78,10 +78,31 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         // send records - doesn't need to be in a transaction
         sendRecordsNonTransactionally(1);
         blockRecordsOverLimitIndex();
-        await().untilAsserted(() -> assertThat(receivedRecordCount.get()).isEqualTo(4));
+        wiatForRecordsToBeReceived();
         // force commit
         // should crash now
         Assertions.assertThatThrownBy(() -> pc.close()).isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void doubleTransaction() {
+        sendOneTransaction();
+        // two transactions back to back
+        sendOneTransaction();
+
+        //
+        blockRecordsOverLimitIndex();
+
+        //
+        wiatForRecordsToBeReceived();
+
+        // force commit
+        // should crash now
+        Assertions.assertThatThrownBy(() -> pc.close()).isInstanceOf(Exception.class);
+    }
+
+    private void wiatForRecordsToBeReceived() {
+        await().untilAsserted(() -> assertThat(receivedRecordCount.get()).isEqualTo(2));
     }
 
     AtomicInteger receivedRecordCount = new AtomicInteger();
@@ -121,7 +142,13 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         sendSeveralTransaction();
         // send records - doesn't need to be in a transaction
         sendRecordsNonTransactionally(1);
+
+        //
         blockRecordsOverLimitIndex();
+
+        //
+        wiatForRecordsToBeReceived();
+
         // force commit
         pc.close(); // should crash now
     }

@@ -1158,7 +1158,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
-        log.debug("Adding {} to mailbox...", polledRecords);
+        log.trace("Adding {} to mailbox...", polledRecords);
         workMailBox.add(ControllerEventMessage.of(polledRecords));
     }
 
