@@ -175,25 +175,7 @@ public class PartitionState<K, V> {
 
         updateHighestSucceededOffsetSoFar(work);
 
-//        maybeRaiseNextExpectedPolledOffset(work.offset());
-
-        // raise next expected on success
-//        Long first = incompleteOffsets.first();
-
-//        var old = getNextExpectedPolledOffsetOld();
-//        var newnew = getNextExpectedPolledOffset();
-
-//        maybeRaiseOffsetHighestSucceededOnSuccess(offset);
-
-//        var newnewafter = getNextExpectedPolledOffset();
-
-
-//        nextExpectedPolledOffset = getOffsetHighestSequentialSucceeded() + 1;
-
         maybeRaiseOffsetHighestSucceededOnSuccess(offset);
-
-//        var newnewafterpost = getNextExpectedPolledOffset();
-
 
         setDirty();
     }
@@ -217,51 +199,20 @@ public class PartitionState<K, V> {
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
         maybeRaiseHighestSeenOffset(newOffset);
-//        maybeRaiseNextExpectedPolledOffset(newOffset);
         commitQueue.put(newOffset, wc);
         incompleteOffsets.add(newOffset);
     }
 
-//    private void maybeRaiseNextExpectedPolledOffset(long offset) {
-//        if (!this.incompleteOffsets.isEmpty()) {
-//            Long lowestIncompleteOffset = this.incompleteOffsets.first();
-//            boolean higherThanSucceededSoFar = offset > getOffsetHighestSequentialSucceeded();
-//            boolean firstOffsetHigherThanSomething = offset < lowestIncompleteOffset;
-//            if (higherThanSucceededSoFar && firstOffsetHigherThanSomething) {
-//                nextExpectedPolledOffset = offset;
-//            }
-//        }
-//    }
-
     /**
      * Ensure that the {@link #offsetHighestSucceeded} is always at least a single offset behind the
-     * {@link #nextExpectedPolledOffset}. Needed to allow us to jump over gaps in the partitions such as transaction
-     * markers.
+     * {@link #getNextExpectedPolledOffset()}. Needed to allow us to jump over gaps in the partitions such as
+     * transaction markers.
      */
     private void maybeRaiseOffsetHighestSucceededOnSuccess(long offset) {
         if (offsetHighestSucceeded < getNextExpectedPolledOffset() - 1) {
             // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
             offsetHighestSucceeded = getNextExpectedPolledOffset() - 1;
         }
-
-
-//        if (incompleteOffsets.isEmpty()) {
-//            offsetHighestSucceeded = offsetHighestSeen;
-//        }
-//        else {
-//            offsetHighestSucceeded = incompleteOffsets.first() - 1;
-//        }
-
-
-//        boolean isHighestSequential = offset == getOffsetHighestSequentialSucceeded();
-//        if (isHighestSequential) {
-//            // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
-//            if (incompleteOffsets.isEmpty()) {
-//                offsetHighestSucceeded = offsetHighestSeen;
-//            } else {
-//                offsetHighestSucceeded = incompleteOffsets.first() - 1;
-//            }
-//        }
     }
 
     /**
@@ -291,12 +242,6 @@ public class PartitionState<K, V> {
     private long getNextExpectedPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
-
-//    private long nextExpectedPolledOffset = -1;
-
-//    private long getNextExpectedPolledOffset() {
-//        return nextExpectedPolledOffset;
-//    }
 
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded

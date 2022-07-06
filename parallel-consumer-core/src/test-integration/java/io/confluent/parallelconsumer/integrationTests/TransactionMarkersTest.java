@@ -100,7 +100,6 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         // force commit
         // should crash now
         pc.close();
-//        Assertions.assertThatThrownBy(() -> pc.close()).isInstanceOf(Exception.class);
     }
 
     @Test
@@ -118,7 +117,6 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         // force commit
         // should crash now
         pc.close();
-//        Assertions.assertThatThrownBy(() -> pc.close()).isInstanceOf(Exception.class);
     }
 
     private void waitForRecordsToBeReceived() {
