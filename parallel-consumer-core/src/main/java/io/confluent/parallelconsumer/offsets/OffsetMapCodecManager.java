@@ -167,8 +167,8 @@ public class OffsetMapCodecManager<K, V> {
         return new PartitionState<K, V>(tp, incompletes);
     }
 
-    public String makeOffsetMetadataPayload(long finalOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
-        String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, state);
+    public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
+        String offsetMap = serialiseIncompleteOffsetMapToBase64(baseOffsetForPartition, state);
         return offsetMap;
     }
 

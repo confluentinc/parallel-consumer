@@ -8,10 +8,12 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
 import io.confluent.parallelconsumer.state.PartitionState;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.assertj.core.api.Assertions;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,8 +23,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static java.lang.Integer.MAX_VALUE;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 /**
@@ -32,14 +36,20 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
  * @see PartitionState#getOffsetHighestSequentialSucceeded()
  * @see OffsetSimultaneousEncoder
  */
+@Slf4j
 class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 
     /**
      * Block all records beyond the second record
      */
-    private static final int LIMIT = 1;
+    final int LIMIT = 1;
+
+    AtomicInteger receivedRecordCount = new AtomicInteger();
+
 
     Producer<String, String> txProducer;
+    Producer<String, String> txProducerTwo;
+    Producer<String, String> txProducerThree;
     Producer<String, String> normalProducer;
     Consumer<String, String> consumer;
     ParallelEoSStreamProcessor<String, String> pc;
@@ -49,7 +59,11 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     void setup() {
         setupTopic();
         consumer = getKcu().getConsumer();
+
         txProducer = getKcu().createNewTransactionalProducer();
+        txProducerTwo = getKcu().createNewTransactionalProducer();
+        txProducerThree = getKcu().createNewTransactionalProducer();
+
         normalProducer = getKcu().createNewProducer(NORMAL);
         pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumer)
@@ -77,8 +91,13 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         sendOneTransaction();
         // send records - doesn't need to be in a transaction
         sendRecordsNonTransactionally(1);
-        blockRecordsOverLimitIndex();
-        wiatForRecordsToBeReceived();
+
+        //
+        runPcAndBlockRecordsOverLimitIndex();
+
+        //
+        waitForRecordsToBeReceived();
+
         // force commit
         // should crash now
         Assertions.assertThatThrownBy(() -> pc.close()).isInstanceOf(Exception.class);
@@ -91,30 +110,42 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         sendOneTransaction();
 
         //
-        blockRecordsOverLimitIndex();
+        runPcAndBlockRecordsOverLimitIndex();
 
         //
-        wiatForRecordsToBeReceived();
+        waitForRecordsToBeReceived();
 
         // force commit
         // should crash now
         Assertions.assertThatThrownBy(() -> pc.close()).isInstanceOf(Exception.class);
     }
 
-    private void wiatForRecordsToBeReceived() {
-        await().untilAsserted(() -> assertThat(receivedRecordCount.get()).isEqualTo(2));
+    private void waitForRecordsToBeReceived() {
+        int expected = 2;
+        waitForRecordsToBeReceived(expected);
     }
 
-    AtomicInteger receivedRecordCount = new AtomicInteger();
+    private void waitForRecordsToBeReceived(int expected) {
+        log.debug("Awaiting {} records to be received...", expected);
+        await().untilAsserted(() -> assertThat(receivedRecordCount.get()).isAtLeast(expected));
+        log.debug("Awaiting {} records to be received - done.", expected);
+    }
 
     /**
      * Allow processing of first tx messages, but block second transaction messages
      */
-    private void blockRecordsOverLimitIndex() {
+    private void runPcAndBlockRecordsOverLimitIndex() {
+        int blockOver = LIMIT;
+        runPcAndBlockRecordsOverLimitIndex(blockOver);
+    }
+
+    private void runPcAndBlockRecordsOverLimitIndex(int blockOver) {
         pc.poll(recordContexts -> {
             int index = receivedRecordCount.incrementAndGet();
-            if (index > LIMIT) {
+            log.debug("Got record index: {} ...", index);
+            if (index > blockOver) {
                 try {
+                    log.debug(msg("{} over block limit of {}, blocking...", index, blockOver));
                     Thread.sleep(Long.MAX_VALUE);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
@@ -125,12 +156,17 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 
     private void sendOneTransaction() {
         txProducer.beginTransaction();
-        txProducer.send(new ProducerRecord<>(topic, ""));
+        txProducer.send(createRecordToSend());
         txProducer.commitTransaction();
     }
 
+    @NotNull
+    private ProducerRecord<String, String> createRecordToSend() {
+        return new ProducerRecord<>(topic, "");
+    }
+
     private void sendRecordsNonTransactionally(int count) {
-        IntStream.of(count).forEach(i -> normalProducer.send(new ProducerRecord<>(topic, "")));
+        IntStream.of(count).forEach(i -> normalProducer.send(createRecordToSend()));
     }
 
     /**
@@ -140,14 +176,15 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     void several() {
         // sendSeveralTransactions, all closed at the same neighboring offsets
         sendSeveralTransaction();
+
         // send records - doesn't need to be in a transaction
-        sendRecordsNonTransactionally(1);
+        sendRecordsNonTransactionally(10);
 
         //
-        blockRecordsOverLimitIndex();
+        runPcAndBlockRecordsOverLimitIndex();
 
         //
-        wiatForRecordsToBeReceived();
+        waitForRecordsToBeReceived();
 
         // force commit
         pc.close(); // should crash now
@@ -155,5 +192,90 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 
     private void sendSeveralTransaction() {
         IntStream.of(10).forEach(value -> sendOneTransaction());
+    }
+
+    /**
+     * Allowing just the first record adjacent to the transaction marker allows the situation to proceed normally
+     *
+     * @see #single()
+     */
+    @Test
+    void dontBlockFirstRecords() {
+        // sendSeveralTransactions, all closed at the same neighboring offsets
+        sendSeveralTransaction();
+
+        // send records - doesn't need to be in a transaction
+        sendRecordsNonTransactionally(10);
+
+        //
+        runPcAndBlockRecordsOverLimitIndex(3);
+
+        //
+        waitForRecordsToBeReceived();
+
+        // force commit
+        pc.close(); // should crash now
+    }
+
+    /**
+     * @see #dontBlockFirstRecords()
+     */
+    @Test
+    void dontBlockAnyRecords() {
+        // sendSeveralTransactions, all closed at the same neighboring offsets
+        sendSeveralTransaction();
+
+        // send records - doesn't need to be in a transaction
+        sendRecordsNonTransactionally(10);
+
+        //
+        runPcAndBlockRecordsOverLimitIndex(MAX_VALUE);
+
+        //
+        waitForRecordsToBeReceived();
+
+        // force commit
+        pc.close(); // should crash now
+    }
+
+
+    /**
+     * A stacked or overlapping transaction situation, that creates 3 commit markers in a row, so we should get a wider
+     * "gap" and so a more negative bitset length (-3)
+     *
+     * @see #single()
+     */
+    @Test
+    void overLappingTransactions() {
+        //
+        startAndOneRecord(txProducer);
+        startAndOneRecord(txProducerTwo);
+        startAndOneRecord(txProducerThree);
+
+        //
+        commitTx(txProducer);
+        commitTx(txProducerTwo);
+        commitTx(txProducerThree);
+
+        // send records - doesn't need to be in a transaction
+        sendRecordsNonTransactionally(2);
+
+        //
+        runPcAndBlockRecordsOverLimitIndex(3);
+
+        //
+        waitForRecordsToBeReceived(3);
+
+        // force commit
+        pc.close(); // should crash now
+    }
+
+    private void commitTx(Producer<String, String> txProducer) {
+        txProducer.commitTransaction();
+    }
+
+    private void startAndOneRecord(Producer<String, String> txProducer) {
+        txProducer.beginTransaction();
+        txProducer.send(createRecordToSend());
     }
 }

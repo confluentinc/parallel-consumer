@@ -93,8 +93,8 @@ public class OffsetSimultaneousEncoder {
 
         long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
         if (bitsetLengthL < 0) {
-            throw new IllegalStateException(msg("Cannot have negative length BitSet (calculated length: {}, highest succeeded offset: {}, base offset to commit: {})",
-                    bitsetLengthL, highestSucceededOffset, baseOffsetToCommit));
+            throw new IllegalStateException(msg("Cannot have negative length BitSet (calculated length: {}, base offset to commit: {}, highest succeeded offset: {})",
+                    bitsetLengthL, baseOffsetToCommit, highestSucceededOffset));
         }
 
         // BitSet only support Integer.MAX_VALUE bits
