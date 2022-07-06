@@ -138,7 +138,9 @@ public class KafkaClientUtils {
     }
 
     public <K, V> KafkaProducer<K, V> createNewTransactionalProducer() {
-        return createNewProducer(TRANSACTIONAL);
+        KafkaProducer<K, V> txProd = createNewProducer(TRANSACTIONAL);
+        txProd.initTransactions();
+        return txProd;
     }
 
     @Deprecated(since = PCVersion.V051)
@@ -164,10 +166,6 @@ public class KafkaClientUtils {
         }
 
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
-
-        if (mode.equals(TRANSACTIONAL)) {
-            kvKafkaProducer.initTransactions();
-        }
 
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
