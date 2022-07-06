@@ -247,6 +247,8 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
      */
     @Test
     void overLappingTransactions() {
+        int numberOfBaseRecords = 3;
+
         //
         startAndOneRecord(txProducer);
         startAndOneRecord(txProducerTwo);
@@ -261,10 +263,10 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         sendRecordsNonTransactionally(2);
 
         //
-        runPcAndBlockRecordsOverLimitIndex(3);
+        runPcAndBlockRecordsOverLimitIndex(numberOfBaseRecords);
 
         //
-        waitForRecordsToBeReceived(3);
+        waitForRecordsToBeReceived(numberOfBaseRecords);
 
         // force commit
         pc.close(); // should crash now
