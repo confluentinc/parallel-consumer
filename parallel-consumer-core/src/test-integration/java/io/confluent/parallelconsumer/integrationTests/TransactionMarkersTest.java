@@ -1,15 +1,19 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
+import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
+import io.confluent.parallelconsumer.state.PartitionState;
 import org.junit.Test;
 
 /**
  * Tests the system when the input topic has transaction markers in its partitions.
  *
  * @author Antony Stubbs
+ * @see PartitionState#getOffsetHighestSequentialSucceeded()
+ * @see OffsetSimultaneousEncoder
  */
 public class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 

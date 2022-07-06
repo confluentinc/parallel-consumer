@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 
@@ -81,18 +82,19 @@ public class OffsetSimultaneousEncoder {
      */
     private final Set<OffsetEncoder> encoders;
 
-    public OffsetSimultaneousEncoder(long lowWaterMark, long highestSucceededOffset, Set<Long> incompleteOffsets) {
-        this.lowWaterMark = lowWaterMark;
+    public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, Set<Long> incompleteOffsets) {
+        this.lowWaterMark = baseOffsetToCommit;
         this.incompleteOffsets = incompleteOffsets;
 
         //
         if (highestSucceededOffset == -1) { // nothing succeeded yet
-            highestSucceededOffset = lowWaterMark;
+            highestSucceededOffset = baseOffsetToCommit;
         }
 
         long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
         if (bitsetLengthL < 0) {
-            throw new IllegalStateException("Cannot have negative length BitSet");
+            throw new IllegalStateException(msg("Cannot have negative length BitSet (length: {}, highestSucceededOffset: {}, base committed offset: {})",
+                    bitsetLengthL, highestSucceededOffset, baseOffsetToCommit));
         }
 
         // BitSet only support Integer.MAX_VALUE bits
