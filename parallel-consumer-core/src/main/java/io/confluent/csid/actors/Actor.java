@@ -40,8 +40,14 @@ public class Actor<T> implements IActor<T> {
 
     private final T actor;
 
+    /**
+     * Single queueing point for all messages to the actor.
+     * <p>
+     * {@link LinkedBlockingDeque} is implemented as a simple doubly-linked list protected by a single lock and using
+     * conditions to manage blocking. Thread safe, highly performant, single lock.
+     */
     @Getter(AccessLevel.PROTECTED)
-    private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>(); // Thread safe, highly performant, non-blocking
+    private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>();
 
     @Override
     public void tell(final Consumer<T> action) {
