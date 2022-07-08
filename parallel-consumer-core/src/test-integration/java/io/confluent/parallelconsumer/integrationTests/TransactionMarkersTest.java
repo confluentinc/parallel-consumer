@@ -77,13 +77,16 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     }
 
     /**
-     * Originally written to test issue# XXX - that committing can happen successfully when the base offset for the
-     * commit is adjacent to transaction markers in the input partitions.
+     * Test that committing can happen successfully when the base offset for the commit is adjacent to transaction
+     * markers in the input partitions.
      * <p>
      * The system assumes that the next expected (base committed) offset, will always be 1 offset above the highest
      * succeeded. But tx makers can increase this gap from 1 to potentially much higher.
      * <p>
      * todo can these gaps also be created by log compaction? If so, is the solution the same?
+     *
+     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/329">Github issue #329</a> the original
+     *         reported issue
      */
     @Test
     void single() {
