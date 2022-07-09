@@ -739,7 +739,6 @@
                                     <onlyWhenRelease>false</onlyWhenRelease>
                                     <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
                                     <excludes>
-                                        <exclude>io.stubbs.truth:</exclude>
                                         <exclude>io.confluent.parallelconsumer:</exclude>
                                     </excludes>
                                 </requireReleaseDeps>
