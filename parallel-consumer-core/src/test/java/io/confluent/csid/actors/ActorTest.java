@@ -1,5 +1,9 @@
 package io.confluent.csid.actors;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.TimeUtils;
 import lombok.Data;
 import lombok.SneakyThrows;
