@@ -189,6 +189,35 @@
                 <license.mode>check</license.mode>
                 <parallel-tests>false</parallel-tests>
             </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>enforce-versions</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <phase>validate</phase>
+                                <configuration>
+                                    <rules>
+                                        <!-- only enforce requireReleaseDeps when running in CI, not locally -->
+                                        <requireReleaseDeps>
+                                            <onlyWhenRelease>false</onlyWhenRelease>
+                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                            <excludes>
+                                                <exclude>io.confluent.parallelconsumer:</exclude>
+                                            </excludes>
+                                        </requireReleaseDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
         <profile>
             <id>maven-central</id>
@@ -735,13 +764,6 @@
                                 <reactorModuleConvergence />
                                 <banDuplicatePomDependencyVersions />
                                 <requireSameVersions />
-                                <requireReleaseDeps>
-                                    <onlyWhenRelease>false</onlyWhenRelease>
-                                    <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
-                                    <excludes>
-                                        <exclude>io.confluent.parallelconsumer:</exclude>
-                                    </excludes>
-                                </requireReleaseDeps>
                             </rules>
                         </configuration>
                     </execution>
