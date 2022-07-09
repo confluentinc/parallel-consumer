@@ -1,5 +1,9 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;

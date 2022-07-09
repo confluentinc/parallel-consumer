@@ -13,6 +13,7 @@ import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
 import java.util.*;
@@ -309,7 +310,7 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
     @Override
     public Set<TopicPartition> paused() {
         throwInvalidCall();
-        return Set.of();
+        return UniSets.of();
     }
 
     // no-ops
