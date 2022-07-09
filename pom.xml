@@ -492,6 +492,8 @@
                 <artifactId>ossindex-maven-plugin</artifactId>
                 <version>3.2.0</version>
                 <configuration>
+                    <scope>runtime</scope>
+                    <fail>false</fail>
                     <excludeCoordinates>
                         <exclude>
                             <!-- https://github.com/google/guava/issues/4011 -->
@@ -512,10 +514,6 @@
                         </goals>
                     </execution>
                 </executions>
-                <configuration>
-                    <scope>runtime</scope>
-                    <fail>false</fail>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>com.soebes.maven.plugins</groupId>
