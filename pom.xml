@@ -500,6 +500,9 @@
                         </goals>
                     </execution>
                 </executions>
+                <configuration>
+                    <scope>runtime</scope>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>com.soebes.maven.plugins</groupId>
