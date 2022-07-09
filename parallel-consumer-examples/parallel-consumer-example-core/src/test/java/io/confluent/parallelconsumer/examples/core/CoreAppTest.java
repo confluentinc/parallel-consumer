@@ -21,9 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.Duration;
-import java.util.Set;
 
-import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static org.mockito.Mockito.when;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -42,13 +40,6 @@ class CoreAppTest {
         coreApp.mockConsumer.addRecord(new ConsumerRecord(coreApp.inputTopic, 0, 0, "a key 1", "a value"));
         coreApp.mockConsumer.addRecord(new ConsumerRecord(coreApp.inputTopic, 0, 1, "a key 2", "a value"));
         coreApp.mockConsumer.addRecord(new ConsumerRecord(coreApp.inputTopic, 0, 2, "a key 3", "a value"));
-
-
-        // facade test - move
-        var consumer = coreApp.parallelConsumer.getConsumerFacade();
-        Set<?> assignment = consumer.assignment();
-        assertTruth(assignment).isNotEmpty();
-
 
         Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
             KafkaTestUtils.assertLastCommitIs(coreApp.mockConsumer, 3);

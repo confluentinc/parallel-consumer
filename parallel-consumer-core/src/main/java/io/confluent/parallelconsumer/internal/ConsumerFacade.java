@@ -114,7 +114,7 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
         blockingAskConsumerVoid(consumer -> consumer.seek(partition, offset));
     }
 
-    private <R> void blockingAskConsumerVoid(java.util.function.Consumer<Consumer<K, V>> ask) {
+    private void blockingAskConsumerVoid(java.util.function.Consumer<Consumer<K, V>> ask) {
         java.util.function.Consumer<BrokerPollSystem<K, V>> wrap = poller -> ask.accept(poller.getConsumerManager().getConsumer());
         blockingAskVoid(wrap);
     }
@@ -125,13 +125,12 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
 //    }
 
     @SneakyThrows
-    private <R> void blockingAskVoid(java.util.function.Consumer<BrokerPollSystem<K, V>> ask) {
+    private void blockingAskVoid(java.util.function.Consumer<BrokerPollSystem<K, V>> ask) {
         blockingAsk(poller -> {
             ask.accept(poller);
             return Void.class;
         });
     }
-
 
     @Override
     public void seek(TopicPartition partition, OffsetAndMetadata offsetAndMetadata) {
