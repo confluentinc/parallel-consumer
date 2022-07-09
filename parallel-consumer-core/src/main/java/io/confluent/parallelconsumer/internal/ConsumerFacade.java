@@ -45,7 +45,7 @@ import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_T
 @Slf4j
 @RequiredArgsConstructor
 // todo which package? root or internal?
-public class ConsumerFacade<K, V> implements Consumer<K, V> {
+public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V> {
 
     //    private final AbstractParallelEoSStreamProcessor<?, ?> controller;
     private final BrokerPollSystem<K, V> basePollerRef;

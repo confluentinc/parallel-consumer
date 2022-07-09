@@ -70,8 +70,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     // todo removed?
     public static final String MDC_OFFSET_MARKER = "offset";
 
+    /**
+     * @see #getConsumerFacadeRestricted()
+     */
     @Getter
     private final ConsumerFacade consumerFacade;
+
+    /**
+     * Use this is possible instead of {@link #getConsumerFacade()}, as it only has the functions that are allowed to be
+     * called. Use {@link #getConsumerFacade()} if you need something that "is a"
+     * {@link org.apache.kafka.clients.consumer.Consumer}.
+     *
+     * @see #getConsumerFacadeRestricted()
+     */
+    public PCConsumerAPI<K, V> getConsumerFacadeRestricted() {
+        return getConsumerFacade();
+    }
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
