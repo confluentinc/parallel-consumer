@@ -492,8 +492,16 @@
                 <artifactId>ossindex-maven-plugin</artifactId>
                 <version>3.2.0</version>
                 <configuration>
-                    <!-- com.google.guava:guava:jar:31.1-jre:test; - no update yet -->
-                    <fail>false</fail>
+                    <excludeCoordinates>
+                        <exclude>
+                            <!-- https://github.com/google/guava/issues/4011 -->
+                            <!-- CVE-2020-8908: Files::createTempDir local information disclosure vulnerability #4011 -->
+                            <!-- only used transitively from tests, and is a deprecated function -->
+                            <groupId>com.google.guava</groupId>
+                            <artifactId>guava</artifactId>
+                            <version>31.1-jre</version>
+                        </exclude>
+                    </excludeCoordinates>
                 </configuration>
                 <executions>
                     <execution>
