@@ -20,6 +20,7 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -104,7 +105,7 @@ public class StreamsApp {
         return "add your server here";
     }
 
-    void close() {
+    void close() throws IOException {
         streams.close();
         parallelConsumer.close();
     }

@@ -137,14 +137,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     private final List<Runnable> controlLoopHooks = new ArrayList<>();
 
     /**
-     * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
-     * collection sooner.
-     *
-     * @see #processWorkCompleteMailBox
-     */
-    private InterruptibleThread blockableControlThread;
-
-    /**
      * @see #notifySomethingToDo
      * @see #processWorkCompleteMailBox
      */
@@ -616,7 +608,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
-            this.blockableControlThread = new InterruptibleThread(controlThread);
             while (state != closed) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
