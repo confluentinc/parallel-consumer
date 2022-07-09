@@ -52,7 +52,10 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
 
         // commits
 //        pc.closeWithoutClosingClients();
-        pc.close();
+//        pc.close();
+        pc.requestCommitAsap();
+
+        //
         await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
             multiTopics.forEach(singleTopic -> assertCommit(pc, singleTopic, recordsPerTopic + 1));
         });
@@ -66,6 +69,7 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
 
     private void assertCommit(final ParallelEoSStreamProcessor<String, String> pc, NewTopic newTopic, int recordsPerTopic) {
         var committer = getKcu().getLastConsumerConstructed();
+
         assertThat(committer)
                 .hasCommittedToPartition(newTopic)
                 .offset(recordsPerTopic);
