@@ -514,6 +514,7 @@
                 </executions>
                 <configuration>
                     <scope>runtime</scope>
+                    <fail>false</fail>
                 </configuration>
             </plugin>
             <plugin>
