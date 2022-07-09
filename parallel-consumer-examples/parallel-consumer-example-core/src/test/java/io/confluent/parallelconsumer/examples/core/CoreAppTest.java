@@ -23,6 +23,7 @@ import org.mockito.Mockito;
 import java.time.Duration;
 import java.util.Set;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static org.mockito.Mockito.when;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -31,7 +32,7 @@ class CoreAppTest {
 
     @SneakyThrows
     @Test
-    public void test() {
+    void test() {
         log.info("Test start");
         CoreAppUnderTest coreApp = new CoreAppUnderTest();
         TopicPartition tp = new TopicPartition(coreApp.inputTopic, 0);
@@ -45,7 +46,8 @@ class CoreAppTest {
 
         // facade test - move
         var consumer = coreApp.parallelConsumer.getConsumerFacade();
-        Set assignment = consumer.assignment();
+        Set<?> assignment = consumer.assignment();
+        assertTruth(assignment).isNotEmpty();
 
 
         Awaitility.await().pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
@@ -57,7 +59,7 @@ class CoreAppTest {
 
     @SneakyThrows
     @Test
-    public void testPollAndProduce() {
+    void testPollAndProduce() {
         log.info("Test start");
         CoreAppUnderTest coreApp = new CoreAppUnderTest();
 
