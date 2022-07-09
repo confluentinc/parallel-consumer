@@ -9,14 +9,13 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
-import java.util.Queue;
 
 
 // todo inline into controller
 @RequiredArgsConstructor
 public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 
-    AbstractParallelEoSStreamProcessor<K, V> baseController;
+    private final AbstractParallelEoSStreamProcessor<K, V> baseController;
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {

@@ -129,7 +129,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     /**
      * todo docs
      */
-    private ConsumerRebalanceHandler rebalanceHandler;
+    private final ConsumerRebalanceHandler rebalanceHandler = new ConsumerRebalanceHandler<>(this);
 
     /**
      * Useful for testing async code

@@ -47,7 +47,7 @@ import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_T
 public class ConsumerFacade<K, V> implements Consumer<K, V> {
 
     //    private final AbstractParallelEoSStreamProcessor<?, ?> controller;
-    private final BrokerPollSystem<?, ?> basePollerRef;
+    private final BrokerPollSystem<K, V> basePollerRef;
 
     /**
      * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control

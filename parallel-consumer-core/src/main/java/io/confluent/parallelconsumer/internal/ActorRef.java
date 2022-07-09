@@ -108,18 +108,14 @@ public class ActorRef<T> implements IActor<T>, Executor {
 
     /**
      * Blocking version of {@link #processBounded()}
-     *
-     * @param timeout
      */
-    public void processBlocking(Duration timeout) {
+    public void processBlocking(Duration timeout) throws InterruptedException {
         processBounded();
         maybeBlockUntilScheduledOrAction(timeout);
     }
 
     /**
      * May return without executing any scheduled actions
-     *
-     * @param timeout
      */
     private void maybeBlockUntilScheduledOrAction(final Duration timeout) throws InterruptedException {
         Duration timeToBlockFor = lowerOfScheduledOrTimeout(timeout);
