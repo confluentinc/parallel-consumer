@@ -189,6 +189,35 @@
                 <license.mode>check</license.mode>
                 <parallel-tests>false</parallel-tests>
             </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>enforce-versions</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <phase>validate</phase>
+                                <configuration>
+                                    <rules>
+                                        <!-- only enforce requireReleaseDeps when running in CI, not locally -->
+                                        <requireReleaseDeps>
+                                            <onlyWhenRelease>false</onlyWhenRelease>
+                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                            <excludes>
+                                                <exclude>io.confluent.parallelconsumer:</exclude>
+                                            </excludes>
+                                        </requireReleaseDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
         <profile>
             <id>maven-central</id>
@@ -454,7 +483,7 @@
                 <groupId>org.junit-pioneer</groupId>
                 <artifactId>junit-pioneer</artifactId>
                 <scope>test</scope>
-                <version>1.7.0</version>
+                <version>1.7.1</version>
             </dependency>
             <dependency>
                 <groupId>com.github.tomakehurst</groupId>
@@ -700,7 +729,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <id>enforce-versions</id>
@@ -734,13 +763,6 @@
                                 <reactorModuleConvergence />
                                 <banDuplicatePomDependencyVersions />
                                 <requireSameVersions />
-                                <requireReleaseDeps>
-                                    <onlyWhenRelease>false</onlyWhenRelease>
-                                    <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
-                                    <excludes>
-                                        <exclude>io.confluent.parallelconsumer:</exclude>
-                                    </excludes>
-                                </requireReleaseDeps>
                             </rules>
                         </configuration>
                     </execution>
@@ -881,7 +903,7 @@
                 <!-- for use in idea -->
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
-                <version>2.10.0</version>
+                <version>2.11.0</version>
             </plugin>
         </plugins>
 
