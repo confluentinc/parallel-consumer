@@ -3,10 +3,13 @@ package io.confluent.parallelconsumer.truth;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.OptionalSubject;
 import com.google.common.truth.Subject;
 import io.confluent.parallelconsumer.model.CommitHistory;
+import io.stubbs.truth.generator.SubjectFactoryMethod;
+import io.stubbs.truth.generator.UserManagedSubject;
 
 import java.util.Optional;
 
@@ -15,6 +18,7 @@ import static com.google.common.truth.Truth.assertAbout;
 /**
  * @see CommitHistory
  */
+@UserManagedSubject(CommitHistory.class)
 public class CommitHistorySubject extends Subject {
     private final CommitHistory actual;
 
@@ -23,6 +27,7 @@ public class CommitHistorySubject extends Subject {
         this.actual = actual;
     }
 
+    @SubjectFactoryMethod
     public static Factory<CommitHistorySubject, CommitHistory> commitHistories() {
         return CommitHistorySubject::new;
     }
@@ -46,7 +51,7 @@ public class CommitHistorySubject extends Subject {
     }
 
     public void offset(long quantity) {
-        check("atLeastOffset()").that(actual.getOffsetHistory()).contains(quantity);
+        check("getOffsetHistory()").that(actual.getOffsetHistory()).contains(quantity);
     }
 
     public void anything() {

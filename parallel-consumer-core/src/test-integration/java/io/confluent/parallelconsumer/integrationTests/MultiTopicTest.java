@@ -1,26 +1,29 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.state.ShardKey;
-import io.confluent.parallelconsumer.state.ShardKey.KeyOrderedKey;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static one.util.streamex.StreamEx.of;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.equalTo;
@@ -30,7 +33,6 @@ import static org.hamcrest.Matchers.equalTo;
  */
 @Slf4j
 class MultiTopicTest extends BrokerIntegrationTest<String, String> {
-
 
     @ParameterizedTest
     @EnumSource(ProcessingOrder.class)
@@ -55,54 +57,43 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         await().untilAtomic(messageProcessedCount, Matchers.is(equalTo(expectedMessagesCount)));
 
         // commits
-//        await().untilAsserted(() -> {
-//            multiTopics.forEach(singleTopic -> assertCommit(singleTopic, recordsPerTopic));
-//        });
+        pc.requestCommitAsap();
+        pc.close();
+
+        //
+        Consumer<?, ?> assertingConsumer = kcu.createNewConsumer(false);
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> {
+                    assertSeparateConsumerCommit(assertingConsumer, new HashSet<>(multiTopics), recordsPerTopic);
+                });
     }
 
+    /**
+     * Can't get committed offsets from PC wrapped consumer, so force commit by closing PC, then create new consumer
+     * with same group id, and assert what offsets are told are committed.
+     * <p>
+     * When consumer-interface #XXX is merged, could just poll PC directly (see commented out assertCommit below).
+     */
+    private void assertSeparateConsumerCommit(Consumer<?, ?> assertingConsumer, HashSet<NewTopic> topics, int expectedOffset) {
+        Set<TopicPartition> partitions = topics.stream().map(newTopic -> new TopicPartition(newTopic.name(), 0)).collect(Collectors.toSet());
+        Map<TopicPartition, OffsetAndMetadata> committed = assertingConsumer.committed(partitions);
+        var partitionSubjects = assertThat(assertingConsumer).hasCommittedToPartition(partitions);
+        partitionSubjects.forEach((topicPartition, commitHistorySubject)
+                -> commitHistorySubject.atLeastOffset(expectedOffset));
+    }
 
     @SneakyThrows
     private void sendMessages(NewTopic newTopic, int recordsPerTopic) {
         getKcu().produceMessages(newTopic.name(), recordsPerTopic);
     }
 
-    private void assertCommit(NewTopic newTopic, int recordsPerTopic) {
-        assertThat(getKcu().getLastConsumerConstructed())
-                .hasCommittedToPartition(newTopic)
-                .offset(recordsPerTopic);
-    }
-
-    // todo split out
-    @Test
-    void keyTest() {
-        ProcessingOrder ordering = KEY;
-        String topicOne = "t1";
-        String keyOne = "k1";
-
-        var reck1 = new ConsumerRecord<>(topicOne, 0, 0, keyOne, "v");
-        ShardKey key1 = ShardKey.of(reck1, ordering);
-        assertThat(key1).isEqualTo(ShardKey.of(reck1, ordering));
-
-        // same topic, same partition, different key
-        var reck2 = new ConsumerRecord<>(topicOne, 0, 0, "k2", "v");
-        ShardKey of3 = ShardKey.of(reck2, ordering);
-        assertThat(key1).isNotEqualTo(of3);
-
-        // different topic, same key
-        var reck3 = new ConsumerRecord<>("t2", 0, 0, keyOne, "v");
-        assertThat(key1).isNotEqualTo(ShardKey.of(reck3, ordering));
-
-        // same topic, same key
-        KeyOrderedKey keyOrderedKey = new KeyOrderedKey(topicOne, keyOne);
-        KeyOrderedKey keyOrderedKeyTwo = new KeyOrderedKey(topicOne, keyOne);
-        assertThat(keyOrderedKey).isEqualTo(keyOrderedKeyTwo);
-
-        // same topic, same key, different partition
-        var reck4 = new ConsumerRecord<>(topicOne, 1, 0, keyOne, "v");
-        ShardKey of4 = ShardKey.of(reck2, ordering);
-        assertThat(key1).isNotEqualTo(of3);
-        // check both exist in queue too
-        assertThat("false").isEmpty();
-    }
+// depends on merge of features/consumer-interface branch
+//    private void assertCommit(final ParallelEoSStreamProcessor<String, String> pc, NewTopic newTopic, int recordsPerTopic) {
+//        var committer = getKcu().getLastConsumerConstructed();
+//
+//        assertThat(committer)
+//                .hasCommittedToPartition(newTopic)
+//                .offset(recordsPerTopic);
+//    }
 
 }

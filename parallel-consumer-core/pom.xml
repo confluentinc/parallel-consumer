@@ -85,7 +85,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.3.5</version>
+            <version>42.4.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -125,6 +125,7 @@
                     <releaseTarget>8</releaseTarget>
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>
