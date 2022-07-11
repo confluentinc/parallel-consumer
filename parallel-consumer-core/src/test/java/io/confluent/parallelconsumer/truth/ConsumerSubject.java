@@ -14,10 +14,11 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniSets;
 
 import javax.annotation.Generated;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -52,13 +53,13 @@ public class ConsumerSubject extends ConsumerParentSubject {
     private final Duration timeout = Duration.ofSeconds(10);
 
     public CommitHistorySubject hasCommittedToPartition(NewTopic topic) {
-        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(Set.of(topic));
+        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(UniSets.of(topic));
         return map.values().stream()
                 .findFirst()
                 .orElse(
                         check("getCommitHistory(%s)", topic.name())
                                 .about(commitHistories())
-                                .that(new CommitHistory(List.of())));
+                                .that(new CommitHistory(UniLists.of())));
     }
 
     public Map<TopicPartition, CommitHistorySubject> hasCommittedToPartition(Set<NewTopic> topic) {
@@ -69,7 +70,7 @@ public class ConsumerSubject extends ConsumerParentSubject {
                 .toMap(entry -> entry.getKey(), entry
                         -> check("getCommitHistory(%s)", entry.getKey().topic() + ":" + entry.getKey().partition())
                         .about(commitHistories())
-                        .that(new CommitHistory(List.of(entry.getValue()))));
+                        .that(new CommitHistory(UniLists.of(entry.getValue()))));
     }
 
 }
