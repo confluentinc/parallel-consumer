@@ -9,7 +9,6 @@ import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedSubject;
 import one.util.streamex.StreamEx;
-import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -21,7 +20,6 @@ import javax.annotation.Generated;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
@@ -52,18 +50,17 @@ public class ConsumerSubject extends ConsumerParentSubject {
 
     private final Duration timeout = Duration.ofSeconds(10);
 
-    public CommitHistorySubject hasCommittedToPartition(NewTopic topic) {
-        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(UniSets.of(topic));
+    public CommitHistorySubject hasCommittedToPartition(TopicPartition topicPartitions) {
+        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(UniSets.of(topicPartitions));
         return map.values().stream()
                 .findFirst()
                 .orElse(
-                        check("getCommitHistory(%s)", topic.name())
+                        check("getCommitHistory(%s)", topicPartitions.topic())
                                 .about(commitHistories())
                                 .that(new CommitHistory(UniLists.of())));
     }
 
-    public Map<TopicPartition, CommitHistorySubject> hasCommittedToPartition(Set<NewTopic> topic) {
-        Set<TopicPartition> partitions = topic.stream().map(newTopic -> new TopicPartition(newTopic.name(), 0)).collect(Collectors.toSet());
+    public Map<TopicPartition, CommitHistorySubject> hasCommittedToPartition(Set<TopicPartition> partitions) {
         Map<TopicPartition, OffsetAndMetadata> committed = actual.committed(partitions, timeout);
         return StreamEx.of(committed.entrySet())
                 .filter(entry -> entry.getValue() != null)

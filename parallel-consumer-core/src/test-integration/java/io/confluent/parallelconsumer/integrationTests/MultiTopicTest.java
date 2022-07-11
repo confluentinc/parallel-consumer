@@ -77,7 +77,7 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
     private void assertSeparateConsumerCommit(Consumer<?, ?> assertingConsumer, HashSet<NewTopic> topics, int expectedOffset) {
         Set<TopicPartition> partitions = topics.stream().map(newTopic -> new TopicPartition(newTopic.name(), 0)).collect(Collectors.toSet());
         Map<TopicPartition, OffsetAndMetadata> committed = assertingConsumer.committed(partitions);
-        var partitionSubjects = assertThat(assertingConsumer).hasCommittedToPartition(topics);
+        var partitionSubjects = assertThat(assertingConsumer).hasCommittedToPartition(partitions);
         partitionSubjects.forEach((topicPartition, commitHistorySubject)
                 -> commitHistorySubject.atLeastOffset(expectedOffset));
     }
