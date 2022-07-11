@@ -95,7 +95,7 @@
         <mycila.version>4.2.rc3</mycila.version>
         <lombok.version>1.18.24</lombok.version>
         <auto-service.version>1.0.1</auto-service.version>
-        <surefire.version>3.0.0-M6</surefire.version>
+        <surefire.version>3.0.0-M7</surefire.version>
 
         <!-- core -->
         <slf4j.version>1.7.36</slf4j.version>
@@ -112,7 +112,7 @@
         <truth.version>1.1.3</truth.version>
         <flogger.version>0.7.4</flogger.version>
         <mockito.version>4.5.1</mockito.version>
-        <truth-generator-maven-plugin.version>0.1</truth-generator-maven-plugin.version>
+        <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>0.4.2</jabel.version>
     </properties>
 
