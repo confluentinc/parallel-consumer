@@ -143,7 +143,10 @@ public class KafkaClientUtils {
         return txProd;
     }
 
-    @Deprecated(since = PCVersion.V051)
+    /**
+     * @deprecated use the enum version {@link #createNewProducer(ProducerMode)} instead, since = {@link PCVersion#V051}
+     */
+    @Deprecated
     public <K, V> KafkaProducer<K, V> createNewProducer(boolean transactional) {
         var mode = transactional ? TRANSACTIONAL : NORMAL;
         return createNewProducer(mode);
