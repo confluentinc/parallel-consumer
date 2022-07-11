@@ -491,6 +491,20 @@
                 <groupId>org.sonatype.ossindex.maven</groupId>
                 <artifactId>ossindex-maven-plugin</artifactId>
                 <version>3.2.0</version>
+                <configuration>
+                    <scope>runtime</scope>
+                    <fail>false</fail>
+                    <excludeCoordinates>
+                        <exclude>
+                            <!-- https://github.com/google/guava/issues/4011 -->
+                            <!-- CVE-2020-8908: Files::createTempDir local information disclosure vulnerability #4011 -->
+                            <!-- only used transitively from tests, and is a deprecated function -->
+                            <groupId>com.google.guava</groupId>
+                            <artifactId>guava</artifactId>
+                            <version>31.1-jre</version>
+                        </exclude>
+                    </excludeCoordinates>
+                </configuration>
                 <executions>
                     <execution>
                         <id>audit-dependencies</id>
@@ -686,7 +700,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <id>enforce-versions</id>
