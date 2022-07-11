@@ -16,8 +16,8 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import pl.tlinkowski.unij.api.UniSets;
 
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
@@ -68,7 +68,7 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
                 .consumer(consumer)
                 .ordering(PARTITION) // just so we dont need to use keys
                 .build());
-        pc.subscribe(Set.of(super.topic));
+        pc.subscribe(UniSets.of(super.topic));
     }
 
     @AfterEach
