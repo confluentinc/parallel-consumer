@@ -35,7 +35,7 @@ class ShardKeyTest {
         ShardKey.of(wc, KEY);
     }
 
-    // todo split
+    // todo split up
     @Test
     void keyTest() {
         ParallelConsumerOptions.ProcessingOrder ordering = KEY;
@@ -43,9 +43,12 @@ class ShardKeyTest {
         TopicPartition topicOneP0 = new TopicPartition("t1", 0);
         String keyOne = "k1";
 
+
+        // same inputs, different key instances equal
         var reck1 = new ConsumerRecord<>(topicOne, 0, 0, keyOne, "v");
         ShardKey key1 = ShardKey.of(reck1, ordering);
-        assertThat(key1).isEqualTo(ShardKey.of(reck1, ordering));
+        ShardKey anotherInstanceWithSameInputs = ShardKey.of(reck1, ordering);
+        assertThat(key1).isEqualTo(anotherInstanceWithSameInputs);
 
         // same topic, same partition, different key
         var reck2 = new ConsumerRecord<>(topicOne, 0, 0, "k2", "v");
