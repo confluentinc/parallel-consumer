@@ -139,7 +139,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
+    public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         setClean();
     }
 
@@ -173,7 +173,7 @@ public class PartitionState<K, V> {
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
 
-        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(work.offset());
+        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(offset);
         assert (removedFromQueue != null);
 
         boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
@@ -181,7 +181,7 @@ public class PartitionState<K, V> {
 
         updateHighestSucceededOffsetSoFar(work);
 
-        maybeRaiseOffsetHighestSucceededOnSuccess(offset);
+        maybeRaiseOffsetHighestSucceededOnSuccess();
 
         setDirty();
     }
@@ -214,8 +214,9 @@ public class PartitionState<K, V> {
      * {@link #getNextExpectedPolledOffset()}. Needed to allow us to jump over gaps in the partitions such as
      * transaction markers.
      */
-    private void maybeRaiseOffsetHighestSucceededOnSuccess(long offset) {
+    private void maybeRaiseOffsetHighestSucceededOnSuccess() {
         if (offsetHighestSucceeded < getNextExpectedPolledOffset() - 1) {
+            log.debug("Gap detected in partition, probably tx markers. Moving highest succeeded to next expected -1");
             // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
             offsetHighestSucceeded = getNextExpectedPolledOffset() - 1;
         }
@@ -245,6 +246,9 @@ public class PartitionState<K, V> {
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
+    /**
+     * Defines as the offset one below the highest sequentially succeeded offset
+     */
     private long getNextExpectedPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
@@ -270,6 +274,10 @@ public class PartitionState<K, V> {
                 .collect(Collectors.toSet()));
     }
 
+    /**
+     * Defines for or purpose, as only used in definition of what offset to poll for next, as the offset one below the
+     * lowest incomplete offset.
+     */
     public long getOffsetHighestSequentialSucceeded() {
         if (this.incompleteOffsets.isEmpty()) {
             return this.offsetHighestSeen;
