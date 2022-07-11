@@ -1,11 +1,10 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -17,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,22 +57,15 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         await().untilAtomic(messageProcessedCount, Matchers.is(equalTo(expectedMessagesCount)));
 
         // commits
-//        pc.closeWithoutClosingClients();
-//        pc.close();
         pc.requestCommitAsap();
-        log.info("commit msg sent");
         pc.close();
 
         //
         Consumer<?, ?> assertingConsumer = kcu.createNewConsumer(false);
         await().atMost(Duration.ofSeconds(10))
-//                .failFast(pc::isClosedOrFailed)
                 .untilAsserted(() -> {
                     assertSeparateConsumerCommit(assertingConsumer, new HashSet<>(multiTopics), recordsPerTopic);
-//                    assertCommit(pc, new HashSet<>(multiTopics), recordsPerTopic);
-//                    multiTopics.forEach(singleTopic -> assertCommit(pc, singleTopic, recordsPerTopic));
                 });
-        log.info("Offsets committed");
     }
 
     /**
@@ -85,7 +78,8 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         Set<TopicPartition> partitions = topics.stream().map(newTopic -> new TopicPartition(newTopic.name(), 0)).collect(Collectors.toSet());
         Map<TopicPartition, OffsetAndMetadata> committed = assertingConsumer.committed(partitions);
         var partitionSubjects = assertThat(assertingConsumer).hasCommittedToPartition(topics);
-        partitionSubjects.forEach((topicPartition, commitHistorySubject) -> commitHistorySubject.atLeastOffset(expectedOffset));
+        partitionSubjects.forEach((topicPartition, commitHistorySubject)
+                -> commitHistorySubject.atLeastOffset(expectedOffset));
     }
 
     @SneakyThrows
@@ -93,12 +87,13 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         getKcu().produceMessages(newTopic.name(), recordsPerTopic);
     }
 
-    private void assertCommit(final ParallelEoSStreamProcessor<String, String> pc, NewTopic newTopic, int recordsPerTopic) {
-        var committer = getKcu().getLastConsumerConstructed();
-
-        assertThat(committer)
-                .hasCommittedToPartition(newTopic)
-                .offset(recordsPerTopic);
-    }
+// depends on merge of features/consumer-interface branch
+//    private void assertCommit(final ParallelEoSStreamProcessor<String, String> pc, NewTopic newTopic, int recordsPerTopic) {
+//        var committer = getKcu().getLastConsumerConstructed();
+//
+//        assertThat(committer)
+//                .hasCommittedToPartition(newTopic)
+//                .offset(recordsPerTopic);
+//    }
 
 }
