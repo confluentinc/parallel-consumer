@@ -65,10 +65,5 @@ public class CommitHistorySubject extends Subject {
     public void isEmpty() {
         nothing();
     }
-//
-//    @Override
-//    protected String actualCustomStringRepresentation() {
-////        String s = actual.;
-//        return super.actualCustomStringRepresentation();
-//    }
+
 }
