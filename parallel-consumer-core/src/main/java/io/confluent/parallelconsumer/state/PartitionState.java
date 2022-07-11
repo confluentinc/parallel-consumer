@@ -275,7 +275,7 @@ public class PartitionState<K, V> {
     }
 
     /**
-     * Defines for or purpose, as only used in definition of what offset to poll for next, as the offset one below the
+     * Defined for our purpose, as only used in definition of what offset to poll for next, as the offset one below the
      * lowest incomplete offset.
      */
     public long getOffsetHighestSequentialSucceeded() {
