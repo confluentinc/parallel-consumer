@@ -191,31 +191,32 @@
             </properties>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-enforcer-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>enforce-versions</id>
-                                <goals>
-                                    <goal>enforce</goal>
-                                </goals>
-                                <phase>validate</phase>
-                                <configuration>
-                                    <rules>
-                                        <!-- only enforce requireReleaseDeps when running in CI, not locally -->
-                                        <requireReleaseDeps>
-                                            <onlyWhenRelease>false</onlyWhenRelease>
-                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
-                                            <excludes>
-                                                <exclude>io.confluent.parallelconsumer:</exclude>
-                                            </excludes>
-                                        </requireReleaseDeps>
-                                    </rules>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
+                    <!-- make jenkins test TG snapshot -->
+                    <!--                    <plugin>-->
+                    <!--                        <groupId>org.apache.maven.plugins</groupId>-->
+                    <!--                        <artifactId>maven-enforcer-plugin</artifactId>-->
+                    <!--                        <executions>-->
+                    <!--                            <execution>-->
+                    <!--                                <id>enforce-versions</id>-->
+                    <!--                                <goals>-->
+                    <!--                                    <goal>enforce</goal>-->
+                    <!--                                </goals>-->
+                    <!--                                <phase>validate</phase>-->
+                    <!--                                <configuration>-->
+                    <!--                                    <rules>-->
+                    <!--                                        &lt;!&ndash; only enforce requireReleaseDeps when running in CI, not locally &ndash;&gt;-->
+                    <!--                                        <requireReleaseDeps>-->
+                    <!--                                            <onlyWhenRelease>false</onlyWhenRelease>-->
+                    <!--                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>-->
+                    <!--                                            <excludes>-->
+                    <!--                                                <exclude>io.confluent.parallelconsumer:</exclude>-->
+                    <!--                                            </excludes>-->
+                    <!--                                        </requireReleaseDeps>-->
+                    <!--                                    </rules>-->
+                    <!--                                </configuration>-->
+                    <!--                            </execution>-->
+                    <!--                        </executions>-->
+                    <!--                    </plugin>-->
                 </plugins>
             </build>
         </profile>
