@@ -106,6 +106,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
+    // todo remove with consumer facade PR XXX - branch improvements/consumer-interface
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -616,6 +617,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     controlLoop(userFunctionWrapped, callback);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+                    transitionToClosing();
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
                     throw failureReason;
@@ -1129,8 +1131,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
      *
-     * @see #processWorkCompleteMailBox
-//     * @see #blockableControlThread
+     * @see #processWorkCompleteMailBox //     * @see #blockableControlThread
      */
     public void notifySomethingToDo(Reason reason) {
         getMyActor().interruptProcessBlockingMaybe(reason);
@@ -1168,19 +1169,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     public void requestCommitAsap() {
         log.debug("Registering command to commit next chance");
+        // if want immediate commit, need to wake up poller here too - call #commitOffsetsThatAreReadyImmediately instead
         getMyActor().tell(AbstractParallelEoSStreamProcessor::commitOffsetsThatAreReady);
     }
 
-    // in consumer facade instead?
-    public Future<Class> commitAsync() {
-        Future<Class> rFuture = getMyActor().askImmediately(controller -> {
-            controller.commitOffsetsThatAreReady();
-            return Void.class;
-        });
-        return rFuture;
-    }
-
-
+    /**
+     * @return a Future that can be blocked on to wait for the result
+     * @see #requestCommitAsap()
+     */
+    // in consumer facade instead? - this version isn't sync, because it's asking the controller to ask the poller - not direct
+    // how is this different from requestCommitAsap ?
+//    public Future<Class> commitAsync() {
+////        getConsumerFacade().commitSync(); - simplify to facade delegation
+//        return getMyActor().askImmediately(controller -> {
+//            controller.commitOffsetsThatAreReady();
+//            return Void.class;
+//        });
+//    }
     @Override
     public void pauseIfRunning() {
         if (this.state == State.running) {

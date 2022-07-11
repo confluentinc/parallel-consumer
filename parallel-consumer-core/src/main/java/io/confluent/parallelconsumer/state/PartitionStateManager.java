@@ -12,10 +12,10 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -53,8 +53,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final Consumer<K, V> consumer;
 
+    @NonNull
     private final ShardManager<K, V> sm;
 
+    @NonNull
     private final ParallelConsumerOptions<K, V> options;
 
     /**

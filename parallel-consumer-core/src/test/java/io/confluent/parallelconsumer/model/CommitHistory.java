@@ -15,7 +15,7 @@ public class CommitHistory {
 
     private final List<OffsetAndMetadata> history;
 
-    public CommitHistory(final List<OffsetAndMetadata> collect) {
+    public CommitHistory(List<OffsetAndMetadata> collect) {
         super();
         this.history = collect;
     }

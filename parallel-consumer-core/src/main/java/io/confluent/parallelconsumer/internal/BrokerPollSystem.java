@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
+    // todo remove direct access to WM
+    @NonNull
     private final WorkManager<K, V> wm;
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
@@ -116,6 +119,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         try {
             while (state != closed) {
                 handlePoll();
+
 
                 maybeDoCommit();
 
@@ -336,8 +340,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Pause polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#running
-     * running}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#running running}, calling this method will be a no-op.
      * </p>
      */
     public void pausePollingAndWorkRegistrationIfRunning() {
@@ -352,8 +356,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Resume polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#paused
-     * paused}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#paused paused}, calling this method will be a no-op.
      * </p>
      */
     public void resumePollingAndWorkRegistrationIfPaused() {

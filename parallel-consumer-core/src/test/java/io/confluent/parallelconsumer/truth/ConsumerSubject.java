@@ -13,8 +13,6 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniLists;
-import pl.tlinkowski.unij.api.UniSets;
 
 import javax.annotation.Generated;
 import java.time.Duration;

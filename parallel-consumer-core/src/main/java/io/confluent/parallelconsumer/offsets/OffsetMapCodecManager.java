@@ -55,6 +55,7 @@ public class OffsetMapCodecManager<K, V> {
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
+    //    @NonNull
     // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
