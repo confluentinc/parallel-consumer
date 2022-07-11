@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.truth;
 import com.google.common.truth.FailureMetadata;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
-import io.stubbs.truth.generator.UserManagedTruth;
+import io.stubbs.truth.generator.UserManagedSubject;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
@@ -32,7 +32,7 @@ import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHis
  * @see Consumer
  * @see ConsumerParentSubject
  */
-@UserManagedTruth(Consumer.class)
+@UserManagedSubject(Consumer.class)
 @Generated(value = "io.stubbs.truth.generator.internal.TruthGenerator", date = "2022-05-17T12:20:38.207945Z")
 public class ConsumerSubject extends ConsumerParentSubject {
 

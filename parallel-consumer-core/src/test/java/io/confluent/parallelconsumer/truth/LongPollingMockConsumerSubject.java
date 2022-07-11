@@ -9,7 +9,7 @@ import com.google.common.truth.Subject;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
-import io.stubbs.truth.generator.UserManagedTruth;
+import io.stubbs.truth.generator.UserManagedSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 import static com.google.common.truth.Truth.assertAbout;
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
-@UserManagedTruth(LongPollingMockConsumer.class)
+@UserManagedSubject(LongPollingMockConsumer.class)
 public class LongPollingMockConsumerSubject<K, V> extends Subject {
 
     private final LongPollingMockConsumer<K, V> actual;

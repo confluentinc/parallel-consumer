@@ -9,7 +9,7 @@ import com.google.common.truth.OptionalSubject;
 import com.google.common.truth.Subject;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
-import io.stubbs.truth.generator.UserManagedTruth;
+import io.stubbs.truth.generator.UserManagedSubject;
 
 import java.util.Optional;
 
@@ -18,7 +18,7 @@ import static com.google.common.truth.Truth.assertAbout;
 /**
  * @see CommitHistory
  */
-@UserManagedTruth(CommitHistory.class)
+@UserManagedSubject(CommitHistory.class)
 public class CommitHistorySubject extends Subject {
     private final CommitHistory actual;
 
