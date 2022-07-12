@@ -178,7 +178,6 @@ public class PartitionState<K, V> {
 
         updateHighestSucceededOffsetSoFar(work);
 
-
         setDirty();
     }
 

@@ -110,9 +110,8 @@ public class OffsetSimultaneousEncoder {
     }
 
     /**
-     * * Ensure that the {@param #highestSucceededOffset} is always at least a single offset behind the {}@param
+     * Ensure that the {@param #highestSucceededOffset} is always at least a single offset behind the {}@param
      * baseOffsetToCommit}. Needed to allow us to jump over gaps in the partitions such as transaction markers.
-     * <p>
      * <p>
      * Under normal operation, it is expected that the highest succeeded offset will generally always be higher than the
      * next expected offset to poll. This is because PC processes records well beyond the
