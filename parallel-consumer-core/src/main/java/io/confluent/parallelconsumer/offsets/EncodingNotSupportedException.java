@@ -7,10 +7,6 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.parallelconsumer.internal.ParallelConsumerInternalException;
 import lombok.experimental.StandardException;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
- */
-
 /**
  * todo docs
  *

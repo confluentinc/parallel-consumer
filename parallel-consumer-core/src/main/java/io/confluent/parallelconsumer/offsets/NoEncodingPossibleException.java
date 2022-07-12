@@ -15,8 +15,4 @@ import lombok.experimental.StandardException;
 @StandardException
 
 public class NoEncodingPossibleException extends ParallelConsumerInternalException {
-
-    public NoEncodingPossibleException(String msg) {
-        super(msg);
-    }
 }

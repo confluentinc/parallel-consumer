@@ -14,7 +14,4 @@ import lombok.experimental.StandardException;
 @StandardException
 
 public class RunlengthV1EncodingNotSupported extends EncodingNotSupportedException {
-    public RunlengthV1EncodingNotSupported(final String msg) {
-        super(msg);
-    }
 }
