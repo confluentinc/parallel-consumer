@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.state.PartitionState;
+import lombok.NonNull;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -55,7 +56,7 @@ public class OffsetMapCodecManager<K, V> {
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
-    //    @NonNull
+    @NonNull
     // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 

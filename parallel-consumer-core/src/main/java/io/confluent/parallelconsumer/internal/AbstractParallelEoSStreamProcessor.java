@@ -1134,19 +1134,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         getMyActor().tell(AbstractParallelEoSStreamProcessor::commitOffsetsThatAreReady);
     }
 
-    /**
-     * @return a Future that can be blocked on to wait for the result
-     * @see #requestCommitAsap()
-     */
-    // in consumer facade instead? - this version isn't sync, because it's asking the controller to ask the poller - not direct
-    // how is this different from requestCommitAsap ?
-//    public Future<Class> commitAsync() {
-////        getConsumerFacade().commitSync(); - simplify to facade delegation
-//        return getMyActor().askImmediately(controller -> {
-//            controller.commitOffsetsThatAreReady();
-//            return Void.class;
-//        });
-//    }
     @Override
     public void pauseIfRunning() {
         if (this.state == State.running) {
