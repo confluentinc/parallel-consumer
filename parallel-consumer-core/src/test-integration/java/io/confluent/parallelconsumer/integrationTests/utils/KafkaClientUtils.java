@@ -20,6 +20,8 @@ import org.testcontainers.containers.KafkaContainer;
 
 import java.util.Properties;
 
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
 
 @Slf4j
@@ -27,6 +29,11 @@ public class KafkaClientUtils {
 
     public static final int MAX_POLL_RECORDS = 10_000;
     public static final String GROUP_ID_PREFIX = "group-1-";
+
+    class PCVersion {
+        public static final String V051 = "0.5.1";
+    }
+
 
     private final KafkaContainer kContainer;
 
@@ -130,13 +137,28 @@ public class KafkaClientUtils {
         return kvKafkaConsumer;
     }
 
-    public <K, V> KafkaProducer<K, V> createNewProducer(boolean tx) {
+    public <K, V> KafkaProducer<K, V> createNewTransactionalProducer() {
+        KafkaProducer<K, V> txProd = createNewProducer(TRANSACTIONAL);
+        txProd.initTransactions();
+        return txProd;
+    }
+
+    /**
+     * @deprecated use the enum version {@link #createNewProducer(ProducerMode)} instead, since = {@link PCVersion#V051}
+     */
+    @Deprecated
+    public <K, V> KafkaProducer<K, V> createNewProducer(boolean transactional) {
+        var mode = transactional ? TRANSACTIONAL : NORMAL;
+        return createNewProducer(mode);
+    }
+
+    public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode mode) {
         Properties properties = setupProducerProps();
 
         var txProps = new Properties();
         txProps.putAll(properties);
 
-        if (tx) {
+        if (mode.equals(TRANSACTIONAL)) {
             // random number so we get a unique producer tx session each time. Normally wouldn't do this in production,
             // but sometimes running in the test suite our producers step on each other between test runs and this causes
             // Producer Fenced exceptions:
@@ -144,11 +166,15 @@ public class KafkaClientUtils {
             // the same transactionalId, or the producer's transaction has been expired by the broker.
             txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + RandomUtils.nextInt()); // required for tx
             txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
-
         }
+
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
 
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
+    }
+
+    public enum ProducerMode {
+        TRANSACTIONAL, NORMAL
     }
 }
