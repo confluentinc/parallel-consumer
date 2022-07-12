@@ -51,7 +51,9 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     // todo remove static
     private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
-    private final Consumer<K, V> consumer;
+    @NonNull
+//    private final Consumer<K, V> consumer;
+    private Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> facadeSupplier;
 
     private final ShardManager<K, V> sm;
 
@@ -103,7 +105,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         incrementPartitionAssignmentEpoch(assignedPartitions);
 
         try {
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(facadeSupplier); // todo remove throw away instance creation - #233
             var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
             this.partitionStates.putAll(partitionStates);
         } catch (Exception e) {

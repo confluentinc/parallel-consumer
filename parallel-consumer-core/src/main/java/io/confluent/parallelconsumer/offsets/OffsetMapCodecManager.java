@@ -56,7 +56,8 @@ public class OffsetMapCodecManager<K, V> {
     public static final Charset CHARSET_TO_USE = UTF_8;
 
     // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
-    org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+    //org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+    private final Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> facadeSupplier;
 
     /**
      * Decoding result for encoded offsets
@@ -92,9 +93,9 @@ public class OffsetMapCodecManager<K, V> {
      */
     public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
-    // todo remove consumer #233
-    public OffsetMapCodecManager(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this.consumer = consumer;
+    // todo remove consumer #233 or change to ConsumerFacade?
+    public OffsetMapCodecManager(Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> facadeSupplier) {
+        this.facadeSupplier = facadeSupplier;
     }
 
     /**
@@ -111,7 +112,7 @@ public class OffsetMapCodecManager<K, V> {
         while (partitionLastCommittedOffsets == null) {
             WakeupException lastWakeupException = null;
             try {
-                partitionLastCommittedOffsets = consumer.committed(new HashSet<>(assignment));
+                partitionLastCommittedOffsets = this.facadeSupplier.get().committed(new HashSet<>(assignment));
             } catch (WakeupException exception) {
                 log.debug("Woken up trying to get assignment", exception);
                 lastWakeupException = exception;

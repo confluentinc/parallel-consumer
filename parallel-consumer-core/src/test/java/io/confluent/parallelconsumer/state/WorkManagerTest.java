@@ -69,7 +69,7 @@ public class WorkManagerTest {
     private void setupWorkManager(ParallelConsumerOptions build) {
         offset = 0;
 
-        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), time);
+        wm = new WorkManager<>(build, () -> new MockConsumer<>(OffsetResetStrategy.EARLIEST), time);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
@@ -683,7 +683,7 @@ public class WorkManagerTest {
      * initial request (without needing to iterate to other shards)
      *
      * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/236">#236</a> Under some conditions, a
-     * shard (by partition or key), can get starved for attention
+     *         shard (by partition or key), can get starved for attention
      */
     @Test
     void starvation() {

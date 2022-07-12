@@ -74,7 +74,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * @see #getConsumerFacadeRestricted()
      */
     @Getter
-    private final ConsumerFacade consumerFacade;
+    private ConsumerFacade consumerFacade;
 
     /**
      * Use this is possible instead of {@link #getConsumerFacade()}, as it only has the functions that are allowed to be
@@ -240,7 +240,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
+        // todo this stinks, but breaks the dep loop - improve
+        Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> facadeSupplier = () -> this.consumerFacade;
+        this.wm = new WorkManager<>(newOptions, facadeSupplier, dynamicExtraLoadFactor, TimeUtils.getClock());
 
         ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
 

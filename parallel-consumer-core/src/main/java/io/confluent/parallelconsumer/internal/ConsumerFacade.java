@@ -80,6 +80,8 @@ public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V>
 
     private <R> R blockingAsk(Function<BrokerPollSystem<K, V>, R> poller) throws InterruptedException, ExecutionException, TimeoutException {
         Future<R> ask = consumer().ask(poller);
+        // if the polling system is currently long polling the broker waiting for records, interrupt it to deal with messages
+        this.basePollerRef.getConsumerManager().wakeup();
         return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
@@ -232,75 +234,75 @@ public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V>
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, Long> endOffsets(Collection collection, Duration timeout) {
+    public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> collection, Duration timeout) {
         return blockingAskConsumer(consumer -> consumer.endOffsets(collection, timeout));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, Long> endOffsets(Collection collection) {
+    public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> collection) {
         return blockingAskConsumer(consumer -> consumer.endOffsets(collection));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, Long> beginningOffsets(Collection collection, Duration timeout) {
+    public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> collection, Duration timeout) {
         return blockingAskConsumer(consumer -> consumer.beginningOffsets(collection, timeout));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, Long> beginningOffsets(Collection collection) {
+    public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> collection) {
         return blockingAskConsumer(consumer -> consumer.beginningOffsets(collection));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map timestampsToSearch, Duration timeout) {
+    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch, Duration timeout) {
         return blockingAskConsumer(consumer -> consumer.offsetsForTimes(timestampsToSearch, timeout));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map timestampsToSearch) {
+    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch) {
         return blockingAskConsumer(consumer -> consumer.offsetsForTimes(timestampsToSearch));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, OffsetAndMetadata> committed(Set set, Duration timeout) {
+    public Map<TopicPartition, OffsetAndMetadata> committed(Set<TopicPartition> set, Duration timeout) {
         return blockingAskConsumer(consumer -> consumer.committed(set, timeout));
     }
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, OffsetAndMetadata> committed(Set set) {
+    public Map<TopicPartition, OffsetAndMetadata> committed(Set<TopicPartition> set) {
         return blockingAskConsumer(consumer -> consumer.committed(set));
     }
 
     @Override
-    public void seekToEnd(Collection collection) {
+    public void seekToEnd(Collection<TopicPartition> collection) {
         blockingAskConsumerVoid(consumer -> consumer.seekToEnd(collection));
     }
 
     @Override
-    public void seekToBeginning(Collection collection) {
+    public void seekToBeginning(Collection<TopicPartition> collection) {
         blockingAskConsumerVoid(consumer -> consumer.seekToBeginning(collection));
     }
 
     @Override
-    public void assign(Collection collection) {
+    public void assign(Collection<TopicPartition> collection) {
         blockingAskConsumerVoid(consumer -> consumer.assign(collection));
     }
 
     @Override
-    public void subscribe(Collection topics, ConsumerRebalanceListener callback) {
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         // dont allow?
         blockingAskConsumerVoid(consumer -> consumer.subscribe(topics, callback));
     }
 
     @Override
-    public void subscribe(Collection topics) {
+    public void subscribe(Collection<String> topics) {
         // dont allow?
         blockingAskConsumerVoid(consumer -> consumer.subscribe(topics));
     }
@@ -330,6 +332,7 @@ public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V>
 
     @Override
     public void commitSync() {
+        // delegate to PC's commit call, with explanation in the javadoc that in normal operation including close, that it's not necessary
         throwInvalidCall();
     }
 
@@ -349,27 +352,27 @@ public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V>
     }
 
     @Override
-    public void commitAsync(final Map offsets, final OffsetCommitCallback callback) {
+    public void commitAsync(final Map<TopicPartition, OffsetAndMetadata> offsets, final OffsetCommitCallback callback) {
         throwInvalidCall();
     }
 
     @Override
-    public void commitSync(final Map offsets, final Duration timeout) {
+    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsets, final Duration timeout) {
         throwInvalidCall();
     }
 
     @Override
-    public void commitSync(final Map offsets) {
+    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsets) {
         throwInvalidCall();
     }
 
     @Override
-    public void resume(final Collection collection) {
+    public void resume(final Collection<TopicPartition> collection) {
         throwInvalidCall();
     }
 
     @Override
-    public void pause(final Collection collection) {
+    public void pause(final Collection<TopicPartition> collection) {
         throwInvalidCall();
     }
 

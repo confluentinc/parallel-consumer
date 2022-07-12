@@ -177,7 +177,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // write offsets
         {
-            WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
+            WorkManager<String, String> wmm = new WorkManager<>(options, () -> consumerSpy);
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
@@ -200,7 +200,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             {
                 // check for graceful fall back to the smallest available encoder
-                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
+                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(() -> consumerSpy);
                 OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(1, state);
@@ -222,7 +222,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            var newWm = new WorkManager<>(options, consumerSpy);
+            var newWm = new WorkManager<>(options, () -> consumerSpy);
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 

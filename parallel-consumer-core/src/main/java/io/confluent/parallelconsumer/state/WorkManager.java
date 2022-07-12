@@ -71,23 +71,24 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+    public WorkManager(ParallelConsumerOptions<K, V> options, Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> consumer) {
         this(options, consumer, new DynamicLoadFactor(), TimeUtils.getClock());
     }
 
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
-        this(options, consumer, new DynamicLoadFactor(), clock);
+    public WorkManager(ParallelConsumerOptions<K, V> options, Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> facadeSupplier, Clock clock) {
+        this(options, facadeSupplier, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
+    public WorkManager(ParallelConsumerOptions<K, V> newOptions,
+                       Supplier<org.apache.kafka.clients.consumer.Consumer<K, V>> facadeSupplier,
+                       DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionStateManager<>(consumer, sm, options, clock);
+        this.pm = new PartitionStateManager<>(facadeSupplier, sm, options, clock);
     }
 
     /**
