@@ -126,7 +126,7 @@ public class OffsetSimultaneousEncoder {
         long nextExpectedMinusOne = baseOffsetToCommit - 1;
         if (highestSucceededOffset < nextExpectedMinusOne) {
             long gap = nextExpectedMinusOne - highestSucceededOffset;
-            log.debug("Gap detected in partition (highest succeeded: {} while next expected poll offset: {} - gap is {}), probably tx markers. Moving highest succeeded to next expected -1",
+            log.debug("Gap detected in partition (highest succeeded: {} while next expected poll offset: {} - gap is {}), probably tx markers. Moving highest succeeded to next expected - 1",
                     highestSucceededOffset,
                     nextExpectedMinusOne,
                     gap);
