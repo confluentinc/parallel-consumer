@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -43,14 +44,17 @@ import static lombok.AccessLevel.PUBLIC;
 @Slf4j
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
+    @NonNull
     @Getter
     private final ParallelConsumerOptions<K, V> options;
 
     // todo make private
+    @NonNull
     @Getter(PUBLIC)
     final PartitionStateManager<K, V> pm;
 
     // todo make private
+    @NonNull
     @Getter(PUBLIC)
     private final ShardManager<K, V> sm;
 
@@ -60,6 +64,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * We use it here as well to make sure we have a matching number of messages in queues available.
      */
+    @NonNull
     private final DynamicLoadFactor dynamicLoadFactor;
 
     @Getter
@@ -212,7 +217,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
-     * should be downloaded (or pipelined in the Consumer)
+     *         should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
         return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();

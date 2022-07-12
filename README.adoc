@@ -70,7 +70,7 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-                        parallelConsumer.poll(record ->
+        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
 ----
@@ -438,7 +438,7 @@ Where `${project.version}` is the version to be used:
                 .producer(kafkaProducer)
                 .build();
 
-        ParallelEoSStreamProcessor<String, String> eosStreamProcessor =
+        ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
@@ -489,7 +489,7 @@ This is the only thing you need to do, in order to get massively concurrent proc
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-                        parallelConsumer.poll(record ->
+        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
 

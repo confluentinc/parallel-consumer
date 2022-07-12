@@ -5,8 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.actors.Actor;
-import io.confluent.csid.utils.InterruptibleThread;
-import io.confluent.csid.utils.InterruptibleThread.Reason;
+import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -26,7 +25,6 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
-import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -37,7 +35,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -101,11 +98,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * todo docs
      */
     @Getter(PRIVATE)
-    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(clock, this);
+    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
+    // todo remove with consumer facade PR XXX - branch improvements/consumer-interface
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -128,29 +126,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private final List<Runnable> controlLoopHooks = new ArrayList<>();
 
-    /**
-     * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
-     * collection sooner.
-     *
-     * @see #processWorkCompleteMailBox
-     */
-    private InterruptibleThread blockableControlThread;
-
-    /**
-     * @see #notifySomethingToDo
-     * @see #processWorkCompleteMailBox
-     */
-    private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
-
     private final OffsetCommitter committer;
-
-    /**
-     * Used to request a commit asap
-     *
-     * @see #requestCommitAsap
-     */
-    // todo delete?
-    private final AtomicBoolean commitCommand = new AtomicBoolean(false);
 
     /**
      * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
@@ -254,6 +230,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
+
     private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         try {
             consumer.groupMetadata();
@@ -291,7 +268,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Set<String> subscription = consumerToCheck.subscription();
         Set<TopicPartition> assignment = consumerToCheck.assignment();
         if (!subscription.isEmpty() || !assignment.isEmpty()) {
-            throw new IllegalStateException("Consumer subscription must be managed by this class. Use " + this.getClass().getName() + "#subcribe methods instead.");
+            throw new IllegalStateException("Consumer subscription must be managed by the Parallel Consumer. Use " + this.getClass().getName() + "#subcribe methods instead.");
         }
     }
 
@@ -359,6 +336,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
+        // todo interrupting can be removed after improvements/reblaance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
     }
 
@@ -445,7 +423,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
             } catch (InterruptedException e) {
                 // ignore
-                InterruptibleThread.logInterrupted(log, e);
+                log.debug("Interrupted waiting on close...", e);
+                Thread.currentThread().interrupt();
             } catch (ExecutionException | TimeoutException e) {
                 log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
                         "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
@@ -466,6 +445,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.debug("Awaiting worker pool termination...");
+        // todo with new actor / interrupt process, is interrupted test still needed? - try remove
         boolean interrupted = true;
         while (interrupted) {
             log.debug("Still interrupted");
@@ -478,14 +458,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     boolean terminated = workerThreadPool.isTerminated();
                 }
             } catch (InterruptedException e) {
-                InterruptibleThread.logInterrupted(log, Level.WARN, e);
+                log.debug("Interrupted waiting on worker threads to close, retrying...", e);
                 interrupted = true;
             }
         }
         log.debug("Worker pool terminated.");
 
         // last check to see if after worker pool closed, has any new work arrived?
-        processWorkCompleteMailBox();
+        try {
+            processWorkCompleteMailBox();
+        } catch (InterruptedException e) {
+            log.warn("Interrupted processing work while closing, skipping and continuing close...");
+            Thread.currentThread().interrupt();
+        }
 
         commitOffsetsThatAreReady();
 
@@ -549,21 +534,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void transitionToDraining() {
         String msg = "Transitioning to draining...";
         log.debug(msg);
+        // todo send actor message of draining?
+//        getMyActor().tellImmediately(controller -> transitionToState(State.draining));
         this.state = State.draining;
         notifySomethingToDo(new Reason(msg));
     }
 
-    /**
-     * Control thread can be blocked waiting for work, but is interruptable. Interrupting it can be useful to inform
-     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
-     * BrokerPollSystem} so that less messages are downloaded and queued.
-     */
-    private void interruptControlThread(Reason reason) {
-        if (blockableControlThread != null) {
-            String msg = msg("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
-            blockableControlThread.interrupt(log, new Reason(msg, reason));
-        }
-    }
+    // also do closing
+//    private void transitionToState(Reason reason, State newState) {
+//        this.state = newState;
+//    }
 
     private boolean areMyThreadsDone() {
         if (isEmpty(controlThreadFuture)) {
@@ -613,12 +593,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
-            this.blockableControlThread = new InterruptibleThread(controlThread);
             while (state != closed) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+                    transitionToClosing();
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
                     throw failureReason;
@@ -657,7 +637,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox();
+        try {
+            processWorkCompleteMailBox();
+        } catch (InterruptedException e) {
+            log.warn("Interrupted processing work in control loop, skipping...");
+            Thread.currentThread().interrupt();
+        }
 
         if (isIdlingOrRunning()) {
             // offsets will be committed when the consumer has its partitions revoked
@@ -681,14 +666,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
-
-        // thread yield for spin lock avoidance
-        Duration duration = Duration.ofMillis(1);
-        try {
-            Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-            InterruptibleThread.logInterrupted(log, e);
-        }
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
@@ -901,17 +878,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Can be interrupted if something else needs doing.
      */
-    private void processWorkCompleteMailBox() {
-        //
-        final Duration timeToBlockFor = calculateTimeUntilNextAction();
-
-        // can remove currentlyPollingWorkCompleteMailBox
-        currentlyPollingWorkCompleteMailBox.getAndSet(true);
+    private void processWorkCompleteMailBox() throws InterruptedException {
+        Duration timeToBlockFor = calculateTimeUntilNextAction();
         getMyActor().processBlocking(timeToBlockFor);
-        currentlyPollingWorkCompleteMailBox.getAndSet(false);
     }
 
-    // todo move these out and have WM be an actor that's shared and has async methods?
     private void handleWorkResult(WorkContainer<K, V> work) {
         MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
         wm.handleFutureResult(work);
@@ -944,7 +915,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         //
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
-        log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
+        log.debug("Time to block until next action calculated as {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
     }
 
@@ -968,19 +939,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(timeBetweenCommits) > 0;
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
-        boolean isCommandedToCommit = isCommandedToCommit();
 
         boolean shouldDoANormalCommit = commitFrequencyOK && !lingerBeneficial;
 
-        boolean shouldCommitNow = shouldDoANormalCommit || isCommandedToCommit;
+        boolean shouldCommitNow = shouldDoANormalCommit;
 
         if (log.isDebugEnabled()) {
             log.debug("Should commit this cycle? " +
                     "shouldCommitNow? " + shouldCommitNow + " : " +
                     "shouldDoANormalCommit? " + shouldDoANormalCommit + ", " +
                     "commitFrequencyOK? " + commitFrequencyOK + ", " +
-                    "lingerBeneficial? " + lingerBeneficial + ", " +
-                    "isCommandedToCommit? " + isCommandedToCommit
+                    "lingerBeneficial? " + lingerBeneficial
             );
         }
 
@@ -1034,12 +1003,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void commitOffsetsThatAreReady() {
         log.debug("Committing offsets that are ready...");
-        synchronized (commitCommand) {
-            log.debug("Committing offsets that are ready...");
-            committer.retrieveOffsetsAndCommit();
-            clearCommitCommand();
-            this.lastCommitTime = Instant.now();
-        }
+        committer.retrieveOffsetsAndCommit();
+        updateLastCommitCheckTime();
+        this.lastCommitTime = Instant.now();
     }
 
     private void updateLastCommitCheckTime() {
@@ -1120,11 +1086,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
+    // todo extract controller api? - improvements/lambda-api
     protected void sendWorkResultAsync(WorkContainer<K, V> wc) {
+        log.trace("Sending new work result to controller {}", wc);
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
     }
 
-    public void registerWorkAsync(EpochAndRecordsMap<K, V> polledRecords) {
+    public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
+        log.trace("Sending new polled records signal to controller - total partitions: {} records: {}",
+                polledRecords.partitions().size(),
+                polledRecords.count());
         getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
 //
@@ -1138,19 +1109,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Early notify of work arrived.
      * <p>
-     * Only wake up the thread if it's sleeping while polling the mail box.
+     * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
      *
      * @see #processWorkCompleteMailBox
-     * @see #blockableControlThread
      */
     public void notifySomethingToDo(Reason reason) {
-        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
-        if (noTransactionInProgress) {
-            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-            interruptControlThread(reason);
-        } else {
-            log.trace("Would have interrupted control thread, but TX in progress");
-        }
+        // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
+        getMyActor().interruptProcessBlockingMaybe(reason);
     }
 
     @Override
@@ -1177,33 +1142,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Useful for testing, but otherwise the close methods will commit and clean up properly.
      */
     public void requestCommitAsap() {
-        String msg = "Registering command to commit next chance";
-        log.debug(msg);
-        synchronized (commitCommand) {
-            this.commitCommand.set(true);
-        }
-        notifySomethingToDo(new Reason(msg));
-    }
-
-    /**
-     * @see #requestCommitAsap
-     */
-    private boolean isCommandedToCommit() {
-        synchronized (commitCommand) {
-            return this.commitCommand.get();
-        }
-    }
-
-    /**
-     * @see #requestCommitAsap
-     */
-    private void clearCommitCommand() {
-        synchronized (commitCommand) {
-            if (commitCommand.get()) {
-                log.debug("Command to commit asap received, clearing");
-                this.commitCommand.set(false);
-            }
-        }
+        log.debug("Registering command to commit next chance");
+        // if want immediate commit, need to wake up poller here too - call #commitOffsetsThatAreReadyImmediately instead
+        getMyActor().tell(AbstractParallelEoSStreamProcessor::commitOffsetsThatAreReady);
     }
 
     @Override

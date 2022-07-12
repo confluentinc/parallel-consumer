@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.state.PartitionState;
+import lombok.NonNull;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -55,6 +56,7 @@ public class OffsetMapCodecManager<K, V> {
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
+    @NonNull
     // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
     org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
@@ -167,13 +169,13 @@ public class OffsetMapCodecManager<K, V> {
         return new PartitionState<K, V>(tp, incompletes);
     }
 
-    public String makeOffsetMetadataPayload(long finalOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
-        String offsetMap = serialiseIncompleteOffsetMapToBase64(finalOffsetForPartition, state);
+    public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
+        String offsetMap = serialiseIncompleteOffsetMapToBase64(baseOffsetForPartition, state);
         return offsetMap;
     }
 
-    String serialiseIncompleteOffsetMapToBase64(long finalOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
-        byte[] compressedEncoding = encodeOffsetsCompressed(finalOffsetForPartition, state);
+    String serialiseIncompleteOffsetMapToBase64(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
+        byte[] compressedEncoding = encodeOffsetsCompressed(baseOffsetForPartition, state);
         String b64 = OffsetSimpleSerialisation.base64(compressedEncoding);
         return b64;
     }
@@ -186,7 +188,7 @@ public class OffsetMapCodecManager<K, V> {
      * <p>
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
-    byte[] encodeOffsetsCompressed(long finalOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
+    byte[] encodeOffsetsCompressed(long baseOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
         var incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
         long highestSucceeded = partitionState.getOffsetHighestSucceeded();
         if (log.isDebugEnabled()) {
@@ -195,7 +197,7 @@ public class OffsetMapCodecManager<K, V> {
                     highestSucceeded,
                     partitionState.getIncompleteOffsetsBelowHighestSucceeded());
         }
-        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
+        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
 
         //
         if (forcedCodec.isPresent()) {

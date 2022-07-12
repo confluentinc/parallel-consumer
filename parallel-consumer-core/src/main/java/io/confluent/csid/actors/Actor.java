@@ -4,22 +4,20 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.event.Level;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -33,41 +31,46 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // rename to ActorRef? Also clashes with field name.
-public class Actor<T> implements IActor<T> {
-
-    private final Clock clock;
+public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actor;
 
-    //    /**
-//     * Object because there's no common interface between {@link Function} and {@link Consumer}
-//     */
+    /**
+     * Single queueing point for all messages to the actor.
+     * <p>
+     * {@link LinkedBlockingDeque} is implemented as a simple doubly-linked list protected by a single lock and using
+     * conditions to manage blocking. Thread safe, highly performant, single lock.
+     */
     @Getter(AccessLevel.PROTECTED)
-//    private final BlockingQueue<Callable<Optional<Object>>> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
-    private final LinkedBlockingQueue<Runnable> actionMailbox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non-blocking
+    private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>();
 
     @Override
     public void tell(final Consumer<T> action) {
         getActionMailbox().add(() -> action.accept(actor));
+    }
 
-//        getActionMailbox().add(() -> {
-//            action.accept(actor);
-//            return Optional.empty();
-//        });
+    @Override
+    public void tellImmediately(final Consumer<T> action) {
+        getActionMailbox().addFirst(() -> action.accept(actor));
     }
 
     @Override
     public <R> Future<R> ask(final Function<T, R> action) {
-//        Callable<Optional<R>> task = () -> Optional.of(action.apply(actor));
+        /*
+         * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
+         */
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actor));
-//        getActionMailbox().add((Callable) task);
+
+        // todo should actor throw invalid state if actor is "closed" or "terminated"?
         getActionMailbox().add(task);
 
-// how to use CompletableFuture instead?
-//        CompletableFuture<R> future = new CompletableFuture<>();
-//        future.handleAsync()
-//        future.newIncompleteFuture();
+        return task;
+    }
 
+    @Override
+    public <R> Future<R> askImmediately(final Function<T, R> action) {
+        FutureTask<R> task = new FutureTask<>(() -> action.apply(actor));
+        getActionMailbox().addFirst(task);
         return task;
     }
 
@@ -77,6 +80,7 @@ public class Actor<T> implements IActor<T> {
         return this.getActionMailbox().isEmpty();
     }
 
+
     /**
      * Given the elements currently in the queue, processes them, but no more. In other words - processes all elements
      * currently in the queue, but not new ones which are added during processing. We do this so that we finish
@@ -84,6 +88,7 @@ public class Actor<T> implements IActor<T> {
      * <p>
      * Does not execute scheduled - todo remove scheduled to subclass?
      */
+    // todo in interface?
     public void processBounded() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
@@ -96,41 +101,32 @@ public class Actor<T> implements IActor<T> {
 
         log.trace("Running {} drained actions...", work.size());
         for (var action : work) {
-//            action.run();
             execute(action);
         }
-//
-//        actionMailbox.forEach(
-//                //                action.accept(this)
-//                Runnable::run
-//        );
     }
 
     /**
      * Blocking version of {@link #processBounded()}
-     *
-     * @param timeout
      */
-    public void processBlocking(Duration timeout) {
+    // todo in interface?
+    public void processBlocking(Duration timeout) throws InterruptedException {
         processBounded();
-        maybeBlockUntilScheduledOrAction(timeout);
+        maybeBlockUntilAction(timeout);
     }
 
     /**
      * May return without executing any scheduled actions
      *
-     * @param timeout
+     * @param timeout time to block for if mailbox is empty
      */
-    private void maybeBlockUntilScheduledOrAction(Duration timeout) {
-        Runnable polled = null;
-        try {
-            polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
-        } catch (InterruptedException e) {
-            InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted while polling Actor mailbox", e);
-            Thread.currentThread().interrupt();
+    private void maybeBlockUntilAction(Duration timeout) throws InterruptedException {
+        if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
+            log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
         }
+        Runnable polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
 
         if (polled != null) {
+            log.debug("Message received in mailbox, processing");
             execute(polled);
             processBounded();
         }
@@ -140,4 +136,21 @@ public class Actor<T> implements IActor<T> {
         command.run();
     }
 
+    @Override
+    public void interruptProcessBlockingMaybe(Reason reason) {
+        log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
+        getActionMailbox().add(() -> interruptInternal(reason));
+    }
+
+    private String getActorName() {
+        return actor.getClass().getSimpleName();
+    }
+
+    /**
+     * Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on the
+     * queue.
+     */
+    private void interruptInternal(Reason reason) {
+        log.debug("Interruption signal processed: {}", reason);
+    }
 }

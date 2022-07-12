@@ -4,18 +4,17 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
-import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -64,6 +63,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
+    // todo remove direct access to WM
+    @NonNull
     private final WorkManager<K, V> wm;
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
@@ -117,6 +118,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             while (state != closed) {
                 handlePoll();
 
+
                 maybeDoCommit();
 
                 switch (state) {
@@ -145,7 +147,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
             if (count > 0) {
                 log.trace("Loop: Register work");
-                pc.registerWorkAsync(polledRecords);
+                pc.sendNewPolledRecordsAsync(polledRecords);
             }
         }
     }
@@ -249,7 +251,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         log.warn("Broker poll control thread not closed cleanly.");
                     }
                 } catch (InterruptedException e) {
-                    InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted waiting for broker poller thread to finish", e);
+                    log.debug("Interrupted waiting for broker poller thread to finish", e);
                 } catch (ExecutionException | TimeoutException e) {
                     log.error("Execution or timeout exception waiting for broker poller thread to finish", e);
                     throw e;
@@ -336,8 +338,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Pause polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#running
-     * running}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#running running}, calling this method will be a no-op.
      * </p>
      */
     public void pausePollingAndWorkRegistrationIfRunning() {
@@ -352,8 +354,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Resume polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#paused
-     * paused}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#paused paused}, calling this method will be a no-op.
      * </p>
      */
     public void resumePollingAndWorkRegistrationIfPaused() {

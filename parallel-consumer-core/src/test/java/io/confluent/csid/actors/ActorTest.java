@@ -1,6 +1,9 @@
 package io.confluent.csid.actors;
 
-import io.confluent.csid.utils.TimeUtils;
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +21,7 @@ class ActorTest {
 
     public static final String MESSAGE = "tell";
     Greeter greeter = new Greeter();
-    Actor<Greeter> actor = new Actor<>(TimeUtils.getClock(), greeter);
+    Actor<Greeter> actor = new Actor<>(greeter);
 
     @Data
     public static class Greeter {
