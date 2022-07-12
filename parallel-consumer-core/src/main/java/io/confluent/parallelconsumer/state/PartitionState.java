@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -213,12 +214,27 @@ public class PartitionState<K, V> {
      * Ensure that the {@link #offsetHighestSucceeded} is always at least a single offset behind the
      * {@link #getNextExpectedPolledOffset()}. Needed to allow us to jump over gaps in the partitions such as
      * transaction markers.
+     * <p>
+     * Called when work is returned and is successful.
+     * <p>
+     * Under normal operation, it is expected that the highest succeeded offset will generally always be higher than the
+     * next expected offset to poll. This is because PC processes records well beyond the
+     * {@link #getOffsetHighestSequentialSucceeded()} all the time, unless operation in
+     * {@link ProcessingOrder#PARTITION} order. So this situation - where the highest succeeded offset is below the next
+     * offset to poll at the time of commit - will either be an incredibly rare case: only at the very beginning of
+     * processing records, or where ALL records are slow enough or blocked, or in synthetically created scenarios (like
+     * test cases).
      */
     private void maybeRaiseOffsetHighestSucceededOnSuccess() {
-        if (offsetHighestSucceeded < getNextExpectedPolledOffset() - 1) {
-            log.debug("Gap detected in partition, probably tx markers. Moving highest succeeded to next expected -1");
+        long nextExpectedMinusOne = getNextExpectedPolledOffset() - 1;
+        if (offsetHighestSucceeded < nextExpectedMinusOne) {
+            long gap = nextExpectedMinusOne - offsetHighestSucceeded;
+            log.debug("Gap detected in partition (highest succeeded: {} while next expected poll offset: {} - gap is {}), probably tx markers. Moving highest succeeded to next expected -1",
+                    offsetHighestSucceeded,
+                    nextExpectedMinusOne,
+                    gap);
             // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
-            offsetHighestSucceeded = getNextExpectedPolledOffset() - 1;
+            offsetHighestSucceeded = nextExpectedMinusOne;
         }
     }
 
@@ -275,7 +291,7 @@ public class PartitionState<K, V> {
     }
 
     /**
-     * Defined for our purpose, as only used in definition of what offset to poll for next, as the offset one below the
+     * Defined for our purpose (as only used in definition of what offset to poll for next), as the offset one below the
      * lowest incomplete offset.
      */
     public long getOffsetHighestSequentialSucceeded() {
