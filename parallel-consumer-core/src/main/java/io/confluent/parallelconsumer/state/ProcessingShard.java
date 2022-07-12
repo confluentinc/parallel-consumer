@@ -24,6 +24,8 @@ import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Models the queue of work to be processed, based on the {@link ProcessingOrder} modes.
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 @RequiredArgsConstructor

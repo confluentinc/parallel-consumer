@@ -23,6 +23,9 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
 import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
 
 /**
+ * todo docs
+ *
+ * @author Antony Stubbs
  * @see #unwrap
  */
 @Slf4j

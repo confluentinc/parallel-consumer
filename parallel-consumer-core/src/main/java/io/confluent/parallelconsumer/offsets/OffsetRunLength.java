@@ -18,6 +18,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
 @Slf4j
 @UtilityClass
 public class OffsetRunLength {

@@ -19,6 +19,7 @@ import static io.confluent.csid.utils.Range.range;
  * <p>
  * todo unify or refactor with {@link BitSetEncoder}. Why was it ever seperate?
  *
+ * @author Antony Stubbs
  * @see BitSetEncoder
  */
 @Slf4j

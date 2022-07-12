@@ -28,7 +28,7 @@ import static lombok.AccessLevel.PUBLIC;
 /**
  * Sharded, prioritised, offset managed, order controlled, delayed work queue.
  * <p>
- * Low Water Mark - the highest offset (continuously successful) with all it's previous messages succeeded (the offset
+ * Low Watermark - the highest offset (continuously successful) with all it's previous messages succeeded (the offset
  * one commits to broker)
  * <p>
  * High Water Mark - the highest offset which has succeeded (previous may be incomplete)
@@ -37,8 +37,7 @@ import static lombok.AccessLevel.PUBLIC;
  * <p>
  * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
  *
- * @param <K>
- * @param <V>
+ * @author Antony Stubbs
  */
 @Slf4j
 public class WorkManager<K, V> implements ConsumerRebalanceListener {

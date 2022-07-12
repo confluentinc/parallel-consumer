@@ -34,6 +34,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * <p>
  * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
  *
+ * @author Antony Stubbs
  * @see PartitionState
  */
 @Slf4j

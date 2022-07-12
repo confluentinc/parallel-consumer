@@ -27,6 +27,11 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
 
+/**
+ * Context object for a given record, carrying completion status, various time stamps, retry data etc..
+ *
+ * @author Antony Stubbs
+ */
 @Slf4j
 @EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {

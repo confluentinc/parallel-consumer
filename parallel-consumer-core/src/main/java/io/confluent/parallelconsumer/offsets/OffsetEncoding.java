@@ -15,6 +15,11 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
 @ToString
 @RequiredArgsConstructor
 public enum OffsetEncoding {

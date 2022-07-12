@@ -22,6 +22,11 @@ import java.util.zip.GZIPOutputStream;
 
 import static io.confluent.csid.utils.BackportUtils.readFully;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
 @UtilityClass
 @Slf4j
 public class OffsetSimpleSerialisation {

@@ -5,6 +5,14 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.parallelconsumer.internal.ParallelConsumerInternalException;
+import lombok.experimental.StandardException;
+
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
+@StandardException
 
 public class NoEncodingPossibleException extends ParallelConsumerInternalException {
 

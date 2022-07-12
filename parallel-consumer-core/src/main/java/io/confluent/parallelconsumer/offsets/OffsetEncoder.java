@@ -12,6 +12,10 @@ import java.nio.ByteBuffer;
 
 /**
  * Base OffsetEncoder
+ * <p>
+ * todo docs
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public abstract class OffsetEncoder {

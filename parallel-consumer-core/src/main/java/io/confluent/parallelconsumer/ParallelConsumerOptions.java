@@ -23,6 +23,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
  *
+ * @author Antony Stubbs
  * @see #builder()
  * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder
  */
