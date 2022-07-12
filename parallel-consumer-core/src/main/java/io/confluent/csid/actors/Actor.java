@@ -8,7 +8,6 @@ import io.confluent.csid.utils.InterruptibleThread;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -31,8 +30,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @RequiredArgsConstructor
 // rename to ActorRef? Also clashes with field name.
 public class Actor<T> implements IActor<T>, Executor {
-
-    private final Clock clock;
 
     private final T actor;
 
@@ -61,9 +58,8 @@ public class Actor<T> implements IActor<T>, Executor {
          * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
          */
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actor));
-//        getActionMailbox().add((Callable) task);
 
-        // should actor throw invalid state if actor is "closed" or "terminated"?
+        // todo should actor throw invalid state if actor is "closed" or "terminated"?
         getActionMailbox().add(task);
 
 // how to use CompletableFuture instead?
@@ -108,14 +104,8 @@ public class Actor<T> implements IActor<T>, Executor {
 
         log.trace("Running {} drained actions...", work.size());
         for (var action : work) {
-//            action.run();
             execute(action);
         }
-//
-//        actionMailbox.forEach(
-//                //                action.accept(this)
-//                Runnable::run
-//        );
     }
 
     /**
@@ -124,7 +114,7 @@ public class Actor<T> implements IActor<T>, Executor {
     // todo in interface?
     public void processBlocking(Duration timeout) throws InterruptedException {
         processBounded();
-        maybeBlockUntilScheduledOrAction(timeout);
+        maybeBlockUntilAction(timeout);
     }
 
     /**
@@ -132,17 +122,11 @@ public class Actor<T> implements IActor<T>, Executor {
      *
      * @param timeout time to block for if mailbox is empty
      */
-    private void maybeBlockUntilScheduledOrAction(Duration timeout) {
-        Runnable polled = null;
-        try {
-            if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
-                log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
-            }
-            polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
-        } catch (InterruptedException e) {
-            InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted while polling Actor mailbox", e);
-            Thread.currentThread().interrupt();
+    private void maybeBlockUntilAction(Duration timeout) throws InterruptedException {
+        if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
+            log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
         }
+        Runnable polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
 
         if (polled != null) {
             log.debug("Message received in mailbox, processing");

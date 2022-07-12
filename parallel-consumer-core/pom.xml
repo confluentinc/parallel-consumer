@@ -112,7 +112,6 @@
             <version>7.2.9.RELEASE</version>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
