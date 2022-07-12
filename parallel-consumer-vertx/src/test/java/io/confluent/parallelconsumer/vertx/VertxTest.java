@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.vertx;
  */
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import io.confluent.csid.utils.InterruptibleThread;
 import io.confluent.csid.utils.WireMockUtils;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
@@ -239,7 +238,7 @@ class VertxTest extends VertxBaseUnitTest {
                 log.info("Waiting");
                 latchTwo.await();
             } catch (InterruptedException e) {
-                InterruptibleThread.logInterrupted(log, e);
+                log.debug("", e);
             }
 
             cp.flag();

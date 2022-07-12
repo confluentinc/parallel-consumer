@@ -5,8 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.actors.Actor;
-import io.confluent.csid.utils.InterruptibleThread;
-import io.confluent.csid.utils.InterruptibleThread.Reason;
+import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -26,7 +25,6 @@ import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
-import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -128,21 +126,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final List<Runnable> controlLoopHooks = new ArrayList<>();
 
     /**
-     * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
-     * collection sooner.
-     *
-     * @see #processWorkCompleteMailBox
-     */
-    private InterruptibleThread blockableControlThread;
-
-    /**
      * @see #notifySomethingToDo
      * @see #processWorkCompleteMailBox
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
     private final OffsetCommitter committer;
-
 
     /**
      * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
@@ -442,7 +431,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
             } catch (InterruptedException e) {
                 // ignore
-                InterruptibleThread.logInterrupted(log, e);
+                log.debug("Interrupted waiting on close...", e);
+                Thread.currentThread().interrupt();
             } catch (ExecutionException | TimeoutException e) {
                 log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
                         "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
@@ -476,7 +466,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     boolean terminated = workerThreadPool.isTerminated();
                 }
             } catch (InterruptedException e) {
-                InterruptibleThread.logInterrupted(log, Level.WARN, e);
+                log.debug("Interrupted waiting on worker threads to close, retrying...", e);
                 interrupted = true;
             }
         }
@@ -556,18 +546,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         notifySomethingToDo(new Reason(msg));
     }
 
-//    /**
-//     * Control thread can be blocked waiting for work, but is interruptable. Interrupting it can be useful to inform
-//     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
-//     * BrokerPollSystem} so that fewer messages are downloaded and queued.
-//     */
-//    private void interruptControlThread(Reason reason) {
-//        if (blockableControlThread != null) {
-//            String msg = msg("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
-//            blockableControlThread.interrupt(log, new Reason(msg, reason));
-//        }
-//    }
-
     private boolean areMyThreadsDone() {
         if (isEmpty(controlThreadFuture)) {
             // not constructed yet, will become alive, unless #poll is never called
@@ -616,7 +594,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
-            this.blockableControlThread = new InterruptibleThread(controlThread);
             while (state != closed) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
@@ -690,14 +667,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
-
-        // thread yield for spin lock avoidance
-        Duration duration = Duration.ofMillis(1);
-        try {
-            Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-            InterruptibleThread.logInterrupted(log, e);
-        }
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",

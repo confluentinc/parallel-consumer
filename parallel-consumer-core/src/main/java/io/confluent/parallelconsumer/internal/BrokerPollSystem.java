@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -16,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
-import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -253,7 +251,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         log.warn("Broker poll control thread not closed cleanly.");
                     }
                 } catch (InterruptedException e) {
-                    InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted waiting for broker poller thread to finish", e);
+                    log.debug("Interrupted waiting for broker poller thread to finish", e);
                 } catch (ExecutionException | TimeoutException e) {
                     log.error("Execution or timeout exception waiting for broker poller thread to finish", e);
                     throw e;
