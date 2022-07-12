@@ -900,7 +900,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Can be interrupted if something else needs doing.
      */
-    private void processWorkCompleteMailBox() {
+    private void processWorkCompleteMailBox() throws InterruptedException {
         //
         final Duration timeToBlockFor = calculateTimeUntilNextAction();
 

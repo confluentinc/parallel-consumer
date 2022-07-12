@@ -7,16 +7,12 @@ package io.confluent.csid.actors;
 import io.confluent.csid.utils.InterruptibleThread;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.event.Level;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -34,7 +30,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // rename to ActorRef? Also clashes with field name.
-public class Actor<T> implements IActor<T> {
+public class Actor<T> implements IActor<T>, Executor {
 
     private final Clock clock;
 
@@ -65,7 +61,16 @@ public class Actor<T> implements IActor<T> {
          * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
          */
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actor));
+//        getActionMailbox().add((Callable) task);
+
+        // should actor throw invalid state if actor is "closed" or "terminated"?
         getActionMailbox().add(task);
+
+// how to use CompletableFuture instead?
+//        CompletableFuture<R> future = new CompletableFuture<>();
+//        future.handleAsync()
+//        future.newIncompleteFuture();
+
         return task;
     }
 
@@ -115,11 +120,9 @@ public class Actor<T> implements IActor<T> {
 
     /**
      * Blocking version of {@link #processBounded()}
-     *
-     * @param timeout
      */
     // todo in interface?
-    public void processBlocking(Duration timeout) {
+    public void processBlocking(Duration timeout) throws InterruptedException {
         processBounded();
         maybeBlockUntilScheduledOrAction(timeout);
     }
