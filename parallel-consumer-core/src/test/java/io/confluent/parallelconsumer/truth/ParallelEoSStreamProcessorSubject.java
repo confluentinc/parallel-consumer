@@ -4,15 +4,9 @@ import com.google.common.truth.FailureMetadata;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorChildSubject;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorParentSubject;
-import io.confluent.parallelconsumer.internal.ConsumerFacade;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedMiddleSubject;
 import io.stubbs.truth.generator.UserManagedSubject;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.common.TopicPartition;
-
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Main Subject for the class under test.
@@ -23,7 +17,7 @@ import java.util.Set;
  */
 @UserManagedSubject(ParallelEoSStreamProcessor.class)
 public class ParallelEoSStreamProcessorSubject extends ParallelEoSStreamProcessorParentSubject
-        implements UserManagedMiddleSubject {
+        implements UserManagedMiddleSubject<ParallelEoSStreamProcessor> {
 
     protected ParallelEoSStreamProcessorSubject(FailureMetadata failureMetadata,
                                                 ParallelEoSStreamProcessor actual) {
@@ -38,21 +32,4 @@ public class ParallelEoSStreamProcessorSubject extends ParallelEoSStreamProcesso
         return ParallelEoSStreamProcessorSubject::new;
     }
 
-    public CommitHistorySubject hasCommittedToAnyAssignedPartitionOf(NewTopic newTopic) {
-        isNotNull();
-        ConsumerFacade consumer = actual.getConsumerFacade();
-        return check("getConsumerFacade()")
-                .about(ConsumerSubject.consumers())
-                .that(consumer)
-                .hasCommittedToPartition(newTopic);
-    }
-
-    public Map<TopicPartition, CommitHistorySubject> hasCommittedToAnyAssignedPartitionOf(Set<NewTopic> newTopic) {
-        isNotNull();
-        ConsumerFacade consumer = actual.getConsumerFacade();
-        return check("getConsumerFacade()")
-                .about(ConsumerSubject.consumers())
-                .that(consumer)
-                .hasCommittedToPartition(newTopic);
-    }
 }

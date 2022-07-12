@@ -101,7 +101,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * todo docs
      */
     @Getter(PRIVATE)
-    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(clock, this);
+    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
@@ -483,7 +483,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Worker pool terminated.");
 
         // last check to see if after worker pool closed, has any new work arrived?
-        processWorkCompleteMailBox();
+        try {
+            processWorkCompleteMailBox();
+        } catch (InterruptedException e) {
+            log.warn("Interrupted processing work while closing, skipping and continuing close...");
+            Thread.currentThread().interrupt();
+        }
 
         commitOffsetsThatAreReady();
 
@@ -656,7 +661,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox();
+        try {
+            processWorkCompleteMailBox();
+        } catch (InterruptedException e) {
+            log.warn("Interrupted processing work in control loop, skipping...");
+            Thread.currentThread().interrupt();
+        }
 
         if (isIdlingOrRunning()) {
             // offsets will be committed when the consumer has its partitions revoked

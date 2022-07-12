@@ -11,7 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -29,7 +32,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // rename to ActorRef? Also clashes with field name.
-public class Actor<T> implements IActor<T>, Executor {
+public class Actor<T> implements IActor<T> {
 
     private final T actor;
 
@@ -61,11 +64,6 @@ public class Actor<T> implements IActor<T>, Executor {
 
         // todo should actor throw invalid state if actor is "closed" or "terminated"?
         getActionMailbox().add(task);
-
-// how to use CompletableFuture instead?
-//        CompletableFuture<R> future = new CompletableFuture<>();
-//        future.handleAsync()
-//        future.newIncompleteFuture();
 
         return task;
     }
