@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -82,11 +81,8 @@ public class PartitionState<K, V> {
     /**
      * Highest offset which has completed successfully ("succeeded").
      * <p>
-     * Note that this may in some conditions, this may actually be a virtual pointer for the real "highest succeeded
-     * offset" - that being, it either points to the highest succeeded offset, or potentially some number of transaction
-     * marker records above it. A virtual model that either points to the highest succeeded record, or the next 'user'
-     * type record (which is by definition not completed) on the partition (which may be several non `user` type records
-     * such as transaction markers) beyond, minus one.
+     * Note that this may in some conditions, there may be a gap between this and the next offset to poll - that being,
+     * there may be some number of transaction marker records above it, and the next offset to poll.
      */
     @Getter(PUBLIC)
     private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
@@ -182,7 +178,6 @@ public class PartitionState<K, V> {
 
         updateHighestSucceededOffsetSoFar(work);
 
-        maybeRaiseOffsetHighestSucceededOnSuccess();
 
         setDirty();
     }
@@ -208,34 +203,6 @@ public class PartitionState<K, V> {
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
         incompleteOffsets.add(newOffset);
-    }
-
-    /**
-     * Ensure that the {@link #offsetHighestSucceeded} is always at least a single offset behind the
-     * {@link #getNextExpectedPolledOffset()}. Needed to allow us to jump over gaps in the partitions such as
-     * transaction markers.
-     * <p>
-     * Called when work is returned and is successful.
-     * <p>
-     * Under normal operation, it is expected that the highest succeeded offset will generally always be higher than the
-     * next expected offset to poll. This is because PC processes records well beyond the
-     * {@link #getOffsetHighestSequentialSucceeded()} all the time, unless operation in
-     * {@link ProcessingOrder#PARTITION} order. So this situation - where the highest succeeded offset is below the next
-     * offset to poll at the time of commit - will either be an incredibly rare case: only at the very beginning of
-     * processing records, or where ALL records are slow enough or blocked, or in synthetically created scenarios (like
-     * test cases).
-     */
-    private void maybeRaiseOffsetHighestSucceededOnSuccess() {
-        long nextExpectedMinusOne = getNextExpectedPolledOffset() - 1;
-        if (offsetHighestSucceeded < nextExpectedMinusOne) {
-            long gap = nextExpectedMinusOne - offsetHighestSucceeded;
-            log.debug("Gap detected in partition (highest succeeded: {} while next expected poll offset: {} - gap is {}), probably tx markers. Moving highest succeeded to next expected -1",
-                    offsetHighestSucceeded,
-                    nextExpectedMinusOne,
-                    gap);
-            // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
-            offsetHighestSucceeded = nextExpectedMinusOne;
-        }
     }
 
     /**
