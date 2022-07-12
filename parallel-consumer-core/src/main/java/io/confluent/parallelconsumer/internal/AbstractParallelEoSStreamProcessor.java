@@ -260,7 +260,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.committer = this.brokerPollSubsystem;
         }
 
-        this.runner = new UserFunctionRunner<K, V>(this, clock, getProducerManager());
+        this.runner = new UserFunctionRunner<>(this, clock, getProducerManager(), options.getAdminClient());
     }
 
     private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {

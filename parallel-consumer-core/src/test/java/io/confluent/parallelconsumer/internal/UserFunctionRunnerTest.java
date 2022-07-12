@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.TerminalFailureReac
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import io.confluent.parallelconsumer.state.WorkManager;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -41,7 +42,7 @@ class UserFunctionRunnerTest {
                 .terminalFailureReaction(shutdown)
                 .build());
 
-        UserFunctionRunner<String, String> r = new UserFunctionRunner<>(mock, Clock.systemUTC(), Optional.empty());
+        UserFunctionRunner<String, String> r = new UserFunctionRunner<>(mock, Clock.systemUTC(), Optional.empty(), mock(AdminClient.class));
         var workFor = ModelUtils.createWorkFor(0);
         r.runUserFunction(fake,
                 o -> {

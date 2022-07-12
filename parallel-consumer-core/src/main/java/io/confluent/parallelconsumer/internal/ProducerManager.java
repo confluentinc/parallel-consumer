@@ -22,7 +22,6 @@ import org.apache.kafka.common.TopicPartition;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +34,10 @@ import java.util.stream.Stream;
 import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
+ * Central control point for {@link KafkaProducer} where it's needed in some scenarios, like transactions.
+ * <p>
+ * Also has useful wrapping methods.
+ * <p>
  * todo docs
  */
 @Slf4j
@@ -46,9 +49,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     private final boolean producerIsConfiguredForTransactions;
 
-
     /**
-     * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
+     * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transactionally. We must
      * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
      * state COMMITTING_TRANSACTION".
      */
@@ -142,18 +144,15 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         readLock.lock();
-        List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
         try {
-            for (ProducerRecord<K, V> rec : outMsgs) {
+            return outMsgs.stream().map(rec -> {
                 log.trace("Producing {}", rec);
                 var future = producer.send(rec, callback);
-                futures.add(Tuple.pairOf(rec, future));
-            }
+                return Tuple.pairOf(rec, future);
+            }).collect(Collectors.toList());
         } finally {
             readLock.unlock();
         }
-
-        return futures;
     }
 
     public List<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> produceMessagesSyncWithContext(PollContext<K, V> context, List<ProducerRecord<K, V>> outMsgs) {

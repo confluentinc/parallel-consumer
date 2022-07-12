@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
@@ -43,6 +44,11 @@ public class ParallelConsumerOptions<K, V> {
      * @see ParallelStreamProcessor
      */
     private final Producer<K, V> producer;
+
+    /**
+     * Supplying a producer is only needed for some functions, which will cause an error if used when it's missing.
+     */
+    private final AdminClient adminClient;
 
     /**
      * Path to Managed executor service for Java EE
@@ -251,8 +257,9 @@ public class ParallelConsumerOptions<K, V> {
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
 
         //
-        if (!isProducerSupplied() && getTerminalFailureReaction() == DLQ) {
-            throw new IllegalArgumentException(msg("Wanting to use DQL failure mode ({}) without supplying a Producer instance",
+        // todo should admin be required?
+        if (!isProducerSupplied() && getAdminClient() == null && getTerminalFailureReaction() == DLQ) {
+            throw new IllegalArgumentException(msg("Wanting to use DQL failure mode ({}) without supplying a either a Producer or Admin client (both are needed) instance",
                     getTerminalFailureReaction()));
         }
 
