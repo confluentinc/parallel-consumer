@@ -16,6 +16,7 @@ import java.util.Optional;
 import static com.google.common.truth.Truth.assertAbout;
 
 /**
+ * @author Antony Stubbs
  * @see CommitHistory
  */
 @UserManagedSubject(CommitHistory.class)

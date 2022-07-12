@@ -30,6 +30,8 @@ import static org.hamcrest.Matchers.equalTo;
 
 /**
  * Originally created to investigate issue report #184
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 class MultiTopicTest extends BrokerIntegrationTest<String, String> {

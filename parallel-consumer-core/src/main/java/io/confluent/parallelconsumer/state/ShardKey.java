@@ -13,7 +13,7 @@ import org.apache.kafka.common.TopicPartition;
 /**
  * Simple value class for processing {@link ShardKey}s to make the various key systems type safe and extendable.
  *
- * @see ShardKeyTest
+ * @author Antony Stubbs
  */
 @Getter
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)

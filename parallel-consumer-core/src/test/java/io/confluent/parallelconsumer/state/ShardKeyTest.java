@@ -15,6 +15,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
+ * @author Antony Stubbs
  * @see ShardKey
  */
 class ShardKeyTest {

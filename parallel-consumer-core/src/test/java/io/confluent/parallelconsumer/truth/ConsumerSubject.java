@@ -29,6 +29,7 @@ import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHis
  * If the system detects this class already exists, it won't attempt to generate a new one. Note that if the base
  * skeleton of this class ever changes, you won't automatically get it updated.
  *
+ * @author Antony Stubbs
  * @see Consumer
  * @see ConsumerParentSubject
  */
