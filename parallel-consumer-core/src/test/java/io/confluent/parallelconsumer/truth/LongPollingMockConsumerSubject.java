@@ -21,6 +21,9 @@ import java.util.stream.Collectors;
 import static com.google.common.truth.Truth.assertAbout;
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
+/**
+ * @author Antony Stubbs
+ */
 @UserManagedSubject(LongPollingMockConsumer.class)
 public class LongPollingMockConsumerSubject<K, V> extends Subject {
 

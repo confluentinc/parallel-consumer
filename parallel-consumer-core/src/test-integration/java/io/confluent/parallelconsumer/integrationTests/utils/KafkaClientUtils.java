@@ -37,6 +37,11 @@ import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
 @Slf4j
 public class KafkaClientUtils {
 

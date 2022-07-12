@@ -41,7 +41,6 @@ import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.time.Duration.ofMillis;
-import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -106,10 +105,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
-
-    public void closeWithoutClosingClients() {
-        close(ofSeconds(30), DrainingMode.DRAIN);
-    }
 
     /**
      * An inbound message to the controller.
