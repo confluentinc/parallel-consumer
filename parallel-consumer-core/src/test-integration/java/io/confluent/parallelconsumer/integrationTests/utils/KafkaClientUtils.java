@@ -1,32 +1,58 @@
 package io.confluent.parallelconsumer.integrationTests.utils;
+
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.RandomUtils;
+import one.util.streamex.IntStreamEx;
 import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
+import static com.google.common.truth.Truth.assertThat;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
+import static java.util.Optional.empty;
+import static org.apache.commons.lang3.RandomUtils.nextInt;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
 @Slf4j
 public class KafkaClientUtils {
 
     public static final int MAX_POLL_RECORDS = 10_000;
     public static final String GROUP_ID_PREFIX = "group-1-";
+
+    class PCVersion {
+        public static final String V051 = "0.5.1";
+    }
+
 
     private final KafkaContainer kContainer;
 
@@ -38,7 +64,12 @@ public class KafkaClientUtils {
 
     @Getter
     private AdminClient admin;
-    private final String groupId = GROUP_ID_PREFIX + RandomUtils.nextInt();
+    private final String groupId = GROUP_ID_PREFIX + nextInt();
+
+    /**
+     * todo docs
+     */
+    private KafkaConsumer<String, String> lastConsumerConstructed;
 
 
     public KafkaClientUtils(KafkaContainer kafkaContainer) {
@@ -119,7 +150,7 @@ public class KafkaClientUtils {
         Properties properties = setupConsumerProps();
 
         if (newConsumerGroup) {
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + RandomUtils.nextInt()); // new group
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + nextInt()); // new group
         }
 
         // override with custom
@@ -130,25 +161,111 @@ public class KafkaClientUtils {
         return kvKafkaConsumer;
     }
 
-    public <K, V> KafkaProducer<K, V> createNewProducer(boolean tx) {
+    public <K, V> KafkaProducer<K, V> createNewTransactionalProducer() {
+        KafkaProducer<K, V> txProd = createNewProducer(TRANSACTIONAL);
+        txProd.initTransactions();
+        return txProd;
+    }
+
+    /**
+     * @deprecated use the enum version {@link #createNewProducer(ProducerMode)} instead, since = {@link PCVersion#V051}
+     */
+    @Deprecated
+    public <K, V> KafkaProducer<K, V> createNewProducer(boolean transactional) {
+        var mode = transactional ? TRANSACTIONAL : NORMAL;
+        return createNewProducer(mode);
+    }
+
+    public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode mode) {
         Properties properties = setupProducerProps();
 
         var txProps = new Properties();
         txProps.putAll(properties);
 
-        if (tx) {
-            // random number so we get a unique producer tx session each time. Normally wouldn't do this in production,
-            // but sometimes running in the test suite our producers step on each other between test runs and this causes
+        if (mode.equals(TRANSACTIONAL)) {
+            // random number, so we get a unique producer tx session each time. Normally wouldn't do this in production,
+            // but sometimes running in the test suite our producers' step on each other between test runs and this causes
             // Producer Fenced exceptions:
             // Error looks like: Producer attempted an operation with an old epoch. Either there is a newer producer with
             // the same transactionalId, or the producer's transaction has been expired by the broker.
-            txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + RandomUtils.nextInt()); // required for tx
+            txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + nextInt()); // required for tx
             txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
-
         }
+
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
 
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
+    }
+
+    public enum ProducerMode {
+        TRANSACTIONAL, NORMAL
+    }
+
+    @SneakyThrows
+    public List<NewTopic> createTopics(int numTopics) {
+        List<NewTopic> newTopics = IntStreamEx.range(numTopics)
+                .mapToObj(i
+                        -> new NewTopic("in-" + i + "-" + nextInt(), empty(), empty()))
+                .toList();
+        getAdmin().createTopics(newTopics)
+                .all()
+                .get();
+        return newTopics;
+    }
+
+    public List<String> produceMessages(String inputName, int numberToSend) throws InterruptedException, ExecutionException {
+        log.info("Producing {} messages to {}", numberToSend, inputName);
+        final List<String> expectedKeys = new ArrayList<>();
+        List<Future<RecordMetadata>> sends = new ArrayList<>();
+        try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
+            for (int i = 0; i < numberToSend; i++) {
+                String key = "key-" + i;
+                Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
+                    if (exception != null) {
+                        log.error("Error sending, ", exception);
+                    }
+                });
+                sends.add(send);
+                expectedKeys.add(key);
+            }
+            log.debug("Finished sending test data");
+        }
+        // make sure we finish sending before next stage
+        log.debug("Waiting for broker acks");
+        for (Future<RecordMetadata> send : sends) {
+            RecordMetadata recordMetadata = send.get();
+            boolean b = recordMetadata.hasOffset();
+            assertThat(b).isTrue();
+        }
+        assertThat(sends).hasSize(numberToSend);
+        return expectedKeys;
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll) {
+        Properties consumerProps = new Properties();
+        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
+        KafkaConsumer<String, String> newConsumer = createNewConsumer(false, consumerProps);
+        lastConsumerConstructed = newConsumer;
+
+        var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
+                .ordering(order)
+                .consumer(newConsumer)
+                .commitMode(commitMode)
+                .maxConcurrency(100)
+                .build());
+
+        pc.setTimeBetweenCommits(ofSeconds(1));
+
+        // sanity
+        return pc;
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key) {
+        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500);
+    }
+
+    public KafkaConsumer<String, String> getLastConsumerConstructed() {
+        return lastConsumerConstructed;
     }
 }

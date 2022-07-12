@@ -40,8 +40,7 @@ def job = {
     stage('Build') {
         archiveArtifacts artifacts: 'pom.xml'
         withVaultEnv([["gpg/confluent-packaging-private-8B1DA6120C2BF624", "passphrase", "GPG_PASSPHRASE"]]) {
-            withVaultFile([["maven/jenkins_maven_global_settings", "settings_xml", "maven-global-settings.xml", "MAVEN_GLOBAL_SETTINGS_FILE"],
-                           ["gpg/confluent-packaging-private-8B1DA6120C2BF624", "private_key", "confluent-packaging-private.key", "GPG_PRIVATE_KEY"]]) {
+            withVaultFile([["maven/jenkins_maven_global_settings", "settings_xml", "maven-global-settings.xml", "MAVEN_GLOBAL_SETTINGS_FILE"]]) {
                 withMaven(globalMavenSettingsFilePath: "${env.MAVEN_GLOBAL_SETTINGS_FILE}") {
                     withDockerServer([uri: dockerHost()]) {
                         def isPrBuild = env.CHANGE_TARGET ? true : false
@@ -50,11 +49,9 @@ def job = {
                             sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
-                            sh '''
-                          set +x
-                          gpg --import < $GPG_PRIVATE_KEY;
-                          mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE
-                      '''
+                          withGPGkey("gpg/confluent-packaging-private-8B1DA6120C2BF624") {
+                            sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                          }
                         }
                         currentBuild.result = 'Success'
                     }
