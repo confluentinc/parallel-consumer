@@ -326,6 +326,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
+        // todo interrupting can be removed after improvements/reblaance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
     }
 
@@ -535,9 +536,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void transitionToDraining() {
         String msg = "Transitioning to draining...";
         log.debug(msg);
+        // todo send actor message of draining?
+//        getMyActor().tellImmediately(controller -> transitionToState(State.draining));
         this.state = State.draining;
         notifySomethingToDo(new Reason(msg));
     }
+
+    // also do closing
+//    private void transitionToState(Reason reason, State newState) {
+//        this.state = newState;
+//    }
 
     private boolean areMyThreadsDone() {
         if (isEmpty(controlThreadFuture)) {
