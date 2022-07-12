@@ -33,13 +33,16 @@ public class ProcessingShard<K, V> {
      * Map of offset to WorkUnits.
      * <p>
      * Uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some concurrency
-     * errors (missing WorkContainers).
+     * errors (missing WorkContainers). This is addressed in PR#270.
+     * <p>
+     * Is a Map because need random access into collection, as records don't always complete in order (i.e. UNORDERED
+     * mode).
      */
     @Getter
     private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
 
     @Getter(PRIVATE)
-    private final Object key;
+    private final ShardKey key;
 
     private final ParallelConsumerOptions<?, ?> options;
 
@@ -55,7 +58,7 @@ public class ProcessingShard<K, V> {
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
         if (entries.containsKey(key)) {
-            log.debug("Entry for {} already exists in shard queue", wc);
+            log.debug("Entry for {} already exists in shard queue, dropping record", wc);
         } else {
             entries.put(key, wc);
         }
@@ -68,10 +71,6 @@ public class ProcessingShard<K, V> {
 
     public boolean isEmpty() {
         return entries.isEmpty();
-    }
-
-    public Optional<WorkContainer<K, V>> getWorkForOffset(long offset) {
-        return Optional.ofNullable(entries.get(offset));
     }
 
     public long getCountOfWorkAwaitingSelection() {
