@@ -7,6 +7,8 @@ package io.confluent.parallelconsumer.truth;
 import com.google.common.truth.FailureMetadata;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
+import io.stubbs.truth.generator.UserManagedSubject;
+import one.util.streamex.StreamEx;
 import io.stubbs.truth.generator.UserManagedTruth;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -19,21 +21,22 @@ import pl.tlinkowski.unij.api.UniSets;
 import javax.annotation.Generated;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
 /**
  * Optionally move this class into source control, and add your custom assertions here.
- *
  * <p>
  * If the system detects this class already exists, it won't attempt to generate a new one. Note that if the base
  * skeleton of this class ever changes, you won't automatically get it updated.
  *
+ * @author Antony Stubbs
  * @see Consumer
  * @see ConsumerParentSubject
  */
-@UserManagedTruth(Consumer.class)
+@UserManagedSubject(Consumer.class)
 @Generated(value = "io.stubbs.truth.generator.internal.TruthGenerator", date = "2022-05-17T12:20:38.207945Z")
 public class ConsumerSubject extends ConsumerParentSubject {
 
@@ -51,26 +54,24 @@ public class ConsumerSubject extends ConsumerParentSubject {
 
     private final Duration timeout = Duration.ofSeconds(10);
 
-    public CommitHistorySubject hasCommittedToPartition(NewTopic topic) {
-        int defaultPartition = 0;
-        TopicPartition tp = new TopicPartition(topic.name(), defaultPartition);
-        var committed = (Map<TopicPartition, OffsetAndMetadata>) actual.committed(UniSets.of(tp), timeout);
-        var offsets = Optional.ofNullable(committed.get(tp));
-
-        var history = offsets.isPresent()
-                ? UniLists.of(offsets.get())
-                : UniLists.<OffsetAndMetadata>of();
-
-        return check("getCommitHistory(%s)", topic.name() + ":" + defaultPartition).about(commitHistories()).that(new CommitHistory(history));
+    public CommitHistorySubject hasCommittedToPartition(TopicPartition topicPartitions) {
+        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(UniSets.of(topicPartitions));
+        return map.values().stream()
+                .findFirst()
+                .orElse(
+                        check("getCommitHistory(%s)", topicPartitions.topic())
+                                .about(commitHistories())
+                                .that(new CommitHistory(UniLists.of())));
     }
 
-//    @Override
-//    protected String actualCustomStringRepresentation() {
-//        String assignors = ReflectionToStringBuilder.toStringExclude(actual,
-//                "assignors", "client", "time", "kafkaConsumerMetrics", "coordinator", "log", "metrics", "fetcher",
-//                "keyDeserializer", "valueDeserializer", "interceptors", "cachedSubscriptionHashAllFetchPositions", "metadata"
-//        );
-//        return assignors;
-//    }
+    public Map<TopicPartition, CommitHistorySubject> hasCommittedToPartition(Set<TopicPartition> partitions) {
+        Map<TopicPartition, OffsetAndMetadata> committed = actual.committed(partitions, timeout);
+        return StreamEx.of(committed.entrySet())
+                .filter(entry -> entry.getValue() != null)
+                .toMap(entry -> entry.getKey(), entry
+                        -> check("getCommitHistory(%s)", entry.getKey().topic() + ":" + entry.getKey().partition())
+                        .about(commitHistories())
+                        .that(new CommitHistory(UniLists.of(entry.getValue()))));
+    }
 
 }
