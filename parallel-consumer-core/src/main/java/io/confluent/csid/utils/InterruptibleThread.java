@@ -1,6 +1,7 @@
 package io.confluent.csid.utils;
 
-import lombok.*;
+import io.confluent.csid.actors.Interruptible;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.event.Level;
@@ -17,6 +18,7 @@ import static java.util.Optional.of;
  */
 @Data
 @Slf4j
+// todo extract the logger, delete the rest - leave on a different branch?
 public class InterruptibleThread {
 
     final Thread thread;
@@ -27,7 +29,7 @@ public class InterruptibleThread {
 //
 
     // todo make not static?
-    private static Reason interruptReason = Reason.UNKNOWN;
+    private static Interruptible.Reason interruptReason = Interruptible.Reason.UNKNOWN;
 
     public static void logInterrupted(Logger delegateLogger, InterruptedException e) {
         logInterrupted(delegateLogger, "Interrupted", e);
@@ -44,7 +46,7 @@ public class InterruptibleThread {
     public static void logInterrupted(Logger delegateLogger, Level level, String msg, InterruptedException e) {
         //
         Optional<String> locationString = getLocationString();
-        Reason reason = getInterruptReasonTL();
+        Interruptible.Reason reason = getInterruptReasonTL();
 
         //
         var reasonNormalised = reason == null ? "No reason given" : "Reason: " + reason;
@@ -91,17 +93,17 @@ public class InterruptibleThread {
         return caller;
     }
 
-    private static Reason getInterruptReasonTL() {
+    private static Interruptible.Reason getInterruptReasonTL() {
         var reason = interruptReason;
         clearReason();
         return reason;
     }
 
     private static void clearReason() {
-        interruptReason = Reason.UNKNOWN;
+        interruptReason = Interruptible.Reason.UNKNOWN;
     }
 
-    public void interrupt(Logger delegateLogger, Reason interruptReason) {
+    public void interrupt(Logger delegateLogger, Interruptible.Reason interruptReason) {
         InterruptibleThread.interruptReason = interruptReason;
 //        objectThreadLocal.set(interruptReason);
         delegateLogger.debug("Interrupting thread {} for: {}", thread.getName(), interruptReason);
@@ -112,13 +114,4 @@ public class InterruptibleThread {
         return thread.getName();
     }
 
-    @AllArgsConstructor
-    @RequiredArgsConstructor
-    @ToString
-    @EqualsAndHashCode
-    public static class Reason {
-        public static final Reason UNKNOWN = new Reason("unknown-reason");
-        private final String desc;
-        private Reason root;
-    }
 }

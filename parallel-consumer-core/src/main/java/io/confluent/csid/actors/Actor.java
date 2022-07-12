@@ -4,7 +4,6 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,7 +31,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // rename to ActorRef? Also clashes with field name.
-public class Actor<T> implements IActor<T> {
+public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actor;
 
@@ -137,7 +136,8 @@ public class Actor<T> implements IActor<T> {
         command.run();
     }
 
-    public void interruptProcessBlockingMaybe(InterruptibleThread.Reason reason) {
+    @Override
+    public void interruptProcessBlockingMaybe(Reason reason) {
         log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
         getActionMailbox().add(() -> interruptInternal(reason));
     }
@@ -150,7 +150,7 @@ public class Actor<T> implements IActor<T> {
      * Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on the
      * queue.
      */
-    private void interruptInternal(InterruptibleThread.Reason reason) {
+    private void interruptInternal(Reason reason) {
         log.debug("Interruption signal processed: {}", reason);
     }
 }
