@@ -122,19 +122,20 @@ public class OffsetSimultaneousEncoder {
      * created scenarios (like test cases).
      */
     private long maybeRaiseOffsetHighestSucceeded(long baseOffsetToCommit, long highestSucceededOffset) {
-        if (highestSucceededOffset < baseOffsetToCommit - 1) {
-            long nextExpectedMinusOne = baseOffsetToCommit - 1;
+        long nextExpectedMinusOne = baseOffsetToCommit - 1;
+
+        boolean gapLargerThanOne = highestSucceededOffset < nextExpectedMinusOne;
+        if (gapLargerThanOne) {
             long gap = nextExpectedMinusOne - highestSucceededOffset;
             log.debug("Gap detected in partition (highest succeeded: {} while next expected poll offset: {} - gap is {}), probably tx markers. Moving highest succeeded to next expected - 1",
                     highestSucceededOffset,
                     nextExpectedMinusOne,
                     gap);
             // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
-            return nextExpectedMinusOne;
-        } else {
-            // leave it as is
-            return highestSucceededOffset;
+            highestSucceededOffset = nextExpectedMinusOne;
         }
+
+        return highestSucceededOffset;
     }
 
     private Set<OffsetEncoder> initEncoders() {
