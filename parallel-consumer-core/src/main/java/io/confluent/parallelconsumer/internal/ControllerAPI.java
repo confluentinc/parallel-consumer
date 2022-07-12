@@ -4,17 +4,11 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 
 import java.util.Optional;
 
-public class ControllerAPI<K, V> {
+public interface ControllerAPI<K, V> {
 
-    public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
+    void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords);
 
-    }
+    void sendWorkResultAsync(WorkContainer<K, V> wc);
 
-    protected void sendWorkResultAsync(WorkContainer<K, V> wc) {
-    }
-
-
-    public Optional<Object> getMyId() {
-        return null;
-    }
+    Optional<Object> getMyId();
 }
