@@ -12,7 +12,6 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.IntStreamEx;
-import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -31,11 +30,13 @@ import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * todo docs
@@ -48,6 +49,11 @@ public class KafkaClientUtils {
     public static final int MAX_POLL_RECORDS = 10_000;
     public static final String GROUP_ID_PREFIX = "group-1-";
 
+    class PCVersion {
+        public static final String V051 = "0.5.1";
+    }
+
+
     private final KafkaContainer kContainer;
 
     @Getter
@@ -58,7 +64,7 @@ public class KafkaClientUtils {
 
     @Getter
     private AdminClient admin;
-    private final String groupId = GROUP_ID_PREFIX + RandomUtils.nextInt();
+    private final String groupId = GROUP_ID_PREFIX + nextInt();
 
     /**
      * todo docs
@@ -144,7 +150,7 @@ public class KafkaClientUtils {
         Properties properties = setupConsumerProps();
 
         if (newConsumerGroup) {
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + RandomUtils.nextInt()); // new group
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + nextInt()); // new group
         }
 
         // override with custom
@@ -155,32 +161,56 @@ public class KafkaClientUtils {
         return kvKafkaConsumer;
     }
 
-    public <K, V> KafkaProducer<K, V> createNewProducer(boolean tx) {
+    public <K, V> KafkaProducer<K, V> createNewTransactionalProducer() {
+        KafkaProducer<K, V> txProd = createNewProducer(TRANSACTIONAL);
+        txProd.initTransactions();
+        return txProd;
+    }
+
+    /**
+     * @deprecated use the enum version {@link #createNewProducer(ProducerMode)} instead, since = {@link PCVersion#V051}
+     */
+    @Deprecated
+    public <K, V> KafkaProducer<K, V> createNewProducer(boolean transactional) {
+        var mode = transactional ? TRANSACTIONAL : NORMAL;
+        return createNewProducer(mode);
+    }
+
+    public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode mode) {
         Properties properties = setupProducerProps();
 
         var txProps = new Properties();
         txProps.putAll(properties);
 
-        if (tx) {
-            // random number so we get a unique producer tx session each time. Normally wouldn't do this in production,
-            // but sometimes running in the test suite our producers step on each other between test runs and this causes
+        if (mode.equals(TRANSACTIONAL)) {
+            // random number, so we get a unique producer tx session each time. Normally wouldn't do this in production,
+            // but sometimes running in the test suite our producers' step on each other between test runs and this causes
             // Producer Fenced exceptions:
             // Error looks like: Producer attempted an operation with an old epoch. Either there is a newer producer with
             // the same transactionalId, or the producer's transaction has been expired by the broker.
-            txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + RandomUtils.nextInt()); // required for tx
+            txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + nextInt()); // required for tx
             txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
-
         }
+
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
 
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
     }
 
+    public enum ProducerMode {
+        TRANSACTIONAL, NORMAL
+    }
+
     @SneakyThrows
     public List<NewTopic> createTopics(int numTopics) {
-        List<NewTopic> newTopics = IntStreamEx.range(numTopics).mapToObj(i -> new NewTopic("in-" + i + "-" + nextInt(), empty(), empty())).toList();
-        getAdmin().createTopics(newTopics).all().get();
+        List<NewTopic> newTopics = IntStreamEx.range(numTopics)
+                .mapToObj(i
+                        -> new NewTopic("in-" + i + "-" + nextInt(), empty(), empty()))
+                .toList();
+        getAdmin().createTopics(newTopics)
+                .all()
+                .get();
         return newTopics;
     }
 
@@ -207,7 +237,6 @@ public class KafkaClientUtils {
             RecordMetadata recordMetadata = send.get();
             boolean b = recordMetadata.hasOffset();
             assertThat(b).isTrue();
-            long offset = recordMetadata.offset();
         }
         assertThat(sends).hasSize(numberToSend);
         return expectedKeys;

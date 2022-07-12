@@ -80,6 +80,9 @@ public class PartitionState<K, V> {
 
     /**
      * Highest offset which has completed successfully ("succeeded").
+     * <p>
+     * Note that this may in some conditions, there may be a gap between this and the next offset to poll - that being,
+     * there may be some number of transaction marker records above it, and the next offset to poll.
      */
     @Getter(PUBLIC)
     private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
@@ -133,7 +136,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
+    public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         setClean();
     }
 
@@ -167,7 +170,7 @@ public class PartitionState<K, V> {
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
 
-        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(work.offset());
+        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(offset);
         assert (removedFromQueue != null);
 
         boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
@@ -195,9 +198,10 @@ public class PartitionState<K, V> {
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
-        maybeRaiseHighestSeenOffset(wc.offset());
-        commitQueue.put(wc.offset(), wc);
-        incompleteOffsets.add(wc.offset());
+        long newOffset = wc.offset();
+        maybeRaiseHighestSeenOffset(newOffset);
+        commitQueue.put(newOffset, wc);
+        incompleteOffsets.add(newOffset);
     }
 
     /**
@@ -224,6 +228,9 @@ public class PartitionState<K, V> {
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
+    /**
+     * Defines as the offset one below the highest sequentially succeeded offset
+     */
     private long getNextExpectedPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
@@ -249,6 +256,10 @@ public class PartitionState<K, V> {
                 .collect(Collectors.toSet()));
     }
 
+    /**
+     * Defined for our purpose (as only used in definition of what offset to poll for next), as the offset one below the
+     * lowest incomplete offset.
+     */
     public long getOffsetHighestSequentialSucceeded() {
         if (this.incompleteOffsets.isEmpty()) {
             return this.offsetHighestSeen;
