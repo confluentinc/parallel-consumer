@@ -35,7 +35,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -124,12 +123,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Useful for testing async code
      */
     private final List<Runnable> controlLoopHooks = new ArrayList<>();
-
-    /**
-     * @see #notifySomethingToDo
-     * @see #processWorkCompleteMailBox
-     */
-    private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
     private final OffsetCommitter committer;
 
@@ -880,16 +873,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Can be interrupted if something else needs doing.
      */
     private void processWorkCompleteMailBox() throws InterruptedException {
-        //
-        final Duration timeToBlockFor = calculateTimeUntilNextAction();
-
-        // can remove currentlyPollingWorkCompleteMailBox
-        currentlyPollingWorkCompleteMailBox.getAndSet(true);
+        Duration timeToBlockFor = calculateTimeUntilNextAction();
         getMyActor().processBlocking(timeToBlockFor);
-        currentlyPollingWorkCompleteMailBox.getAndSet(false);
     }
 
-    // todo move these out and have WM be an actor that's shared and has async methods?
     private void handleWorkResult(WorkContainer<K, V> work) {
         MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
         wm.handleFutureResult(work);
@@ -1093,6 +1080,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
+    // todo extract controller api? - improvements/lambda-api
     protected void sendWorkResultAsync(WorkContainer<K, V> wc) {
         log.trace("Sending new work result to controller {}", wc);
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
@@ -1110,17 +1098,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
      *
-     * @see #processWorkCompleteMailBox //     * @see #blockableControlThread
+     * @see #processWorkCompleteMailBox
      */
     public void notifySomethingToDo(Reason reason) {
+        // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
         getMyActor().interruptProcessBlockingMaybe(reason);
-//        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
-//        if (noTransactionInProgress) {
-//            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-//            interruptControlThread(reason);
-//        } else {
-//            log.trace("Would have interrupted control thread, but TX in progress");
-//        }
     }
 
     @Override
