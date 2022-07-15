@@ -890,6 +890,51 @@ CAUTION: This cannot be true for any externally integrated third party system, u
 
 For implementations details, see the <<Transactional System Architecture>> section.
 
+.From the Options Javadoc
+[source,java,indent=0]
+----
+        /**
+         * Periodically commits through the Producer using transactions.
+         * <p>
+         * The benefits of using this mode are:
+         * <p>
+         * a) All records produced from a given source offset will be visible, or none will be
+         * ({@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}).
+         * <p>
+         * b) If any records making up a transaction have a terminal issue being produced, or the system crashes while
+         * before finishing sending all of them, none will ever be visible if the system will retry the whole set in a
+         * new transaction.
+         * <p>
+         * c) a source offset, and it's produced records will be committed as a set. Normally: either the record
+         * producing could fail, or the committing of the source offset could fail, as they are individual operations.
+         * When uUsing Transactions, they are committed together - so if either operations fail, the transaction will
+         * never get committed, and upon recovery the system will retry the set again (and no duplicates will be visible
+         * in the topic).
+         * <p>
+         * Slowest of the options, but no duplicates in Kafka caused by producing a record from consuming a record, that
+         * has already had its offset committed (message replay may cause duplicates in external systems which is
+         * unavoidable).
+         * <p>
+         * When producing multiple records (see {@link ParallelStreamProcessor#pollAndProduceMany}), all records must
+         * have been produced successfully to the broker before the transaction will commit, after which all will be
+         * visible together, or none.
+         * <p>
+         * Also records produced while running in this mode, won't be seen by consumer running in
+         * {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG} {@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}
+         * mode until the transaction is complete and all records are produced successfully. Records produced into a
+         * transactions that gets aborted or timed out, will never be visible.
+         * <p>
+         * The system must prevent records from being produced to the brokers whose source consumer record offsets has
+         * not been included in this transaction. Otherwise, the transactions would include produced records from
+         * consumer offsets which would only be committed in the NEXT transaction, which wouldn't make sense. To achieve
+         * this, after succeeded consumer offsets are gathered, record producing is suspended, until the transaction has
+         * finished committing. This periodically slows down record production during this period.
+         * <p>
+         * This is separate from using an IDEMPOTENT Producer, which can be used, along with
+         * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         */
+----
+
 [[streams-usage]]
 == Using with Kafka Streams
 

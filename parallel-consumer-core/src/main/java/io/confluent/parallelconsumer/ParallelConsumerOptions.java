@@ -86,6 +86,7 @@ public class ParallelConsumerOptions<K, V> {
      */
     public enum CommitMode {
 
+        // tag::transactionalJavadoc[]
         /**
          * Periodically commits through the Producer using transactions.
          * <p>
@@ -126,6 +127,7 @@ public class ParallelConsumerOptions<K, V> {
          * This is separate from using an IDEMPOTENT Producer, which can be used, along with
          * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
          */
+        // end::transactionalJavadoc[]
         PERIODIC_TRANSACTIONAL_PRODUCER,
 
         /**
