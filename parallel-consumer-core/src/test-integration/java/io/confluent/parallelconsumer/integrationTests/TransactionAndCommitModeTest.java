@@ -189,15 +189,15 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         AtomicInteger producedCount = new AtomicInteger(0);
 
         pc.pollAndProduce(record -> {
-            log.debug("Polled {}", record.offset());
-            consumedKeys.add(record.key());
+                    log.debug("Polled {}", record.offset());
+                    consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
                 }, consumeProduceResult -> {
                     log.debug("Produced {}", consumeProduceResult.getOut());
-            producedCount.incrementAndGet();
-            producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
-            bar.step();
+                    producedCount.incrementAndGet();
+                    producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
+                    bar.step();
                 }
         );
 
