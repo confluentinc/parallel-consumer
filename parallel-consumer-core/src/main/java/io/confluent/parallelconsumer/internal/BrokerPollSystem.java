@@ -34,7 +34,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter {
+public class BrokerPollSystem<K, V> implements OffsetCommitter, BrokerStatusInformer {
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -63,6 +63,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
     private final WorkManager<K, V> wm;
+
+    /**
+     * todo docs
+     */
+    private Set<BrokerStatusListener> statusListeners;
+    private BrokerStatus brokerStatus;
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
@@ -361,5 +367,19 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         } else {
             log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.state);
         }
+    }
+
+    @Override
+    public void addStatusListener(BrokerStatusListener listener) {
+        statusListeners.add(listener);
+    }
+
+    @Override
+    public BrokerStatus getConnectionStatus() {
+        return brokerStatus;
+    }
+
+    private void onBrokerStatusChange(BrokerStatus status) {
+        statusListeners.forEach(brokerStatusListener -> brokerStatusListener.notifyBrokerStatus(status));
     }
 }

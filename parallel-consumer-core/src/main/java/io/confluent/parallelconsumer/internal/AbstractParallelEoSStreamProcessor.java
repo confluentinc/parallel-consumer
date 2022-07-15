@@ -50,7 +50,7 @@ import static lombok.AccessLevel.PROTECTED;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, BrokerStatusInformer, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
     public static final String MDC_OFFSET_MARKER = "offset";
@@ -1243,6 +1243,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
+    }
+
+    public void addStatusListener(BrokerStatusListener listener) {
+        brokerPollSubsystem.addStatusListener(listener);
+    }
+
+    public BrokerStatus getConnectionStatus() {
+        return brokerPollSubsystem.getConnectionStatus();
     }
 
 }
