@@ -468,7 +468,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // last check to see if after worker pool closed, has any new work arrived?
         try {
-            processWorkCompleteMailBox();
+            processActorMessageQueue();
         } catch (InterruptedException e) {
             log.warn("Interrupted processing work while closing, skipping and continuing close...");
             Thread.currentThread().interrupt();
@@ -638,9 +638,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
         }
 
-        log.trace("Loop: Process mailbox");
+        log.trace("Loop: Process actor queue");
         try {
-            processWorkCompleteMailBox();
+            processActorMessageQueue();
         } catch (InterruptedException e) {
             log.warn("Interrupted processing work in control loop, skipping...");
             Thread.currentThread().interrupt();
@@ -880,7 +880,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Can be interrupted if something else needs doing.
      */
-    private void processWorkCompleteMailBox() throws InterruptedException {
+    private void processActorMessageQueue() throws InterruptedException {
         Duration timeToBlockFor = calculateTimeUntilNextAction();
         getMyActor().processBlocking(timeToBlockFor);
     }
@@ -973,12 +973,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
         // no work is currently being done
         boolean workInFlight = wm.hasWorkInFlight();
-        // work mailbox is empty
-        boolean workWaitingInMailbox = !getMyActor().isEmpty();
+        // work actor queue is empty
+        boolean workWaitingInActorQueue = !getMyActor().isEmpty();
         boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
-        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};",
-                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
-        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
+        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInActorQueue {} || !workWaitingToCommit {};",
+                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInActorQueue, !workWaitingToCommit);
+        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInActorQueue || !workWaitingToCommit;
 
         // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
@@ -1053,14 +1053,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             // fail or succeed, either way we're done
             for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+                addWorkResultOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
             }
             log.trace("User function future registered");
 
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+            log.error("Exception caught in user function running stage, registering WC as failed, returning to queue", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
                 sendWorkResultAsync(wc); // always add on error
@@ -1074,7 +1074,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ExternalEngine#onUserFunctionSuccess
      * @see ExternalEngine#isAsyncFutureWork
      */
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
+    // todo collapse
+    protected void addWorkResultOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
         sendWorkResultAsync(wc);
     }
 
@@ -1106,7 +1107,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
      *
-     * @see #processWorkCompleteMailBox
+     * @see #processActorMessageQueue
      */
     public void notifySomethingToDo(Reason reason) {
         // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
