@@ -745,6 +745,12 @@ CAUTION: This cannot be true for any externally integrated third party system, u
 
 For implementations details, see the <<Transactional System Architecture>> section.
 
+.From the Options Javadoc
+[source,java,indent=0]
+----
+include::{project_root}/parallel-consumer-core/src/main/java/io/confluent/parallelconsumer/ParallelConsumerOptions.java[tag=transactionalJavadoc]
+----
+
 [[streams-usage]]
 == Using with Kafka Streams
 
