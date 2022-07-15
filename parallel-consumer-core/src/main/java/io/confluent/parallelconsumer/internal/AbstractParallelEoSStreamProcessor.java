@@ -606,6 +606,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Optional<String> myId = Optional.empty();
 
     /**
+     * todo docs
+     * <p>
+     * Kicks of the control loop in the executor and returns.
+     * <p>
      * Supervisor loop for the main loop.
      *
      * @see #supervisorLoop(Function, Consumer)
@@ -1184,7 +1188,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #blockableControlThread
      */
     public void notifySomethingToDo() {
-        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
+        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false);
         if (noTransactionInProgress) {
             log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
             interruptControlThread();

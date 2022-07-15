@@ -1,24 +1,36 @@
-package io.confluent.parallelconsumer.integrationTests;
+package io.confluent.parallelconsumer.internal;
 
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.integrationTests.TransactionMarkersTest;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ConsumerGroupId;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import net.bytebuddy.ByteBuddy;
+import net.bytebuddy.agent.ByteBuddyAgent;
+import net.bytebuddy.agent.builder.AgentBuilder;
+import net.bytebuddy.asm.Advice;
+import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
+import net.bytebuddy.implementation.FixedValue;
+import net.bytebuddy.matcher.ElementMatchers;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 
+import java.lang.instrument.Instrumentation;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static net.bytebuddy.matcher.ElementMatchers.named;
 
 /**
  * todo docs
  *
  * @author Antony Stubbs
  */
+@Slf4j
 class TransactionBlockTest extends TransactionMarkersTest {
 
     @Test
@@ -96,6 +108,46 @@ class TransactionBlockTest extends TransactionMarkersTest {
         // retry
         // assert results in output topic
         Truth.assertThat(true).isFalse();
+    }
+
+    class MyAdvice {
+        @Advice.OnMethodEnter
+        public void enter() {
+            log.error("hi");
+        }
+    }
+
+    @Test
+    void mockTest() {
+        Class<?> dynamicType = new ByteBuddy()
+                .subclass(Object.class)
+                .method(named("toString")).intercept(FixedValue.value("Hello World!"))
+                .make()
+                .load(getClass().getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                .getLoaded();
+//        dynamicType.
+
+        final Instrumentation install = ByteBuddyAgent.install().redefineClasses();
+
+
+        var targetPackageName = PollContext.class.getPackageName();
+        final AgentBuilder.Default aDefault = new AgentBuilder.Default();
+        aDefault.with(AgentBuilder.Listener.StreamWriting.toSystemOut());
+        aDefault.type(ElementMatchers.nameStartsWith(targetPackageName))
+                .transform((builder, typeDescription, classLoader, javaModule) -> {
+                    return builder
+                            .visit(Advice.to(MyAdvice.class).on(ElementMatchers.isMethod()));
+                });
+
+        final PollContext<Object, Object> recordContexts = new PollContext<>();
+        recordContexts.offset();
+
+        log.debug("end");
+
+
+//        ProducerManager<String, String> pm = Mockito.<ProducerManager<String, String>>mock(ProducerManager.class);
+//        Mockito.when(pm.produceMessages()).
+//        List<ParallelConsumer.Tuple<ProducerRecord<String, String>, Future<RecordMetadata>>> tuples = pm.produceMessages(List.of());
     }
 
     @NonNull

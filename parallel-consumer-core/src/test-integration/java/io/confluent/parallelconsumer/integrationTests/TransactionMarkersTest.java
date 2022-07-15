@@ -40,7 +40,7 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
  * @see OffsetSimultaneousEncoder#OffsetSimultaneousEncoder
  */
 @Slf4j
-class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
+public class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 
     /**
      * Block all records beyond the second record
@@ -55,7 +55,7 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     Producer<String, String> txProducerThree;
     Producer<String, String> normalProducer;
     Consumer<String, String> consumer;
-    ParallelEoSStreamProcessor<String, String> pc;
+    protected ParallelEoSStreamProcessor<String, String> pc;
 
     @BeforeEach
         // todo move to super?
