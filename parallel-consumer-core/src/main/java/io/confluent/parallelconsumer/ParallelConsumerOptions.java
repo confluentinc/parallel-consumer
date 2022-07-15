@@ -95,9 +95,9 @@ public class ParallelConsumerOptions<K, V> {
          * a) All records produced from a given source offset will be visible, or none will be
          * ({@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}).
          * <p>
-         * b) If any records making up a transaction have a terminal issue being produced, or the system crashes while
-         * before finishing sending all of them, none will ever be visible if the system will retry the whole set in a
-         * new transaction.
+         * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
+         * finishing sending all the records and committing, none will ever be visible and the system will retry th e
+         * whole set in a new transaction.
          * <p>
          * c) a source offset, and it's produced records will be committed as a set. Normally: either the record
          * producing could fail, or the committing of the source offset could fail, as they are individual operations.
@@ -108,6 +108,12 @@ public class ParallelConsumerOptions<K, V> {
          * Slowest of the options, but no duplicates in Kafka caused by producing a record from consuming a record, that
          * has already had its offset committed (message replay may cause duplicates in external systems which is
          * unavoidable).
+         * <p>
+         * Note that the system uses very large transactions (for transaction standards), by only committing by default
+         * every {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY}, which is 5 seconds.
+         * This creates large transactions. However, note also that this would be the same as using non-transactional
+         * committing - that being upon failure, all records not previously committed will be replayed. Reducing this
+         * configuration places higher loads on the broker, but will reduce (but cannot eliminate) replay upon failure.
          * <p>
          * When producing multiple records (see {@link ParallelStreamProcessor#pollAndProduceMany}), all records must
          * have been produced successfully to the broker before the transaction will commit, after which all will be
@@ -126,14 +132,16 @@ public class ParallelConsumerOptions<K, V> {
          * <p>
          * This is separate from using an IDEMPOTENT Producer, which can be used, along with
          * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         *
+         * @see AbstractParallelEoSStreamProcessor#getTimeBetweenCommits()
          */
         // end::transactionalJavadoc[]
         PERIODIC_TRANSACTIONAL_PRODUCER,
 
         /**
-         * Periodically synchronous commits with the Consumer. Much faster than {@link
-         * #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than {@link
-         * #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
+         * Periodically synchronous commits with the Consumer. Much faster than
+         * {@link #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than
+         * {@link #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
          */
         PERIODIC_CONSUMER_SYNC,
 
@@ -161,9 +169,9 @@ public class ParallelConsumerOptions<K, V> {
      * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
      * maximum to prevent overloading them or to a degree, using up quotas.
      * <p>
-     * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a {@link
-     * #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15} records being
-     * processed at once.
+     * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a
+     * {@link #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15}
+     * records being processed at once.
      * <p>
      * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
      * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
@@ -198,8 +206,9 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
-     * returned from the user-function. Only relevant if using one of the produce-flows and providing a {@link
-     * ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
+     * returned from the user-function. Only relevant if using one of the produce-flows and providing a
+     * {@link ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the
+     * user-function.
      * <p>
      * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary
      * re-processing and duplicates on slow {@link Producer#send} calls.
@@ -210,8 +219,8 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration sendTimeout = Duration.ofSeconds(10);
 
     /**
-     * Controls how long to block while waiting for offsets to be committed. Only relevant if using {@link
-     * CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
+     * Controls how long to block while waiting for offsets to be committed. Only relevant if using
+     * {@link CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
      */
     @Builder.Default
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
@@ -228,9 +237,9 @@ public class ParallelConsumerOptions<K, V> {
      * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
      * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      * <p>
-     * Note that there is no relationship between the {@link ConsumerConfig} setting of {@link
-     * ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large layer
-     * of indirection between the managed consumer, and the managed queues we use.
+     * Note that there is no relationship between the {@link ConsumerConfig} setting of
+     * {@link ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large
+     * layer of indirection between the managed consumer, and the managed queues we use.
      * <p>
      * This indirection effectively disconnects the processing of messages from "polling" them from the managed client,
      * as we do not wait to process them before calling poll again. We simply call poll as much as we need to, in order

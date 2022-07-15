@@ -152,7 +152,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
+        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode);
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
@@ -219,16 +219,18 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(defaultTimeout)
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                    // dynamic reason support still waiting
+                    // https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                    // https://github.com/confluentinc/parallel-consumer/issues/199
                     .failFast("PC died, check logs.",
-                            () -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
+                            () -> pc.isClosedOrFailed()
                                     || producedCount.get() > expectedMessageCount)
 //                            () -> {
 //                                if (pc.isClosedOrFailed())
 //                                    return pc.getFailureCause();
 //                                else
 //                                    return new TerminalFailureException(msg("Too many messages? processedCount.get() {} > expectedMessageCount {}",
-//                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4 // TODO link
+//                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4
 //                            })
                     .alias(failureMessage)
                     .untilAsserted(() -> {

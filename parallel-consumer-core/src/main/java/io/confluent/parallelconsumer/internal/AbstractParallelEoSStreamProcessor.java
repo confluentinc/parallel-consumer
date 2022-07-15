@@ -72,15 +72,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Clock clock = TimeUtils.getClock();
 
     /**
-     * Kafka's default auto commit frequency. https://docs.confluent.io/platform/current/clients/consumer.html#id1
+     * Kafka's default auto commit frequency - which is 5000ms.
+     *
+     * @see org.apache.kafka.clients.consumer.ConsumerConfig#AUTO_COMMIT_INTERVAL_MS_CONFIG
+     * @see org.apache.kafka.clients.consumer.ConsumerConfig#CONFIG
      */
-    private static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY = 5000;
+    public static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY = 5000; // ms
 
     /**
      * Time between commits. Using a higher frequency will put more load on the brokers.
      */
     @Setter
     @Getter
+    // todo move this to options for next major version
     private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY);
 
     private Instant lastCommitCheckTime = Instant.now();
