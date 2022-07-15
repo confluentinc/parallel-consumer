@@ -89,10 +89,15 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         pm.startProducing();
         try {
             var futures = pm.produceMessages(recordListToProduce);
-            for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> future : futures) {
+            for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> futureTuple : futures) {
                 var recordMetadata = TimeUtils.time(() ->
-                        future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
-                var result = new ConsumeProduceResult<>(context.getPollContext(), future.getLeft(), recordMetadata);
+                {
+                    Future<RecordMetadata> futureSend = futureTuple.getRight();
+                    // todo message these to the controller thread instead of blocking for them here - the controller
+                    //  can collect all completed futures itself and check the status of each one - and react accordingly
+                    return futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                });
+                var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
                 results.add(result);
             }
         } catch (Exception e) {

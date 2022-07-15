@@ -59,7 +59,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * would have the side effect of all producer record sending being done by the controller thread. Now as the
      * Producer is thread safe - it uses the {@link RecordAccumulator} effectively as it's Actor bus, and all network
      * communication, amongst other things, are done through a separate thread. However, before sending records to the
-     * accumulator, some non-trivial work is done while still in the multi-threaded context - most particularly (because
+     * accumulator, some non-trivial work is done while still in the multithreading context - most particularly (because
      * it's probably the slowest part) is the serialisation of the payload. By moving to the new micro Actor framework,
      * that serialisation would then be done in the controller. Give the existing shared state system using the
      * {@link ReentrantReadWriteLock} works really well, I'm hesitant to give up the performance over simplification in
