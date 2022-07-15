@@ -139,6 +139,14 @@ public class KafkaClientUtils {
         return createNewConsumer(false);
     }
 
+    public enum ConsumerGroupId {
+        NEW, REUSE
+    }
+
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(ConsumerGroupId groupId) {
+        return createNewConsumer(groupId.equals(ConsumerGroupId.NEW));
+    }
+
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup) {
         return createNewConsumer(newConsumerGroup, new Properties());
     }
