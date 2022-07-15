@@ -1,6 +1,8 @@
 package io.confluent.parallelconsumer.integrationTests;
 
+import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ConsumerGroupId;
 import lombok.NonNull;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
@@ -47,7 +49,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
         pc.requestCommitAsap();
 
         // assert tx completes
-        var isolationCommittedConsumer = kcu.createNewConsumer(false);
+        var isolationCommittedConsumer = kcu.createNewConsumer(ConsumerGroupId.NEW);
         {
             var poll = isolationCommittedConsumer.poll(Duration.ZERO);
             assertThat(poll).containsOffset(blockFreeRecords);
@@ -64,20 +66,23 @@ class TransactionBlockTest extends TransactionMarkersTest {
         }
 
         // finish transaction
-        ???
+//        ???
+        Truth.assertThat(true).isFalse();
 
         // assert blocked record now sent
         pc.requestCommitAsap();
-        assertThat(pc).hasCommittedOffset(blockFreeRecords);
+        assertThat(pc).hasCommittedToAnything(blockFreeRecords);
         {
             var poll = isolationCommittedConsumer.poll(Duration.ZERO);
             assertThat(poll).containsOffset(blockedOffset);
         }
 
         // commit open transaction
-        ???
+//        ???
+        Truth.assertThat(true).isFalse();
+
         // assert results topic contains all
-        assertThat(pc).hasCommittedOffset(blockFreeRecords);
+        assertThat(pc).hasCommittedToAnything(blockFreeRecords);
         {
             var poll = isolationCommittedConsumer.poll(Duration.ZERO);
             assertThat(poll).containsOffset(blockedOffset);
@@ -90,13 +95,14 @@ class TransactionBlockTest extends TransactionMarkersTest {
         // assert nothing on result topic
         // retry
         // assert results in output topic
+        Truth.assertThat(true).isFalse();
     }
 
     @NonNull
-    private List makeOutput(PollContext<String, String> recordContexts) {
+    private List<ProducerRecord<String, String>> makeOutput(PollContext<String, String> recordContexts) {
         return recordContexts.stream()
                 .map(record
-                        -> new ProducerRecord(topic, record.value()))
+                        -> new ProducerRecord<String, String>(topic, record.value()))
                 .collect(Collectors.toList());
     }
 
