@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelStreamProcessor.FutureConsumeProduceResult;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -17,6 +18,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
@@ -678,6 +680,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Loop: Process mailbox");
         processWorkCompleteMailBox();
 
+        processFutureSendResults();
+
         if (isIdlingOrRunning()) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
@@ -712,6 +716,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
+    }
+
+    private void processFutureSendResults() {
+        futuresQueue.stream()
+                .filter(result -> result.getMeta().isDone())
+                .forEach(result -> {
+                    RecordMetadata recordMetadata = result.getMeta().get();
+                    // future doesn't have exceptions...
+//                    if (recordMetadata.)
+                    PollContextInternal<K, V> in = result.getIn();
+                    in.streamWorkContainers()
+                            .forEach(wc
+                                    -> onUserFunctionSuccess(wc, result));
+                });
     }
 
     private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
@@ -1255,6 +1273,21 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
+    }
+
+    /**
+     * Async tell the controller about future send results. This causes the controller to only commit results for these
+     * source records when it's potentially done blockin gon it's actor queue until the next commit time - but as these
+     * records only affect things at commit time - that's great.
+     */
+    protected void handleFutureProduceResultsAsync(List<FutureConsumeProduceResult<K, V, K, V>> results) {
+        getMyActor().tell(controller -> handleFutureProduceResultsMessage(results));
+    }
+
+    private final Queue<FutureConsumeProduceResult<K, V, K, V>> futuresQueue = new LinkedBlockingQueue;
+
+    private void handleFutureProduceResultsMessage(List<FutureConsumeProduceResult<K, V, K, V>> results) {
+        futuresQueue.addAll(results);
     }
 
 }

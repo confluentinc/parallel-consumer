@@ -10,6 +10,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -84,5 +85,12 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
         private final PollContext<K, V> in;
         private final ProducerRecord<KK, VV> out;
         private final RecordMetadata meta;
+    }
+
+    @Data
+    class FutureConsumeProduceResult<K, V, KK, VV> {
+        private final PollContextInternal<K, V> in;
+        private final ProducerRecord<KK, VV> out;
+        private final Future<RecordMetadata> meta;
     }
 }
