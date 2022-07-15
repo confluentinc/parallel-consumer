@@ -86,7 +86,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // should be three stages so can batch when there's more than one, otherwise it's acquires the read lock N times
         ProducerManager<K, V> pm = super.getProducerManager().get();
-        pm.startProducing();
+        var produceLock = pm.startProducing();
         try {
             var futures = pm.produceMessages(recordListToProduce);
             for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> futureTuple : futures) {
@@ -103,7 +103,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         } catch (Exception e) {
             throw new InternalRuntimeError("Error while waiting for produce results", e);
         } finally {
-            pm.finishProducing();
+            pm.finishProducing(produceLock);
         }
         return results;
     }
