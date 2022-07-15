@@ -279,7 +279,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     /**
      * Assumes the system is drained at this point, or draining is not desired.
      */
-    public void close(final Duration timeout) {
+    public void close(Duration timeout) {
         log.debug("Closing producer, assuming no more in flight...");
         if (options.isUsingTransactionalProducer() && !isTransactionReady()) {
             acquireCommitLock();
