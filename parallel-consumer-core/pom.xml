@@ -127,6 +127,7 @@
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
+                        <class>io.confluent.parallelconsumer.internal.ProducerManager</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>

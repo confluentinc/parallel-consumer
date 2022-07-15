@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -53,40 +54,53 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @Override
     @SneakyThrows
     public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-        Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+                                   Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         // todo refactor out the producer system to a sub class
         if (!getOptions().isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
         }
 
         // wrap user func to add produce function
-        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = context -> {
-            List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
-
-            if (recordListToProduce.isEmpty()) {
-                log.debug("No result returned from function to send.");
-            }
-            log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
-
-            List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
-            log.trace("Producing {} messages in result...", recordListToProduce.size());
-
-            var futures = super.getProducerManager().get().produceMessages(recordListToProduce);
-            try {
-                for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> future : futures) {
-                    var recordMetadata = TimeUtils.time(() ->
-                        future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
-                    var result = new ConsumeProduceResult<>(context.getPollContext(), future.getLeft(), recordMetadata);
-                    results.add(result);
-                }
-            } catch (Exception e) {
-                throw new InternalRuntimeError("Error while waiting for produce results", e);
-            }
+        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc
+                = context -> {
+            List<ConsumeProduceResult<K, V, K, V>> results = getConsumeProduceResults(userFunction, context);
 
             return results;
         };
 
         supervisorLoop(wrappedUserFunc, callback);
+    }
+
+    private List<ConsumeProduceResult<K, V, K, V>> getConsumeProduceResults(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                                                            PollContextInternal<K, V> context) {
+        //
+        List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
+
+        if (recordListToProduce.isEmpty()) {
+            log.debug("No result returned from function to send.");
+        }
+        log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
+
+        List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
+        log.trace("Producing {} messages in result...", recordListToProduce.size());
+
+        // should be three stages so can batch when there's more than one, otherwise it's acquires the read lock N times
+        ProducerManager<K, V> pm = super.getProducerManager().get();
+        pm.startProducing();
+        try {
+            var futures = pm.produceMessages(recordListToProduce);
+            for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> future : futures) {
+                var recordMetadata = TimeUtils.time(() ->
+                        future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
+                var result = new ConsumeProduceResult<>(context.getPollContext(), future.getLeft(), recordMetadata);
+                results.add(result);
+            }
+        } catch (Exception e) {
+            throw new InternalRuntimeError("Error while waiting for produce results", e);
+        } finally {
+            pm.finishProducing();
+        }
+        return results;
     }
 
     @Override
@@ -109,8 +123,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     @SneakyThrows
-    public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction, 
-    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+    public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
+                               Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         pollAndProduceMany(consumerRecord -> UniLists.of(userFunction.apply(consumerRecord)), callback);
     }
 
