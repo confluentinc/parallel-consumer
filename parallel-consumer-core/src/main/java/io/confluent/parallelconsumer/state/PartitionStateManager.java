@@ -9,7 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.NonNull;
@@ -200,7 +200,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         var tp = toTopicPartition(rec);
         Long epoch = partitionsAssignmentEpochs.get(tp);
         if (epoch == null) {
-            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
+            throw new InternalRuntimeException(msg("Received message for a partition which is not assigned: {}", rec));
         }
         return epoch;
     }

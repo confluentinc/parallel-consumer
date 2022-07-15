@@ -360,7 +360,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // truncate the revoked partitions
             wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
-            throw new InternalRuntimeError("onPartitionsRevoked event error", e);
+            throw new InternalRuntimeException("onPartitionsRevoked event error", e);
         }
 
         //

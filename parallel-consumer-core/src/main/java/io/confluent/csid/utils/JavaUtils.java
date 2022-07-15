@@ -4,7 +4,7 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.experimental.UtilityClass;
 
 import java.time.Duration;
@@ -28,7 +28,7 @@ public class JavaUtils {
     public static <T> Optional<T> getOnlyOne(final Map<String, T> stringMapMap) {
         if (stringMapMap.isEmpty()) return Optional.empty();
         Collection<T> values = stringMapMap.values();
-        if (values.size() > 1) throw new InternalRuntimeError("More than one element");
+        if (values.size() > 1) throw new InternalRuntimeException("More than one element");
         return Optional.of(values.iterator().next());
     }
 
