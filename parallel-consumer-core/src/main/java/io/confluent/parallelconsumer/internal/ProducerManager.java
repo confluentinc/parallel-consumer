@@ -99,7 +99,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             }
         } else {
             if (producerIsConfiguredForTransactions) {
-                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " + "the Producer must not have a transaction ID for this option. This is because having such an ID forces the " + "Producer into transactional mode - i.e. you cannot use it without using transactions.");
+                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - "
+                        + "the Producer must not have a transaction ID for this option. This is because having such an ID forces the "
+                        + "Producer into transactional mode - i.e. you cannot use it without using transactions.");
             }
         }
     }
@@ -152,25 +154,20 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             }
         };
 
-        ReentrantReadWriteLock.ReadLock readLock = acquireReadLock();
-        try {
-            List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
-            for (ProducerRecord<K, V> rec : outMsgs) {
-                log.trace("Producing {}", rec);
-                var future = producer.send(rec, callback);
-                futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
-            }
-            return futures;
-        } finally {
-            releaseReadLock(readLock);
+        List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
+        for (ProducerRecord<K, V> rec : outMsgs) {
+            log.trace("Producing {}", rec);
+            var future = producer.send(rec, callback);
+            futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
         }
+        return futures;
     }
 
-    protected void releaseReadLock(ReentrantReadWriteLock.ReadLock readLock) {
+    protected void releaseProduceLock(ReentrantReadWriteLock.ReadLock readLock) {
         readLock.unlock();
     }
 
-    protected ReentrantReadWriteLock.ReadLock acquireReadLock() {
+    protected ReentrantReadWriteLock.ReadLock acquireProduceLock() {
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         readLock.lock();
         return readLock;
@@ -211,6 +208,11 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         if (!options.isUsingTransactionalProducer()) {
             throw new IllegalStateException("Bug: cannot use if not using transactional producer");
         }
+
+        // producer commit lock should already be acquired at this point, before work was retrieved to commit,
+        // so that more messages don't sneak into this tx block - the consumer records of which won't yet be
+        // in this offset collection
+        ensureCommitLockHeld();
 
         //
         producer.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
@@ -396,21 +398,20 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         writeLock.unlock();
     }
 
-    private void ensureLockHeld() {
+    private void ensureCommitLockHeld() {
         if (!producerTransactionLock.isWriteLockedByCurrentThread())
             throw new IllegalStateException("Expected commit lock to be held");
     }
 
-    // todo rename to isTransactionCommittingInProgress
     public boolean isTransactionCommittingInProgress() {
         return producerTransactionLock.isWriteLocked();
     }
 
-    public void startProducing() {
-        //acquire
+    public ReentrantReadWriteLock.ReadLock startProducing() {
+        return acquireProduceLock();
     }
 
-    public void finishProducing() {
-        //release
+    public void finishProducing(ReentrantReadWriteLock.ReadLock produceLock) {
+        releaseProduceLock(produceLock);
     }
 }
