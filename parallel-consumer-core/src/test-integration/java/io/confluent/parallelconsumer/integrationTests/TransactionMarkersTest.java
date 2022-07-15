@@ -12,13 +12,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -85,8 +89,8 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
      * <p>
      * todo can these gaps also be created by log compaction? If so, is the solution the same?
      *
-     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/329">Github issue #329</a> the original
-     *         reported issue
+     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/329">Github issue #329</a> the
+     *         original reported issue
      */
     @Test
     void single() {
@@ -167,8 +171,10 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         return new ProducerRecord<>(topic, "");
     }
 
-    private void sendRecordsNonTransactionally(int count) {
-        IntStream.of(count).forEach(i -> normalProducer.send(createRecordToSend()));
+    protected List<Future<RecordMetadata>> sendRecordsNonTransactionally(int count) {
+        return IntStream.of(count).mapToObj(i
+                        -> normalProducer.send(createRecordToSend()))
+                .collect(Collectors.toList());
     }
 
     /**
