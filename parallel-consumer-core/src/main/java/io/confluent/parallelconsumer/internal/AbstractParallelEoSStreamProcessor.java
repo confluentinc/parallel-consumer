@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelStreamProcessor.FutureConsumeProduceResult;
+import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -18,6 +18,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
@@ -718,17 +719,21 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
+    /**
+     * todo docs
+     */
     private void processFutureSendResults() {
         futuresQueue.stream()
-                .filter(result -> result.getMeta().isDone())
+                // filter results where ALL send futures have completed
+                .filter(result -> result.getOut().stream()
+                        .allMatch(sendResult -> sendResult.getRight().isDone()))
                 .forEach(result -> {
-                    RecordMetadata recordMetadata = result.getMeta().get();
-                    // future doesn't have exceptions...
-//                    if (recordMetadata.)
+                    // future doesn't have exceptions...? send callbacks...
                     PollContextInternal<K, V> in = result.getIn();
+                    List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> out = result.getOut();
                     in.streamWorkContainers()
                             .forEach(wc
-                                    -> onUserFunctionSuccess(wc, result));
+                                    -> onUserFunctionSuccess(wc, out));
                 });
     }
 
@@ -1276,18 +1281,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * Async tell the controller about future send results. This causes the controller to only commit results for these
-     * source records when it's potentially done blockin gon it's actor queue until the next commit time - but as these
-     * records only affect things at commit time - that's great.
+     * todo move, docs
      */
-    protected void handleFutureProduceResultsAsync(List<FutureConsumeProduceResult<K, V, K, V>> results) {
-        getMyActor().tell(controller -> handleFutureProduceResultsMessage(results));
-    }
+    private final Queue<ConsumeProduceResult<K, V, K, V>> futuresQueue = new LinkedBlockingQueue<>();
 
-    private final Queue<FutureConsumeProduceResult<K, V, K, V>> futuresQueue = new LinkedBlockingQueue;
-
-    private void handleFutureProduceResultsMessage(List<FutureConsumeProduceResult<K, V, K, V>> results) {
-        futuresQueue.addAll(results);
+    /**
+     * Async tell the controller about future send results. This causes the controller to only commit results for these
+     * source records when it's done blocking on message queue, until the next commit time. But as these results only
+     * affect things at commit time - that's great.
+     */
+    protected void handleFutureProduceResultsAsync(ConsumeProduceResult<K, V, K, V> results) {
+        futuresQueue.add(results);
     }
 
 }

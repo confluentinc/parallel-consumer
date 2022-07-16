@@ -82,15 +82,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      */
     @Data
     class ConsumeProduceResult<K, V, KK, VV> {
-        private final PollContext<K, V> in;
-        private final ProducerRecord<KK, VV> out;
-        private final RecordMetadata meta;
-    }
-
-    @Data
-    class FutureConsumeProduceResult<K, V, KK, VV> {
         private final PollContextInternal<K, V> in;
-        private final ProducerRecord<KK, VV> out;
-        private final Future<RecordMetadata> meta;
+        private final List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> out;
     }
 }
