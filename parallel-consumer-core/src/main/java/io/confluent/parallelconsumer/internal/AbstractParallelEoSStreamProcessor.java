@@ -730,6 +730,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 .forEach(result -> {
                     // future doesn't have exceptions...? send callbacks...
                     PollContextInternal<K, V> in = result.getIn();
+                    // todo this needs fixing - should be one work container, to one set of future record sends
                     List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> out = result.getOut();
                     in.streamWorkContainers()
                             .forEach(wc
