@@ -36,7 +36,7 @@ public abstract class BrokerIntegrationTest<K, V> {
 
     int numPartitions = 1;
 
-    String topic;
+    protected String topic;
 
     /**
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers

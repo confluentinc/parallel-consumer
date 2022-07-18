@@ -103,9 +103,9 @@ public class CoreApp {
                     var result = processBrokerRecord(consumerRecord);
                     return new ProducerRecord<>(outputTopic, consumerRecord.key(), result.payload);
                 }, consumeProduceResult -> {
-                    log.debug("Message {} saved to broker at offset {}",
-                            consumeProduceResult.getOut(),
-                            consumeProduceResult.getMeta().offset());
+                    // todo fix up
+                    log.debug("Message {} saved to broker at offset ??",
+                            consumeProduceResult.getOut());
                 }
         );
         // end::exampleProduce[]

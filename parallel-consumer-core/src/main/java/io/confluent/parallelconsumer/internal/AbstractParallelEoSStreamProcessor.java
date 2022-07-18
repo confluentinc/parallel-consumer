@@ -9,15 +9,19 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import io.confluent.parallelconsumer.PollContextInternal;
+import io.confluent.parallelconsumer.RecordContextInternal;
+import io.confluent.parallelconsumer.state.ConsumerRecordId;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
+import lombok.experimental.StandardException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -255,6 +259,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
+//        Callback callback = (RecordMetadata metadata, Exception exception) -> {
+//            RecordContextInternal<K, V> recordContextInternal = null;
+//            sendRecordResultSuccess(recordContextInternal, metadata, exception);
+//            final boolean noErrorPresent = exception == null;
+//            if (noErrorPresent) {
+//
+//            } else {
+//                // handle errors sending records in the controller thread - it can requeue them, or fail
+//                sendRecordResultFailed(metadata, exception);
+//                log.error("Error producing result message", exception);
+//                throw new InternalRuntimeError("Error producing result message", exception);
+//            }
+//        };
+
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
             if (options.isUsingTransactionalProducer())
@@ -266,6 +284,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.committer = this.brokerPollSubsystem;
         }
     }
+
 
     private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         try {
@@ -608,7 +627,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see #supervisorLoop(Function, Consumer)
      */
-    protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
+    protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, R> userFunctionWrapped,
                                       Consumer<R> callback) {
         if (state != State.unused) {
             throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
@@ -663,7 +682,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Main control loop
      */
-    private <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
+    private <R> void controlLoop(Function<PollContextInternal<K, V>, R> userFunction,
                                  Consumer<R> callback) throws TimeoutException, ExecutionException {
 
         //
@@ -719,26 +738,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    /**
-     * todo docs
-     */
-    private void processFutureSendResults() {
-        futuresQueue.stream()
-                // filter results where ALL send futures have completed
-                .filter(result -> result.getOut().stream()
-                        .allMatch(sendResult -> sendResult.getRight().isDone()))
-                .forEach(result -> {
-                    // future doesn't have exceptions...? send callbacks...
-                    PollContextInternal<K, V> in = result.getIn();
-                    // todo this needs fixing - should be one work container, to one set of future record sends
-                    List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> out = result.getOut();
-                    in.streamWorkContainers()
-                            .forEach(wc
-                                    -> onUserFunctionSuccess(wc, out));
-                });
-    }
-
-    private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    private <R> int handleWork(final Function<PollContextInternal<K, V>, R> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
 
@@ -771,7 +771,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workToProcess the polled records to process
      */
-    protected <R> void submitWorkToPool(Function<PollContextInternal<K, V>, List<R>> usersFunction,
+    protected <R> void submitWorkToPool(Function<PollContextInternal<K, V>, R> usersFunction,
                                         Consumer<R> callback,
                                         List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
@@ -797,12 +797,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
+    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, R> usersFunction,
                                            final Consumer<R> callback,
                                            final List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
         log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerThreadPool.submit(() -> {
+        Future<?> outputRecordFuture = workerThreadPool.submit(() -> {
             addInstanceMDC();
             return runUserFunction(usersFunction, callback, batch);
         });
@@ -1122,11 +1122,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Run the supplied function.
      */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
-        // call the user's function
-        List<R> resultsFromUserFunction;
+    protected <R> R runUserFunction(Function<PollContextInternal<K, V>, R> usersFunction,
+                                    Consumer<R> callback,
+                                    List<WorkContainer<K, V>> workContainerBatch) {
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
@@ -1143,26 +1141,36 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
 
             PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
-            resultsFromUserFunction = usersFunction.apply(context);
 
-            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
-                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
+            // run user function
+            R resultsFromUserFunction = usersFunction.apply(context);
 
-            // capture each result, against the input record
-            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {
+            boolean isNotRecordsProduceResult = resultsFromUserFunction instanceof ConsumeProduceResult<?, ?> cpr
+                    && cpr.getOut().isEmpty();
+
+            if (isNotRecordsProduceResult) {
+                for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
+                    onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+                }
+
+                // capture each result, against the input record
+//            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
+//                for (R result : resultsFromUserFunction) {
                 log.trace("Running users call back...");
-                callback.accept(result);
-            }
+                callback.accept(resultsFromUserFunction);
+//                }
 
-            // fail or succeed, either way we're done
-            for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+                // fail or succeed, either way we're done
+                for (var kvWorkContainer : workContainerBatch) {
+                    addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+//                    addToMailBoxOnUserFunctionSuccess(kvWorkContainer);
+                }
+                log.trace("User function future registered");
+            } else {
+                log.debug("User function returned output records, so not sending result yet");
+//                handleFutureProduceResultsAsync()
             }
-            log.trace("User function future registered");
-
-            return intermediateResults;
+            return resultsFromUserFunction;
         } catch (Exception e) {
             // handle fail
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
@@ -1174,11 +1182,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, Object ignored) {
+//    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc) {
         addToMailbox(wc);
     }
 
-    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, Object ignored) {
+//    protected void onUserFunctionSuccess(WorkContainer<K, V> wc) {
         log.trace("User function success");
         // todo check for produced message send success or not here
         // if results.isProducedRecord().failedAndRetriable()
@@ -1284,15 +1294,147 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * todo move, docs
      */
-    private final Queue<ConsumeProduceResult<K, V, K, V>> futuresQueue = new LinkedBlockingQueue<>();
+    private final Queue<ConsumeProduceResult<K, V>> futuresQueue = new LinkedBlockingQueue<>();
+
+    private final Queue<CompletedSend<K, V>> finishedSends = new LinkedBlockingQueue<>();
+
+    private final Queue<ConsumeProduceResult<K, V>> queueTwo = new LinkedBlockingQueue<>();
+
+    private final Map<RecordContextInternal<K, V>, Future<RecordMetadata>> anotherMap = new HashMap<>();
+
+    // concurrent access
+    Map<ConsumerRecordId, ConsumeProduceResult<K, V>> inFlightSends = new HashMap<>();
+
+    Map<PollContextInternal<K, V>, List<ProducerRecord<K, V>>> stashedInFlightSendsTwo = new HashMap<>();
+
 
     /**
      * Async tell the controller about future send results. This causes the controller to only commit results for these
      * source records when it's done blocking on message queue, until the next commit time. But as these results only
      * affect things at commit time - that's great.
      */
-    protected void handleFutureProduceResultsAsync(ConsumeProduceResult<K, V, K, V> results) {
-        futuresQueue.add(results);
+    protected void handleFutureProduceResultsAsync(ConsumeProduceResult<K, V> results) {
+//        futuresQueue.add(results);
+        ConsumerRecord<K, V> singleConsumerRecord = results.getIn().getSingleConsumerRecord();
+        var tp = new TopicPartition(singleConsumerRecord.topic(), singleConsumerRecord.partition());
+        var key = new ConsumerRecordId(tp, singleConsumerRecord.offset());
+        inFlightSends.put(key, results);
+    }
+
+    protected void handleFutureProduceResultsAsync(RecordContextInternal<K, V> recordContextInternal, Future<RecordMetadata> recordMetadataFuture) {
+//        futuresQueue.add(results);
+//        ConsumerRecord<K, V> singleConsumerRecord = results.getIn().getSingleConsumerRecord();
+//        var tp = new TopicPartition(singleConsumerRecord.topic(), singleConsumerRecord.partition());
+//        var key = new ConsumerRecordId(tp, singleConsumerRecord.offset());
+//        inFlightSends.put(key, results);
+
+        anotherMap.put(recordContextInternal, recordMetadataFuture);
+    }
+
+
+    private void sendRecordResultSuccess(RecordMetadata metadata) {
+        var tp = new TopicPartition(metadata.topic(), metadata.partition());
+        var key = new ConsumerRecordId(tp, metadata.offset());
+        ConsumeProduceResult<K, V> finishedSendResult = inFlightSends.get(key);
+        futuresQueue.add(finishedSendResult);
+    }
+
+    public void stashInFlightSends(PollContextInternal<K, V> recordContextInternal,
+                                   List<ProducerRecord<K, V>> recordListToProduce) {
+        stashedInFlightSendsTwo.put(recordContextInternal, recordListToProduce);
+    }
+
+    public void sendRecordResultSuccess(PollContextInternal<K, V> recordContextInternal,
+                                        ProducerRecord<K, V> sent,
+                                        RecordMetadata metadata,
+                                        Exception exception) {
+//        List<ProducerRecord<K, V>> completedRecordMetadataFuture = stashedInFlightSendsTwo.get(recordContextInternal);
+
+//        if (completedRecordMetadataFuture.isDone()) {
+        finishedSends.add(new CompletedSend<>(recordContextInternal, sent, metadata, exception));
+//        } else {
+//            throw new IllegalStateException(msg("Expected future to be done, but wasn't. {} {}", recordContextInternal, metadata));
+//        }
+
+        //
+        notifySomethingToDo();
+    }
+
+    /**
+     * todo docs
+     */
+    private void processFutureSendResults() {
+        finishedSends.stream().forEach(result -> {
+            var exception = result.getException();
+            boolean noErrorPresent = exception == null;
+            var context = result.getRecordContextInternal();
+            if (noErrorPresent) {
+                // remove finished send
+                List<ProducerRecord<K, V>> producerRecords = this.stashedInFlightSendsTwo.get(context);
+                producerRecords.remove(result.getSent());
+
+                // if all records for context are complete, finish all wc's
+                if (producerRecords.isEmpty()) {
+//                    var out = result.getMetadata();
+                    Optional<Object> ignored = Optional.empty();
+                    context.streamWorkContainers().forEach(wc ->
+                            onUserFunctionSuccess(wc, ignored) // this isn't right
+                    );
+                }
+            } else {
+                boolean retriable = true; // todo check exception type
+                if (retriable) { // don't put back in queue for certain exception types?
+                    // must fail all records for poll context and try again - cannot abort transaction?
+                    context.streamWorkContainers().forEach(wc -> wc.onUserFunctionFailure(exception));
+                } else {
+                    // check error, return to queue or shutdown
+                    log.error("Fatal error producing result message, must rebuild Producer, so must shutdown", exception);
+                    throw new InternalRuntimeError("Error producing result message", exception); // todo throw specific
+                }
+            }
+        });
+
+        futuresQueue.stream()
+                // filter results where ALL send futures have completed
+                .filter(result -> result.getOut().stream()
+                        .allMatch(sendResult -> sendResult.getRight().isDone()))
+                .forEach(result -> {
+                    // future doesn't have exceptions...? send callbacks...
+                    PollContextInternal<K, V> in = result.getIn();
+                    // todo this needs fixing - should be one work container, to one set of future record sends
+                    List<Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> out = result.getOut();
+                    in.streamWorkContainers()
+                            .forEach(wc -> onUserFunctionSuccess(wc, out));
+                });
+    }
+
+    @Value
+    public static class CompletedSend<K, V> {
+        PollContextInternal<K, V> recordContextInternal;
+        ProducerRecord<K, V> sent;
+        RecordMetadata metadata;
+        Exception exception;
+    }
+
+    @StandardException
+    public static class IllegalStateException extends InternalRuntimeError {
+    }
+
+    @Value
+    public class ContextualCallback implements Callback {
+
+        RecordContextInternal<K, V> recordContextInternal;
+
+        @Override
+        public void onCompletion(RecordMetadata metadata, Exception exception) {
+        }
+    }
+
+    public class SendCallbackListener {
+
+        public void onCompletion(RecordContextInternal<K, V> recordContextInternal, RecordMetadata metadata, Exception exception) {
+
+        }
     }
 
 }

@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.NonNull;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 
@@ -145,17 +147,26 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see ParallelConsumerOptions.CommitMode#PERIODIC_TRANSACTIONAL_PRODUCER
      * @see ParallelStreamProcessor#pollAndProduceMany
      */
-    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(List<ProducerRecord<K, V>> outMsgs) {
+    public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(Consumer<ParallelEoSStreamProcessor.CallbackArgs<K, V>> call,
+                                                                                                      List<ProducerRecord<K, V>> outMsgs) {
         // only needed if not using tx
-        Callback callback = (RecordMetadata metadata, Exception exception) -> {
-            if (exception != null) {
-                log.error("Error producing result message", exception);
-                throw new InternalRuntimeError("Error producing result message", exception);
-            }
-        };
+        AbstractParallelEoSStreamProcessor<K, V> controller = null;
+        AbstractParallelEoSStreamProcessor.SendCallbackListener cbListener = null;
 
         List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
         for (ProducerRecord<K, V> rec : outMsgs) {
+
+            Callback callback = (RecordMetadata metadata, Exception exception) -> {
+                call.accept(new ParallelEoSStreamProcessor.CallbackArgs<>(metadata, exception, rec));
+//            final boolean noErrorPresent = exception == null;
+//            if (noErrorPresent) {
+//                controller.sendRecordResultSuccess(null, metadata, exception);
+//            } else {
+//                log.error("Error producing result message", exception);
+//                throw new InternalRuntimeError("Error producing result message", exception);
+//            }
+            };
+
             log.trace("Producing {}", rec);
             var future = producer.send(rec, callback);
             futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
@@ -203,7 +214,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see KafkaProducer#commitTransaction()
      */
     @Override
-    protected void commitOffsets(@NonNull Map<TopicPartition, OffsetAndMetadata> offsetsToSend, @NonNull ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(@NonNull Map<TopicPartition, OffsetAndMetadata> offsetsToSend,
+                                 @NonNull ConsumerGroupMetadata groupMetadata) {
         log.debug("Transactional offset commit starting");
         if (!options.isUsingTransactionalProducer()) {
             throw new IllegalStateException("Bug: cannot use if not using transactional producer");

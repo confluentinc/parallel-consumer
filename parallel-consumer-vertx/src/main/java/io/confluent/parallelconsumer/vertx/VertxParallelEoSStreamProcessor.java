@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.vertx;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
@@ -164,7 +165,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
                                    Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
         // wrap single record function in batch function
-        Function<PollContextInternal<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
+        Function<PollContextInternal<K, V>, ConsumeProduceResult<K, V>> userFuncWrapper = context -> {
             log.trace("Consumed a record ({}), executing void function...", context);
 
             Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context.getPollContext());
@@ -174,7 +175,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
 
             addVertxHooks(context, futureWebResponse);
 
-            return UniLists.of(futureWebResponse);
+            return futureWebResponse;
         };
 
         Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
@@ -286,6 +287,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         }
     }
 
+    // todo delete - not used anymore
     @Override
     protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
@@ -301,11 +303,11 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
      * Determines if any of the elements in the supplied list is a Vertx Future type
      */
     @Override
-    protected boolean isAsyncFutureWork(List<?> resultsFromUserFunction) {
-        for (Object object : resultsFromUserFunction) {
-            return (object instanceof Future);
-        }
-        return false;
+    protected boolean isAsyncFutureWork(Object resultsFromUserFunction) {
+//        for (Object object : resultsFromUserFunction) {
+        return (resultsFromUserFunction instanceof Future);
+//        }
+//        return false;
     }
 
     /**

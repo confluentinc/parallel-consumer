@@ -7,7 +7,6 @@ import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.Con
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
@@ -16,7 +15,6 @@ import net.bytebuddy.matcher.ElementMatchers;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 
-import java.lang.instrument.Instrumentation;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -127,7 +125,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
                 .getLoaded();
 //        dynamicType.
 
-        final Instrumentation install = ByteBuddyAgent.install().redefineClasses();
+//        final Instrumentation install = ByteBuddyAgent.install().redefineClasses();
 
 
         var targetPackageName = PollContext.class.getPackageName();

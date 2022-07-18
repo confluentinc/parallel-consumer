@@ -8,8 +8,11 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.List;
@@ -34,40 +37,49 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     public void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction) {
-        Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = (context) -> {
+        Function<PollContextInternal<K, V>, ConsumeProduceResult<K, V>> wrappedUserFunc = context -> {
             log.trace("asyncPoll - Consumed a consumerRecord ({}), executing void function...", context);
 
             carefullyRun(usersVoidConsumptionFunction, context.getPollContext());
 
             log.trace("asyncPoll - user function finished ok.");
-            return UniLists.of(); // user function returns no produce records, so we satisfy our api
+//            Runnable noop = () -> {};
+//            Future<RecordMetadata> noopFuture = new FutureTask<>(noop, null);
+            return new ConsumeProduceResult<>(context, UniLists.of());
+//            return UniLists.of(); // user function returns no produce records, so we satisfy our api
         };
-        Consumer<Object> voidCallBack = ignore -> log.trace("Void callback applied.");
+        Consumer<ConsumeProduceResult<K, V>> voidCallBack = ignore -> log.trace("Void callback applied.");
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
+    /**
+     * todo docs
+     * <p>
+     * Records are committed in a block when using batch, so system waits until all produced records for a batch are
+     * ack'd, before committing any of the offsets.
+     */
     @Override
     @SneakyThrows
     public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                   Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+                                   Consumer<ConsumeProduceResult<K, V>> callback) {
         // todo refactor out the producer system to a sub class
         if (!getOptions().isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
         }
 
         // wrap user func to add produce function
-        Function<PollContextInternal<K, V>, ConsumeProduceResult<K, V, K, V>> wrappedUserFunc
+        Function<PollContextInternal<K, V>, ConsumeProduceResult<K, V>> wrappedUserFunc
                 = context -> {
-            ConsumeProduceResult<K, V, K, V> results = getConsumeProduceResults(userFunction, context);
+            ConsumeProduceResult<K, V> results = getConsumeProduceResults(userFunction, context);
             super.handleFutureProduceResultsAsync(results);
             return results;
         };
 
-        supervisorLoop(wrappedUserFunc, callback);
+        super.supervisorLoop(wrappedUserFunc, callback);
     }
 
-    private ConsumeProduceResult<K, V, K, V> getConsumeProduceResults(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                                                      PollContextInternal<K, V> context) {
+    private ConsumeProduceResult<K, V> getConsumeProduceResults(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                                                PollContextInternal<K, V> context) {
         //
         List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
 
@@ -78,17 +90,33 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         log.trace("Producing {} messages in result...", recordListToProduce.size());
 
+
+        Callback callback = (RecordMetadata metadata, Exception exception) -> {
+            sendRecordResultSuccess(context, metadata, exception);
+        };
+
+        Consumer<CallbackArgs<K, V>> call = (CallbackArgs<K, V> args) -> {
+            sendRecordResultSuccess(context, args.sent, args.metadata, args.exception);
+        };
+
         // should be three stages so can batch when there's more than one, otherwise it's acquires the read lock N times
         ProducerManager<K, V> pm = super.getProducerManager().get();
         var produceLock = pm.startProducing();
         try {
-            var futures = pm.produceMessages(recordListToProduce);
+            var futures = pm.produceMessages(call, recordListToProduce);
             return new ConsumeProduceResult<>(context, futures);
         } catch (Exception e) {
             throw new InternalRuntimeError("Error while waiting for produce results", e);
         } finally {
             pm.finishProducing(produceLock);
         }
+    }
+
+    @Value
+    public static class CallbackArgs<K, V> {
+        RecordMetadata metadata;
+        Exception exception;
+        ProducerRecord<K, V> sent;
     }
 
     @Override
@@ -112,7 +140,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @Override
     @SneakyThrows
     public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
-                               Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
+                               Consumer<ConsumeProduceResult<K, V>> callback) {
         pollAndProduceMany(consumerRecord -> UniLists.of(userFunction.apply(consumerRecord)), callback);
     }
 

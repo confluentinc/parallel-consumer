@@ -20,7 +20,6 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -52,11 +51,11 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
     }
 
     @Override
-    protected boolean isAsyncFutureWork(List<?> resultsFromUserFunction) {
-        for (Object object : resultsFromUserFunction) {
-            return (object instanceof Disposable);
-        }
-        return false;
+    protected boolean isAsyncFutureWork(Object resultsFromUserFunction) {
+//        for (Object object : resultsFromUserFunction) {
+        return (resultsFromUserFunction instanceof Disposable);
+//        }
+//        return false;
     }
 
     @SneakyThrows
@@ -80,7 +79,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
      */
     public void react(Function<PollContext<K, V>, Publisher<?>> reactorFunction) {
 
-        Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = pollContext -> {
+        Function<PollContextInternal<K, V>, Object> wrappedUserFunc = pollContext -> {
 
             if (log.isTraceEnabled()) {
                 log.trace("Record list ({}), executing void function...",

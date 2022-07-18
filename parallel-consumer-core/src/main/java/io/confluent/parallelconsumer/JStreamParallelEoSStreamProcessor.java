@@ -16,9 +16,9 @@ import java.util.stream.Stream;
 @Slf4j
 public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V> implements JStreamParallelStreamProcessor<K, V> {
 
-    private final Stream<ConsumeProduceResult<K, V, K, V>> stream;
+    private final Stream<ConsumeProduceResult<K, V>> stream;
 
-    private final ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
+    private final ConcurrentLinkedDeque<ConsumeProduceResult<K, V>> userProcessResultsStream;
 
     public JStreamParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> parallelConsumerOptions) {
         super(parallelConsumerOptions);
@@ -29,7 +29,7 @@ public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamPr
     }
 
     @Override
-    public Stream<ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction) {
+    public Stream<ConsumeProduceResult<K, V>> pollProduceAndStream(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction) {
         super.pollAndProduceMany(userFunction, (result) -> {
             log.trace("Wrapper callback applied, sending result to stream. Input: {}", result);
             this.userProcessResultsStream.add(result);

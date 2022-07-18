@@ -886,7 +886,7 @@ The tests require an active docker server on `localhost`.
 ==== Integration Testing with TestContainers
 //https://github.com/confluentinc/schroedinger#integration-testing-with-testcontainers
 
-We use the excellent https://testcontainers.org[Testcontainers] library for integration testing with JUnit.
+We use the excellent https://testcontainers.org[Test Containers] library for integration testing with JUnit.
 
 To speed up test execution, you can enable container reuse across test runs by setting the following in your https://www.testcontainers.org/features/configuration/[`~/.testcontainers.properties` file]:
 

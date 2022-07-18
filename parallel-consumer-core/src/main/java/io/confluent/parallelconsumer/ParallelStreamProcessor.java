@@ -37,13 +37,13 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
 
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link
-     * ProducerRecord}s to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns one or more
+     * {@link ProducerRecord}s to be sent back to the broker.
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
     void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                            Consumer<ConsumeProduceResult<K, V, K, V>> callback);
+                            Consumer<ConsumeProduceResult<K, V>> callback);
 
     /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or many {@link
@@ -58,13 +58,13 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction);
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
-     * ProducerRecord} to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns a
+     * {@link ProducerRecord} to be sent back to the broker.
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
     void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
-                        Consumer<ConsumeProduceResult<K, V, K, V>> callback);
+                        Consumer<ConsumeProduceResult<K, V>> callback);
 
     /**
      * A simple triple structure to capture the set of coinciding data.
@@ -77,11 +77,9 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      *
      * @param <K>  in key
      * @param <V>  in value
-     * @param <KK> out key
-     * @param <VV> out value
      */
     @Data
-    class ConsumeProduceResult<K, V, KK, VV> {
+    class ConsumeProduceResult<K, V> {
         private final PollContextInternal<K, V> in;
         private final List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> out;
     }

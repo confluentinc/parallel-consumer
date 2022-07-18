@@ -24,7 +24,7 @@ public interface JStreamParallelStreamProcessor<K, V> extends DrainingCloseable 
      *
      * @return a stream of results of applying the function to the polled records
      */
-    Stream<ParallelStreamProcessor.ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(
+    Stream<ParallelStreamProcessor.ConsumeProduceResult<K, V>> pollProduceAndStream(
             Function<PollContext<K, V>,
                     List<ProducerRecord<K, V>>> userFunction);
 }

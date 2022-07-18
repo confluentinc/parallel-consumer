@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
@@ -51,11 +50,12 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
      * With Vertx and Reactor, a function hasn't succeeded until the inner vertx function has also succeeded logging
      */
     @Override
-    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, Object resultsFromUserFunction) {
         if (isAsyncFutureWork(resultsFromUserFunction)) {
             log.debug("Reactor creation function success, user's function success");
         } else {
             super.onUserFunctionSuccess(wc, resultsFromUserFunction);
+//            super.onUserFunctionSuccess(wc);
         }
     }
 
@@ -63,9 +63,9 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
      * With Vertx and Reactor, a function hasn't succeeded until the inner vertx function has also succeeded no op
      */
     @Override
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, Object resultsFromUserFunction) {
         if (isAsyncFutureWork(resultsFromUserFunction)) {
-            log.debug("User function success but not adding vertx vertical to mailbox yet");
+            log.debug("User function success but not adding vertx vertical to mailbox yet, system chains a function to do that instead");
         } else {
             super.addToMailBoxOnUserFunctionSuccess(wc, resultsFromUserFunction);
         }
@@ -79,6 +79,6 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
      * @return true if the work needs special treatment
      */
     // TODO: Now that the modules don't use the internal threading systems at all, is this method redundant as all work from a module extension would return true
-    protected abstract boolean isAsyncFutureWork(List<?> resultsFromUserFunction);
+    protected abstract boolean isAsyncFutureWork(Object resultsFromUserFunction);
 
 }

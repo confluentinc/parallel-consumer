@@ -18,7 +18,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
@@ -76,9 +75,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     @Setter
     static Duration defaultRetryDelay = Duration.ofSeconds(1);
 
+    /**
+     * Only used and visible for testing.
+     */
     @Getter
     @Setter(AccessLevel.PUBLIC)
-    private Future<List<?>> future;
+    private Future<?> future;
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 

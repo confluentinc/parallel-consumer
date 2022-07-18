@@ -44,7 +44,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     @Test
     public void testStream() {
         var latch = new CountDownLatch(1);
-        Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
+        Stream<ConsumeProduceResult<String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
             ProducerRecord mock = mock(ProducerRecord.class);
             log.info("Consumed and produced record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
             myRecordProcessingAction.apply(record.getSingleConsumerRecord());
@@ -58,7 +58,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
-        Stream<ConsumeProduceResult<String, String, String, String>> peekedStream = streamedResults.peek(x ->
+        Stream<ConsumeProduceResult<String, String>> peekedStream = streamedResults.peek(x ->
         {
             log.info("streaming test {}", x.getIn().value());
         });
@@ -90,7 +90,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
         var myResultStream = stream.peek(x -> {
             if (x != null) {
                 ConsumerRecord<String, String> left = x.getIn().getSingleConsumerRecord();
-                log.info("{}:{}:{}:{}", left.key(), left.value(), x.getOut(), x.getMeta());
+                log.info("{}:{}:{}:{}", left.key(), left.value(), x.getOut(), x);
             } else {
                 log.info("null");
             }
