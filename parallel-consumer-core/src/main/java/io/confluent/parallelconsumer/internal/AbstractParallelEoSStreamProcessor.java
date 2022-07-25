@@ -336,16 +336,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
-        try {
-            wm.onPartitionsRevoked(partitions);
 
-            // can't commit for partitions already revoked, but use opportunity as a save point
+        try {
+            // commit any offsets from revoked partitions
             commitOffsetsThatAreReady();
 
-            usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
+            // truncate the revoked partitions
+            wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
             throw new InternalRuntimeError("onPartitionsRevoked event error", e);
         }
+
+        //
+        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
     }
 
     /**
@@ -363,7 +366,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * Delegate to {@link WorkManager}
+     * Cannot commit any offsets for partitions that have been `lost` (as opposed to revoked). Just delegate to
+     * {@link WorkManager} for truncation.
      *
      * @see WorkManager#onPartitionsAssigned
      */
@@ -566,8 +570,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to inform
-     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
-     * BrokerPollSystem} so that less messages are downloaded and queued.
+     * that work is available when there was none, to make tests run faster, or to move on to shutting down the
+     * {@link BrokerPollSystem} so that less messages are downloaded and queued.
      */
     private void interruptControlThread() {
         if (blockableControlThread != null) {
