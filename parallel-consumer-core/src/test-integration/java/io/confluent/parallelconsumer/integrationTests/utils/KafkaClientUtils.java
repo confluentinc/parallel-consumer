@@ -64,7 +64,7 @@ public class KafkaClientUtils {
 
     @Getter
     private AdminClient admin;
-    private final String groupId = GROUP_ID_PREFIX + nextInt();
+    private String groupId = GROUP_ID_PREFIX + nextInt();
 
     /**
      * todo docs
@@ -134,23 +134,39 @@ public class KafkaClientUtils {
             admin.close();
     }
 
+    public enum GroupOption {
+        RESUE_GROUP,
+        NEW_GROUP
+    }
+
+
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(GroupOption reuseGroup) {
+        return createNewConsumer(reuseGroup.equals(GroupOption.NEW_GROUP));
+    }
+
     public <K, V> KafkaConsumer<K, V> createNewConsumer() {
         return createNewConsumer(false);
     }
 
+    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup) {
         return createNewConsumer(newConsumerGroup, new Properties());
     }
 
+    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(Properties options) {
         return createNewConsumer(false, options);
     }
 
+    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup, Properties options) {
         Properties properties = setupConsumerProps();
 
         if (newConsumerGroup) {
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + nextInt()); // new group
+            // overwrite the group id with a new one
+            String newGroupId = GROUP_ID_PREFIX + nextInt();
+            this.groupId = newGroupId; // save it for reuse later
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, newGroupId); // new group
         }
 
         // override with custom
