@@ -230,7 +230,7 @@ public class KafkaClientUtils {
         return newTopics;
     }
 
-    public List<String> produceMessages(String inputName, int numberToSend) throws InterruptedException, ExecutionException {
+    public List<String> produceMessages(String inputName, long numberToSend) throws InterruptedException, ExecutionException {
         log.info("Producing {} messages to {}", numberToSend, inputName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
@@ -255,7 +255,7 @@ public class KafkaClientUtils {
             boolean b = recordMetadata.hasOffset();
             assertThat(b).isTrue();
         }
-        assertThat(sends).hasSize(numberToSend);
+        assertThat(sends).hasSize(Math.toIntExact(numberToSend));
         return expectedKeys;
     }
 

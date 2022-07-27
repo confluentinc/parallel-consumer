@@ -8,14 +8,11 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,11 +20,9 @@ import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.concurrent.ExecutionException;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -39,7 +34,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
     }
 
-    int numPartitions = 2;
+    int numPartitions = 1;
 
     String topic;
 
@@ -68,23 +63,6 @@ public abstract class BrokerIntegrationTest<K, V> {
             FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
             kafkaContainer.followOutput(logConsumer);
         }
-    }
-
-    Consumer<String, String> consumer;
-
-    ParallelEoSStreamProcessor<String, String> pc;
-
-    @BeforeEach
-    void setup() {
-        setupTopic();
-        consumer = getKcu().createNewConsumer(KafkaClientUtils.GroupOption.NEW_GROUP);
-
-        pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
-                .consumer(consumer)
-                .ordering(PARTITION) // just so we dont need to use keys
-                .build());
-
-        pc.subscribe(UniSets.of(topic));
     }
 
     @BeforeEach
