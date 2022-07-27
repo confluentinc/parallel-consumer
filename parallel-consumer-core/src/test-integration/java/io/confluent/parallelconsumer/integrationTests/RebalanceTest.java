@@ -1,8 +1,8 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -12,10 +12,10 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -32,7 +32,6 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
  */
 class RebalanceTest extends BrokerIntegrationTest<String, String> {
 
-
     Consumer<String, String> consumer;
 
     ParallelEoSStreamProcessor<String, String> pc;
@@ -43,6 +42,7 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
         super.numPartitions = 2;
     }
 
+    // todo refactor move up
     @BeforeEach
     void setup() {
         setupTopic();
@@ -78,7 +78,7 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
 
         // cause rebalance
         var newConsumer = kcu.createNewConsumer(RESUE_GROUP);
-        newConsumer.subscribe(List.of(topic));
+        newConsumer.subscribe(UniLists.of(topic));
         ConsumerRecords<Object, Object> poll = newConsumer.poll(Duration.ofSeconds(5));
 
         // make sure only there are no duplicates
