@@ -41,7 +41,7 @@ public class CommitHistorySubject extends Subject {
         return assertAbout(commitHistories()).that(actual);
     }
 
-    public void atLeastOffset(int needleCommit) {
+    public void atLeastOffset(long needleCommit) {
         Optional<Long> highestCommitOpt = this.actual.highestCommit();
         check("highestCommit()").about(OptionalSubject.optionals())
                 .that(highestCommitOpt)
