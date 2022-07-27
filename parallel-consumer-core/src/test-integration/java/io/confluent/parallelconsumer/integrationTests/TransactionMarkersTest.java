@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -13,17 +12,14 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
 import static java.lang.Integer.MAX_VALUE;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
@@ -54,26 +50,12 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     ParallelEoSStreamProcessor<String, String> pc;
 
     @BeforeEach
-        // todo move to super?
     void setup() {
-        setupTopic();
-        consumer = getKcu().getConsumer();
-
         txProducer = getKcu().createNewTransactionalProducer();
         txProducerTwo = getKcu().createNewTransactionalProducer();
         txProducerThree = getKcu().createNewTransactionalProducer();
 
         normalProducer = getKcu().createNewProducer(NORMAL);
-        pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
-                .consumer(consumer)
-                .ordering(PARTITION) // just so we dont need to use keys
-                .build());
-        pc.subscribe(UniSets.of(super.topic));
-    }
-
-    @AfterEach
-    void close() {
-        pc.close();
     }
 
     /**

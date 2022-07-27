@@ -18,10 +18,8 @@ import pl.tlinkowski.unij.api.UniSets;
 
 import javax.annotation.Generated;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 
@@ -71,20 +69,6 @@ public class ConsumerSubject extends ConsumerParentSubject {
                         -> check("getCommitHistory(%s)", entry.getKey().topic() + ":" + entry.getKey().partition())
                         .about(commitHistories())
                         .that(new CommitHistory(UniLists.of(entry.getValue()))));
-    }
-
-    /**
-     * @return
-     * @see LongPollingMockConsumerSubject#hasCommittedToAnyPartition()
-     */
-    public CommitHistorySubject hasCommittedToAnyPartition() {
-        isNotNull();
-        var assignment = actual.assignment();
-        Map<TopicPartition, OffsetAndMetadata> allCommits = actual.committed(assignment);
-        List<OffsetAndMetadata> historyForCommitsToPartition = allCommits.values().stream()
-                .collect(Collectors.toList());
-        CommitHistory commitHistory = new CommitHistory(historyForCommitsToPartition);
-        return check("getCommitHistory()").about(commitHistories()).that(commitHistory);
     }
 
 }

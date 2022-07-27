@@ -4,7 +4,6 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import com.google.common.truth.Truth;
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.junit.jupiter.api.Test;
@@ -50,11 +49,7 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
         ConsumerRecords<Object, Object> poll = newConsumer.poll(Duration.ofSeconds(5));
 
         // make sure only there are no duplicates
-        Truth.assertThat(poll.count()).isEqualTo(0);
         assertThat(poll).hasCountEqualTo(0);
-
-        // assert commits
-//        assertThat(consumer).hasCommittedToAnyPartition().atLeastOffset(expected);
     }
 
 }
