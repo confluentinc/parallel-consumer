@@ -39,7 +39,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
     }
 
-    int numPartitions = 1;
+    int numPartitions = 2;
 
     String topic;
 

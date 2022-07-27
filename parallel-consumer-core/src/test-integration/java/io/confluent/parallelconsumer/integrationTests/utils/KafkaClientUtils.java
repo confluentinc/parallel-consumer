@@ -237,7 +237,8 @@ public class KafkaClientUtils {
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
             for (int i = 0; i < numberToSend; i++) {
                 String key = "key-" + i;
-                Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
+                ProducerRecord<String, String> record = new ProducerRecord<>(inputName, key, "value-" + i);
+                Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
                     if (exception != null) {
                         log.error("Error sending, ", exception);
                     }

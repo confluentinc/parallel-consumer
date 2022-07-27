@@ -338,7 +338,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
-            // commit any offsets from revoked partitions
+            // commit any offsets from revoked partitions BEFORE truncation
             commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
