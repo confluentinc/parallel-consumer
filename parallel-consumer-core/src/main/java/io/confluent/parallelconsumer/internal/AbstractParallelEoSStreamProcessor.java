@@ -63,9 +63,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
-    // todo removed?
-    public static final String MDC_OFFSET_MARKER = "offset";
-
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
      * user function.
@@ -96,7 +93,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Instant lastCommitCheckTime = Instant.now();
 
     /**
-     * todo docs
+     * Actor for accepting messages closures form other threads.
      */
     @Getter(PRIVATE)
     private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
@@ -104,6 +101,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
+    // todo fill in PR number
     // todo remove with consumer facade PR XXX - branch improvements/consumer-interface
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
