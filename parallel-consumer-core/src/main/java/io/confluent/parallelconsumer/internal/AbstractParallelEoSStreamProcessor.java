@@ -170,10 +170,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
-    // todo move into PartitionStateManager
-    @Getter
-    private int numberOfAssignedPartitions;
-
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
     /**
@@ -301,8 +297,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
-        numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
-
         try {
             // commit any offsets from revoked partitions BEFORE truncation
             commitOffsetsThatAreReady();
@@ -328,12 +322,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
-        log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
+        log.info("Assigned {} total ({} new) partition(s) {}",
+                getNumberOfAssignedPartitions(),
+                partitions.size(),
+                partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         // todo interrupting can be removed after improvements/reblaance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
+    }
+
+    public long getNumberOfAssignedPartitions() {
+        return wm.getPm().getNumberOfAssignedPartitions();
     }
 
     /**
@@ -344,7 +344,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Override
     public void onPartitionsLost(Collection<TopicPartition> partitions) {
-        numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         wm.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }

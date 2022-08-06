@@ -89,16 +89,16 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
         log.debug("Partitions assigned: {}", assignedPartitions);
 
-        for (final TopicPartition partitionAssignment : assignedPartitions) {
-            boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionAssignment);
+        for (final TopicPartition partitionKey : assignedPartitions) {
+            boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionKey);
             if (isAlreadyAssigned) {
-                PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionAssignment);
+                PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionKey);
                 if (previouslyAssignedState.isRemoved()) {
-                    log.trace("Reassignment of previously revoked partition {} - state: {}", partitionAssignment, previouslyAssignedState);
+                    log.trace("Reassignment of previously revoked partition {} - state: {}", partitionKey, previouslyAssignedState);
                 } else {
                     log.warn("New assignment of partition which already exists and isn't recorded as removed in " +
                             "partition state. Could be a state bug - was the partition revocation somehow missed, " +
-                            "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionAssignment, previouslyAssignedState);
+                            "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionKey, previouslyAssignedState);
                 }
             }
         }
@@ -279,6 +279,9 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
+    /**
+     * @return the number of record entries in all the partitions being managed not yet succeeded in processing
+     */
     public long getNumberOfEntriesInPartitionQueues() {
         Collection<PartitionState<K, V>> values = getAssignedPartitions().values();
         return values.stream()
@@ -419,4 +422,13 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
     }
 
+    public long getNumberOfAssignedPartitions() {
+        return this.partitionStates.values().stream()
+                .filter(
+                        x -> {
+                            boolean partitionRemoved = x.equals(RemovedPartitionState.getSingleton());
+                            return !partitionRemoved;
+                        })
+                .count();
+    }
 }
