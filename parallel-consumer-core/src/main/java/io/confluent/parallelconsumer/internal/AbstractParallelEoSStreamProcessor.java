@@ -321,18 +321,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        log.info("Assigned {} total ({} new) partition(s) {}",
-                getNumberOfAssignedPartitions(),
-                partitions.size(),
-                partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         // todo interrupting can be removed after improvements/reblaance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
-    }
-
-    public long getNumberOfAssignedPartitions() {
-        return wm.getPm().getNumberOfAssignedPartitions();
     }
 
     /**

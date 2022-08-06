@@ -87,7 +87,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
-        log.debug("Partitions assigned: {}", assignedPartitions);
+        log.info("Assigned {} total ({} new) partition(s) {}",
+                getNumberOfAssignedPartitions(),
+                assignedPartitions.size(),
+                assignedPartitions);
 
         for (final TopicPartition partitionKey : assignedPartitions) {
             boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionKey);
