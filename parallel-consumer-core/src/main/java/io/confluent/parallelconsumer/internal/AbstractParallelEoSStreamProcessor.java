@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.actors.Actor;
-import io.confluent.csid.actors.Interruptable.Reason;
+import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ErrorInUserFunctionException;
 import io.confluent.parallelconsumer.ParallelConsumer;
@@ -1118,9 +1118,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see #processActorMessageQueue
      */
+    // todo should be defunct after full migration to Actor framework, as ANY messages for the controller will also wake it up.
     public void notifySomethingToDo(Reason reason) {
         // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
-        getMyActor().interruptProcessAsync(reason);
+        getMyActor().interruptMaybePollingActor(reason);
     }
 
     @Override

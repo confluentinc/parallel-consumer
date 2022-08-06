@@ -10,18 +10,13 @@ import lombok.ToString;
  *
  * @author Antony Stubbs
  */
-public interface Interruptable {
+public interface Interruptible {
 
-    /**
-     * todo docs
-     *
-     * @param reason
-     */
     // todo rename
-    void interruptProcessAsync(Reason reason);
+    void interruptMaybePollingActor(Reason reason);
 
     /**
-     * Structured enforcement of reasons for interrupting something.
+     * Structured enforcement of Human readable reasons for interrupting something.
      */
     @AllArgsConstructor
     @RequiredArgsConstructor

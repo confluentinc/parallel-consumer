@@ -21,8 +21,9 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * Micro Actor framework for structured, ordered, simple IPC.
  * <p>
  * By sending messages as Java Lambda (closure) functions, the Actor paradigm messages are effectively generated for us
- * automatically by the compiler. This takes the hassle out of creating messages classes for every type of message you
- * want to send an actor - by effectively defining the message content in the parameters of the method being called.
+ * automatically by the compiler. This takes the hassle out of creating message classes for every type of message we
+ * want to send an actor - by effectively defining the message fields from the variables of the scope being closed over
+ * and captured.
  * <p>
  * {@link Actor} works in two parts - sending messages and processing them. Messages can be sent in two ways, by
  * {@link #ask}ing, or {@link #tell}ing.
@@ -33,25 +34,34 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * <p>
  * Asking
  * <p>
- * The closure message is sent into the queue, and a {@link Future} returned which will containing the response once
- * it's processed.
+ * The closure message is sent into the queue, and a {@link Future} returned which will contain the response once it's
+ * processed.
+ * <p>
+ * Messages can also be sent to the front of the queue, by using the {@code Immediately} versions of the methods. Note:
+ * messages sent with these versions end up effectively in a "First In, Last Out" (FILO) queue, as a subsequent
+ * immediate message will be in front of previous ones.
  * <p>
  * Processing
  * <p>
- * The {@link #process()} function iterates over all the closures in the queue, executing them serially. The
- * {@link #processBlocking(Duration)} version does the same initially, but then also will block by
+ * To process the closures, you must call one of the processing methods, and execution will be done in the calling
+ * thread.
+ * <p>
+ * The {@link #process()} function iterates over all the closures in the queue, executing them serially.
+ * <p>
+ * The {@link #processBlocking(Duration)} version does the same initially, but then also will block by
  * {@link BlockingQueue#poll(long, TimeUnit)}ing the queue for new messages for the given duration, in order to allow
  * your program's thread to effectively {@link Thread#sleep} until new messages are sent.
  * <p>
- * Naming suggestions:
+ * Naming suggestions for classes declaring APIs which use the {@link Actor}:
  * <p>
- * {@code Sync} denotes methods which will not run on the actor queue.
+ * {@code Sync} denotes methods which will block using the {@link #ask} functions, waiting for a response.
+ * <p>
+ * todo drop?: , OR not run on the actor queue, but are Thread-Safe to call.
  * <p>
  * {@code Async} denotes methods which will return immediately, after queueing a message.
  * <p>
- * Messages can also be sent to the front of the queue, by using the {@code Immediately} versions of the methods.
  *
- * @param <T>
+ * @param <T> the Type of the Object to send closures to
  * @author Antony Stubbs
  */
 @Slf4j
@@ -59,9 +69,9 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // todo rename to ActorRef? ActorInterface? ActorAPI? Also clashes with field name.
-public class Actor<T> implements IActor<T>, Interruptable {
+public class Actor<T> implements IActor<T>, Interruptible {
 
-    private final T actualActorInstance;
+    private final T actorRef;
 
     /**
      * Single queueing point for all messages to the actor.
@@ -74,12 +84,12 @@ public class Actor<T> implements IActor<T>, Interruptable {
 
     @Override
     public void tell(final Consumer<T> action) {
-        getActionMailbox().add(() -> action.accept(actualActorInstance));
+        getActionMailbox().add(() -> action.accept(actorRef));
     }
 
     @Override
     public void tellImmediately(final Consumer<T> action) {
-        getActionMailbox().addFirst(() -> action.accept(actualActorInstance));
+        getActionMailbox().addFirst(() -> action.accept(actorRef));
     }
 
     @Override
@@ -87,21 +97,34 @@ public class Actor<T> implements IActor<T>, Interruptable {
         /*
          * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
          */
-        FutureTask<R> task = new FutureTask<>(() -> action.apply(actualActorInstance));
+        FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
 
         // todo should actor throw invalid state if actor is "closed" or "terminated"?
+//        checkState(State.acceptingMessages);
+
+        // queue
         getActionMailbox().add(task);
 
         return task;
     }
 
+    /**
+     * Send a message to the actor, returning a Future with the result of the message.
+     *
+     * @param <R> the type of the result
+     * @return a {@link Future} which will contain the function result, once the closure has been processed by one of
+     *         the {@link #process} methods.
+     */
     @Override
     public <R> Future<R> askImmediately(final Function<T, R> action) {
-        FutureTask<R> task = new FutureTask<>(() -> action.apply(actualActorInstance));
+        FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
         getActionMailbox().addFirst(task);
         return task;
     }
 
+    /**
+     * @return true if the queue is empty
+     */
     // todo only used from one place which is deprecated
     @Override
     public boolean isEmpty() {
@@ -121,6 +144,7 @@ public class Actor<T> implements IActor<T>, Interruptable {
      * Does not execute scheduled - todo remove scheduled to subclass?
      */
     // todo in interface?
+    @Override
     public void process() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
@@ -138,9 +162,10 @@ public class Actor<T> implements IActor<T>, Interruptable {
     }
 
     /**
-     * Blocking version of {@link #process()}
+     * Blocking version of {@link #process()}, will process messages, then block until either a new message arrives, or
+     * the timeout is reached.
      */
-    // todo in interface?
+    @Override
     public void processBlocking(Duration timeout) throws InterruptedException {
         process();
         maybeBlockUntilAction(timeout);
@@ -168,19 +193,34 @@ public class Actor<T> implements IActor<T>, Interruptable {
         command.run();
     }
 
+    /**
+     * A simple convenience method to push an effectively NO-OP message to the actor, which would wake it up if it were
+     * blocked polling the queue for a new message. Useful to have a blocked thread return from the process method if
+     * it's blocked, without needed to {@link Thread#interrupt} it, but you don't want to send it a closure for some
+     * reason.
+     *
+     * @param reason the reason for interrupting the Actor
+     * @deprecated rather than call this generic wakeup method, it's better to send a message directly to your Actor
+     *         object {@link T} (todo how to link to type param), so that the interrupt has context. However this can be
+     *         useful to use for legacy code.
+     */
+    @Deprecated
     @Override
-    public void interruptProcessAsync(Reason reason) {
+    public void interruptMaybePollingActor(Reason reason) {
         log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
         getActionMailbox().add(() -> interruptInternalSync(reason));
     }
 
-    private String getActorName() {
-        return actualActorInstance.getClass().getSimpleName();
+    @Override
+    public String getActorName() {
+        return actorRef.getClass().getSimpleName();
     }
 
     /**
-     * Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on the
-     * queue.
+     * Perform the NO-OP interrupt.
+     * <p>
+     * Note: Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on
+     * the queue.
      */
     private void interruptInternalSync(Reason reason) {
         log.debug("Interruption signal processed: {}", reason);
