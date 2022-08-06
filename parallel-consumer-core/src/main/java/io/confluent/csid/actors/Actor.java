@@ -74,7 +74,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actorRef;
 
-    private volatile State state;
+    private volatile State state = State.ACCEPTING_MESSAGES;
 
     /**
      * Single queueing point for all messages to the actor.
@@ -247,7 +247,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
         log.debug("Interruption signal processed: {}", reason);
     }
 
-    private enum State {
+    public enum State {
         ACCEPTING_MESSAGES,
         CLOSED
     }

@@ -129,6 +129,7 @@
                         <package>io.confluent.csid</package>
                     </packages>
                     <classes>
+<!--                        <class>io.confluent.csid.actors.Greeter</class>-->
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>
