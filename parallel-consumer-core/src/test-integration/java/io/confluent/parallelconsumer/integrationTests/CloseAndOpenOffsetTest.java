@@ -351,7 +351,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
             // the single message is not processed
             await().atMost(defaultTimeout).untilAsserted(() ->
-                    assertThat(readByOne).hasSize(quantity - numberOfFailingMessages));
+                    assertThat(readByOne)
+                            .hasSize(quantity - numberOfFailingMessages));
 
             //
             // TODO: fatal vs retriable exceptions. Retry limits particularly for draining state?

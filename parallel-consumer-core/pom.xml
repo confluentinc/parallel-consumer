@@ -9,7 +9,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.3.0-SNAPSHOT</version>
+        <version>0.6.0.0-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -129,6 +129,7 @@
                         <package>io.confluent.csid</package>
                     </packages>
                     <classes>
+<!--                        <class>io.confluent.csid.actors.Greeter</class>-->
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>

@@ -287,13 +287,13 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     }
 
     @Override
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void addWorkResultOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
         // no op
         if (isAsyncFutureWork(resultsFromUserFunction)) {
             log.debug("User function success but not adding vertx vertical to mailbox yet");
         } else {
-            super.addToMailBoxOnUserFunctionSuccess(wc, resultsFromUserFunction);
+            super.addWorkResultOnUserFunctionSuccess(wc, resultsFromUserFunction);
         }
     }
 

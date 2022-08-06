@@ -4,6 +4,7 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import java.time.Duration;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -14,6 +15,7 @@ import java.util.function.Function;
  * @param <T>
  * @author Antony Stubbs
  */
+// todo remove?
 public interface IActor<T> {
 
     void tell(Consumer<T> action);
@@ -23,9 +25,18 @@ public interface IActor<T> {
      */
     void tellImmediately(Consumer<T> action);
 
+    <R> Future<R> askImmediately(Function<T, R> action);
+
     <R> Future<R> ask(Function<T, R> action);
 
     boolean isEmpty();
 
-    <R> Future<R> askImmediately(Function<T, R> action);
+    void processBlocking(Duration timeout) throws InterruptedException;
+
+    // todo in interface?
+    void process();
+
+    String getActorName();
+
+    void close();
 }

@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.actors.Actor;
 import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.ErrorInUserFunctionException;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -62,9 +63,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
-    // todo removed?
-    public static final String MDC_OFFSET_MARKER = "offset";
-
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
      * user function.
@@ -95,7 +93,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Instant lastCommitCheckTime = Instant.now();
 
     /**
-     * todo docs
+     * Actor for accepting messages closures form other threads.
      */
     @Getter(PRIVATE)
     private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
@@ -103,6 +101,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
+    // todo fill in PR number
     // todo remove with consumer facade PR XXX - branch improvements/consumer-interface
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
@@ -145,7 +144,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Instant lastCommitTime;
 
     public boolean isClosedOrFailed() {
-        boolean closed = state == State.closed;
+        boolean closed = state == State.CLOSED;
         boolean doneOrCancelled = false;
         if (this.controlThreadFuture.isPresent()) {
             Future<Boolean> threadFuture = controlThreadFuture.get();
@@ -166,17 +165,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see State
      */
-    private State state = State.unused;
+    private State state = UNUSED;
 
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
      */
     // todo this needs to be reconciled with all subscription flows
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
-
-    // todo move into PartitionStateManager
-    @Getter
-    private int numberOfAssignedPartitions;
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
@@ -229,7 +224,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.committer = this.brokerPollSubsystem;
         }
     }
-
 
     private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         try {
@@ -309,16 +303,21 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void onPartitionsRevokedInternal(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
-        numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
-            wm.onPartitionsRevoked(partitions);
-
-            // can't commit for partitions already revoked, but use opportunity as a save point
+            // commit any offsets from revoked partitions BEFORE truncation
             commitOffsetsThatAreReady();
 
-            usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
+            // truncate the revoked partitions
+            wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
             throw new InternalRuntimeError("onPartitionsRevoked event error", e);
+        }
+
+        //
+        try {
+            usersConsumerRebalanceListener.ifPresent(listener -> listener.onPartitionsRevoked(partitions));
+        } catch (Exception e) {
+            throw new ErrorInUserFunctionException("Error from rebalance listener function after #onPartitionsRevoked", e);
         }
     }
 
@@ -332,8 +331,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see WorkManager#onPartitionsAssigned
      */
     private void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
-        numberOfAssignedPartitions = numberOfAssignedPartitions + partitions.size();
-        log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         // todo interrupting can be removed after improvements/reblaance-messages is merged
@@ -372,7 +369,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Close the system, without draining.
      *
-     * @see State#draining
+     * @see State#DRAINING
      */
     @Override
     public void close() {
@@ -384,7 +381,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     @SneakyThrows
     public void close(Duration timeout, DrainingMode drainMode) {
-        if (state == closed) {
+        if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
             log.info("Signaling to close...");
@@ -392,7 +389,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             switch (drainMode) {
                 case DRAIN -> {
                     log.info("Will wait for all in flight to complete before");
-                    transitionToDraining();
+                    transitionToDrainingAsync(new Reason("Closing"));
                 }
                 case DONT_DRAIN -> {
                     log.info("Not waiting for remaining queued to complete, will finish in flight, then close...");
@@ -414,7 +411,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
-        while (!state.equals(closed)) {
+        while (!state.equals(CLOSED)) {
             try {
                 Future<Boolean> booleanFuture = this.controlThreadFuture.get();
                 log.debug("Blocking on control future");
@@ -464,26 +461,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
         log.debug("Worker pool terminated.");
 
-        // last check to see if after worker pool closed, has any new work arrived?
-        try {
-            processWorkCompleteMailBox();
-        } catch (InterruptedException e) {
-            log.warn("Interrupted processing work while closing, skipping and continuing close...");
-            Thread.currentThread().interrupt();
-        }
-
-        commitOffsetsThatAreReady();
-
         // only close consumer once producer has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
 
+        // reject further and process renaming - make sure no new messages possible
+        getMyActor().close();
+
+        // last commit
+        commitOffsetsThatAreReady();
+
+        //
         maybeCloseConsumer();
 
+        //
         producerManager.ifPresent(x -> x.close(timeout));
 
+        //
         log.debug("Close complete.");
-        this.state = closed;
+        this.state = CLOSED;
     }
 
     /**
@@ -531,19 +527,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return isRecordsAwaitingProcessing || threadsDone;
     }
 
-    private void transitionToDraining() {
-        String msg = "Transitioning to draining...";
-        log.debug(msg);
-        // todo send actor message of draining?
-//        getMyActor().tellImmediately(controller -> transitionToState(State.draining));
-        this.state = State.draining;
-        notifySomethingToDo(new Reason(msg));
+    private void transitionToDrainingAsync(Reason reason) {
+        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
     }
 
     // also do closing
-//    private void transitionToState(Reason reason, State newState) {
-//        this.state = newState;
-//    }
+    private void transitionToState(Reason reason, State newState) {
+        log.debug("Transitioning to state {} from {} - reason: {}...", reason, newState, state);
+        this.state = newState;
+    }
 
     private boolean areMyThreadsDone() {
         if (isEmpty(controlThreadFuture)) {
@@ -568,11 +560,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
-        if (state != State.unused) {
+        if (state != UNUSED) {
             throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
                     "state is {})", state));
         } else {
-            state = running;
+            state = RUNNING;
         }
 
         // broker poll subsystem
@@ -593,7 +585,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
-            while (state != closed) {
+            while (state != CLOSED) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
                 } catch (Exception e) {
@@ -627,7 +619,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         //
         int newWork = handleWork(userFunction, callback);
 
-        if (state == running) {
+        if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -636,9 +628,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
         }
 
-        log.trace("Loop: Process mailbox");
+        log.trace("Loop: Process actor queue");
         try {
-            processWorkCompleteMailBox();
+            processActorMessageQueueBlocking();
         } catch (InterruptedException e) {
             log.warn("Interrupted processing work in control loop, skipping...");
             Thread.currentThread().interrupt();
@@ -656,10 +648,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.trace("Current state: {}", state);
         switch (state) {
-            case draining -> {
+            case DRAINING -> {
                 drain();
             }
-            case closing -> {
+            case CLOSING -> {
                 doClose(DrainingCloseable.DEFAULT_TIMEOUT);
             }
         }
@@ -679,7 +671,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int gotWorkCount = 0;
 
         //
-        if (state == running || state == draining) {
+        if (state == RUNNING || state == DRAINING) {
             int delta = calculateQuantityToRequest();
             var records = wm.getWorkIfAvailable(delta);
 
@@ -863,22 +855,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void transitionToClosing() {
-        String msg = "Transitioning to closing...";
-        log.debug(msg);
-        if (state == State.unused) {
-            state = closed;
-        } else {
-            state = State.closing;
-        }
-        notifySomethingToDo(new Reason(msg));
+        getMyActor().tellImmediately(me -> {
+            String msg = "Transitioning to closing...";
+            log.debug(msg);
+            if (state == UNUSED) {
+                state = CLOSED;
+            } else {
+                state = CLOSING;
+            }
+        });
     }
 
     /**
      * Check the work queue for work to be done, potentially blocking.
      * <p>
-     * Can be interrupted if something else needs doing.
+     * Can be interrupted if something else needs doing via the {@link Actor}, {@link #myActor}.
      */
-    private void processWorkCompleteMailBox() throws InterruptedException {
+    private void processActorMessageQueueBlocking() throws InterruptedException {
         Duration timeToBlockFor = calculateTimeUntilNextAction();
         getMyActor().processBlocking(timeToBlockFor);
     }
@@ -920,7 +913,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private boolean isIdlingOrRunning() {
-        return state == running || state == draining || state == paused;
+        return state == RUNNING || state == DRAINING || state == PAUSED;
     }
 
 
@@ -965,18 +958,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @return true if waiting to commit would help performance
      */
-    @Deprecated // ?
+    @Deprecated // todo check?
     private boolean lingeringOnCommitWouldBeBeneficial() {
         // work is waiting to be done
         boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
         // no work is currently being done
         boolean workInFlight = wm.hasWorkInFlight();
-        // work mailbox is empty
-        boolean workWaitingInMailbox = !getMyActor().isEmpty();
+        // work actor queue is empty
+        boolean workWaitingInActorQueue = !getMyActor().isEmpty();
         boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
-        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};",
-                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
-        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
+        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInActorQueue {} || !workWaitingToCommit {};",
+                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInActorQueue, !workWaitingToCommit);
+        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInActorQueue || !workWaitingToCommit;
 
         // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
@@ -991,7 +984,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
             return minus;
         } else {
-            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
+            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", RUNNING, state);
             return Duration.ZERO;
         }
     }
@@ -1051,14 +1044,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             // fail or succeed, either way we're done
             for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+                addWorkResultOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
             }
             log.trace("User function future registered");
 
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+            log.error("Exception caught in user function running stage, registering WC as failed, returning to queue", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
                 sendWorkResultAsync(wc); // always add on error
@@ -1072,7 +1065,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ExternalEngine#onUserFunctionSuccess
      * @see ExternalEngine#isAsyncFutureWork
      */
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
+    // todo collapse
+    protected void addWorkResultOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
         sendWorkResultAsync(wc);
     }
 
@@ -1111,11 +1105,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
      *
-     * @see #processWorkCompleteMailBox
+     * @see #processActorMessageQueueBlocking
+     * @deprecated todo should be defunct after full migration to Actor framework, as ANY messages for the controller will also wake it up.
      */
+    @Deprecated
     public void notifySomethingToDo(Reason reason) {
         // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
-        getMyActor().interruptProcessBlockingMaybe(reason);
+        getMyActor().interruptMaybePollingActor(reason);
     }
 
     @Override
@@ -1149,24 +1145,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void pauseIfRunning() {
-        if (this.state == State.running) {
-            log.info("Transitioning parallel consumer to state paused.");
-            this.state = State.paused;
-        } else {
-            log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
-        }
+        getMyActor().tellImmediately(me -> {
+            if (this.state == State.RUNNING) {
+                log.info("Transitioning parallel consumer to state paused.");
+                this.state = State.PAUSED;
+            } else {
+                log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
+            }
+        });
     }
 
     @Override
     public void resumeIfPaused() {
-        if (this.state == State.paused) {
-            final String msg = "Transitioning parallel consumer to state " + running;
-            log.info(msg);
-            this.state = State.running;
-            notifySomethingToDo(new Reason(msg));
-        } else {
-            log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
-        }
+        getMyActor().tellImmediately(me -> {
+            if (this.state == State.PAUSED) {
+                transitionToState(new Reason("Resuming"), RUNNING);
+            } else {
+                log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
+            }
+        });
     }
 
 }
