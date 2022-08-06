@@ -27,9 +27,9 @@
     </root>
 
     <!-- primary -->
-    <!--    <logger name="io.confluent.parallelconsumer" level="info"/>-->
-    <logger name="io.confluent.parallelconsumer" level="debug"/>
-        <logger name="io.confluent.csid" level="debug"/>
+    <logger name="io.confluent.parallelconsumer" level="info"/>
+    <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
+    <logger name="io.confluent.csid" level="debug"/>
 
     <!--    <logger name="io.confluent.csid.utils.LatchTestUtils" level="trace"/>-->
 
