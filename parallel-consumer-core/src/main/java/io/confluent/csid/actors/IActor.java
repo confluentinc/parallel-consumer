@@ -37,4 +37,6 @@ public interface IActor<T> {
     void process();
 
     String getActorName();
+
+    void close();
 }

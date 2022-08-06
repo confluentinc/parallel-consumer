@@ -4,6 +4,7 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
@@ -73,6 +74,8 @@ public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actorRef;
 
+    private volatile State state;
+
     /**
      * Single queueing point for all messages to the actor.
      * <p>
@@ -84,28 +87,35 @@ public class Actor<T> implements IActor<T>, Interruptible {
 
     @Override
     public void tell(final Consumer<T> action) {
+        checkState(State.ACCEPTING_MESSAGES);
         getActionMailbox().add(() -> action.accept(actorRef));
     }
 
     @Override
     public void tellImmediately(final Consumer<T> action) {
+        checkState(State.ACCEPTING_MESSAGES);
         getActionMailbox().addFirst(() -> action.accept(actorRef));
     }
 
     @Override
     public <R> Future<R> ask(final Function<T, R> action) {
+        checkState(State.ACCEPTING_MESSAGES);
+
         /*
          * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
          */
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
 
-        // todo should actor throw invalid state if actor is "closed" or "terminated"?
-//        checkState(State.acceptingMessages);
-
         // queue
         getActionMailbox().add(task);
 
         return task;
+    }
+
+    private void checkState(State targetState) {
+        if (!state.equals(targetState)) {
+            throw new InternalRuntimeError(msg("Actor in {} state, not {} target state", state, targetState));
+        }
     }
 
     /**
@@ -117,6 +127,8 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     @Override
     public <R> Future<R> askImmediately(final Function<T, R> action) {
+        checkState(State.ACCEPTING_MESSAGES);
+
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
         getActionMailbox().addFirst(task);
         return task;
@@ -217,6 +229,15 @@ public class Actor<T> implements IActor<T>, Interruptible {
     }
 
     /**
+     * Stop accepting any further messages, and then process any closures in the queue.
+     */
+    @Override
+    public void close() {
+        state = State.CLOSED;
+        process();
+    }
+
+    /**
      * Perform the NO-OP interrupt.
      * <p>
      * Note: Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on
@@ -224,5 +245,10 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     private void interruptInternalSync(Reason reason) {
         log.debug("Interruption signal processed: {}", reason);
+    }
+
+    private enum State {
+        ACCEPTING_MESSAGES,
+        CLOSED
     }
 }
