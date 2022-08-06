@@ -36,7 +36,7 @@ class ActorTest {
     @Test
     void tell() {
         actor.tell(g -> g.setTold(MESSAGE));
-        actor.processBounded();
+        actor.process();
         //        ManagedTruth.assertThat(greeter). // todo get TG working with Greeter class
         assertThat(greeter.getTold()).isEqualTo(MESSAGE);
 
@@ -46,7 +46,7 @@ class ActorTest {
     @Test
     void ask() {
         Future<String> tell = actor.ask(g -> g.greet(MESSAGE));
-        actor.processBounded();
+        actor.process();
         String s = tell.get();
         assertThat(s).isEqualTo(Greeter.PREFIX + MESSAGE);
     }
