@@ -54,9 +54,11 @@ image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelcons
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
-Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
+Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project is here].
 
-NOTE: This is not a part of Confluent's commercial support offering, except through consulting engagements.
+TIP: If you like this project, please ⭐ Star it in GitHub to show your appreciation, help us gauge popularity of the project and allocate resources.
+
+NOTE: This is not a part of the Confluent commercial support offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
 
 IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
