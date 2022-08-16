@@ -105,7 +105,7 @@ public class PartitionState<K, V> {
     private boolean allowedMoreRecords = true;
 
     /**
-     * Map of offsets to WorkUnits.
+     * Map of offsets to WorkUnits not yet succeeded in processing.
      * <p>
      * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
      * advancing offsets, as this isn't a guarantee of kafka's.
@@ -163,6 +163,9 @@ public class PartitionState<K, V> {
         return !commitQueue.isEmpty();
     }
 
+    /**
+     * @return the number work units not yet succeeded in processing
+     */
     public int getCommitQueueSize() {
         return commitQueue.size();
     }
@@ -270,8 +273,8 @@ public class PartitionState<K, V> {
 
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
-     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see {@link
-     * OffsetMapCodecManager#makeOffsetMetadataPayload}.
+     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see
+     * {@link OffsetMapCodecManager#makeOffsetMetadataPayload}.
      *
      * @return if possible, the String encoded offset map
      */

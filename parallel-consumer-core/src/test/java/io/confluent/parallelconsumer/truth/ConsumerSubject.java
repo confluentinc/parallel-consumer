@@ -21,8 +21,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 
-import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
-
 /**
  * Optionally move this class into source control, and add your custom assertions here.
  * <p>
@@ -57,7 +55,7 @@ public class ConsumerSubject extends ConsumerParentSubject {
                 .findFirst()
                 .orElse(
                         check("getCommitHistory(%s)", topicPartitions.topic())
-                                .about(commitHistories())
+                                .about(CommitHistorySubject.commitHistories())
                                 .that(new CommitHistory(UniLists.of())));
     }
 
@@ -67,7 +65,7 @@ public class ConsumerSubject extends ConsumerParentSubject {
                 .filter(entry -> entry.getValue() != null)
                 .toMap(entry -> entry.getKey(), entry
                         -> check("getCommitHistory(%s)", entry.getKey().topic() + ":" + entry.getKey().partition())
-                        .about(commitHistories())
+                        .about(CommitHistorySubject.commitHistories())
                         .that(new CommitHistory(UniLists.of(entry.getValue()))));
     }
 

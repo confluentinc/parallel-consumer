@@ -64,7 +64,7 @@ public class KafkaClientUtils {
 
     @Getter
     private AdminClient admin;
-    private final String groupId = GROUP_ID_PREFIX + nextInt();
+    private String groupId = GROUP_ID_PREFIX + nextInt();
 
     /**
      * todo docs
@@ -134,23 +134,39 @@ public class KafkaClientUtils {
             admin.close();
     }
 
+    public enum GroupOption {
+        RESUE_GROUP,
+        NEW_GROUP
+    }
+
+
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(GroupOption reuseGroup) {
+        return createNewConsumer(reuseGroup.equals(GroupOption.NEW_GROUP));
+    }
+
     public <K, V> KafkaConsumer<K, V> createNewConsumer() {
         return createNewConsumer(false);
     }
 
+    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup) {
         return createNewConsumer(newConsumerGroup, new Properties());
     }
 
+    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(Properties options) {
         return createNewConsumer(false, options);
     }
 
+    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup, Properties options) {
         Properties properties = setupConsumerProps();
 
         if (newConsumerGroup) {
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID_PREFIX + nextInt()); // new group
+            // overwrite the group id with a new one
+            String newGroupId = GROUP_ID_PREFIX + nextInt();
+            this.groupId = newGroupId; // save it for reuse later
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, newGroupId); // new group
         }
 
         // override with custom
@@ -214,14 +230,15 @@ public class KafkaClientUtils {
         return newTopics;
     }
 
-    public List<String> produceMessages(String inputName, int numberToSend) throws InterruptedException, ExecutionException {
+    public List<String> produceMessages(String inputName, long numberToSend) throws InterruptedException, ExecutionException {
         log.info("Producing {} messages to {}", numberToSend, inputName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
             for (int i = 0; i < numberToSend; i++) {
                 String key = "key-" + i;
-                Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
+                ProducerRecord<String, String> record = new ProducerRecord<>(inputName, key, "value-" + i);
+                Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
                     if (exception != null) {
                         log.error("Error sending, ", exception);
                     }
@@ -238,7 +255,7 @@ public class KafkaClientUtils {
             boolean b = recordMetadata.hasOffset();
             assertThat(b).isTrue();
         }
-        assertThat(sends).hasSize(numberToSend);
+        assertThat(sends).hasSize(Math.toIntExact(numberToSend));
         return expectedKeys;
     }
 

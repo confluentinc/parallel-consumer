@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -53,8 +54,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final Consumer<K, V> consumer;
 
+    @NonNull
     private final ShardManager<K, V> sm;
 
+    @NonNull
     private final ParallelConsumerOptions<K, V> options;
 
     /**
@@ -84,18 +87,21 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
-        log.debug("Partitions assigned: {}", assignedPartitions);
+        log.info("Assigned {} total ({} new) partition(s) {}",
+                getNumberOfAssignedPartitions(),
+                assignedPartitions.size(),
+                assignedPartitions);
 
-        for (final TopicPartition partitionAssignment : assignedPartitions) {
-            boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionAssignment);
+        for (final TopicPartition partitionKey : assignedPartitions) {
+            boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionKey);
             if (isAlreadyAssigned) {
-                PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionAssignment);
+                PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionKey);
                 if (previouslyAssignedState.isRemoved()) {
-                    log.trace("Reassignment of previously revoked partition {} - state: {}", partitionAssignment, previouslyAssignedState);
+                    log.trace("Reassignment of previously revoked partition {} - state: {}", partitionKey, previouslyAssignedState);
                 } else {
                     log.warn("New assignment of partition which already exists and isn't recorded as removed in " +
                             "partition state. Could be a state bug - was the partition revocation somehow missed, " +
-                            "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionAssignment, previouslyAssignedState);
+                            "or is this a race? Please file a GH issue. Partition: {}, state: {}", partitionKey, previouslyAssignedState);
                 }
             }
         }
@@ -276,6 +282,9 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
+    /**
+     * @return the number of record entries in all the partitions being managed not yet succeeded in processing
+     */
     public long getNumberOfEntriesInPartitionQueues() {
         Collection<PartitionState<K, V>> values = getAssignedPartitions().values();
         return values.stream()
@@ -416,4 +425,13 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
     }
 
+    public long getNumberOfAssignedPartitions() {
+        return this.partitionStates.values().stream()
+                .filter(
+                        x -> {
+                            boolean partitionRemoved = x.equals(RemovedPartitionState.getSingleton());
+                            return !partitionRemoved;
+                        })
+                .count();
+    }
 }

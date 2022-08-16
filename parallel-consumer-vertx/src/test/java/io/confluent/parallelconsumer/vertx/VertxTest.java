@@ -238,7 +238,7 @@ class VertxTest extends VertxBaseUnitTest {
                 log.info("Waiting");
                 latchTwo.await();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.debug("", e);
             }
 
             cp.flag();

@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.model;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.CollectionUtils;
@@ -15,7 +15,7 @@ public class CommitHistory {
 
     private final List<OffsetAndMetadata> history;
 
-    public CommitHistory(final List<OffsetAndMetadata> collect) {
+    public CommitHistory(List<OffsetAndMetadata> collect) {
         super();
         this.history = collect;
     }

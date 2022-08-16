@@ -141,6 +141,9 @@ public class CoreApp {
         final int maxRetries = 10;
         final Map<ConsumerRecord<String, String>, Long> retriesCount = new ConcurrentHashMap<>();
 
+        pc.pollAndProduceMany();
+        pc.poll(records ->);
+
         pc.poll(context -> {
             var consumerRecord = context.getSingleRecord().getConsumerRecord();
             Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);

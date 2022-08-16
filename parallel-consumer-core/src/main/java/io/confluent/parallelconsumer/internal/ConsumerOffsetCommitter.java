@@ -159,7 +159,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                     throw new InternalRuntimeError(msg("Timeout waiting for commit response {} to request {}", timeout, commitRequest));
                 waitingOnCommitResponse = take.getRequest().getId() != commitRequest.getId();
             } catch (InterruptedException e) {
-                log.debug("Interrupted waiting for commit response", e);
+                log.debug("Interrupted waiting for commit response, retrying", e);
             }
             attempts++;
         }
