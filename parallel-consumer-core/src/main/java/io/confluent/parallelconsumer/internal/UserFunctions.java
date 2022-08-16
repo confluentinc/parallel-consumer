@@ -56,7 +56,7 @@ public class UserFunctions {
      * @param wrappedFunction the function to run
      * @param userFuncParam   the parameter to pass into the user's function
      */
-    public static <PARAM> void carefullyRun(RecordProcessor.PollConsumer<PARAM> wrappedFunction, PARAM userFuncParam) {
+    public static <PARAM> void carefullyRun(RecordProcessor.Processor<PARAM> wrappedFunction, PARAM userFuncParam) {
         try {
             wrappedFunction.accept(userFuncParam);
         } catch (Exception e) {
