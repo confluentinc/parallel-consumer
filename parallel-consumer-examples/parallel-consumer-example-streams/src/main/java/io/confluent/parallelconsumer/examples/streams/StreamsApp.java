@@ -18,6 +18,7 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.KTable;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.Properties;
@@ -74,6 +75,14 @@ public class StreamsApp {
             log.info("Concurrently processing a record: {}", record);
             messageCount.getAndIncrement();
         });
+
+        StreamsBuilder builder = new StreamsBuilder();
+
+        KTable<String, String> table = builder.<String, String>stream(inputTopic).toTable();
+
+        parallelConsumer.stream("topic-one").map(context -> context.blah());
+        parallelConsumer.stream("topic-two").foreach(context -> context.blah());
+        parallelConsumer.stream("topic-three").join(table, (left, right) -> left);
     }
     // end::example[]
 
