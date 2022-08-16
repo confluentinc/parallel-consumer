@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.examples.streams;
  */
 
 
+import io.confluent.parallelconsumer.PCTopologyBuilder;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,13 +77,15 @@ public class StreamsApp {
             messageCount.getAndIncrement();
         });
 
-        StreamsBuilder builder = new StreamsBuilder();
+        StreamsBuilder ksBuilder = new StreamsBuilder();
 
-        KTable<String, String> table = builder.<String, String>stream(inputTopic).toTable();
+        KTable<String, String> table = ksBuilder.<String, String>stream(inputTopic).toTable();
 
-        parallelConsumer.stream("topic-one").map(context -> context.blah());
-        parallelConsumer.stream("topic-two").foreach(context -> context.blah());
-        parallelConsumer.stream("topic-three").join(table, (left, right) -> left);
+        var builder = new PCTopologyBuilder();
+        builder.stream("topic-one").map(context -> context.blah()).to("topic-one-output");
+        builder.stream("topic-two").foreach(context -> context.blah());
+        builder.stream("topic-three").join(table, (left, right) -> left);
+        parallelConsumer.start(builder.build());
     }
     // end::example[]
 

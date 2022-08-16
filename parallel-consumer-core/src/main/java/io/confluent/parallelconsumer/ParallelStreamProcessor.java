@@ -9,11 +9,9 @@ import lombok.Data;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Pattern;
 
 /**
  * Parallel message consumer which also can optionally produce 0 or many {@link ProducerRecord} results to be published
@@ -67,13 +65,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
                         Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
-    <K, V> PCStream<K, V> stream(String topicName);
-
-    <K, V> PCStream<K, V> stream(String topicName, Consumed<K, V> consumed);
-
-    <K, V> PCStream<K, V> stream(Collection<String> topics);
-
-    <K, V> PCStream<K, V> stream(Pattern topicPattern);
+    void start(Object build);
 
     /**
      * A simple triple structure to capture the set of coinciding data.
