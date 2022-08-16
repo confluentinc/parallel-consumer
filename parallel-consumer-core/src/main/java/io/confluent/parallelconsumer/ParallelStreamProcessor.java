@@ -65,7 +65,7 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
                         Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
-    void start(Object build);
+    void start(PCTopolgy build);
 
     /**
      * A simple triple structure to capture the set of coinciding data.

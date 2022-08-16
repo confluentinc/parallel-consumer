@@ -78,7 +78,7 @@ public class StreamsApp {
         });
 
         StreamsBuilder ksBuilder = new StreamsBuilder();
-
+        var stream = ksBuilder.<String, String>stream(inputTopic);
         KTable<String, String> table = ksBuilder.<String, String>stream(inputTopic).toTable();
 
         var builder = new PCTopologyBuilder();
