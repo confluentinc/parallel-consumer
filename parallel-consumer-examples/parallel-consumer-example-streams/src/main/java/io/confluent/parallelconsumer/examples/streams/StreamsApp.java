@@ -5,10 +5,7 @@ package io.confluent.parallelconsumer.examples.streams;
  */
 
 
-import io.confluent.parallelconsumer.PCTopologyBuilder;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelStreamProcessor;
-import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -100,8 +97,10 @@ public class StreamsApp {
                 )
                 .to("topic-one-output");
 
-        builder.stream("topic-two").foreach(context -> context.stream().forEach(this::service));
-        builder.stream("topic-three").join(table, (left, right) -> left);
+        final PCStream<Object, Object> s3 = builder.stream("topic-two");
+        s3.foreach(context -> context.stream().forEach(this::service));
+        s3.map().
+//        builder.stream("topic-three").join(table, (left, right) -> left);
         parallelConsumer.start(builder.build());
     }
 

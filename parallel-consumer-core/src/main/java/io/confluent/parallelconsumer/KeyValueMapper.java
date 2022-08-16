@@ -16,8 +16,6 @@
  */
 package io.confluent.parallelconsumer;
 
-import org.apache.kafka.streams.KeyValue;
-
 /**
  * The {@code KeyValueMapper} interface for mapping a {@link KeyValue key-value pair} to a new value of arbitrary type.
  * For example, it can be used to
@@ -50,9 +48,7 @@ public interface KeyValueMapper<K, V, VR> {
     /**
      * Map a record with the given key and value to a new value.
      *
-     * @param key   the key of the record
-     * @param value the value of the record
      * @return the new value
      */
-    VR apply(final K key, final V value);
+    VR apply(PollContext<K, V> context);
 }

@@ -7,16 +7,17 @@ package io.confluent.parallelconsumer;
  */
 public interface PCStream<K, V> {
 
-    PCStream map(RecordProcessor.Transformer o);
+    PCStream<K, V> map(RecordProcessor.Transformer<K, V> o);
 
-    PCStream map(KeyValueMapper mapper);
+    <VR> PCStream<K, VR> map(KeyValueMapper<K, V, VR> mapper);
 
-    <KR, VR> KStream<KR, VR> flatMap(final KeyValueMapper<? super K, ? super V, ? extends Iterable<? extends KeyValue<? extends KR, ? extends VR>>> mapper);
+    <KR, VR> PCStream<KR, VR> flatMap(KeyValueMapper<? super K, ? super V, ? extends Iterable<? extends KeyValue<? extends KR, ? extends VR>>> mapper);
 
-
-    void foreach(RecordProcessor.Processor o);
+    void foreach(RecordProcessor.Processor<K, V> o);
 
     void join(V table, V o);
 
     void to(String s);
+
+    PCStream<K, V> through(String s);
 }
