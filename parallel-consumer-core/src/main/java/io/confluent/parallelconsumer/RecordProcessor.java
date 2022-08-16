@@ -14,7 +14,7 @@ public interface RecordProcessor {
      * Process a Kafka {@link ConsumerRecord} via {@link PollContext} instances.
      */
     @FunctionalInterface
-    interface PollConsumer<K, V> extends java.util.function.Consumer<PollContext<K, V>> {
+    interface Processor<K, V> extends java.util.function.Consumer<PollContext<K, V>> {
 
         /**
          * Process a Kafka {@link ConsumerRecord} via {@link PollContext} instances.
@@ -33,17 +33,17 @@ public interface RecordProcessor {
     }
 
     @FunctionalInterface
-    interface PollConsumerAndProducer<K, V> extends java.util.function.Function<PollContext<K, V>, List<ProducerRecord<K, V>>> {
+    interface Transformer<K, V> extends java.util.function.Function<PollContext<K, V>, List<ProducerRecord<K, V>>> {
 
         /**
-         * Like {@link PollConsumer#accept(PollContext)} but also returns records to be produced back to Kafka.
+         * Like {@link Processor#accept(PollContext)} but also returns records to be produced back to Kafka.
          *
          * @param records the Kafka records to process
          * @return the function result
-         * @see PollConsumer#accept(PollContext)
+         * @see Processor#accept(PollContext)
          */
         @Override
-        List<ProducerRecord<K, V>> apply(PollContext records);
+        List<ProducerRecord<K, V>> apply(PollContext<K, V> records);
 
     }
 }

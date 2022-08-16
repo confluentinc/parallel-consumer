@@ -82,11 +82,19 @@ public class StreamsApp {
 
         StreamsBuilder ksBuilder = new StreamsBuilder();
         var stream = ksBuilder.<String, String>stream(inputTopic);
+//        stream.flatMap()
         KTable<String, String> table = ksBuilder.<String, String>stream(inputTopic).toTable();
 
         var builder = new PCTopologyBuilder();
         builder.stream("topic-one")
                 .map(
+                        context ->
+                                applyMap(context)
+                )
+                .to("topic-one-output");
+
+        builder.stream("topic-one")
+                .flatMap(
                         context ->
                                 applyMap(context)
                 )
