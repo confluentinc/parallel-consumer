@@ -6,9 +6,9 @@ package io.confluent.parallelconsumer;
  * @author Antony Stubbs
  */
 public interface PCStream<K, V> {
-    void map(V o);
+    void map(RecordProcessor.PollConsumerAndProducer o);
 
-    void foreach(V o);
+    void foreach(RecordProcessor.PollConsumer o);
 
     void join(V table, V o);
 }

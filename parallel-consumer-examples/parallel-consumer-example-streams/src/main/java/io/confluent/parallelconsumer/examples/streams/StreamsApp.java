@@ -8,12 +8,14 @@ package io.confluent.parallelconsumer.examples.streams;
 import io.confluent.parallelconsumer.PCTopologyBuilder;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import io.confluent.parallelconsumer.PollContext;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -22,6 +24,7 @@ import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.KTable;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -82,10 +85,24 @@ public class StreamsApp {
         KTable<String, String> table = ksBuilder.<String, String>stream(inputTopic).toTable();
 
         var builder = new PCTopologyBuilder();
-        builder.stream("topic-one").map(context -> context.blah()).to("topic-one-output");
-        builder.stream("topic-two").foreach(context -> context.blah());
+        builder.stream("topic-one")
+                .map(
+                        context ->
+                                applyMap(context)
+                )
+                .to("topic-one-output");
+
+        builder.stream("topic-two").foreach(context -> context.stream().forEach(this::service));
         builder.stream("topic-three").join(table, (left, right) -> left);
         parallelConsumer.start(builder.build());
+    }
+
+    private List<ProducerRecord> applyMap(PollContext context) {
+        return null;
+    }
+
+    private void service(Object o) {
+
     }
     // end::example[]
 
