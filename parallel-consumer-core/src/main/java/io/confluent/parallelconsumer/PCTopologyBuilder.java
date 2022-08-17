@@ -16,7 +16,12 @@ public interface PCTopologyBuilder {
 
     <K, V> PCStream<K, V> stream(Collection<String> topics);
 
+    <K, V> PCStream<K, V> stream(Collection<String> topics, Consumed<K, V> consumed);
+
     <K, V> PCStream<K, V> stream(Pattern topicPattern);
+
+    <K, V> PCStream<K, V> stream(Pattern topicPattern, Consumed<K, V> consumed);
+
 
     PCTopolgy build();
 }

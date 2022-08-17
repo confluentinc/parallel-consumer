@@ -25,16 +25,18 @@ import static io.confluent.parallelconsumer.internal.Documentation.getLinkHtmlTo
 /**
  * Context object used to pass messages to process to users processing functions.
  * <p>
- * Results sets can be iterated in a variety of ways. Explore the different methods available.
+ * Result sets can be iterated in a variety of ways. Explore the different methods available.
  * <p>
  * You can access for {@link ConsumerRecord}s directly, or you can get the {@link RecordContext} wrappers, which provide
  * extra information about the specific records, such as {@link RecordContext#getNumberOfFailedAttempts()}.
  * <p>
- * Note that if you are not setting a {@link ParallelConsumerOptions#batchSize}, then you can use the {@link
- * #getSingleRecord()}, and it's convenience accessors ({@link #value()}, {@link #offset()}, {@link #key()} {@link
- * #getSingleConsumerRecord()}). But if you have configured batching, they will all throw an {@link
- * IllegalArgumentException}, as it's not valid to have batches of messages and yet tread the batch input as a single
- * record.
+ * Note that if you are not setting a {@link ParallelConsumerOptions#batchSize}, then you can use the
+ * {@link #getSingleRecord()}, and it's convenience accessors ({@link #value()}, {@link #offset()}, {@link #key()}
+ * {@link #getSingleConsumerRecord()}). But if you have configured batching, they will all throw an
+ * {@link IllegalArgumentException}, as it's not valid to have batches of messages and yet tread the batch input as a
+ * single record.
+ *
+ * @see RecordContext
  */
 @AllArgsConstructor
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)

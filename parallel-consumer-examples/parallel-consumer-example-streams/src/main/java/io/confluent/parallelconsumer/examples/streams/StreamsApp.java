@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.examples.streams;
 
 
 import io.confluent.parallelconsumer.*;
+import io.confluent.parallelconsumer.internal.PCTopologyBuilderImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -13,12 +14,12 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.kstream.KTable;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.List;
@@ -77,38 +78,102 @@ public class StreamsApp {
             messageCount.getAndIncrement();
         });
 
+        // for reference - KS
         StreamsBuilder ksBuilder = new StreamsBuilder();
         var stream = ksBuilder.<String, String>stream(inputTopic);
-//        stream.flatMap()
-        KTable<String, String> table = ksBuilder.<String, String>stream(inputTopic).toTable();
+        var table = ksBuilder.<String, String>stream(inputTopic).toTable();
 
-        var builder = new PCTopologyBuilder();
-        builder.stream("topic-one")
-                .map(
-                        context ->
-                                applyMap(context)
-                )
-                .to("topic-one-output");
+        //
+        var builder = new PCTopologyBuilderImpl();
 
-        builder.stream("topic-one")
-                .flatMap(
-                        context ->
-                                applyMap(context)
-                )
-                .to("topic-one-output");
 
-        final PCStream<Object, Object> s3 = builder.stream("topic-two");
-        s3.foreach(context -> context.stream().forEach(this::service));
-        s3.map().
-//        builder.stream("topic-three").join(table, (left, right) -> left);
-        parallelConsumer.start(builder.build());
+        //
+        {
+            builder.stream("topic-one")
+                    .map(this::applyMap)
+                    .to("topic-one-output");
+
+            builder.stream("topic-one")
+                    .flatMap(this::applyFlatMap)
+                    .to("topic-one-output");
+        }
+
+
+        //
+        {
+            PCStream<String, String> s3 = builder.stream("topic-two");
+
+            s3.foreach(this::callService);
+
+            s3.map(this::applyMap)
+                    .to("out-topic");
+
+            parallelConsumer.start(builder.build());
+        }
+
+
+        // custom serde
+        {
+            // specific serdes
+            Serde<String> stringSerde = Serdes.String();
+            Consumed<String, String> consumedAsString = Consumed.with(stringSerde, stringSerde);
+            Produced<String, String> producedAsString = Produced.with(stringSerde, stringSerde);
+
+            //
+            PCStream<String, String> s3 = builder.stream("topic-two", consumedAsString);
+            s3.map(this::applyMap)
+                    .to("topic-two-out", producedAsString);
+
+            parallelConsumer.start(builder.build());
+        }
+
+        // default serdes
+        {
+            //
+            Serde<String> stringSerde = Serdes.String();
+            builder = new PCTopologyBuilderImpl(stringSerde);
+
+            //
+            PCStream<String, String> s3 = builder.stream("topic-two");
+            s3.map(this::applyMap)
+                    .to("topic-two-out");
+
+            parallelConsumer.start(builder.build());
+        }
+
+        // default serdes
+        {
+            //
+            Serde<String> stringSerde = Serdes.String();
+            Serde<Long> longSerde = Serdes.Long();
+            builder = new PCTopologyBuilderImpl(stringSerde, longSerde);
+
+            //
+            PCStream<String, String> s3 = builder.stream("topic-two");
+            s3.map(this::applyMap)
+                    .to("topic-two-out");
+
+            parallelConsumer.start(builder.build());
+        }
+
+
+        // table ideas
+        //        builder.stream("topic-three").join(table, (left, right) -> left);
     }
 
-    private List<ProducerRecord> applyMap(PollContext context) {
+    private List<ProducerRecord<Object, Object>> applyMap(PollContext<Object, Object> recordContexts) {
         return null;
     }
 
-    private void service(Object o) {
+    private Iterable<? extends KeyValue<?, ?>> applyFlatMap(PollContext<Object, Object> context) {
+        return null;
+    }
+
+    private List<ProducerRecord<String, String>> applyMap(PollContext context) {
+        return null;
+    }
+
+    private void callService(Object o) {
 
     }
     // end::example[]
