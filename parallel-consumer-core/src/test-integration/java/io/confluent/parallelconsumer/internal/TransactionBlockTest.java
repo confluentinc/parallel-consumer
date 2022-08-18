@@ -12,6 +12,7 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.FixedValue;
 import net.bytebuddy.matcher.ElementMatchers;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -21,21 +22,29 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static net.bytebuddy.matcher.ElementMatchers.named;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 /**
- * todo docs
+ * Tests around ensuring the Producer system blocks further work collection and record sending through the commit phase
  *
  * @author Antony Stubbs
  */
 @Tag("transactions")
 @Tag("#355")
 @Slf4j
+// todo extend broker integration test instead
 class TransactionBlockTest extends TransactionMarkersTest {
 
+    /**
+     * Producer blocks any further work being started or records being sent during commit phase
+     */
     @Test
     void testProducerLock() {
+        var isolationCommittedConsumer = kcu.createNewConsumer(NEW_GROUP);
+
         // send source messages
         int numRecords = 3;
         int blockFreeRecords = numRecords - 1;
@@ -44,7 +53,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
 
         var blockedRec = new CountDownLatch(1);
 
-        // process two records, sending 3 from each
+        // process 3 records, sending 2 from each
         pc.pollAndProduceMany(recordContexts -> {
             if (recordContexts.offset() == blockedOffset) {
                 // todo use waiter
@@ -58,57 +67,75 @@ class TransactionBlockTest extends TransactionMarkersTest {
             return makeOutput(recordContexts);
         });
 
+
         // start committing transaction
         pc.requestCommitAsap();
 
+        // somehow block tx from completing
+
+        // while committing tx, try to produce another record, observe it's blocked
+        {
+            // unblock
+            blockedRec.countDown();
+            pc.requestCommitAsap();
+            // assert for 1 second
+            await().pollDelay(Duration.ofSeconds(1)).untilAsserted(() ->
+            {
+                var poll = isolationCommittedConsumer.poll(Duration.ZERO);
+                assertWithMessage("Output topic missing blocked record").that(poll).doesntContainOffset(blockedOffset);
+            });
+        }
+
+        // allow finish transaction
+//        ???
+        Truth.assertThat(true).isFalse();
+
+
         // assert tx completes
-        var isolationCommittedConsumer = kcu.createNewConsumer(NEW_GROUP);
-        {
-            var poll = isolationCommittedConsumer.poll(Duration.ZERO);
-            assertThat(poll).containsOffset(blockFreeRecords);
-        }
-
-        // while sending tx, try to produce another record, observe it's blocked
-        // unblock
-        blockedRec.countDown();
-        // assert for 1 second
-        pc.requestCommitAsap();
-        {
-            var poll = isolationCommittedConsumer.poll(Duration.ZERO);
-            assertThat(poll).doesntContainOffset(blockedOffset);
-        }
-
-        // finish transaction
-//        ???
-        Truth.assertThat(true).isFalse();
-
-        // assert blocked record now sent
-        pc.requestCommitAsap();
-        assertThat(pc).hasCommittedToAnything(blockFreeRecords);
+        await().untilAsserted(() ->
         {
             var poll = isolationCommittedConsumer.poll(Duration.ZERO);
             assertThat(poll).containsOffset(blockedOffset);
-        }
+        });
 
-        // commit open transaction
-//        ???
-        Truth.assertThat(true).isFalse();
-
-        // assert results topic contains all
-        assertThat(pc).hasCommittedToAnything(blockFreeRecords);
-        {
-            var poll = isolationCommittedConsumer.poll(Duration.ZERO);
-            assertThat(poll).containsOffset(blockedOffset);
-        }
+// delete
+//        // commit open transaction
+////        ???
+//        Truth.assertThat(true).isFalse();
+//
+//        // assert results topic contains all
+//        assertThat(pc).hasCommittedToAnything(blockFreeRecords);
+//        {
+//            var poll = isolationCommittedConsumer.poll(Duration.ZERO);
+//            assertThat(poll).containsOffset(blockedOffset);
+//        }
     }
 
+    /**
+     * Test aborting the second tx has only first plus nothing in result topic
+     */
     @Test
-    void abortedTransaction() {
+    void abortedSecondTransaction() {
+        Truth.assertThat(true).isFalse();
+    }
+
+    /**
+     * Test aborting the first tx ends up with nothing
+     */
+    @Test
+    void abortedBothTransactions() {
         // do the above again, but instead abort the transaction
         // assert nothing on result topic
-        // retry
-        // assert results in output topic
         Truth.assertThat(true).isFalse();
+    }
+
+    /**
+     * Test option to drain consumer records (work records) that are in flight (but haven't produced a record yet,
+     * otherwise they already be drained in the producer flush) while blocking any further work from being started.
+     */
+    @Test()
+    @Disabled("Not implemented")
+    void drainInflightWork() {
     }
 
     class MyAdvice {
@@ -118,6 +145,10 @@ class TransactionBlockTest extends TransactionMarkersTest {
         }
     }
 
+    /**
+     * test that uses mocks to ensure the correct methods are being called, and to make the transaction committing very
+     * slow
+     */
     @Test
     void mockTest() {
         Class<?> dynamicType = new ByteBuddy()
@@ -159,6 +190,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
                 .collect(Collectors.toList());
     }
 
+    // todo move to producer utils
     private void sendRecordsNonTransactionallyAndBlock(int i) {
         sendRecordsNonTransactionally(3).forEach(future -> {
             try {

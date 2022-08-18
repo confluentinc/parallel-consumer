@@ -31,6 +31,7 @@ import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -151,6 +152,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see ParallelStreamProcessor#pollAndProduceMany
      */
     public List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> produceMessages(List<ProducerRecord<K, V>> outMsgs) {
+        ensureProduceStarted();
+
         // only needed if not using tx
         Callback callback = (RecordMetadata metadata, Exception exception) -> {
             if (exception != null) {
@@ -394,7 +397,19 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         if (producerTransactionLock.isWriteLocked() && !producerTransactionLock.isWriteLockedByCurrentThread()) {
             throw new ConcurrentModificationException(this.getClass().getSimpleName() + " is not safe for multi-threaded access");
         }
-        writeLock.lock();
+
+        // lock the lock
+        // todo remove or use sensible value
+        boolean gotLock = false;
+        try {
+            gotLock = writeLock.tryLock(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        if (!gotLock) {
+            throw new InternalRuntimeError("Timeout getting commit lock - slow or too many records being ack'd?");
+        }
+//        writeLock.lock();
     }
 
     private void releaseCommitLock() {
@@ -427,6 +442,14 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * todo docs
      */
     public void finishProducing(ReentrantReadWriteLock.ReadLock produceLock) {
+        ensureProduceStarted();
         releaseProduceLock(produceLock);
+    }
+
+
+    private void ensureProduceStarted() {
+        if (producerTransactionLock.getReadHoldCount() < 1) {
+            throw new InternalRuntimeError("Need to call #startProducing first");
+        }
     }
 }
