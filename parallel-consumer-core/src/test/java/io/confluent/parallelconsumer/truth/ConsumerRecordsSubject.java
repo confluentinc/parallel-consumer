@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer.truth;
 
+import com.google.common.truth.Fact;
 import com.google.common.truth.FailureMetadata;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedMiddleSubject;
@@ -31,10 +32,10 @@ public class ConsumerRecordsSubject extends ConsumerRecordsParentSubject impleme
     }
 
     public void containsOffset(int blockFreeRecords) {
-
+        failWithoutActual(Fact.simpleFact("not-implemented"));
     }
 
     public void doesntContainOffset(int blockedOffset) {
-
+        failWithoutActual(Fact.simpleFact("not-implemented"));
     }
 }
