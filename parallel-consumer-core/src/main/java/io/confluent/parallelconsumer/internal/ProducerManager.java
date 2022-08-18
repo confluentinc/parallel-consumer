@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.NonNull;
@@ -55,15 +56,16 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * first block any further records from being sent, then drain ourselves to get all sent records ack'd, and then
      * commit the tx during the synchronisation barrier, then unlock the barrier.
      * <p>
-     * This could be implemented more simply, using the new micro Actor system. However, given our implementation, that
-     * would have the side effect of all producer record sending being done by the controller thread. Now as the
-     * Producer is thread safe - it uses the {@link RecordAccumulator} effectively as it's Actor bus, and all network
-     * communication, amongst other things, are done through a separate thread. However, before sending records to the
-     * accumulator, some non-trivial work is done while still in the multithreading context - most particularly (because
-     * it's probably the slowest part) is the serialisation of the payload. By moving to the new micro Actor framework,
-     * that serialisation would then be done in the controller. Give the existing shared state system using the
-     * {@link ReentrantReadWriteLock} works really well, I'm hesitant to give up the performance over simplification in
-     * this case.
+     * This could be implemented more simply, using the new micro Actor system, by sending {@link ProducerRecord}s as
+     * actor messages, and having the controller process the {@link ProducerManager}s actor queue (send the queued up
+     * records). However, given our implementation, that would have the side effect of all producer record sending being
+     * done by the controller thread. Now as the Producer is thread safe - it uses the {@link RecordAccumulator}
+     * effectively as it's Actor bus, and all network communication, amongst other things, are done through a separate
+     * thread. However, before sending records to the accumulator, some non-trivial work is done while still in the
+     * multithreading context - most particularly (because it's probably the slowest part) is the serialisation of the
+     * payload. By moving to the new micro Actor framework, that serialisation would then be done in the controller.
+     * Give the existing shared state system using the {@link ReentrantReadWriteLock} works really well, and so sending
+     * work is done by worker threads, I'm hesitant to give up the performance over simplification in this case.
      */
     private ReentrantReadWriteLock producerTransactionLock;
 
@@ -92,6 +94,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             try {
                 log.debug("Initialising producer transaction session...");
                 producer.initTransactions();
+                // todo in PR: being tx must be lazy, otherwise quiet topics will have transactions timing out
                 beginTransaction();
             } catch (KafkaException e) {
                 log.error("Make sure your producer is setup for transactions - specifically make sure it's {} is set.", ProducerConfig.TRANSACTIONAL_ID_CONFIG, e);
@@ -136,10 +139,12 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     /**
      * Produce a message back to the broker.
      * <p>
-     * Implementation uses the blocking API, performance upgrade in later versions, is not an issue for the more common
-     * use case where messages aren't produced, and the produce is still multithreaded.
+     * Implementation uses the blocking API, by blocking on produce ack results (in batches when the flatMap version of
+     * producing a list of records is used). Performance upgrade in later versions (#356). This is of course not an
+     * issue for the more common use case of PC where messages aren't produced
+     * ({@link ParallelEoSStreamProcessor#poll}), and the {@code produce ack block} is still multi-threaded after all.
      * <p>
-     * May block if a transaction is in progress - see
+     * May block while a transaction is in progress - see
      * {@link ParallelConsumerOptions.CommitMode#PERIODIC_TRANSACTIONAL_PRODUCER}.
      *
      * @see ParallelConsumerOptions.CommitMode#PERIODIC_TRANSACTIONAL_PRODUCER
@@ -174,7 +179,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * First lock, so no other records can be sent. Then wait for the producer to get all its acks complete.
+     * First lock, so no other records can be sent. Then wait for the producer to get all its {@code acks} complete by
+     * calling {@link Producer#flush()}.
      */
     @Override
     protected void preAcquireWork() {
@@ -183,7 +189,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * Wait for all in flight records to be ack'd before continuing, so they are all in the tx
+     * Wait for all in flight records to be ack'd before continuing, so they are all in the tx.
      */
     private void drain() {
         producer.flush();
@@ -403,14 +409,23 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             throw new IllegalStateException("Expected commit lock to be held");
     }
 
+    /**
+     * todo docs
+     */
     public boolean isTransactionCommittingInProgress() {
         return producerTransactionLock.isWriteLocked();
     }
 
+    /**
+     * todo docs
+     */
     public ReentrantReadWriteLock.ReadLock startProducing() {
         return acquireProduceLock();
     }
 
+    /**
+     * todo docs
+     */
     public void finishProducing(ReentrantReadWriteLock.ReadLock produceLock) {
         releaseProduceLock(produceLock);
     }

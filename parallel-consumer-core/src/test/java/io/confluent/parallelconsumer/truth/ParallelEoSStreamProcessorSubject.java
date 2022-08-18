@@ -12,6 +12,7 @@ import io.stubbs.truth.generator.UserManagedSubject;
 /**
  * Main Subject for the class under test.
  *
+ * @author Antony Stubbs
  * @see ParallelEoSStreamProcessor
  * @see ParallelEoSStreamProcessorParentSubject
  * @see ParallelEoSStreamProcessorChildSubject

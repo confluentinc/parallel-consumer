@@ -41,7 +41,6 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
-import static java.util.Optional.of;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -278,7 +277,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else
@@ -345,14 +344,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
-        usersConsumerRebalanceListener = of(callback);
+        usersConsumerRebalanceListener = Optional.of(callback);
         consumer.subscribe(topics, this);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
-        usersConsumerRebalanceListener = of(callback);
+        usersConsumerRebalanceListener = Optional.of(callback);
         consumer.subscribe(pattern, this);
     }
 
@@ -680,7 +679,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return true;
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
-        this.controlThreadFuture = of(controlTaskFutureResult);
+        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
     }
 
     /**
