@@ -241,21 +241,23 @@ public class KafkaClientUtils {
         return newTopics;
     }
 
-    public List<String> produceMessages(String inputName, long numberToSend) throws InterruptedException, ExecutionException {
-        log.info("Producing {} messages to {}", numberToSend, inputName);
+    public List<String> produceMessages(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
+        log.info("Producing {} messages to {}", numberToSend, topicName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
-            for (int i = 0; i < numberToSend; i++) {
-                String key = "key-" + i;
-                ProducerRecord<String, String> record = new ProducerRecord<>(inputName, key, "value-" + i);
+
+            var rf = new RecordFactory();
+            List<ProducerRecord<String, String>> recs = rf.createRecords(topicName, numberToSend);
+
+            for (var record : recs) {
                 Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
                     if (exception != null) {
                         log.error("Error sending, ", exception);
                     }
                 });
                 sends.add(send);
-                expectedKeys.add(key);
+                expectedKeys.add(record.key());
             }
             log.debug("Finished sending test data");
         }

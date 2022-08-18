@@ -1,6 +1,18 @@
 package io.confluent.parallelconsumer.internal;
 
+import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
+import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
+import io.confluent.parallelconsumer.state.WorkManager;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.concurrent.Future;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
@@ -11,9 +23,20 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
  * @author Antony Stubbs
  * @see ProducerManager
  */
-class ProducerManagerTest {
+class ProducerManagerTest extends BrokerIntegrationTest<String, String> {
 
-    ProducerManager<Object, Object> pm = new ProducerManager<>();
+    ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder().build();
+
+    KafkaProducer<String, String> producer = getKcu().getProducer();
+
+    KafkaConsumer<String, String> consumer = getKcu().getConsumer();
+    ConsumerManager<String, String> cm = new ConsumerManager<>(consumer);
+
+    WorkManager<String, String> wm = new WorkManager<>(opts, consumer);
+
+    ProducerManager<String, String> pm = new ProducerManager<>(producer, cm, wm, opts);
+
+    RecordFactory rf = new RecordFactory();
 
     /**
      * todo docs
@@ -23,7 +46,7 @@ class ProducerManagerTest {
         assertThat(pm).isNotTransactionCommittingInProgress();
 
         // should send fine, futures should finish
-        var notBlockedSends = pm.produceMessages();
+        var notBlockedSends = produceOneRecord();
         assertThat(notBlockedSends).hasSize(-1);
 
         // pretend to start to commit
@@ -33,7 +56,7 @@ class ProducerManagerTest {
         assertThat(pm).isTransactionCommittingInProgress();
 
         // these futures should block
-        var blockedSends = pm.produceMessages();
+        var blockedSends = produceOneRecord();
         assertThat(blockedSends).hasSize(-1);
 
         // pretend to finish tx
@@ -45,6 +68,14 @@ class ProducerManagerTest {
 
         // blocked to send should only now complete
         assertThat(blockedSends).hasSize(-1);
+    }
+
+    private List<ParallelConsumer.Tuple<ProducerRecord<String, String>, Future<RecordMetadata>>> produceOneRecord() {
+        return pm.produceMessages(makeRecord());
+    }
+
+    private List<ProducerRecord<String, String>> makeRecord() {
+        return rf.createRecords("topic", 1);
     }
 
     /**
@@ -59,13 +90,13 @@ class ProducerManagerTest {
                 .transactionNotOpen();
 
         {
-            var notBlockedSends = pm.produceMessages();
+            var notBlockedSends = produceOneRecord();
         }
 
         assertThat(pm).transactionOpen();
 
         {
-            var notBlockedSends = pm.produceMessages();
+            var notBlockedSends = produceOneRecord();
         }
 
         pm.preAcquireWork();
