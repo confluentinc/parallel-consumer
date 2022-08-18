@@ -9,6 +9,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,6 +24,8 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
  * @author Antony Stubbs
  * @see ProducerManager
  */
+@Tag("transactions")
+@Tag("#355")
 class ProducerManagerTest extends BrokerIntegrationTest<String, String> {
 
     ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder().build();

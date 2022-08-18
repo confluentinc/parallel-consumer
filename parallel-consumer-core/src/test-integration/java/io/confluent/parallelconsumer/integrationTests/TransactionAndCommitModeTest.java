@@ -29,6 +29,7 @@ import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.CartesianProductTest;
 
@@ -49,7 +50,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Originally created to reproduce bug #25 https://github.com/confluentinc/parallel-consumer/issues/25 which was a known
- * issue with multithreaded use of the {@link KafkaProducer}.
+ * issue with multi-threaded use of the {@link KafkaProducer}.
  * <p>
  * After fixing multi threading issues, using Producer transactions was made optional, and this test grew to uncover
  * several issues with the new implementation of committing offsets through the {@link KafkaConsumer}.
@@ -58,6 +59,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see ConsumerOffsetCommitter
  * @see ProducerManager
  */
+@Tag("transactions")
 @Slf4j
 class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
 

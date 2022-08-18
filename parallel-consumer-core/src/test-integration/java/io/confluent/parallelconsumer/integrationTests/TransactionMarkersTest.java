@@ -16,6 +16,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniSets;
 
@@ -39,6 +40,7 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
  * @see PartitionState#getOffsetHighestSequentialSucceeded()
  * @see OffsetSimultaneousEncoder#OffsetSimultaneousEncoder
  */
+@Tag("transactions")
 @Slf4j
 public class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 

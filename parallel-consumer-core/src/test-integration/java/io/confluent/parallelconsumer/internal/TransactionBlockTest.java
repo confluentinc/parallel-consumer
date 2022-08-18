@@ -12,6 +12,7 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.FixedValue;
 import net.bytebuddy.matcher.ElementMatchers;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -28,6 +29,8 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  *
  * @author Antony Stubbs
  */
+@Tag("transactions")
+@Tag("#355")
 @Slf4j
 class TransactionBlockTest extends TransactionMarkersTest {
 
