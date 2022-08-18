@@ -1165,10 +1165,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
-        // todo check for produced message send success or not here
-        // if results.isProducedRecord().failedAndRetriable()
-        //   put work container back into retry queue
-        //   wc.onUserFunctionFailure();
         wc.onUserFunctionSuccess();
     }
 

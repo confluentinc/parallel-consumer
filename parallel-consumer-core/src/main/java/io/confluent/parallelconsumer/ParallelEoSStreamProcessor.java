@@ -93,8 +93,6 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                 var recordMetadata = TimeUtils.time(() ->
                 {
                     Future<RecordMetadata> futureSend = futureTuple.getRight();
-                    // todo message these to the controller thread instead of blocking for them here - the controller
-                    //  can collect all completed futures itself and check the status of each one - and react accordingly
                     return futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
                 });
                 var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
