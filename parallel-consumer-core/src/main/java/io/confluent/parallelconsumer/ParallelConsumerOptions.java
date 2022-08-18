@@ -19,6 +19,7 @@ import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static java.time.Duration.ofMillis;
 
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
@@ -160,6 +161,30 @@ public class ParallelConsumerOptions<K, V> {
          */
         PERIODIC_CONSUMER_ASYNCHRONOUS
 
+    }
+
+    /**
+     * Kafka's default auto commit frequency - which is 5000ms.
+     *
+     * @see org.apache.kafka.clients.consumer.ConsumerConfig#AUTO_COMMIT_INTERVAL_MS_CONFIG
+     * @see org.apache.kafka.clients.consumer.ConsumerConfig#CONFIG
+     */
+    public static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS = 5000;
+
+    /**
+     * Time between commits. Using a higher frequency (a lower value) will put more load on the brokers.
+     */
+    @Builder.Default
+    private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS);
+
+    /**
+     * @deprecated only settable during {@code deprecation phase} - use
+     *         {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits}} instead.
+     */
+    // todo delete in next major version
+    @Deprecated
+    public void setTimeBetweenCommits(Duration timeBetweenCommits) {
+        this.timeBetweenCommits = timeBetweenCommits;
     }
 
     /**

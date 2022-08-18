@@ -41,7 +41,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
-import static java.time.Duration.ofMillis;
+import static java.util.Optional.of;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -72,20 +72,44 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Clock clock = TimeUtils.getClock();
 
     /**
-     * Kafka's default auto commit frequency - which is 5000ms.
+     * Sets the time between commits. Using a higher frequency will put more load on the brokers.
      *
-     * @see org.apache.kafka.clients.consumer.ConsumerConfig#AUTO_COMMIT_INTERVAL_MS_CONFIG
-     * @see org.apache.kafka.clients.consumer.ConsumerConfig#CONFIG
+     * @deprecated use {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits}} instead. This
+     *         will be deleted in the next major version.
      */
-    public static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY = 5000; // ms
+    // todo delete in next major version
+    @Deprecated
+    public void setTimeBetweenCommits(final Duration timeBetweenCommits) {
+//        this.timeBetweenCommits = of(timeBetweenCommits);
+        options.setTimeBetweenCommits(timeBetweenCommits);
+    }
 
     /**
-     * Time between commits. Using a higher frequency will put more load on the brokers.
+     * Gets the time between commits.
+     *
+     * @deprecated use {@link ParallelConsumerOptions#setTimeBetweenCommits} instead. This will be deleted in the next
+     *         major version.
      */
-    @Setter
-    @Getter
-    // todo move this to options for next major version
-    private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY);
+    // todo delete in next major version
+    @Deprecated
+    public Duration getTimeBetweenCommits() {
+//        if (!this.timeBetweenCommits.isPresent()) {
+//            return options.getTimeBetweenCommits();
+//        } else {
+//
+//        }
+        return options.getTimeBetweenCommits();
+    }
+
+//    /**
+//     * Sets the time between commits. Using a higher frequency will put more load on the brokers.
+//     *
+//     * @deprecated use {@link ParallelConsumerOptions#setTimeBetweenCommits} instead. This will be deleted in the next
+//     *         major version.
+//     */
+//    // todo delete in next major version
+//    @Deprecated
+//    private Optional<Duration> timeBetweenCommits = Optional.empty();
 
     private Instant lastCommitCheckTime = Instant.now();
 
@@ -95,7 +119,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
-     * The pool which is used for running the users's supplied function
+     * The pool which is used for running the users' supplied function
      */
     protected final ThreadPoolExecutor workerThreadPool;
 
@@ -254,7 +278,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            this.producerManager = of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else
@@ -321,14 +345,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
-        usersConsumerRebalanceListener = Optional.of(callback);
+        usersConsumerRebalanceListener = of(callback);
         consumer.subscribe(topics, this);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
-        usersConsumerRebalanceListener = Optional.of(callback);
+        usersConsumerRebalanceListener = of(callback);
         consumer.subscribe(pattern, this);
     }
 
@@ -656,7 +680,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return true;
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
-        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+        this.controlThreadFuture = of(controlTaskFutureResult);
     }
 
     /**
@@ -1025,7 +1049,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private boolean isShouldCommitNow() {
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
-        boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(timeBetweenCommits) > 0;
+        boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean isCommandedToCommit = isCommandedToCommit();
 
