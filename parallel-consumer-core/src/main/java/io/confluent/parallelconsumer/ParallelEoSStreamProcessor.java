@@ -63,47 +63,45 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         // wrap user func to add produce function
         Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc
                 = context -> {
-            List<ConsumeProduceResult<K, V, K, V>> results = getConsumeProduceResults(userFunction, context);
+
+            // todo refactor this block into #getConsumeProduceResults at end of review or in seperate commit / pr
+            {
+                //
+                List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
+
+                if (recordListToProduce.isEmpty()) {
+                    log.debug("No result returned from function to send.");
+                }
+                log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
+
+                List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
+                log.trace("Producing {} messages in result...", recordListToProduce.size());
+
+                // should be three stages so can batch when there's more than one, otherwise it's acquires the read lock N times
+                ProducerManager<K, V> pm = super.getProducerManager().get();
+                var produceLock = pm.startProducing();
+                try {
+                    var futures = pm.produceMessages(recordListToProduce);
+                    for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> futureTuple : futures) {
+                        var recordMetadata = TimeUtils.time(() ->
+                        {
+                            Future<RecordMetadata> futureSend = futureTuple.getRight();
+                            return futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                        });
+                        var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
+                        results.add(result);
+                    }
+                } catch (Exception e) {
+                    throw new InternalRuntimeError("Error while waiting for produce results", e);
+                } finally {
+                    pm.finishProducing(produceLock);
+                }
+            }
 
             return results;
         };
 
         supervisorLoop(wrappedUserFunc, callback);
-    }
-
-    private List<ConsumeProduceResult<K, V, K, V>> getConsumeProduceResults(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                                                            PollContextInternal<K, V> context) {
-        //
-        List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
-
-        if (recordListToProduce.isEmpty()) {
-            log.debug("No result returned from function to send.");
-        }
-        log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
-
-        List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
-        log.trace("Producing {} messages in result...", recordListToProduce.size());
-
-        // should be three stages so can batch when there's more than one, otherwise it's acquires the read lock N times
-        ProducerManager<K, V> pm = super.getProducerManager().get();
-        var produceLock = pm.startProducing();
-        try {
-            var futures = pm.produceMessages(recordListToProduce);
-            for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> futureTuple : futures) {
-                var recordMetadata = TimeUtils.time(() ->
-                {
-                    Future<RecordMetadata> futureSend = futureTuple.getRight();
-                    return futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
-                });
-                var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
-                results.add(result);
-            }
-        } catch (Exception e) {
-            throw new InternalRuntimeError("Error while waiting for produce results", e);
-        } finally {
-            pm.finishProducing(produceLock);
-        }
-        return results;
     }
 
     @Override
