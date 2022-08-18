@@ -77,28 +77,32 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                 List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
                 log.trace("Producing {} messages in result...", recordListToProduce.size());
 
-                // should be three stages so can batch when there's more than one, otherwise it's acquires the read lock N times
+                // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
                 ProducerManager<K, V> pm = super.getProducerManager().get();
                 var produceLock = pm.startProducing();
+
+                // wait for all ack's to complete, see PR #356 for async version
                 try {
                     var futures = pm.produceMessages(recordListToProduce);
-                    for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> futureTuple : futures) {
-                        var recordMetadata = TimeUtils.time(() ->
-                        {
+
+                    TimeUtils.time(() -> {
+                        for (var futureTuple : futures) {
                             Future<RecordMetadata> futureSend = futureTuple.getRight();
-                            return futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
-                        });
-                        var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
-                        results.add(result);
-                    }
+
+                            var recordMetadata = futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+
+                            var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
+                            results.add(result);
+                        }
+                        return null; // return from timer function
+                    });
                 } catch (Exception e) {
                     throw new InternalRuntimeError("Error while waiting for produce results", e);
                 } finally {
                     pm.finishProducing(produceLock);
                 }
+                return results;
             }
-
-            return results;
         };
 
         supervisorLoop(wrappedUserFunc, callback);
