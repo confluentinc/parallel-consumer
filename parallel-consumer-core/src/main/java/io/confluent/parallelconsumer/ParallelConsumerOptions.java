@@ -92,34 +92,42 @@ public class ParallelConsumerOptions<K, V> {
          * <p>
          * The benefits of using this mode are:
          * <p>
-         * a) All records produced from a given source offset will be visible, or none will be
+         * a) All records produced from a given source offset will either all be visible, or none will be
          * ({@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}).
          * <p>
          * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
-         * finishing sending all the records and committing, none will ever be visible and the system will retry th e
+         * finishing sending all the records and committing, none will ever be visible and the system will retry the
          * whole set in a new transaction.
          * <p>
-         * c) a source offset, and it's produced records will be committed as a set. Normally: either the record
-         * producing could fail, or the committing of the source offset could fail, as they are individual operations.
-         * When uUsing Transactions, they are committed together - so if either operations fail, the transaction will
-         * never get committed, and upon recovery the system will retry the set again (and no duplicates will be visible
-         * in the topic).
+         * c) A source offset, and it's produced records will be committed as an atomic set. Normally: either the record
+         * producing could fail, or the committing of the source offset could fail, as they are separate individual
+         * operations. When using Transactions, they are committed together - so if either operations fails, the
+         * transaction will never get committed, and upon recovery, the system will retry the set again (and no
+         * duplicates will be visible in the topic).
          * <p>
-         * Slowest of the options, but no duplicates in Kafka caused by producing a record from consuming a record, that
-         * has already had its offset committed (message replay may cause duplicates in external systems which is
-         * unavoidable).
+         * This {@code CommitMode} is the slowest of the options, but there will be no duplicates in Kafka caused by
+         * producing a record multiple times if previous offset commits have failed or crashes have occurred (however
+         * message replay may cause duplicates in external systems which is unavoidable - external systems must be
+         * idempotent).
          * <p>
-         * Note that the system uses very large transactions (for transaction standards), by only committing by default
-         * every {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY}, which is 5 seconds.
-         * This creates large transactions. However, note also that this would be the same as using non-transactional
-         * committing - that being upon failure, all records not previously committed will be replayed. Reducing this
-         * configuration places higher loads on the broker, but will reduce (but cannot eliminate) replay upon failure.
+         * Note that the system can potentially cause very large transactions (for transaction standards). The default
+         * commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY} gets
+         * automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
+         * href=https://docs.confluent.io/platform/current/streams/developer-guide/config-streams.html">commit.interval.ms</a>).
+         * Reducing this configuration places higher loads on the broker, but will reduce (but cannot eliminate) replay
+         * upon failure. Note also that when using transactions in Kafka, consumption in {@code READ_COMMITTED} mode is
+         * blocked up to the offset of the first STILL open transaction. Using a smaller commit frequency reduces this
+         * minimum consumption latency - the faster transactions are closed, the faster the transaction content can be
+         * read by {@code READ_COMMITTED} consumers. More information about this can be found on the Confluent blog
+         * post:
+         * <a href="https://www.confluent.io/blog/enabling-exactly-once-kafka-streams/">Enabling Exactly-Once in Kafka
+         * Streams</a>.
          * <p>
          * When producing multiple records (see {@link ParallelStreamProcessor#pollAndProduceMany}), all records must
          * have been produced successfully to the broker before the transaction will commit, after which all will be
          * visible together, or none.
          * <p>
-         * Also records produced while running in this mode, won't be seen by consumer running in
+         * Records produced while running in this mode, won't be seen by consumer running in
          * {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG} {@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}
          * mode until the transaction is complete and all records are produced successfully. Records produced into a
          * transactions that gets aborted or timed out, will never be visible.
@@ -127,10 +135,11 @@ public class ParallelConsumerOptions<K, V> {
          * The system must prevent records from being produced to the brokers whose source consumer record offsets has
          * not been included in this transaction. Otherwise, the transactions would include produced records from
          * consumer offsets which would only be committed in the NEXT transaction, which wouldn't make sense. To achieve
-         * this, after succeeded consumer offsets are gathered, record producing is suspended, until the transaction has
-         * finished committing. This periodically slows down record production during this period.
+         * this, after succeeded consumer offsets are gathered, work processing and record producing is suspended, until
+         * the transaction has finished committing. This periodically slows down record production during this phase, by
+         * the time needed to commit the transaction.
          * <p>
-         * This is separate from using an IDEMPOTENT Producer, which can be used, along with
+         * This is all separate from using an IDEMPOTENT Producer, which can be used, along with
          * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
          *
          * @see AbstractParallelEoSStreamProcessor#getTimeBetweenCommits()
