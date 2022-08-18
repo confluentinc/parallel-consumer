@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.RESUE_GROUP;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.REUSE_GROUP;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.equalTo;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
@@ -77,7 +77,7 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
         await().untilAtomic(count, is(equalTo(recordsCount)));
 
         // cause rebalance
-        var newConsumer = kcu.createNewConsumer(RESUE_GROUP);
+        var newConsumer = kcu.createNewConsumer(REUSE_GROUP);
         newConsumer.subscribe(UniLists.of(topic));
         ConsumerRecords<Object, Object> poll = newConsumer.poll(Duration.ofSeconds(5));
 

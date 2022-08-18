@@ -136,7 +136,7 @@ public class KafkaClientUtils {
     }
 
     public enum GroupOption {
-        RESUE_GROUP,
+        REUSE_GROUP,
         NEW_GROUP
     }
 
