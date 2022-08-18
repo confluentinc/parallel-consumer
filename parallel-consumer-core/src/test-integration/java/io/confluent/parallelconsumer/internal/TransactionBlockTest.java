@@ -3,11 +3,9 @@ package io.confluent.parallelconsumer.internal;
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.TransactionMarkersTest;
-import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ConsumerGroupId;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
@@ -16,13 +14,13 @@ import net.bytebuddy.matcher.ElementMatchers;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 
-import java.lang.instrument.Instrumentation;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static net.bytebuddy.matcher.ElementMatchers.named;
 
 /**
@@ -61,7 +59,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
         pc.requestCommitAsap();
 
         // assert tx completes
-        var isolationCommittedConsumer = kcu.createNewConsumer(ConsumerGroupId.NEW);
+        var isolationCommittedConsumer = kcu.createNewConsumer(NEW_GROUP);
         {
             var poll = isolationCommittedConsumer.poll(Duration.ZERO);
             assertThat(poll).containsOffset(blockFreeRecords);
@@ -127,7 +125,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
                 .getLoaded();
 //        dynamicType.
 
-        final Instrumentation install = ByteBuddyAgent.install().redefineClasses();
+//        final Instrumentation install = ByteBuddyAgent.install().redefineClasses();
 
 
         var targetPackageName = PollContext.class.getPackageName();
@@ -154,7 +152,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
     private List<ProducerRecord<String, String>> makeOutput(PollContext<String, String> recordContexts) {
         return recordContexts.stream()
                 .map(record
-                        -> new ProducerRecord<String, String>(topic, record.value()))
+                        -> new ProducerRecord<String, String>(getTopic(), record.value()))
                 .collect(Collectors.toList());
     }
 

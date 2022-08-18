@@ -36,6 +36,7 @@ public abstract class BrokerIntegrationTest<K, V> {
 
     int numPartitions = 1;
 
+    @Getter
     String topic;
 
     /**

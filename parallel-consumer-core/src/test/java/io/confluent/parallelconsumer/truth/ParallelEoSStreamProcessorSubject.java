@@ -33,10 +33,6 @@ public class ParallelEoSStreamProcessorSubject extends ParallelEoSStreamProcesso
         return ParallelEoSStreamProcessorSubject::new;
     }
 
-    public CommitHistorySubject hasCommittedToAnyAssignedPartitionOf(String topicName) {
-        throw new InternalRuntimeError("");
-        return null;
-    }
 
     public void hasCommittedToAnything(int offset) {
         throw new InternalRuntimeError("");

@@ -172,7 +172,7 @@ public class TransactionMarkersTest extends BrokerIntegrationTest<String, String
     }
 
     protected List<Future<RecordMetadata>> sendRecordsNonTransactionally(int count) {
-        return IntStream.of(count).mapToObj(i
+        return IntStream.of(count).mapToObj(ignored
                         -> normalProducer.send(createRecordToSend()))
                 .collect(Collectors.toList());
     }

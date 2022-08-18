@@ -72,7 +72,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
 
-    public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions options) {
+    public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions<K, V> options) {
         super(newConsumer, wm);
         this.producer = newProducer;
         this.options = options;
