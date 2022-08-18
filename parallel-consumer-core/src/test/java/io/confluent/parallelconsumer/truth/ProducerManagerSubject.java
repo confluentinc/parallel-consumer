@@ -1,7 +1,6 @@
 package io.confluent.parallelconsumer.truth;
 
 import com.google.common.truth.FailureMetadata;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import io.confluent.parallelconsumer.internal.ProducerManagerChildSubject;
 import io.confluent.parallelconsumer.internal.ProducerManagerParentSubject;
@@ -33,10 +32,11 @@ public class ProducerManagerSubject extends ProducerManagerParentSubject impleme
     }
 
     public void transactionNotOpen() {
-        throw new InternalRuntimeError("");
+        check("isTransactionOpen()").that(actual.isTransactionOpen()).isFalse();
     }
 
     public void transactionOpen() {
-        throw new InternalRuntimeError("");
+        check("isTransactionCommittingInProgress()").that(actual.isTransactionCommittingInProgress()).isTrue();
+
     }
 }

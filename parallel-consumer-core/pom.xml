@@ -125,6 +125,7 @@
                     <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
                     <releaseTarget>8</releaseTarget>
                     <classes>
+<!--                        <class>java.lang.Thread</class>-->
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.internal.ProducerManager</class>

@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
 
 /**
  * todo docs
@@ -75,6 +77,12 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
 
+    /**
+     * todo docs
+     */
+    @Getter
+    private ProducerState producerState;
+
     public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions<K, V> options) {
         super(newConsumer, wm);
         this.producer = newProducer;
@@ -95,6 +103,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             try {
                 log.debug("Initialising producer transaction session...");
                 producer.initTransactions();
+                this.producerState = INIT;
                 // todo in PR: being tx must be lazy, otherwise quiet topics will have transactions timing out
                 beginTransaction();
             } catch (KafkaException e) {
@@ -242,7 +251,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     // see bug https://issues.apache.org/jira/browse/KAFKA-10382
                     // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
                     synchronized (producer) {
-                        producer.commitTransaction();
+                        commitTransaction();
                         beginTransaction();
                     }
                 } else {
@@ -250,7 +259,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     if (retrying) {
                         if (isTransactionCompleting()) {
                             // try wait again
-                            producer.commitTransaction();
+                            commitTransaction();
                         }
                         if (isTransactionReady()) {
                             // tx has completed since we last tried, start a new one
@@ -263,7 +272,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                         }
                     } else {
                         // happy path
-                        producer.commitTransaction();
+                        commitTransaction();
                         beginTransaction();
                     }
                 }
@@ -305,6 +314,11 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         }
     }
 
+    private void commitTransaction() {
+        producer.commitTransaction();
+        this.producerState = COMMIT;
+    }
+
     /**
      * todo tx starting should be on demand of next send only? dangling tx on quiet topics will block topic reading in isolate committed mode
      * todo only do this lazy when actually sending a message when state is NOT_BEGUN
@@ -325,6 +339,20 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
          none
          */
         producer.beginTransaction();
+        this.producerState = BEGIN;
+    }
+
+    /**
+     * todo docs
+     *
+     * @return
+     */
+    public boolean isTransactionOpen() {
+        return this.producerState.equals(BEGIN);
+    }
+
+    enum ProducerState {
+        INIT, BEGIN, COMMIT, ABORT, CLOSE
     }
 
     /**
@@ -382,12 +410,23 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             acquireCommitLock();
             try {
                 // close started after tx began, but before work was done, otherwise a tx wouldn't have been started
-                producer.abortTransaction();
+                abortTransaction();
             } finally {
                 releaseCommitLock();
             }
         }
+        closeProducer(timeout);
+    }
+
+    private void closeProducer(Duration timeout) {
         producer.close(timeout);
+        this.producerState = CLOSE;
+    }
+
+    private void abortTransaction() {
+        producer.abortTransaction();
+        this.producerState = ABORT;
+
     }
 
     private void acquireCommitLock() {
