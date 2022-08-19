@@ -8,6 +8,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.experimental.FieldDefaults;
 
+import java.util.function.Supplier;
+
 /**
  * DI
  * <p>
@@ -46,7 +48,7 @@ public abstract class PCModule<K, V> {
     //Provides
     protected ProducerManager<K, V> producerManager() {
         if (kvProducerManager == null) {
-             this.kvProducerManager = new ProducerManager<K, V>(producerWrap(), consumerManager(), workManager(), options());
+            this.kvProducerManager = new ProducerManager<K, V>(producerWrap(), consumerManager(), workManager(), options());
         }
         return kvProducerManager;
     }
@@ -92,5 +94,9 @@ public abstract class PCModule<K, V> {
             brokerPollSystem = new BrokerPollSystem<>(consumerManager(), workManager(), pc, options());
         }
         return brokerPollSystem;
+    }
+
+    public Supplier<AbstractParallelEoSStreamProcessor<K, V>> pcSupplier() {
+        return this::pc;
     }
 }

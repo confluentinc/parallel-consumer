@@ -56,9 +56,13 @@ public class ModelUtils {
         return UniLists.of(new TopicPartition(topic, 0));
     }
 
+    long nextOffset = 0L;
+
     @NonNull
     private ConsumerRecord<String, String> createConsumerRecord(String topic) {
-        return new ConsumerRecord<>(topic, 0, 0L, "a-key", "a-value");
+        var cr = new ConsumerRecord<>(topic, 0, nextOffset, "a-key", "a-value");
+        nextOffset++;
+        return cr;
     }
 
     // todo duplicate?

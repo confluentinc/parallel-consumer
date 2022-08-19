@@ -1,6 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 import com.google.common.truth.Truth;
+import io.confluent.csid.utils.BlockedThreadAsserter;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -19,7 +20,6 @@ import org.mockito.Mockito;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,9 +28,12 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
+import static java.time.Duration.ZERO;
+import static java.time.Duration.ofSeconds;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.description;
+import static org.mockito.Mockito.times;
 
 /**
  * todo docs
@@ -92,7 +95,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             blocked.start();
 
             await("pretend to start to commit - acquire commit lock")
-                    .pollDelay(Duration.ofSeconds(1))
+                    .pollDelay(ofSeconds(1))
                     .untilAsserted(
                             () -> Truth.assertWithMessage("Thread should be sleeping/blocked and not have returned")
                                     .that(blockedCommitterReturned.get())
@@ -119,7 +122,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             blocked.start();
 
             await("starting sending records blocked")
-                    .pollDelay(Duration.ofSeconds(1))
+                    .pollDelay(ofSeconds(1))
                     .untilAsserted(
                             () -> Truth.assertWithMessage("Thread should be sleeping/blocked and not have returned")
                                     .that(blockedRecordSenderReturned.get())
@@ -210,6 +213,9 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         }
     }
 
+    /**
+     * There's GOT to be a better way to test this corner case than this
+     */
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffset() {
 
@@ -233,41 +239,76 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             doWork(pc);
 
             // process inbox
-            pc.processWorkCompleteMailBox(Duration.ZERO);
+            pc.processWorkCompleteMailBox(ZERO);
 
             // send another record, return the work, but don't process inbox
             var freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
+            pc.processWorkCompleteMailBox(ZERO);
+
+            // get the work
+            List<WorkContainer<String, String>> workIfAvailable = pc.getWm().getWorkIfAvailable(100);
+            assertThat(workIfAvailable).isNotEmpty();
+
+            // being producing the record from that work
             var producingLock = pm.beginProducing();
-            pm.produceMessages(UniLists.of(mu.createProducerRecords()));
-            pm.finishProducing(producingLock);
+
+
+//            pm.finishProducing(producingLock); // remove the too early produce unlock
 
             // this is the phase between finishing the record but not putting it into the offsets to be collected could be an issue
 
             // simulate the commit happening right after read lock release, but before the controller could do an inbox process
-            pc.commitOffsetsThatAreReady();
+            // should block because the commit lock can't be granted
+//            Assertions.assertThatThrownBy(() -> pc.commitOffsetsThatAreReady()).hasMessageContaining("Timeout");
+            var commitBlocks = new BlockedThreadAsserter();
+            commitBlocks.assertFunctionBlocks(pc::commitOffsetsThatAreReady, ofSeconds(2));
+
+
+            // record doesn't try to send until after commit tries to start (and it should be blocked)
+            pm.produceMessages(UniLists.of(mu.createProducerRecords()));
+
+
+            // finish second record
+            workIfAvailable.forEach(stringStringWorkContainer -> {
+                pc.onUserFunctionSuccess(stringStringWorkContainer, UniLists.of());
+                pc.addToMailBoxOnUserFunctionSuccess(Mockito.mock(PollContextInternal.class), stringStringWorkContainer, UniLists.of());
+            });
+
+            // finish completely the work, should free up the commit lock to be obtained, work scanned and processed (picking up this result), and the whole thing is committed
+            pm.finishProducing(producingLock); // remove lock now after returning work
+
+//            pc.processWorkCompleteMailBox(ZERO); // process the work results
+
+
+            //
+            await().untilAsserted(() -> Truth.assertWithMessage("commit should now have unlocked and returned")
+                    .that(commitBlocks.functionHasCompleted())
+                    .isTrue());
+
 
             // capturing error scenario
-
-            final int nextExpectedOffset = 1; // as only first of two work completed
-            {
-                // error - 2 records in tx but only one of their offsets committed
-                var producer = module.producerWrap();
-                Mockito.verify(producer, atMostOnce())
-                        .sendOffsetsToTransaction(UniMaps.of(mu.getPartition(), new OffsetAndMetadata(nextExpectedOffset, "")), mu.consumerGroupMeta());
-
-                // error - 2 times send() called - 2 records sent (should only be one, as second record send should be blocked)
-                Mockito.verify(producer, times(2))
-                        .send(any(), any());
-            }
+            final int nextExpectedOffset = 2; // as only first of two work completed
+//            {
+//                // error - 2 records in tx but only one of their offsets committed
+//                var producer = module.producerWrap();
+//                Mockito.verify(producer, times(1))
+//                        .sendOffsetsToTransaction(UniMaps.of(mu.getPartition(), new OffsetAndMetadata(nextExpectedOffset, "")), mu.consumerGroupMeta());
+//
+//                // error - 2 times send() called - 2 records sent (should only be one, as second record send should be blocked)
+//                Mockito.verify(producer, times(2))
+//                        .send(any(), any());
+//            }
 
             // correct behaviour should be
             {
                 var producer = module.producerWrap();
-                Mockito.verify(producer, description("Only single record in tx and the first offset only"))
+                Mockito.verify(producer, description("Both offsets"))
                         .sendOffsetsToTransaction(UniMaps.of(mu.getPartition(), new OffsetAndMetadata(nextExpectedOffset, "")), mu.consumerGroupMeta());
 
-                Mockito.verify(producer, description("called once to send only one record (should only be one, as second record send should be blocked)"))
+//                Mockito.verify(producer, description("called once to send only one record (should only be one, as second record send should be blocked)"))
+                Mockito.verify(producer, times(2)
+                                .description("Should send twice, as it blocks the commit lock until it finishes, so offsets get taken only after"))
                         .send(any(), any());
 
             }
@@ -278,11 +319,11 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         // create
         EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
         pc.registerWork(freshWork);
-        pc.processWorkCompleteMailBox(Duration.ZERO);
+        pc.processWorkCompleteMailBox(ZERO);
 
         // result
         List<WorkContainer<String, String>> workIfAvailable = pc.getWm().getWorkIfAvailable(100);
-        assertThat(workIfAvailable).isNotEmpty();
+        assertThat(workIfAvailable).hasSize(1);
 
         // force record send
         var producingLock = pm.beginProducing();
@@ -296,7 +337,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         });
 
         // process into wm
-        pc.processWorkCompleteMailBox(Duration.ZERO);
+        pc.processWorkCompleteMailBox(ZERO);
     }
 
 }

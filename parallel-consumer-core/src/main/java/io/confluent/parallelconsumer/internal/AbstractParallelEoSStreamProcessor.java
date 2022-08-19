@@ -271,16 +271,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-//        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
         this.wm = module.workManager();
-
-//        ConsumerManager<K, V> consumerMgr = module.consumerManager();
 
         this.brokerPollSubsystem = module.brokerPoller(this);
 
         if (options.isProducerSupplied()) {
-//            this.producerManager = Optional.of(new ProducerManager<>(new ProducerWrap<>(options), consumerMgr, this.wm, options));
-//            PCModule module = options.getDiModule();
             this.producerManager = of(module.producerManager());
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();

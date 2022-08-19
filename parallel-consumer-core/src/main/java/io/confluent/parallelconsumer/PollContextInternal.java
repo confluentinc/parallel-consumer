@@ -27,9 +27,12 @@ public class PollContextInternal<K, V> {
     @Getter
     private final PollContext<K, V> pollContext;
 
+    /**
+     * todo docs
+     */
     @Getter
     @Setter
-    Optional<ProducerManager.ProducingLock> producingLock = Optional.empty();
+    protected Optional<ProducerManager<K, V>.ProducingLock> producingLock = Optional.empty();
 
     public PollContextInternal(List<WorkContainer<K, V>> workContainers) {
         this.pollContext = new PollContext<>(workContainers);
