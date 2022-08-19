@@ -58,6 +58,9 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final String managedThreadFactory = "java:comp/DefaultManagedThreadFactory";
 
+    /**
+     * todo docs
+     */
     @Getter
     @Setter
     private PCModule<K, V> module;
@@ -96,6 +99,8 @@ public class ParallelConsumerOptions<K, V> {
         // tag::transactionalJavadoc[]
         /**
          * Periodically commits through the Producer using transactions.
+         *
+         * Unlike Kafka Streams, the records being sent by different threads will all be in a single transaction, as PC shares a single Producer instance. This could be seen as an performance overhead advantage, efficient resource use, for a loss in granularity.
          * <p>
          * The benefits of using this mode are:
          * <p>
@@ -314,9 +319,6 @@ public class ParallelConsumerOptions<K, V> {
 
     @Builder.Default
     private final int maxFailureHistory = 10;
-
-//    @Builder.Default
-//    private final PCModule diModule = new PCModuleProd(this);
 
     /**
      * @return the combined target of the desired concurrency by the configured batch size
