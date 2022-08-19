@@ -79,7 +79,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
                 // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
                 ProducerManager<K, V> pm = super.getProducerManager().get();
-                var produceLock = pm.startProducing();
+                var produceLock = pm.beginProducing();
 
                 // wait for all ack's to complete, see PR #356 for async version
                 try {

@@ -277,7 +277,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            this.producerManager = Optional.of(new ProducerManager<>(new ProducerWrap<>(options), consumerMgr, this.wm, options));
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else

@@ -36,7 +36,10 @@ public class ProducerManagerSubject extends ProducerManagerParentSubject impleme
     }
 
     public void transactionOpen() {
-        check("isTransactionCommittingInProgress()").that(actual.isTransactionCommittingInProgress()).isTrue();
+        check("isTransactionOpen()").that(actual.isTransactionOpen()).isTrue();
+    }
 
+    public void stateIs(ProducerManager.ProducerState targetState) {
+        check("getProducerState()").that(actual.getProducerState()).isEqualTo(targetState);
     }
 }

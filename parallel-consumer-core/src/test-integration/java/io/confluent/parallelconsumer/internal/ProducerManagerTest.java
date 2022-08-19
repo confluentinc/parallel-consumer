@@ -5,21 +5,24 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
 import io.confluent.parallelconsumer.state.WorkManager;
-import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
@@ -34,7 +37,9 @@ import static org.mockito.Mockito.mock;
 @Timeout(60)
 class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
-    ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder().build();
+    ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder()
+            .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+            .build();
 
 //    KafkaProducer<String, String> producer = getKcu().getProducer();
 //
@@ -44,8 +49,13 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 //    WorkManager<String, String> wm = new WorkManager<>(opts, consumer);
 
     //    ProducerManager<String, String> pm = new ProducerManager<>(producer, cm, wm, opts);
-    ProducerManager<String, String> pm = new ProducerManager<>(mock(Producer.class), mock(ConsumerManager.class), mock(WorkManager.class), opts);
+    ProducerManager<String, String> pm;
 
+    {
+        ProducerWrap mock = mock(ProducerWrap.class);
+        Mockito.when(mock.isConfiguredForTransactions()).thenReturn(true);
+        pm = new ProducerManager<>(mock, mock(ConsumerManager.class), mock(WorkManager.class), opts);
+    }
 
     RecordFactory rf = new RecordFactory();
 
@@ -57,7 +67,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         assertThat(pm).isNotTransactionCommittingInProgress();
 
         // should send fine, futures should finish
-        var produceReadLock = pm.startProducing();
+        var produceReadLock = pm.beginProducing();
         produceOneRecord();
 
         {
@@ -91,7 +101,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         final AtomicBoolean blockedRecordSenderReturned = new AtomicBoolean(false);
         {
             Thread blocked = new Thread(() -> {
-                ReentrantReadWriteLock.ReadLock produceLock = pm.startProducing();
+                var produceLock = pm.beginProducing();
                 pm.finishProducing(produceLock);
                 blockedRecordSenderReturned.set(true);
             });
@@ -133,26 +143,34 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
     @Test
     void txOnlyStartedUponMessageSend() {
         assertThat(pm).isNotTransactionCommittingInProgress();
+        assertThat(pm).stateIs(INIT);
 
         assertWithMessage("Transaction is started as not open")
                 .that(pm)
                 .transactionNotOpen();
 
         {
-            var notBlockedSends = produceOneRecord();
-        }
+            var produceLock = pm.beginProducing();
 
-        assertThat(pm).transactionOpen();
+            {
+                var notBlockedSends = produceOneRecord();
+            }
 
-        {
-            var notBlockedSends = produceOneRecord();
+            assertThat(pm).stateIs(BEGIN);
+            assertThat(pm).transactionOpen();
+
+            {
+                var notBlockedSends = produceOneRecord();
+            }
+
+            pm.finishProducing(produceLock);
         }
 
         pm.preAcquireWork();
 
         assertThat(pm).isTransactionCommittingInProgress();
 
-        pm.commitOffsets(null, null);
+        pm.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
 
         assertThat(pm).isTransactionCommittingInProgress();
 
@@ -164,6 +182,21 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         assertWithMessage("A new transaction hasn't been opened")
                 .that(pm)
                 .transactionNotOpen();
+
+        // do another round of producing and check state
+        {
+            var producingLock = pm.beginProducing();
+            assertThat(pm).transactionNotOpen();
+            produceOneRecord();
+            assertThat(pm).transactionOpen();
+            pm.finishProducing(producingLock);
+            assertThat(pm).transactionOpen();
+            pm.preAcquireWork();
+            assertThat(pm).transactionOpen();
+            pm.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+            assertThat(pm).transactionNotOpen();
+            assertThat(pm).stateIs(COMMIT);
+        }
     }
 
 }
