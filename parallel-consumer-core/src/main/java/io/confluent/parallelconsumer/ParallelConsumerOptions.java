@@ -171,11 +171,19 @@ public class ParallelConsumerOptions<K, V> {
      */
     public static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS = 5000;
 
+    public static final Duration DEFAULT_TIME_BETWEEN_COMMITS = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS);
+
+    /*
+     * The same as Kafka Streams
+     */
+    public static final Duration DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS = ofMillis(100);
+
+
     /**
      * Time between commits. Using a higher frequency (a lower value) will put more load on the brokers.
      */
     @Builder.Default
-    private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS);
+    private Duration timeBetweenCommits = DEFAULT_TIME_BETWEEN_COMMITS;
 
     /**
      * @deprecated only settable during {@code deprecation phase} - use
@@ -311,13 +319,25 @@ public class ParallelConsumerOptions<K, V> {
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
-        if (isUsingTransactionalProducer() && producer == null) {
-            throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
-                    commitMode));
-        }
+        transactionsValidation();
 
         //
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
+    }
+
+    private void transactionsValidation() {
+        if (isUsingTransactionalProducer()) {
+            if (producer == null) {
+                throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
+                        commitMode));
+            }
+
+            // update commit frequency
+            boolean commitFrequencyHasntBeenSet = getTimeBetweenCommits() == DEFAULT_TIME_BETWEEN_COMMITS;
+            if (commitFrequencyHasntBeenSet) {
+                this.timeBetweenCommits = DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS;
+            }
+        }
     }
 
     public boolean isUsingTransactionalProducer() {
