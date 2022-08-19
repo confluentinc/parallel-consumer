@@ -22,6 +22,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
+import static java.util.Optional.of;
 
 @Slf4j
 public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V>
@@ -80,6 +81,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                 // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
                 ProducerManager<K, V> pm = super.getProducerManager().get();
                 var produceLock = pm.beginProducing();
+                context.setProducingLock(of(produceLock));
 
                 // wait for all ack's to complete, see PR #356 for async version
                 try {
@@ -98,8 +100,6 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                     });
                 } catch (Exception e) {
                     throw new InternalRuntimeError("Error while waiting for produce results", e);
-                } finally {
-                    pm.finishProducing(produceLock);
                 }
                 return results;
             }

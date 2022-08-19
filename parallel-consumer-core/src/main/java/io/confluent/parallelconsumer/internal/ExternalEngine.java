@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
 
@@ -63,11 +64,11 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
      * With Vertx and Reactor, a function hasn't succeeded until the inner vertx function has also succeeded no op
      */
     @Override
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void addToMailBoxOnUserFunctionSuccess(final PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         if (isAsyncFutureWork(resultsFromUserFunction)) {
             log.debug("User function success but not adding vertx vertical to mailbox yet");
         } else {
-            super.addToMailBoxOnUserFunctionSuccess(wc, resultsFromUserFunction);
+            super.addToMailBoxOnUserFunctionSuccess(context, wc, resultsFromUserFunction);
         }
     }
 

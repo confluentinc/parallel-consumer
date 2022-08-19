@@ -696,8 +696,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                  Consumer<R> callback) throws TimeoutException, ExecutionException {
 
         //
-        int newWork = handleWork(userFunction, callback);
+        handleWork(userFunction, callback);
 
+        //
         if (state == running) {
             if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
@@ -707,13 +708,29 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
         }
 
-        log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox();
 
+        // acquiring the commit lock here, still allows user function side effects to run while committing a transaction
+        // todo optionally prevent side affects during transaction commit by acquiring the lock before getting work
+        /**
+         * call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
+         */
+        producerManager.ifPresent(ProducerManager::preAcquireWork);
+
+        // make sure all work that's been completed are arranged ready for commit check and don't block this time
+        log.trace("Loop: Process mailbox");
+        processWorkCompleteMailBox(Duration.ZERO);
+
+        //
         if (isIdlingOrRunning()) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
             commitOffsetsMaybe();
+        }
+
+        // blocking version if box empty
+        if (workMailBox.isEmpty()) {
+            Duration timeToBlockFor = getTimeToBlockFor();
+            processWorkCompleteMailBox(timeToBlockFor);
         }
 
         // run call back
@@ -951,11 +968,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Can be interrupted if something else needs doing.
      */
-    private void processWorkCompleteMailBox() {
+    private void processWorkCompleteMailBox(final Duration timeToBlockFor) {
         log.trace("Processing mailbox (might block waiting for results)...");
         Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
-
-        final Duration timeToBlockFor = getTimeToBlockFor();
 
         if (timeToBlockFor.toMillis() > 0) {
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
@@ -1135,6 +1150,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                                                                         List<WorkContainer<K, V>> workContainerBatch) {
         // call the user's function
         List<R> resultsFromUserFunction;
+        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
+
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
@@ -1150,7 +1167,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 return null;
             }
 
-            PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
             resultsFromUserFunction = usersFunction.apply(context);
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
@@ -1166,7 +1182,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             // fail or succeed, either way we're done
             for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
             }
             log.trace("User function future registered");
 
@@ -1176,14 +1192,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                addToMailbox(wc); // always add on error
+                addToMailbox(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
         }
     }
 
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        addToMailbox(wc);
+    protected void addToMailBoxOnUserFunctionSuccess(final PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+        addToMailbox(context, wc);
     }
 
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1191,10 +1207,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
-    protected void addToMailbox(WorkContainer<K, V> wc) {
+    protected void addToMailbox(final PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
         log.trace("Adding {} {} to mailbox...", state, wc);
         workMailBox.add(ControllerEventMessage.of(wc));
+
+        wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
     public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {

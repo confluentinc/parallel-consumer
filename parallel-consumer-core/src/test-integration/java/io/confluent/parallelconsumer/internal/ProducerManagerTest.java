@@ -199,4 +199,12 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         }
     }
 
+    @Test
+    void producedRecordsCantBeInTransactionWithoutItsOffset() {
+        // send a record
+        // start commit
+        // send another record, see it's blocked from sending
+
+    }
+
 }

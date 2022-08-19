@@ -4,13 +4,16 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -23,6 +26,10 @@ public class PollContextInternal<K, V> {
     @Delegate
     @Getter
     private final PollContext<K, V> pollContext;
+
+    @Getter
+    @Setter
+    Optional<ProducerManager.ProducingLock> producingLock = Optional.empty();
 
     public PollContextInternal(List<WorkContainer<K, V>> workContainers) {
         this.pollContext = new PollContext<>(workContainers);

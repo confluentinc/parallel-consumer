@@ -5,7 +5,9 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -229,4 +231,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
     }
 
+//    public void onPostAddToMailBox() {
+////        this.produceLock.map(locl->lock.finish());
+//    }
+
+    public void onPostAddToMailBox(PollContextInternal<K, V> context, Optional<ProducerManager<K, V>> producerManager) {
+        producerManager.ifPresent(pm -> {
+            var producingLock = context.getProducingLock();
+            producingLock.ifPresent(pm::finishProducing);
+        });
+    }
 }

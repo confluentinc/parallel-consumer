@@ -445,10 +445,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * todo docs
      */
     @RequiredArgsConstructor
-    private class ProducingLock {
+    public class ProducingLock {
         private final ReentrantReadWriteLock.ReadLock produceLock;
 
-        public void unlock() {
+        protected void unlock() {
             produceLock.unlock();
         }
     }
