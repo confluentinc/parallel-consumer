@@ -46,7 +46,7 @@ public abstract class PCModule<K, V> {
     //Provides
     protected ProducerManager<K, V> producerManager() {
         if (kvProducerManager == null) {
-            this.kvProducerManager = new ProducerManager<K, V>(producerWrap(), consumerManager(), workManager(), options());
+             this.kvProducerManager = new ProducerManager<K, V>(producerWrap(), consumerManager(), workManager(), options());
         }
         return kvProducerManager;
     }
@@ -62,7 +62,7 @@ public abstract class PCModule<K, V> {
 
     WorkManager workManager;
 
-    protected WorkManager<K, V> workManager() {
+    public WorkManager<K, V> workManager() {
         if (workManager == null) {
             workManager = new WorkManager<K, V>(options(), dynamicExtraLoadFactor(), TimeUtils.getClock());
         }

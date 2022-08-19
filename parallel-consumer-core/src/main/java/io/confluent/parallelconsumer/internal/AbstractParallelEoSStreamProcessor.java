@@ -274,7 +274,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
         this.wm = module.workManager();
 
-        ConsumerManager<K, V> consumerMgr = module.consumerManager();
+//        ConsumerManager<K, V> consumerMgr = module.consumerManager();
 
         this.brokerPollSubsystem = module.brokerPoller(this);
 
@@ -1207,7 +1207,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    protected void addToMailBoxOnUserFunctionSuccess(final PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         addToMailbox(context, wc);
     }
 
@@ -1216,7 +1216,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
-    protected void addToMailbox(final PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
+    protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
         log.trace("Adding {} {} to mailbox...", state, wc);
         workMailBox.add(ControllerEventMessage.of(wc));

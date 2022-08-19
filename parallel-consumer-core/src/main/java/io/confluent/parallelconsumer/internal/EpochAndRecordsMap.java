@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.state.PartitionStateManager;
+import lombok.NonNull;
 import lombok.Value;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -26,7 +27,8 @@ public class EpochAndRecordsMap<K, V> {
         poll.partitions().forEach(partition -> {
             var records = poll.records(partition);
             Long epochOfPartition = pm.getEpochOfPartition(partition);
-            recordMap.put(partition, new RecordsAndEpoch(epochOfPartition, records));
+            RecordsAndEpoch entry = new RecordsAndEpoch(epochOfPartition, records);
+            recordMap.put(partition, entry);
         });
     }
 
@@ -60,8 +62,8 @@ public class EpochAndRecordsMap<K, V> {
 
     @Value
     public class RecordsAndEpoch {
-        Long epochOfPartitionAtPoll;
-        List<ConsumerRecord<K, V>> records;
+        @NonNull Long epochOfPartitionAtPoll;
+        @NonNull List<ConsumerRecord<K, V>> records;
     }
 
 }

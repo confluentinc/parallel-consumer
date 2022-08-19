@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -344,7 +345,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
      */
-    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, ConsumerRecord<K, V> rec) {
+    private void maybeRegisterNewRecordAsWork(@NonNull Long epochOfInboundRecords, @NonNull ConsumerRecord<K, V> rec) {
         // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
         var currentPartitionEpoch = getEpochOfPartitionForRecord(rec);
         if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {

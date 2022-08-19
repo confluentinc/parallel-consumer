@@ -3,9 +3,13 @@ package io.confluent.parallelconsumer.internal;
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
+import io.confluent.parallelconsumer.state.ModelUtils;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.junit.jupiter.api.Tag;
@@ -25,7 +29,8 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 /**
  * todo docs
@@ -53,6 +58,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
     //    ProducerManager<String, String> pm = new ProducerManager<>(producer, cm, wm, opts);
     ProducerManager<String, String> pm;
+    private final ModelUtils mu = new ModelUtils(module);
 
 
     {
@@ -210,14 +216,6 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
-        var module = new PCModuleTestEnv(options) {
-//            final ProducerWrap mock = mock(ProducerWrap.class);
-//
-//            @Override
-//            protected ProducerWrap<String, String> producerWrap() {
-//                return mock;
-//            }
-        };
 
 
 //        ProducerManager<String, String> pm = mock(ProducerManager.class);
@@ -229,20 +227,76 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 //        AbstractParallelEoSStreamProcessor<String, String> pc = mock(AbstractParallelEoSStreamProcessor.class);
 
             // send a record
-            pc.onUserFunctionSuccess(mock(WorkContainer.class), UniLists.of());
+            pc.subscribe(UniLists.of("topic"));
+            pc.onPartitionsAssigned(mu.getPartitions());
+
+            doWork(pc);
 
             // process inbox
             pc.processWorkCompleteMailBox(Duration.ZERO);
 
-            // send another record, don't process inbox
-            pc.onUserFunctionSuccess(mock(WorkContainer.class), UniLists.of());
+            // send another record, return the work, but don't process inbox
+            var freshWork = mu.createFreshWork();
+            pc.registerWork(freshWork);
+            var producingLock = pm.beginProducing();
+            pm.produceMessages(UniLists.of(mu.createProducerRecords()));
+            pm.finishProducing(producingLock);
 
-            // commit
+            // this is the phase between finishing the record but not putting it into the offsets to be collected could be an issue
+
+            // simulate the commit happening right after read lock release, but before the controller could do an inbox process
             pc.commitOffsetsThatAreReady();
 
-            // error - 2 records in tx but only one of their offsets committed
-            Mockito.verify(pm, Mockito.atLeastOnce()).commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+            // capturing error scenario
+
+            final int nextExpectedOffset = 1; // as only first of two work completed
+            {
+                // error - 2 records in tx but only one of their offsets committed
+                var producer = module.producerWrap();
+                Mockito.verify(producer, atMostOnce())
+                        .sendOffsetsToTransaction(UniMaps.of(mu.getPartition(), new OffsetAndMetadata(nextExpectedOffset, "")), mu.consumerGroupMeta());
+
+                // error - 2 times send() called - 2 records sent (should only be one, as second record send should be blocked)
+                Mockito.verify(producer, times(2))
+                        .send(any(), any());
+            }
+
+            // correct behaviour should be
+            {
+                var producer = module.producerWrap();
+                Mockito.verify(producer, description("Only single record in tx and the first offset only"))
+                        .sendOffsetsToTransaction(UniMaps.of(mu.getPartition(), new OffsetAndMetadata(nextExpectedOffset, "")), mu.consumerGroupMeta());
+
+                Mockito.verify(producer, description("called once to send only one record (should only be one, as second record send should be blocked)"))
+                        .send(any(), any());
+
+            }
         }
+    }
+
+    private void doWork(ParallelEoSStreamProcessor<String, String> pc) {
+        // create
+        EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
+        pc.registerWork(freshWork);
+        pc.processWorkCompleteMailBox(Duration.ZERO);
+
+        // result
+        List<WorkContainer<String, String>> workIfAvailable = pc.getWm().getWorkIfAvailable(100);
+        assertThat(workIfAvailable).isNotEmpty();
+
+        // force record send
+        var producingLock = pm.beginProducing();
+        pm.produceMessages(UniLists.of(mu.createProducerRecords()));
+        pm.finishProducing(producingLock);
+
+        // result
+        workIfAvailable.forEach(stringStringWorkContainer -> {
+            pc.onUserFunctionSuccess(stringStringWorkContainer, UniLists.of());
+            pc.addToMailBoxOnUserFunctionSuccess(Mockito.mock(PollContextInternal.class), stringStringWorkContainer, UniLists.of());
+        });
+
+        // process into wm
+        pc.processWorkCompleteMailBox(Duration.ZERO);
     }
 
 }
