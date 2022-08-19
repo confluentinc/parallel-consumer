@@ -40,7 +40,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private State state = running;
 
-    private Optional<Future<Boolean>> pollControlThreadFuture;
+    private Optional<Future<Boolean>> pollControlThreadFuture = Optional.empty();
 
     /**
      * While {@link io.confluent.parallelconsumer.internal.State#paused paused} is an externally controlled state that

@@ -691,8 +691,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Main control loop
      */
-    private <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
-                                 Consumer<R> callback) throws TimeoutException, ExecutionException {
+    protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
+                                   Consumer<R> callback) throws TimeoutException, ExecutionException {
 
         //
         handleWork(userFunction, callback);
@@ -713,6 +713,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         /**
          * call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
          */
+        // todo also check tx is used
         producerManager.ifPresent(ProducerManager::preAcquireWork);
 
         // make sure all work that's been completed are arranged ready for commit check and don't block this time
