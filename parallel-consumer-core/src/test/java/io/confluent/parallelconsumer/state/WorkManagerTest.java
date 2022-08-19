@@ -66,10 +66,13 @@ public class WorkManagerTest {
 
     protected List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
 
-    private void setupWorkManager(ParallelConsumerOptions build) {
+    private void setupWorkManager(ParallelConsumerOptions options) {
         offset = 0;
 
-        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), time);
+        var mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        var optsOverride = options.toBuilder().consumer(mockConsumer).build();
+
+        wm = new WorkManager<>(optsOverride, time);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);

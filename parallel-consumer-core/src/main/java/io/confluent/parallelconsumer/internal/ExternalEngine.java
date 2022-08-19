@@ -19,9 +19,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProcessor<K, V> {
 
     protected ExternalEngine(final ParallelConsumerOptions<K, V> newOptions) {
-        super(newOptions);
+        super(newOptions, new PCModuleProd<>(newOptions));
     }
-
 
     /**
      * @return the number of records to try to get, based on the current count of records outstanding - but unlike core,

@@ -3,10 +3,8 @@ package io.confluent.parallelconsumer.internal;
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
 import io.confluent.parallelconsumer.state.WorkContainer;
-import io.confluent.parallelconsumer.state.WorkManager;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -44,6 +42,8 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
             .build();
 
+    PCModuleTestEnv module = new PCModuleTestEnv(opts);
+
 //    KafkaProducer<String, String> producer = getKcu().getProducer();
 //
 //    KafkaConsumer<String, String> consumer = getKcu().getConsumer();
@@ -54,10 +54,12 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
     //    ProducerManager<String, String> pm = new ProducerManager<>(producer, cm, wm, opts);
     ProducerManager<String, String> pm;
 
+
     {
-        ProducerWrap mock = mock(ProducerWrap.class);
-        Mockito.when(mock.isConfiguredForTransactions()).thenReturn(true);
-        pm = new ProducerManager<>(mock, mock(ConsumerManager.class), mock(WorkManager.class), opts);
+//        ProducerWrap mock = mock(ProducerWrap.class);
+//        Mockito.when(mock.isConfiguredForTransactions()).thenReturn(true);
+//        pm = new ProducerManager<>(mock, mock(ConsumerManager.class), mock(WorkManager.class), opts);
+        pm = module.producerManager();
     }
 
     RecordFactory rf = new RecordFactory();
@@ -204,11 +206,26 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffset() {
-        ProducerManager<String, String> pm = mock(ProducerManager.class);
-        var options = ParallelConsumerOptions.builder()
-                .producer()
+
+        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
-        try (var pc = new ParallelEoSStreamProcessor<String, String>(options)) {
+        var module = new PCModuleTestEnv(options) {
+//            final ProducerWrap mock = mock(ProducerWrap.class);
+//
+//            @Override
+//            protected ProducerWrap<String, String> producerWrap() {
+//                return mock;
+//            }
+        };
+
+
+//        ProducerManager<String, String> pm = mock(ProducerManager.class);
+//        var options = ParallelConsumerOptions.<String, String>builder()
+//                .diModule(of(module))
+//                .build();
+
+        try (var pc = module.pc()) {
 //        AbstractParallelEoSStreamProcessor<String, String> pc = mock(AbstractParallelEoSStreamProcessor.class);
 
             // send a record

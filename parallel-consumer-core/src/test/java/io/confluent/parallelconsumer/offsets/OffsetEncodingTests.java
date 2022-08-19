@@ -177,7 +177,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // write offsets
         {
-            WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
+            WorkManager<String, String> wmm = new WorkManager<>(options.toBuilder().consumer(consumerSpy).build());
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
@@ -222,7 +222,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            var newWm = new WorkManager<>(options, consumerSpy);
+            var newWm = new WorkManager<>(options.toBuilder().consumer(consumerSpy).build());
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 

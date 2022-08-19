@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
@@ -55,6 +56,10 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final String managedThreadFactory = "java:comp/DefaultManagedThreadFactory";
+
+    public <K, V> PCModule getModule() {
+        return null;
+    }
 
     /**
      * The ordering guarantee to use.
@@ -308,6 +313,9 @@ public class ParallelConsumerOptions<K, V> {
 
     @Builder.Default
     private final int maxFailureHistory = 10;
+
+//    @Builder.Default
+//    private final PCModule diModule = new PCModuleProd(this);
 
     /**
      * @return the combined target of the desired concurrency by the configured batch size

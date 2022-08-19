@@ -41,6 +41,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
+import static java.util.Optional.of;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -253,7 +254,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see ParallelConsumerOptions
      */
-    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
+    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
@@ -261,7 +262,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         options = newOptions;
         options.validate();
 
-        this.dynamicExtraLoadFactor = new DynamicLoadFactor();
+        this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
         this.consumer = options.getConsumer();
 
         checkGroupIdConfigured(consumer);
@@ -270,14 +271,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
+//        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
+        this.wm = module.workManager();
 
-        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
+        ConsumerManager<K, V> consumerMgr = module.consumerManager();
 
-        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+        this.brokerPollSubsystem = module.brokerPoller(this);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(new ProducerManager<>(new ProducerWrap<>(options), consumerMgr, this.wm, options));
+//            this.producerManager = Optional.of(new ProducerManager<>(new ProducerWrap<>(options), consumerMgr, this.wm, options));
+//            PCModule module = options.getDiModule();
+            this.producerManager = of(module.producerManager());
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else
@@ -344,14 +348,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
-        usersConsumerRebalanceListener = Optional.of(callback);
+        usersConsumerRebalanceListener = of(callback);
         consumer.subscribe(topics, this);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
-        usersConsumerRebalanceListener = Optional.of(callback);
+        usersConsumerRebalanceListener = of(callback);
         consumer.subscribe(pattern, this);
     }
 
@@ -679,7 +683,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return true;
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
-        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+        this.controlThreadFuture = of(controlTaskFutureResult);
     }
 
     /**

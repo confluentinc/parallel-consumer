@@ -5,9 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
-import io.confluent.parallelconsumer.internal.ProducerManager;
+import io.confluent.parallelconsumer.internal.*;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -34,8 +32,12 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
      *
      * @see ParallelConsumerOptions
      */
+    public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
+        super(newOptions, module);
+    }
+
     public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions) {
-        super(newOptions);
+        super(newOptions, new PCModuleProd<>(newOptions));
     }
 
     @Override
