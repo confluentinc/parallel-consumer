@@ -533,7 +533,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Worker pool terminated.");
 
         // last check to see if after worker pool closed, has any new work arrived?
-        processWorkCompleteMailBox();
+        processWorkCompleteMailBox(Duration.ZERO);
 
         commitOffsetsThatAreReady();
 
@@ -967,8 +967,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Check the work queue for work to be done, potentially blocking.
      * <p>
      * Can be interrupted if something else needs doing.
+     * <p>
+     * Visible for testing.
      */
-    private void processWorkCompleteMailBox(final Duration timeToBlockFor) {
+    protected void processWorkCompleteMailBox(final Duration timeToBlockFor) {
         log.trace("Processing mailbox (might block waiting for results)...");
         Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
 
@@ -1128,7 +1130,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return Duration.between(lastCommitCheckTime, now);
     }
 
-    private void commitOffsetsThatAreReady() {
+    /**
+     * Visible for testing
+     */
+    protected void commitOffsetsThatAreReady() {
         log.debug("Committing offsets that are ready...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");

@@ -3,7 +3,9 @@ package io.confluent.parallelconsumer.internal;
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
+import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.Mockito;
+import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
@@ -201,10 +204,28 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffset() {
-        // send a record
-        // start commit
-        // send another record, see it's blocked from sending
+        ProducerManager<String, String> pm = mock(ProducerManager.class);
+        var options = ParallelConsumerOptions.builder()
+                .producer()
+                .build();
+        try (var pc = new ParallelEoSStreamProcessor<String, String>(options)) {
+//        AbstractParallelEoSStreamProcessor<String, String> pc = mock(AbstractParallelEoSStreamProcessor.class);
 
+            // send a record
+            pc.onUserFunctionSuccess(mock(WorkContainer.class), UniLists.of());
+
+            // process inbox
+            pc.processWorkCompleteMailBox(Duration.ZERO);
+
+            // send another record, don't process inbox
+            pc.onUserFunctionSuccess(mock(WorkContainer.class), UniLists.of());
+
+            // commit
+            pc.commitOffsetsThatAreReady();
+
+            // error - 2 records in tx but only one of their offsets committed
+            Mockito.verify(pm, Mockito.atLeastOnce()).commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+        }
     }
 
 }
