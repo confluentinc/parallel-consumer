@@ -694,7 +694,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
                                    Consumer<R> callback) throws TimeoutException, ExecutionException {
-
         //
         handleWork(userFunction, callback);
 
@@ -716,9 +715,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
          */
         // todo also check tx is used
         // could do this optimistically as well, and only get the lock if state is dirty
-        if (options.isUsingTransactionCommitMode()) {
-            log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
-            producerManager.ifPresent(ProducerManager::preAcquireWork);
+        final boolean shouldTryCommitNow = isTimeToCommitNow();
+        updateLastCommitCheckTime();
+
+        if (shouldTryCommitNow) {
+            if (options.isUsingTransactionCommitMode()) {
+                log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
+                producerManager.ifPresent(ProducerManager::preAcquireWork);
+            }
         }
 
         // make sure all work that's been completed are arranged ready for commit check and don't block this time
@@ -726,10 +730,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         processWorkCompleteMailBox(Duration.ZERO);
 
         //
-        if (isIdlingOrRunning()) {
+        if (isIdlingOrRunning() && shouldTryCommitNow) {
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
-            commitOffsetsMaybe();
+            commitOffsetsThatAreReady();
+//            commitOffsetsMaybe();
         }
 
         // blocking version if box empty
@@ -1057,17 +1062,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
 
-    /**
-     * Conditionally commit offsets to broker
-     */
-    private void commitOffsetsMaybe() {
-        if (isShouldCommitNow()) {
-            commitOffsetsThatAreReady();
-        }
-        updateLastCommitCheckTime();
-    }
+//    /**
+//     * Conditionally commit offsets to broker
+//     */
+//    private void commitOffsetsMaybe() {
+//        if (isShouldCommitNow()) {
+//            commitOffsetsThatAreReady();
+//        }
+//        updateLastCommitCheckTime();
+//    }
 
-    protected boolean isShouldCommitNow() {
+    protected boolean isTimeToCommitNow() {
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
         boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;

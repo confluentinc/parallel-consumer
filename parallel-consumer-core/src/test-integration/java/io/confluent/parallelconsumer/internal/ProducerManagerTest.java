@@ -70,7 +70,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
                 parallelEoSStreamProcessor = new ParallelEoSStreamProcessor<>(options(), this) {
                     @Override
-                    protected boolean isShouldCommitNow() {
+                    protected boolean isTimeToCommitNow() {
                         return true;
                     }
 
