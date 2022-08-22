@@ -26,6 +26,7 @@ import org.apache.kafka.common.errors.TimeoutException;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -69,6 +70,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * Give the existing shared state system using the {@link ReentrantReadWriteLock} works really well, and so sending
      * work is done by worker threads, I'm hesitant to give up the performance over simplification in this case.
      */
+    @Getter
     private ReentrantReadWriteLock producerTransactionLock;
 
     /**
@@ -180,9 +182,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         lock.unlock();
     }
 
+    @lombok.SneakyThrows
     protected ProducingLock acquireProduceLock() {
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
-        readLock.lock();
+        log.debug("Acquiring produce lock...");
+//        readLock.lock();
+        readLock.tryLock(5, TimeUnit.SECONDS);
+        log.debug("Produce lock acquired.");
         return new ProducingLock(readLock);
     }
 
@@ -386,18 +392,29 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void acquireCommitLock() {
+        if (producerTransactionLock.isWriteLocked() && producerTransactionLock.isWriteLockedByCurrentThread()) {
+            log.debug("Lock already held, returning with-out reentering to avoid write lock layers...");
+            return;
+        }
 //        if (producerTransactionLock.getWriteHoldCount() > 0)
 //            throw new ConcurrentModificationException("Lock already held");
+
+        final int readHoldCount = producerTransactionLock.getReadHoldCount();
+        final int readLockCount = producerTransactionLock.getReadLockCount();
+        final int queueLength = producerTransactionLock.getQueueLength();
+
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
-//        if (producerTransactionLock.isWriteLocked() && !producerTransactionLock.isWriteLockedByCurrentThread()) {
-//            throw new ConcurrentModificationException(this.getClass().getSimpleName() + " is not safe for multi-threaded access");
-//        }
+        if (producerTransactionLock.isWriteLocked() && !producerTransactionLock.isWriteLockedByCurrentThread()) {
+            throw new ConcurrentModificationException(this.getClass().getSimpleName() + " is not safe for multi-threaded access");
+        }
 
         // lock the lock
         // todo remove or use sensible value
         boolean gotLock = false;
         try {
+            log.debug("Acquiring commit lock...");
             gotLock = writeLock.tryLock() || writeLock.tryLock(12, TimeUnit.SECONDS);
+            log.debug("Commit lock acquired.");
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -408,7 +425,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void releaseCommitLock() {
-        log.trace("Release commit lock");
+        log.debug("Release commit lock...");
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
         if (!producerTransactionLock.isWriteLockedByCurrentThread()) throw new IllegalStateException("Not held be me");
         writeLock.unlock();
@@ -436,7 +453,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     /**
      * todo docs
      */
-    public void finishProducing(ProducingLock produceLock) {
+    public void finishProducing(@NonNull ProducingLock produceLock) {
         ensureProduceStarted();
         releaseProduceLock(produceLock);
     }
@@ -456,6 +473,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         private final ReentrantReadWriteLock.ReadLock produceLock;
 
         protected void unlock() {
+            log.debug("Unlocking produce lock...");
             produceLock.unlock();
         }
     }

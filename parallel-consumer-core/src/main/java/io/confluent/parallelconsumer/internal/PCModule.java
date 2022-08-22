@@ -71,7 +71,7 @@ public abstract class PCModule<K, V> {
         return workManager;
     }
 
-    ParallelEoSStreamProcessor parallelEoSStreamProcessor;
+    protected ParallelEoSStreamProcessor parallelEoSStreamProcessor;
 
     protected ParallelEoSStreamProcessor<K, V> pc() {
         if (parallelEoSStreamProcessor == null) {

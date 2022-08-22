@@ -2,6 +2,7 @@ package io.confluent.parallelconsumer.internal;
 
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.BlockedThreadAsserter;
+import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -22,10 +23,12 @@ import org.mockito.Mockito;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -36,8 +39,7 @@ import static java.time.Duration.ZERO;
 import static java.time.Duration.ofSeconds;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.description;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.*;
 
 /**
  * todo docs
@@ -55,7 +57,30 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
             .build();
 
-    PCModuleTestEnv module = new PCModuleTestEnv(opts);
+    PCModuleTestEnv module = new PCModuleTestEnv(opts) {
+        @Override
+        protected ParallelEoSStreamProcessor<String, String> pc() {
+            if (parallelEoSStreamProcessor == null) {
+                parallelEoSStreamProcessor = spy(super.pc());
+
+                // todo use mockito instead
+//                doNothing().when(parallelEoSStreamProcessor).close(any(),any());
+//                doReturn(true).when(parallelEoSStreamProcessor).isShouldCommitNow();
+
+                parallelEoSStreamProcessor = new ParallelEoSStreamProcessor<>(options(), this) {
+                    @Override
+                    protected boolean isShouldCommitNow() {
+                        return true;
+                    }
+
+                    @Override
+                    public void close(final Duration timeout, final DrainingMode drainMode) {
+                    }
+                };
+            }
+            return parallelEoSStreamProcessor;
+        }
+    };
 
 //    KafkaProducer<String, String> producer = getKcu().getProducer();
 //
@@ -374,27 +399,46 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
 
+            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
 
+            var producingLockRef = new AtomicReference<ProducerManager.ProducingLock>();
             var offset1Mutex = new CountDownLatch(1);
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
-                log.info(context.toString());
-                if (context.offset() == 1) {
-                    // use latch utils
-                    try {
+                var newValue = pm.beginProducing();
+                try {
+                    producingLockRef.set(
+                            newValue
+                    );
+                    log.info(context.toString());
+                    if (context.offset() == 1) {
                         log.error("Blocking on {}", 1);
-                        offset1Mutex.await();
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
+                        LatchTestUtils.awaitLatch(offset1Mutex);
                     }
+
+                    // use real user function wrap
+                    module.producerWrap().send(mock(ProducerRecord.class), (a, b) -> {
+                    });
+                    return UniLists.of();
+                } finally {
+                    // this unlocks the produce lock too early - should be after WC returned. Need a call back? plugin? Should refactor the wrapped user function to can construct it?
+                    // also without using wrapped user function- we're not testing something important
+                    newValue.unlock();
                 }
-                return UniLists.of();
             };
 
-            // won't block
+
+            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+
+
+            // won't block because offset 0 goes through
             pc.controlLoop(userFunc, o -> {
             });
 
-            // won't block
+
+            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+
+
+            // won't block - not dirty
             pc.controlLoop(userFunc, o -> {
             });
 
@@ -403,9 +447,36 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             pc.registerWork(freshWork);
             pc.processWorkCompleteMailBox(ZERO);
 
-//            // should not block
-            pc.controlLoop(userFunc, o -> {
-            });
+            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+
+            // being producing the record from that work
+            var producingBlocks = new BlockedThreadAsserter();
+
+//            producingBlocks.assertFunctionBlocks(() -> {
+//                Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+//                producingLockRef.set(
+//                        pm.beginProducing()
+//                );
+//
+//            }, ofSeconds(2));
+
+            // waits for user function to run and take the produce lock
+//            await().untilAsserted(() -> Truth.assertThat(module.producerManager().getProducerTransactionLock().getReadLockCount()).isAtLeast(1));
+
+            // blocks as offset 1 is blocked sending, then unblock 1, and make sure that makes us return
+            var commitBlocks = new BlockedThreadAsserter();
+            commitBlocks.assertUnblocksAfter(() -> {
+                try {
+                    pc.controlLoop(userFunc, o -> {
+                    });
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }, () -> {
+                log.debug("Unblocking offset processing offset1Mutex...");
+                offset1Mutex.countDown();
+            }, ofSeconds(2));
+
 
 //            Assertions.assertTimeoutPreemptively(ofSeconds(10), () -> pc.controlLoop(userFunc, o -> {
 //            }));
@@ -432,30 +503,18 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 //            List<WorkContainer<String, String>> workIfAvailable = pc.getWm().getWorkIfAvailable(100);
 //            assertThat(workIfAvailable).isNotEmpty();
 
-            // being producing the record from that work
-            var producingLock = pm.beginProducing();
 
-
-//            pm.finishProducing(producingLock); // remove the too early produce unlock
-
-            // this is the phase between finishing the record but not putting it into the offsets to be collected could be an issue
-
-            // simulate the commit happening right after read lock release, but before the controller could do an inbox process
-            // should block because the commit lock can't be granted
-//            Assertions.assertThatThrownBy(() -> pc.commitOffsetsThatAreReady()).hasMessageContaining("Timeout");
-            var commitBlocks = new BlockedThreadAsserter();
-//            commitBlocks.assertFunctionBlocks(pc::commitOffsetsThatAreReady, ofSeconds(2));
-            commitBlocks.assertUnblocksAfter(pc::commitOffsetsThatAreReady, () -> {
-                // record doesn't try to send until after commit tries to start (and it should be blocked)
-                pm.produceMessages(UniLists.of(mu.createProducerRecords()));
-
-                // finish completely the work, should free up the commit lock to be obtained, work scanned and processed (picking up this result), and the whole thing is committed
-                pm.finishProducing(producingLock); // remove lock now after returning work
-            }, ofSeconds(2));
+//            new Thread(() -> {
+//                producingLockRef.set(
+//                        pm.beginProducing()
+//                );
+//            }).start();
+//            await().untilAtomic(producingLockRef, Matchers.notNullValue());
+//            var producingLock = producingLockRef.get();
 
 
             // record doesn't try to send until after commit tries to start (and it should be blocked)
-            pm.produceMessages(UniLists.of(mu.createProducerRecords()));
+//            pm.produceMessages(UniLists.of(mu.createProducerRecords()));
 
 
             // finish second record
@@ -465,7 +524,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 //            });
 
             // finish completely the work, should free up the commit lock to be obtained, work scanned and processed (picking up this result), and the whole thing is committed
-            pm.finishProducing(producingLock); // remove lock now after returning work
+//            pm.finishProducing(producingLockRef.get()); // remove lock now after returning work
 
 //            pc.processWorkCompleteMailBox(ZERO); // process the work results
 

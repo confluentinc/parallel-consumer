@@ -1,6 +1,7 @@
 package io.confluent.csid.utils;
 
 import com.google.common.truth.Truth;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -15,6 +16,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Antony Stubbs
  */
+@Slf4j
 public class BlockedThreadAsserter {
 
     AtomicBoolean methodReturned = new AtomicBoolean(false);
@@ -37,7 +39,7 @@ public class BlockedThreadAsserter {
         });
         blocked.start();
 
-        await("pretend to start to commit - acquire commit lock")
+        await()
                 .pollDelay(blockedForAtLeast) // makes sure it is still blocked after 1 second
                 .atMost(blockedForAtLeast.plus(Duration.ofSeconds(1)))
                 .untilAsserted(
@@ -57,6 +59,7 @@ public class BlockedThreadAsserter {
 
         AtomicBoolean unblockerHasRun = new AtomicBoolean(false);
         scheduledExecutorService.schedule(() -> {
+                    log.debug("Running unblocking function - blocked function should return after this");
                     unblockingFunction.run();
                     unblockerHasRun.set(true);
                 },
@@ -64,13 +67,16 @@ public class BlockedThreadAsserter {
                 TimeUnit.MILLISECONDS);
 
         var time = TimeUtils.timeWithMeta(() -> {
+            log.debug("Running function expected to block for {}...", unblocksAfter);
             functionExpectedToBlock.run();
             return Void.class;
         });
+        log.debug("Function unblocked after {}", time.getElapsed());
 
         this.methodReturned.set(true);
 
-        Truth.assertWithMessage("Unblocking function completed").that(unblockerHasRun.get()).isTrue();
         Truth.assertThat(time.getElapsed()).isAtLeast(unblocksAfter);
+        Truth.assertWithMessage("Unblocking function should complete OK (if false, may not have run at all - or that the expected function to block did NOT block)")
+                .that(unblockerHasRun.get()).isTrue();
     }
 }

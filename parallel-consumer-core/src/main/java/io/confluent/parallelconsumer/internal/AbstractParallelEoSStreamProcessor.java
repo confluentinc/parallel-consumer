@@ -715,6 +715,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
          * call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
          */
         // todo also check tx is used
+        // could do this optimisitaly as well, and only get the lock if state is dirty
+        log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
         producerManager.ifPresent(ProducerManager::preAcquireWork);
 
         // make sure all work that's been completed are arranged ready for commit check and don't block this time
@@ -1063,7 +1065,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         updateLastCommitCheckTime();
     }
 
-    private boolean isShouldCommitNow() {
+    protected boolean isShouldCommitNow() {
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
         boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;
