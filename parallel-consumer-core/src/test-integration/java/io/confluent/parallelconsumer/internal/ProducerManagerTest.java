@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -22,8 +23,10 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
@@ -45,6 +48,7 @@ import static org.mockito.Mockito.times;
 @Tag("transactions")
 @Tag("#355")
 @Timeout(60)
+@Slf4j
 class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
     ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder()
@@ -363,33 +367,70 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 //        AbstractParallelEoSStreamProcessor<String, String> pc = mock(AbstractParallelEoSStreamProcessor.class);
 
             // send a record
-            pc.subscribe(UniLists.of("topic"));
+            pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
+            pc.setState(State.running);
 
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
 
-            //
-            pc.controlLoop(stringStringPollContextInternal -> null, o -> {
+
+            var offset1Mutex = new CountDownLatch(1);
+            Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
+                log.info(context.toString());
+                if (context.offset() == 1) {
+                    // use latch utils
+                    try {
+                        log.error("Blocking on {}", 1);
+                        offset1Mutex.await();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                return UniLists.of();
+            };
+
+            // won't block
+            pc.controlLoop(userFunc, o -> {
             });
 
-//            doWork(pc);
-
-            // process inbox
-//            pc.processWorkCompleteMailBox(ZERO);
+            // won't block
+            pc.controlLoop(userFunc, o -> {
+            });
 
             // send another record, return the work, but don't process inbox
             freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
             pc.processWorkCompleteMailBox(ZERO);
 
-            //
-            pc.controlLoop(stringStringPollContextInternal -> null, o -> {
+//            // should not block
+            pc.controlLoop(userFunc, o -> {
             });
 
+//            Assertions.assertTimeoutPreemptively(ofSeconds(10), () -> pc.controlLoop(userFunc, o -> {
+//            }));
+
+            //
+//            {
+//                var controlMethod = new BlockedThreadAsserter();
+//                controlMethod.assertFunctionBlocks(() -> {
+//                    try {
+//                        pc.controlLoop(userFunc, o -> {
+//                        });
+//                    } catch (Exception e) {
+//                        throw new RuntimeException(e);
+//                    }
+//                }, ofSeconds(2));
+//            }
+//            pc.controlLoop(stringStringPollContextInternal -> null, o -> {
+//            });
+
+            // finish producing
+//            pm.finishProducing(ptod);
+
             // get the work
-            List<WorkContainer<String, String>> workIfAvailable = pc.getWm().getWorkIfAvailable(100);
-            assertThat(workIfAvailable).isNotEmpty();
+//            List<WorkContainer<String, String>> workIfAvailable = pc.getWm().getWorkIfAvailable(100);
+//            assertThat(workIfAvailable).isNotEmpty();
 
             // being producing the record from that work
             var producingLock = pm.beginProducing();
@@ -411,10 +452,10 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
 
             // finish second record
-            workIfAvailable.forEach(stringStringWorkContainer -> {
-                pc.onUserFunctionSuccess(stringStringWorkContainer, UniLists.of());
-                pc.addToMailBoxOnUserFunctionSuccess(Mockito.mock(PollContextInternal.class), stringStringWorkContainer, UniLists.of());
-            });
+//            workIfAvailable.forEach(stringStringWorkContainer -> {
+//                pc.onUserFunctionSuccess(stringStringWorkContainer, UniLists.of());
+//                pc.addToMailBoxOnUserFunctionSuccess(Mockito.mock(PollContextInternal.class), stringStringWorkContainer, UniLists.of());
+//            });
 
             // finish completely the work, should free up the commit lock to be obtained, work scanned and processed (picking up this result), and the whole thing is committed
             pm.finishProducing(producingLock); // remove lock now after returning work

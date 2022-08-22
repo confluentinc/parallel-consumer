@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
@@ -44,6 +45,7 @@ public class ModelUtils {
         )));
     }
 
+    @Getter
     final String topic = "topic";
 
     @NonNull

@@ -26,7 +26,6 @@ import org.apache.kafka.common.errors.TimeoutException;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -210,8 +209,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     @Override
     protected void postCommit() {
         // only release lock when commit successful
-        if (producerTransactionLock.getWriteHoldCount() > 1) // sanity
-            throw new ConcurrentModificationException("Lock held too many times, won't be released problem and will cause deadlock");
+//        if (producerTransactionLock.getWriteHoldCount() > 1) // sanity
+//            throw new ConcurrentModificationException("Lock held too many times, won't be released problem and will cause deadlock");
 
         releaseCommitLock();
     }
@@ -398,7 +397,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         // todo remove or use sensible value
         boolean gotLock = false;
         try {
-            gotLock = writeLock.tryLock(5, TimeUnit.SECONDS);
+            gotLock = writeLock.tryLock() || writeLock.tryLock(12, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
