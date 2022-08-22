@@ -99,8 +99,10 @@ public class ParallelConsumerOptions<K, V> {
         // tag::transactionalJavadoc[]
         /**
          * Periodically commits through the Producer using transactions.
-         *
-         * Unlike Kafka Streams, the records being sent by different threads will all be in a single transaction, as PC shares a single Producer instance. This could be seen as an performance overhead advantage, efficient resource use, for a loss in granularity.
+         * <p>
+         * Unlike Kafka Streams, the records being sent by different threads will all be in a single transaction, as PC
+         * shares a single Producer instance. This could be seen as an performance overhead advantage, efficient
+         * resource use, for a loss in granularity.
          * <p>
          * The benefits of using this mode are:
          * <p>
@@ -189,6 +191,14 @@ public class ParallelConsumerOptions<K, V> {
      */
     public static final Duration DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS = ofMillis(100);
 
+    /**
+     * Allow new records to be processed while a transaction is being processed. Default disabled.
+     * <p>
+     * Recommended to leave this off to avoid side effect duplicates upon rebalance. Enabling could improve performance
+     * as the produce lock will only be taken right before it's needed to produce the result record.
+     */
+    @Builder.Default
+    private boolean allowEagerProcessingDuringTransactionCommit = false;
 
     /**
      * Time between commits. Using a higher frequency (a lower value) will put more load on the brokers.
@@ -351,7 +361,12 @@ public class ParallelConsumerOptions<K, V> {
         }
     }
 
+    @Deprecated
     public boolean isUsingTransactionalProducer() {
+        return isUsingTransactionCommitMode();
+    }
+
+    public boolean isUsingTransactionCommitMode() {
         return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }
 

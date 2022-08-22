@@ -61,7 +61,8 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         @Override
         protected ParallelEoSStreamProcessor<String, String> pc() {
             if (parallelEoSStreamProcessor == null) {
-                parallelEoSStreamProcessor = spy(super.pc());
+                ParallelEoSStreamProcessor<String, String> raw = super.pc();
+                parallelEoSStreamProcessor = spy(raw);
 
                 // todo use mockito instead
 //                doNothing().when(parallelEoSStreamProcessor).close(any(),any());
@@ -562,5 +563,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             }
         }
     }
+
+    // todo test allowEagerProcessingDuringTransactionCommit
 
 }

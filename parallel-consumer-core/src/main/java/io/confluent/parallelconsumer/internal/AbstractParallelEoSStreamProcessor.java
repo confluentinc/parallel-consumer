@@ -715,9 +715,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
          * call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
          */
         // todo also check tx is used
-        // could do this optimisitaly as well, and only get the lock if state is dirty
-        log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
-        producerManager.ifPresent(ProducerManager::preAcquireWork);
+        // could do this optimistically as well, and only get the lock if state is dirty
+        if (options.isUsingTransactionCommitMode()) {
+            log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
+            producerManager.ifPresent(ProducerManager::preAcquireWork);
+        }
 
         // make sure all work that's been completed are arranged ready for commit check and don't block this time
         log.trace("Loop: Process mailbox");
@@ -1203,6 +1205,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 addToMailbox(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
+        } finally {
+            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
         }
     }
 

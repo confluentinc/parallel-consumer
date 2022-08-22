@@ -25,7 +25,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
      */
     @Override
     public void retrieveOffsetsAndCommit() {
-        log.debug("Commit starting - find completed work to commit offsets");
+        log.debug("Find completed work to commit offsets");
         preAcquireWork();
         try {
             var offsetsToCommit = wm.collectCommitDataForDirtyPartitions();
@@ -35,7 +35,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
                 log.debug("Will commit offsets for {} partition(s): {}", offsetsToCommit.size(), offsetsToCommit);
                 ConsumerGroupMetadata groupMetadata = consumerMgr.groupMetadata();
 
-                log.debug("Begin commit");
+                log.debug("Begin commit offsets");
                 commitOffsets(offsetsToCommit, groupMetadata);
 
                 log.debug("On commit success");

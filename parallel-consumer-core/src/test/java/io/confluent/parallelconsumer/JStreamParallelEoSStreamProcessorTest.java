@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -13,6 +14,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
@@ -58,13 +61,23 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
-        Stream<ConsumeProduceResult<String, String, String, String>> peekedStream = streamedResults.peek(x ->
-        {
-            log.info("streaming test {}", x.getIn().value());
-        });
 
-        await().untilAsserted(() ->
-                assertThat(peekedStream).hasSize(1));
+        await().untilAsserted(() -> {
+            log.debug("Checking stream size?");
+
+            AtomicInteger count = new AtomicInteger();
+            Stream<ConsumeProduceResult<String, String, String, String>> peekedStream = streamedResults.peek(x ->
+            {
+                log.info("streaming test {}", x.getIn().value());
+                count.incrementAndGet();
+            });
+
+            final List<ConsumeProduceResult<String, String, String, String>> collect = peekedStream.collect(Collectors.toList());
+
+
+            assertThat(count.get()).isEqualTo(1);
+//            peekedStream.hasSize()
+        });
     }
 
     @Test

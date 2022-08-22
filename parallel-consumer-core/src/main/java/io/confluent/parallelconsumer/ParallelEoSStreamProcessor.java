@@ -65,10 +65,19 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // wrap user func to add produce function
         Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc
+                // todo refactor to class
                 = context -> {
 
             // todo refactor this block into #getConsumeProduceResults at end of review or in seperate commit / pr
             {
+                ProducerManager<K, V> pm = super.getProducerManager().get();
+
+                // if running strict with no processing during commit - get the produce lock first
+                if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
+                    var produceLock = pm.beginProducing();
+                    context.setProducingLock(of(produceLock));
+                }
+
                 //
                 List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
 
@@ -81,9 +90,10 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                 log.trace("Producing {} messages in result...", recordListToProduce.size());
 
                 // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
-                ProducerManager<K, V> pm = super.getProducerManager().get();
-                var produceLock = pm.beginProducing();
-                context.setProducingLock(of(produceLock));
+                if (options.isUsingTransactionCommitMode() && options.isAllowEagerProcessingDuringTransactionCommit()) {
+                    var produceLock = pm.beginProducing();
+                    context.setProducingLock(of(produceLock));
+                }
 
                 // wait for all ack's to complete, see PR #356 for async version
                 try {

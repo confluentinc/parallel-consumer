@@ -461,7 +461,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     private void ensureProduceStarted() {
         if (producerTransactionLock.getReadHoldCount() < 1) {
-            throw new InternalRuntimeError("Need to call #startProducing first");
+            throw new InternalRuntimeError("Need to call #beginProducing first");
         }
     }
 

@@ -28,6 +28,7 @@ public abstract class PCModule<K, V> {
 
     protected PCModule(ParallelConsumerOptions<K, V> optionsInstance) {
         this.optionsInstance = optionsInstance;
+        optionsInstance.setModule(this);
     }
 
     protected ParallelConsumerOptions options() {
