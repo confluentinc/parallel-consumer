@@ -444,7 +444,14 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             // should block because the commit lock can't be granted
 //            Assertions.assertThatThrownBy(() -> pc.commitOffsetsThatAreReady()).hasMessageContaining("Timeout");
             var commitBlocks = new BlockedThreadAsserter();
-            commitBlocks.assertFunctionBlocks(pc::commitOffsetsThatAreReady, ofSeconds(2));
+//            commitBlocks.assertFunctionBlocks(pc::commitOffsetsThatAreReady, ofSeconds(2));
+            commitBlocks.assertUnblocksAfter(pc::commitOffsetsThatAreReady, () -> {
+                // record doesn't try to send until after commit tries to start (and it should be blocked)
+                pm.produceMessages(UniLists.of(mu.createProducerRecords()));
+
+                // finish completely the work, should free up the commit lock to be obtained, work scanned and processed (picking up this result), and the whole thing is committed
+                pm.finishProducing(producingLock); // remove lock now after returning work
+            }, ofSeconds(2));
 
 
             // record doesn't try to send until after commit tries to start (and it should be blocked)
@@ -485,7 +492,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             // correct behaviour should be
             {
                 var producer = module.producerWrap();
-                Mockito.verify(producer, description("Both offsets"))
+                Mockito.verify(producer, description("Both offsets are represented in base commit"))
                         .sendOffsetsToTransaction(UniMaps.of(mu.getPartition(), new OffsetAndMetadata(nextExpectedOffset, "")), mu.consumerGroupMeta());
 
 //                Mockito.verify(producer, description("called once to send only one record (should only be one, as second record send should be blocked)"))
