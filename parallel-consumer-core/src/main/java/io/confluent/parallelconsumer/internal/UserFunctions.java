@@ -32,7 +32,7 @@ public class UserFunctions {
                                                                      PARAM_TWO userFuncParamTwo) {
         try {
             return wrappedFunction.apply(userFuncParamOne, userFuncParamTwo);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new ErrorInUserFunctionException(MSG, e);
         }
     }
@@ -46,7 +46,7 @@ public class UserFunctions {
     public static <PARAM, RESULT> RESULT carefullyRun(Function<PARAM, RESULT> wrappedFunction, PARAM userFuncParam) {
         try {
             return wrappedFunction.apply(userFuncParam);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new ErrorInUserFunctionException(MSG, e);
         }
     }
@@ -59,7 +59,7 @@ public class UserFunctions {
     public static <PARAM> void carefullyRun(Consumer<PARAM> wrappedFunction, PARAM userFuncParam) {
         try {
             wrappedFunction.accept(userFuncParam);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new ErrorInUserFunctionException(MSG, e);
         }
     }
