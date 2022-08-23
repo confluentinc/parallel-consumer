@@ -28,7 +28,8 @@ public class PollContextInternal<K, V> {
     private final PollContext<K, V> pollContext;
 
     /**
-     * todo docs
+     * Used when running in {@link ParallelConsumerOptions.CommitMode#isUsingTransactionCommitMode()} then the produce
+     * lock will be passed around here. It needs to be unlocked when work has been put back in the inbox.
      */
     @Getter
     @Setter

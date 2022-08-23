@@ -238,6 +238,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         ensureCommitLockHeld();
 
         //
+        lazyMaybeBeginTransaction(); // if not using a produce flow, a tx will need to be started here (as no records are being produced)
         producer.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
@@ -425,10 +426,12 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void releaseCommitLock() {
-        log.debug("Release commit lock...");
+        log.debug("Releasing commit lock...");
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
-        if (!producerTransactionLock.isWriteLockedByCurrentThread()) throw new IllegalStateException("Not held be me");
+        if (!producerTransactionLock.isWriteLockedByCurrentThread())
+            throw new IllegalStateException("Not held be me");
         writeLock.unlock();
+        log.debug("Commit lock released.");
     }
 
     private void ensureCommitLockHeld() {

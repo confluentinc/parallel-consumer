@@ -389,8 +389,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
-        parallelConsumer.poll((record) -> {
-            myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+        parallelConsumer.poll(context -> {
+            log.debug("Processing test context...");
+            var singleRecord = context.getSingleConsumerRecord();
+            myRecordProcessingAction.apply(singleRecord);
             msgCompleteBarrier.countDown();
         });
 

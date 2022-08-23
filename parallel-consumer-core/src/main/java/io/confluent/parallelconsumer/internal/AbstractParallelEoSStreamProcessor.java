@@ -535,6 +535,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // last check to see if after worker pool closed, has any new work arrived?
         processWorkCompleteMailBox(Duration.ZERO);
 
+        //
         commitOffsetsThatAreReady();
 
         // only close consumer once producer has committed it's offsets (tx'l)
@@ -1144,7 +1145,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Visible for testing
      */
     protected void commitOffsetsThatAreReady() {
-        log.debug("Committing offsets that are ready...");
+        log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");
             committer.retrieveOffsetsAndCommit();

@@ -51,7 +51,6 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
     }
 
     protected void preAcquireWork() {
-//        this.
         // default noop
     }
 

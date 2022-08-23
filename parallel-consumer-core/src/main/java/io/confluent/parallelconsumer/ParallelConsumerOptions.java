@@ -100,6 +100,9 @@ public class ParallelConsumerOptions<K, V> {
         /**
          * Periodically commits through the Producer using transactions.
          * <p>
+         * Of no use, if not also producing messages (i.e. using a {@link ParallelStreamProcessor#pollAndProduce}
+         * variation).
+         * <p>
          * Unlike Kafka Streams, the records being sent by different threads will all be in a single transaction, as PC
          * shares a single Producer instance. This could be seen as an performance overhead advantage, efficient
          * resource use, for a loss in granularity.
@@ -192,10 +195,13 @@ public class ParallelConsumerOptions<K, V> {
     public static final Duration DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS = ofMillis(100);
 
     /**
-     * Allow new records to be processed while a transaction is being processed. Default disabled.
+     * Allow new records to be processed while a transaction is being committed. Default disabled.
      * <p>
-     * Recommended to leave this off to avoid side effect duplicates upon rebalance. Enabling could improve performance
-     * as the produce lock will only be taken right before it's needed to produce the result record.
+     * Doesn't interfere with the transaction.
+     * <p>
+     * Recommended to leave this off to avoid side effect duplicates upon rebalance after a crash. Enabling could
+     * improve performance as the produce lock will only be taken right before it's needed to produce the result record
+     * instead of pessimistically.
      */
     @Builder.Default
     private boolean allowEagerProcessingDuringTransactionCommit = false;

@@ -185,7 +185,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
-        myRecordProcessingAction = mock(ParallelEoSStreamProcessorTest.MyAction.class);
+        myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
 
         when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
     }

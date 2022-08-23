@@ -69,7 +69,7 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     @Deprecated
     public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
                                          String consumerGroupId) throws ProducerFencedException {
-        producer.sendOffsetsToTransaction(offsets, consumerGroupId);
+        sendOffsetsToTransaction(offsets, new ConsumerGroupMetadata(consumerGroupId));
     }
 
     public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
