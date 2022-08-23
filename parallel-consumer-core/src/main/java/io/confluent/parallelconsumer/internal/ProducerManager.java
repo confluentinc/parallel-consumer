@@ -187,10 +187,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     @lombok.SneakyThrows
     protected ProducingLock acquireProduceLock() {
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
-        log.debug("Acquiring produce lock...");
+        log.trace("Acquiring produce lock...");
 //        readLock.lock();
         readLock.tryLock(5, TimeUnit.SECONDS);
-        log.debug("Produce lock acquired.");
+        log.trace("Produce lock acquired.");
         return new ProducingLock(readLock);
     }
 
@@ -202,8 +202,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     protected void preAcquireWork() {
         acquireCommitLock();
         drain();
-        // drain all results
-        pc.get().processWorkCompleteMailBox(Duration.ZERO);
     }
 
 
@@ -349,8 +347,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
          // retriable tx
          none
          */
-        this.producerState = BEGIN;
         producer.beginTransaction();
+        this.producerState = BEGIN;
     }
 
     /**

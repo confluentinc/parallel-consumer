@@ -6,6 +6,7 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.experimental.FieldDefaults;
 
 import java.util.function.Supplier;
@@ -26,9 +27,12 @@ public abstract class PCModule<K, V> {
     @Getter
     protected ParallelConsumerOptions<K, V> optionsInstance;
 
-    protected PCModule(ParallelConsumerOptions<K, V> optionsInstance) {
-        this.optionsInstance = optionsInstance;
-        optionsInstance.setModule(this);
+    @Setter
+    protected AbstractParallelEoSStreamProcessor<K, V> parallelEoSStreamProcessor;
+
+    protected PCModule(ParallelConsumerOptions<K, V> options) {
+        this.optionsInstance = options;
+        options.setModule(this);
     }
 
     protected ParallelConsumerOptions options() {
@@ -72,9 +76,7 @@ public abstract class PCModule<K, V> {
         return workManager;
     }
 
-    protected ParallelEoSStreamProcessor parallelEoSStreamProcessor;
-
-    protected ParallelEoSStreamProcessor<K, V> pc() {
+    protected AbstractParallelEoSStreamProcessor<K, V> pc() {
         if (parallelEoSStreamProcessor == null) {
             parallelEoSStreamProcessor = new ParallelEoSStreamProcessor<>(options(), this);
         }

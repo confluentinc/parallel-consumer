@@ -59,9 +59,9 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
     PCModuleTestEnv module = new PCModuleTestEnv(opts) {
         @Override
-        protected ParallelEoSStreamProcessor<String, String> pc() {
+        protected AbstractParallelEoSStreamProcessor<String, String> pc() {
             if (parallelEoSStreamProcessor == null) {
-                ParallelEoSStreamProcessor<String, String> raw = super.pc();
+                AbstractParallelEoSStreamProcessor<String, String> raw = super.pc();
                 parallelEoSStreamProcessor = spy(raw);
 
                 // todo use mockito instead
@@ -346,7 +346,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         }
     }
 
-    private void doWork(ParallelEoSStreamProcessor<String, String> pc) {
+    private void doWork(AbstractParallelEoSStreamProcessor<String, String> pc) {
         // create
         EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
         pc.registerWork(freshWork);

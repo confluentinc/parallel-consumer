@@ -9,7 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
  */
 public class PCModuleProd<K, V> extends PCModule<K, V> {
 
-    public PCModuleProd(final ParallelConsumerOptions optionsInstance) {
+    public PCModuleProd(final ParallelConsumerOptions<K, V> optionsInstance) {
         super(optionsInstance);
     }
 }

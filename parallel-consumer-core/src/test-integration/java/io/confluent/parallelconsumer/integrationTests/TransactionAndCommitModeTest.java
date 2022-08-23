@@ -113,7 +113,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
     private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order) {
         //        int expectedMessageCount = 50_000;
-        int expectedMessageCount = 10_000;
+        int expectedMessageCount = 30_000;
 //        int expectedMessageCount = 10_000;
 //        int expectedMessageCount = 1_000;
         runTest(maxPoll, commitMode, order, expectedMessageCount);

@@ -249,6 +249,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
+    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
+        this(newOptions, new PCModuleProd<>(newOptions));
+    }
+
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
@@ -257,6 +261,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
+
+        module.setParallelEoSStreamProcessor(this);
 
         log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
 

@@ -367,11 +367,17 @@ public class ParallelConsumerOptions<K, V> {
         }
     }
 
+    /**
+     * @deprecated use {@link #isUsingTransactionCommitMode()}
+     */
     @Deprecated
     public boolean isUsingTransactionalProducer() {
         return isUsingTransactionCommitMode();
     }
 
+    /**
+     * @see CommitMode#PERIODIC_TRANSACTIONAL_PRODUCER
+     */
     public boolean isUsingTransactionCommitMode() {
         return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }

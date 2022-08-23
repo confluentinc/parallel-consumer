@@ -19,7 +19,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProcessor<K, V> {
 
     protected ExternalEngine(final ParallelConsumerOptions<K, V> newOptions) {
-        super(newOptions, new PCModuleProd<>(newOptions));
+        super(newOptions);
     }
 
     /**
