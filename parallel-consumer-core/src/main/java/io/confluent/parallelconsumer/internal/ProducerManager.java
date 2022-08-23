@@ -160,9 +160,11 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * Thread safe.
      */
     private void lazyMaybeBeginTransaction() {
-        boolean txNotBegunAlready = !this.producerState.equals(BEGIN);
-        if (txNotBegunAlready) {
-            syncBeginTransaction();
+        if (options.isUsingTransactionCommitMode()) {
+            boolean txNotBegunAlready = !this.producerState.equals(BEGIN);
+            if (txNotBegunAlready) {
+                syncBeginTransaction();
+            }
         }
     }
 
@@ -463,7 +465,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
 
     private void ensureProduceStarted() {
-        if (producerTransactionLock.getReadHoldCount() < 1) {
+        if (options.isUsingTransactionCommitMode() && producerTransactionLock.getReadHoldCount() < 1) {
             throw new InternalRuntimeError("Need to call #beginProducing first");
         }
     }

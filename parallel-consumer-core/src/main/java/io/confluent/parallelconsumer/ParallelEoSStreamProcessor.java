@@ -83,6 +83,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
                 if (recordListToProduce.isEmpty()) {
                     log.debug("No result returned from function to send.");
+                    return UniLists.of(); // nothing to send
                 }
                 log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
 
