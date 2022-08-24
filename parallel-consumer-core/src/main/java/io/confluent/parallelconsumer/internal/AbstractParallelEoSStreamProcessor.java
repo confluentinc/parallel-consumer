@@ -41,7 +41,6 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
-import static java.util.Optional.of;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -80,7 +79,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     // todo delete in next major version
     @Deprecated
     public void setTimeBetweenCommits(final Duration timeBetweenCommits) {
-//        this.timeBetweenCommits = of(timeBetweenCommits);
         options.setTimeBetweenCommits(timeBetweenCommits);
     }
 
@@ -93,23 +91,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     // todo delete in next major version
     @Deprecated
     public Duration getTimeBetweenCommits() {
-//        if (!this.timeBetweenCommits.isPresent()) {
-//            return options.getTimeBetweenCommits();
-//        } else {
-//
-//        }
         return options.getTimeBetweenCommits();
     }
-
-//    /**
-//     * Sets the time between commits. Using a higher frequency will put more load on the brokers.
-//     *
-//     * @deprecated use {@link ParallelConsumerOptions#setTimeBetweenCommits} instead. This will be deleted in the next
-//     *         major version.
-//     */
-//    // todo delete in next major version
-//    @Deprecated
-//    private Optional<Duration> timeBetweenCommits = Optional.empty();
 
     private Instant lastCommitCheckTime = Instant.now();
 
@@ -283,7 +266,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.brokerPollSubsystem = module.brokerPoller(this);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = of(module.producerManager());
+            this.producerManager = Optional.of(module.producerManager());
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else
@@ -350,14 +333,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
-        usersConsumerRebalanceListener = of(callback);
+        usersConsumerRebalanceListener = Optional.of(callback);
         consumer.subscribe(topics, this);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
-        usersConsumerRebalanceListener = of(callback);
+        usersConsumerRebalanceListener = Optional.of(callback);
         consumer.subscribe(pattern, this);
     }
 
@@ -686,7 +669,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return true;
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
-        this.controlThreadFuture = of(controlTaskFutureResult);
+        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
     }
 
     /**
@@ -1066,17 +1049,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private boolean isIdlingOrRunning() {
         return state == running || state == draining || state == paused;
     }
-
-
-//    /**
-//     * Conditionally commit offsets to broker
-//     */
-//    private void commitOffsetsMaybe() {
-//        if (isShouldCommitNow()) {
-//            commitOffsetsThatAreReady();
-//        }
-//        updateLastCommitCheckTime();
-//    }
 
     protected boolean isTimeToCommitNow() {
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());

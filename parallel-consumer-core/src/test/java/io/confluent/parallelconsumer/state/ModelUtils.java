@@ -11,8 +11,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
-import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -24,7 +22,6 @@ import pl.tlinkowski.unij.api.UniMaps;
 import java.util.List;
 
 @RequiredArgsConstructor
-//@RequiredArgsConstructor
 public class ModelUtils {
 
     private final PCModuleTestEnv module;
@@ -60,7 +57,7 @@ public class ModelUtils {
         return UniLists.of(new TopicPartition(topic, 0));
     }
 
-    long nextOffset = 0L;
+    private long nextOffset = 0L;
 
     @NonNull
     private ConsumerRecord<String, String> createConsumerRecord(String topic) {

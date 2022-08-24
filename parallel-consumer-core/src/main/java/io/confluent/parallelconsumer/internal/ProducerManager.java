@@ -212,11 +212,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         producer.flush();
     }
 
+    /**
+     * Only release lock when commit successful
+     */
     @Override
     protected void postCommit() {
-        // only release lock when commit successful
-//        if (producerTransactionLock.getWriteHoldCount() > 1) // sanity
-//            throw new ConcurrentModificationException("Lock held too many times, won't be released problem and will cause deadlock");
+        if (producerTransactionLock.getWriteHoldCount() > 1) // sanity
+            throw new ConcurrentModificationException("Lock held too many times, won't be released problem and will cause deadlock");
 
         releaseCommitLock();
     }
@@ -397,12 +399,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             log.debug("Lock already held, returning with-out reentering to avoid write lock layers...");
             return;
         }
-//        if (producerTransactionLock.getWriteHoldCount() > 0)
-//            throw new ConcurrentModificationException("Lock already held");
-
-        final int readHoldCount = producerTransactionLock.getReadHoldCount();
-        final int readLockCount = producerTransactionLock.getReadLockCount();
-        final int queueLength = producerTransactionLock.getQueueLength();
 
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
         if (producerTransactionLock.isWriteLocked() && !producerTransactionLock.isWriteLockedByCurrentThread()) {
@@ -422,7 +418,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         if (!gotLock) {
             throw new InternalRuntimeError("Timeout getting commit lock - slow or too many records being ack'd?");
         }
-//        writeLock.lock();
     }
 
     private void releaseCommitLock() {
