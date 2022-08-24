@@ -5,18 +5,22 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import lombok.experimental.UtilityClass;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.mockito.Mockito;
 
-@UtilityClass
+@RequiredArgsConstructor
 public class ModelUtils {
 
-    public static WorkContainer<String, String> createWorkFor(long offset) {
+    private final PCModuleTestEnv module;
+
+    public WorkContainer<String, String> createWorkFor(long offset) {
         //noinspection unchecked
         ConsumerRecord<String, String> mockCr = Mockito.mock(ConsumerRecord.class);
         WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null, TimeUtils.getClock());
         Mockito.doReturn(offset).when(mockCr).offset();
         return workContainer;
     }
+
 }
