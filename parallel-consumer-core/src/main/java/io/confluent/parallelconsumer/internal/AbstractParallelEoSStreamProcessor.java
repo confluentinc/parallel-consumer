@@ -720,18 +720,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // could do this optimistically as well, and only get the lock if state is dirty
         final boolean shouldTryCommitNow = isTimeToCommitNow();
         updateLastCommitCheckTime();
-
+        Duration timeToBlockFor;
         if (shouldTryCommitNow) {
             if (options.isUsingTransactionCommitMode()) {
                 // get into write lock queue, so that no new work can be started from here on
                 log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
                 producerManager.ifPresent(ProducerManager::preAcquireWork);
             }
+
+            timeToBlockFor = Duration.ZERO;
+        } else {
+            timeToBlockFor = getTimeToBlockFor();
         }
 
-        // make sure all work that's been completed are arranged ready for commit check and don't block this time
+        // make sure all work that's been completed are arranged ready for commit
         log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox(Duration.ZERO);
+        processWorkCompleteMailBox(timeToBlockFor);
 
         //
         if (isIdlingOrRunning() && shouldTryCommitNow) {
@@ -740,19 +744,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             commitOffsetsThatAreReady();
         }
 
-        {
-            // blocking on inbox should only be done after we've distributed potential work
-            // todo refactor to method so cannot be seperated
 
-            //
-            handleWork(userFunction, callback);
-
-            // blocking version if box empty
-            if (workMailBox.isEmpty()) {
-                Duration timeToBlockFor = getTimeToBlockFor();
-                processWorkCompleteMailBox(timeToBlockFor);
-            }
-        }
+        // distribute more work
+        handleWork(userFunction, callback);
 
         // run call back
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());

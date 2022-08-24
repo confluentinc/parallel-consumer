@@ -474,8 +474,9 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
             // blocks as offset 1 is blocked sending and so cannot acquire commit lock
             // unblock 1 as unblocking function, and make sure that makes us return
-            await("Ensure expected produce lock is now held by blocked worker thread")
-                    .untilAtomic(blockedOn1, Matchers.is(Matchers.equalTo(true)));
+            var msg = "Ensure expected produce lock is now held by blocked worker thread";
+            log.debug(msg);
+            await(msg).untilAtomic(blockedOn1, Matchers.is(Matchers.equalTo(true)));
             var commitBlocks = new BlockedThreadAsserter();
             commitBlocks.assertUnblocksAfter(() -> {
                 log.debug("Running control loop which should block until offset 1 is released by finishing produce");
