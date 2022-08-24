@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.offsets;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -118,7 +119,10 @@ class WorkManagerOffsetMapCodecManagerTest {
     @BeforeEach
     void setup() {
         MockConsumer<String, String> mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
-        wm = new WorkManager<>(ParallelConsumerOptions.<String, String>builder().consumer(mockConsumer).build());
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .consumer(mockConsumer)
+                .build();
+        wm = new WorkManager<>(new PCModule<>(options));
         wm.onPartitionsAssigned(UniLists.of(tp));
         offsetCodecManager = new OffsetMapCodecManager<>(mockConsumer);
     }
