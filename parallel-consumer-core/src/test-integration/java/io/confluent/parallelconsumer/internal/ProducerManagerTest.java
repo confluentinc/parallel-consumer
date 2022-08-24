@@ -17,6 +17,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -248,6 +249,8 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
     /**
      * There's GOT to be a better way to test this corner case than this
      */
+    // todo delete
+    @Disabled("Delete")
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffset() {
 

@@ -58,7 +58,7 @@ import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
  */
 @Timeout(value = 60)
 @Slf4j
-public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
+class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
 
     Duration normalTimeout = ofSeconds(5);
     Duration debugTimeout = Duration.ofMinutes(1);
