@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Supplier;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
@@ -47,8 +46,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     protected final ProducerWrap<K, V> producer;
 
     private final ParallelConsumerOptions<K, V> options;
-
-    Supplier<AbstractParallelEoSStreamProcessor<K, V>> pc;
 
     /**
      * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transitionally. We must
@@ -87,8 +84,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         super(newConsumer, wm);
         this.producer = newProducer;
         this.options = options;
-
-        this.pc = options.getModule().pcSupplier();
 
         initProducer();
     }
@@ -271,7 +266,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                             commitTransaction();
                         }
                         // delete
-//                        if (isTransactionReady()) {
+//                        if (producer.isTransactionReady()) {
 //                            // tx has completed since we last tried, start a new one
 //                            beginTransaction();
 //                        }
@@ -357,7 +352,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * todo docs
      *
      * @return
-     */
+         */
     public boolean isTransactionOpen() {
         return this.producerState.equals(BEGIN);
     }
@@ -391,7 +386,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private void abortTransaction() {
         producer.abortTransaction();
         this.producerState = ABORT;
-
     }
 
     private void acquireCommitLock() {

@@ -31,7 +31,6 @@ public class PCModuleTestEnv extends PCModule<String, String> {
                 .producer(mock(Producer.class))
                 .build();
         super.optionsInstance = override;
-        this.optionsInstance.setModule(this);
     }
 
     public PCModuleTestEnv() {

@@ -5,11 +5,9 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.ToString;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -57,13 +55,6 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final String managedThreadFactory = "java:comp/DefaultManagedThreadFactory";
-
-    /**
-     * todo docs
-     */
-    @Getter
-    @Setter
-    private PCModule<K, V> module;
 
     /**
      * The ordering guarantee to use.

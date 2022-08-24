@@ -4,7 +4,6 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.Getter;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
@@ -24,20 +23,18 @@ import java.util.function.Supplier;
  *
  * @author Antony Stubbs
  */
-public abstract class PCModule<K, V> {
+public class PCModule<K, V> {
 
-    @Getter
     protected ParallelConsumerOptions<K, V> optionsInstance;
 
     @Setter
     protected AbstractParallelEoSStreamProcessor<K, V> parallelEoSStreamProcessor;
 
-    protected PCModule(ParallelConsumerOptions<K, V> options) {
+    public PCModule(ParallelConsumerOptions<K, V> options) {
         this.optionsInstance = options;
-        options.setModule(this);
     }
 
-    protected ParallelConsumerOptions options() {
+    public ParallelConsumerOptions<K, V> options() {
         return optionsInstance;
     }
 
@@ -73,7 +70,7 @@ public abstract class PCModule<K, V> {
 
     public WorkManager<K, V> workManager() {
         if (workManager == null) {
-            workManager = new WorkManager<K, V>(options(), dynamicExtraLoadFactor(), TimeUtils.getClock());
+            workManager = new WorkManager<K, V>(this, dynamicExtraLoadFactor(), TimeUtils.getClock());
         }
         return workManager;
     }
