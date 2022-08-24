@@ -29,7 +29,7 @@ import java.util.stream.IntStream;
 import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
 import static java.lang.Integer.MAX_VALUE;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
@@ -69,7 +69,7 @@ public class TransactionMarkersTest extends BrokerIntegrationTest<String, String
         txProducerTwo = getKcu().createNewTransactionalProducer();
         txProducerThree = getKcu().createNewTransactionalProducer();
 
-        normalProducer = getKcu().createNewProducer(NORMAL);
+        normalProducer = getKcu().createNewProducer(NOT_TRANSACTIONAL);
         pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumer)
                 .ordering(PARTITION) // just so we dont need to use keys

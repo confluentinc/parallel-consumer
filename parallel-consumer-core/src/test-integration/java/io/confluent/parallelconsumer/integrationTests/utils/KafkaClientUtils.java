@@ -33,7 +33,7 @@ import java.util.concurrent.Future;
 import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
@@ -189,7 +189,7 @@ public class KafkaClientUtils {
      */
     @Deprecated
     public <K, V> KafkaProducer<K, V> createNewProducer(boolean transactional) {
-        var mode = transactional ? TRANSACTIONAL : NORMAL;
+        var mode = transactional ? TRANSACTIONAL : NOT_TRANSACTIONAL;
         return createNewProducer(mode);
     }
 
@@ -220,12 +220,12 @@ public class KafkaClientUtils {
     }
 
     public enum ProducerMode {
-        TRANSACTIONAL, NORMAL;
+        TRANSACTIONAL, NOT_TRANSACTIONAL;
 
         public static ProducerMode matching(CommitMode commitMode) {
             return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)
                     ? TRANSACTIONAL
-                    : NORMAL;
+                    : NOT_TRANSACTIONAL;
         }
     }
 

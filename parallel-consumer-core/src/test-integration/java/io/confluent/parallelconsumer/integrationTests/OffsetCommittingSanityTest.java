@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 
 import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -69,30 +70,48 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         List<Long> producedOffsets = new ArrayList<>();
         List<Long> consumedOffsets = new ArrayList<>();
 
-        KafkaProducer<String, String> kafkaProducer = kcu.createNewProducer(false);
+        KafkaProducer<String, String> kafkaProducer = kcu.createNewProducer(NOT_TRANSACTIONAL);
 
         // offset 0
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", true);
+        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", CheckMode.CHECK_CONSUMED);
 
+        //
         assertCommittedOffset(topicNameForTest, 1);
 
         // offset 1
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-1", "value-1", false);
+        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-1", "value-1", CheckMode.JUST_SLEEP);
 
         // offset 2
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-2", "value-2", true);
+        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-2", "value-2", CheckMode.CHECK_CONSUMED);
     }
 
-    /**
-     * Sends a record Runs PC, conditionally checking that PC consumes that sent message Closes PC, waiting for it to
-     * drain
-     */
     private void sendCheckClose(String topic,
                                 List<Long> producedOffsets,
                                 List<Long> consumedOffsets,
                                 KafkaProducer<String, String> kafkaProducer,
                                 String key, String val,
                                 boolean check) throws Exception {
+        sendCheckClose(topic, producedOffsets, consumedOffsets, kafkaProducer, key, val, check ? CheckMode.CHECK_CONSUMED : CheckMode.JUST_SLEEP);
+    }
+
+
+    /**
+     * Sends a record
+     * <p>
+     * Runs PC
+     * <p>
+     * conditionally checks that PC consumes that sent message
+     * <p>
+     * Closes PC
+     * <p>
+     * waiting for it to drain
+     */
+    private void sendCheckClose(String topic,
+                                List<Long> producedOffsets,
+                                List<Long> consumedOffsets,
+                                KafkaProducer<String, String> kafkaProducer,
+                                String key, String val,
+                                CheckMode check) throws Exception {
         var record = new ProducerRecord<>(topic, key, val);
         Future<RecordMetadata> send = kafkaProducer.send(record);
         long offset = send.get().offset();
@@ -106,7 +125,7 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         pc.poll(consumerRecord -> consumedOffsets.add(consumerRecord.offset()));
 
         //
-        if (check) {
+        if (check.equals(CheckMode.CHECK_CONSUMED)) {
             assertThatCode(() -> {
                 waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
                         .untilAsserted(
@@ -116,6 +135,10 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
             Thread.sleep(2000);
         }
         pc.closeDrainFirst();
+    }
+
+    private enum CheckMode {
+        CHECK_CONSUMED, JUST_SLEEP
     }
 
     /**
