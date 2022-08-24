@@ -723,6 +723,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         if (shouldTryCommitNow) {
             if (options.isUsingTransactionCommitMode()) {
+                // get into write lock queue, so that no new work can be started from here on
                 log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
                 producerManager.ifPresent(ProducerManager::preAcquireWork);
             }
@@ -1006,7 +1007,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             try {
                 var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
-                    log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
+                    log.debug("Mailbox results returned null, indicating timeToBlockFor elapsed (which was set as {})", timeToBlockFor);
                 } else {
                     log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeToBlockFor);
                     results.add(firstBlockingPoll);

@@ -59,7 +59,7 @@ public class BlockedThreadAsserter {
 
         AtomicBoolean unblockerHasRun = new AtomicBoolean(false);
         scheduledExecutorService.schedule(() -> {
-                    log.debug("Running unblocking function - blocked function should return after this");
+                    log.debug("Running unblocking function - blocked function should return ONLY after this (which will be tested)");
                     unblockingFunction.run();
                     unblockerHasRun.set(true);
                 },

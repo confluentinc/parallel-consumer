@@ -16,6 +16,7 @@ import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -404,6 +405,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
 
             var producingLockRef = new AtomicReference<ProducerManager.ProducingLock>();
             var offset1Mutex = new CountDownLatch(1);
+            var blockedOn1 = new AtomicBoolean(false);
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
                 var newValue = pm.beginProducing();
                 try {
@@ -412,7 +414,8 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
                     );
                     log.info(context.toString());
                     if (context.offset() == 1) {
-                        log.error("Blocking on {}", 1);
+                        log.debug("Blocking on {}", 1);
+                        blockedOn1.set(true);
                         LatchTestUtils.awaitLatch(offset1Mutex);
                     }
 
@@ -446,12 +449,17 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             // send another record, return the work, but don't process inbox
             freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
-            pc.processWorkCompleteMailBox(ZERO);
+            // will first try to commit - fine no produce lock yet
+            // then gets the work, distributes it
+            // will then return
+            // -- in the worker thread - will trigger the block and hold the produce lock
+            pc.controlLoop(userFunc, o -> {
+            });
 
             Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
 
-            // being producing the record from that work
-            var producingBlocks = new BlockedThreadAsserter();
+//            // being producing the record from that work
+//            var producingBlocks = new BlockedThreadAsserter();
 
 //            producingBlocks.assertFunctionBlocks(() -> {
 //                Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
@@ -464,9 +472,13 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
             // waits for user function to run and take the produce lock
 //            await().untilAsserted(() -> Truth.assertThat(module.producerManager().getProducerTransactionLock().getReadLockCount()).isAtLeast(1));
 
-            // blocks as offset 1 is blocked sending, then unblock 1, and make sure that makes us return
+            // blocks as offset 1 is blocked sending and so cannot acquire commit lock
+            // unblock 1 as unblocking function, and make sure that makes us return
+            await("Ensure expected produce lock is now held by blocked worker thread")
+                    .untilAtomic(blockedOn1, Matchers.is(Matchers.equalTo(true)));
             var commitBlocks = new BlockedThreadAsserter();
             commitBlocks.assertUnblocksAfter(() -> {
+                log.debug("Running control loop which should block until offset 1 is released by finishing produce");
                 try {
                     pc.controlLoop(userFunc, o -> {
                     });
