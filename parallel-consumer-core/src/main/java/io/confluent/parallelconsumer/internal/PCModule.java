@@ -4,6 +4,10 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
+import lombok.Setter;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.producer.Producer;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -20,8 +24,6 @@ import java.util.function.Supplier;
  *
  * @author Antony Stubbs
  */
-// Module
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public abstract class PCModule<K, V> {
 
     @Getter
@@ -39,7 +41,7 @@ public abstract class PCModule<K, V> {
         return optionsInstance;
     }
 
-    ProducerWrap<K, V> kvProducerWrap;
+    private ProducerWrap<K, V> kvProducerWrap;
 
     protected ProducerWrap<K, V> producerWrap() {
         if (this.kvProducerWrap == null) {
@@ -48,7 +50,7 @@ public abstract class PCModule<K, V> {
         return kvProducerWrap;
     }
 
-    ProducerManager<K, V> kvProducerManager;
+    private ProducerManager<K, V> kvProducerManager;
 
     //Provides
     protected ProducerManager<K, V> producerManager() {
@@ -58,7 +60,7 @@ public abstract class PCModule<K, V> {
         return kvProducerManager;
     }
 
-    ConsumerManager consumerManager;
+    private ConsumerManager consumerManager;
 
     protected ConsumerManager<K, V> consumerManager() {
         if (consumerManager == null) {
@@ -67,7 +69,7 @@ public abstract class PCModule<K, V> {
         return consumerManager;
     }
 
-    WorkManager workManager;
+    private WorkManager workManager;
 
     public WorkManager<K, V> workManager() {
         if (workManager == null) {
@@ -89,7 +91,7 @@ public abstract class PCModule<K, V> {
         return dynamicLoadFactor;
     }
 
-    BrokerPollSystem brokerPollSystem;
+    private BrokerPollSystem brokerPollSystem;
 
     protected BrokerPollSystem<K, V> brokerPoller(AbstractParallelEoSStreamProcessor<K, V> pc) {
         if (brokerPollSystem == null) {
@@ -101,5 +103,9 @@ public abstract class PCModule<K, V> {
 
     public Supplier<AbstractParallelEoSStreamProcessor<K, V>> pcSupplier() {
         return this::pc;
+    }
+
+    public Consumer<K, V> consumer() {
+        return optionsInstance.getConsumer();
     }
 }

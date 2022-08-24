@@ -8,6 +8,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -61,7 +62,6 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @SneakyThrows
     public void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                    Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
-        // todo refactor out the producer system to a sub class
         if (!getOptions().isProducerSupplied()) {
             throw new IllegalArgumentException("To use the produce flows you must supply a Producer in the options");
         }
@@ -112,8 +112,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                     var recordMetadata = futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
 
                     var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
-                    results.add(result);
-                }
+                results.add(result);
+            }
                 return null; // return from timer function
             });
         } catch (Exception e) {

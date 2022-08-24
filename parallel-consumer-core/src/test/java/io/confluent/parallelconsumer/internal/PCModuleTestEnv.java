@@ -6,6 +6,9 @@ import lombok.NonNull;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
+import org.apache.kafka.clients.producer.Producer;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;

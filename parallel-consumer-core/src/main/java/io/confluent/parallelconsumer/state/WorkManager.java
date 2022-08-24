@@ -84,11 +84,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public WorkManager(final ParallelConsumerOptions<K, V> newOptions,
                        final DynamicLoadFactor dynamicExtraLoadFactor,
-                       Clock clock) {
+                      final Clock clock) {
         this.options = newOptions;
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionStateManager<>(options.getConsumer(), sm, options, clock);
+        this.pm = new PartitionStateManager<>(options.getModule().consumer(), sm, options, clock);
     }
 
     /**
