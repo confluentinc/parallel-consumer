@@ -117,10 +117,10 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @BeforeEach
     void setup() {
-        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
-        wm = new WorkManager<>(ParallelConsumerOptions.<String, String>builder().build(), consumer);
+        MockConsumer<String, String> mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        wm = new WorkManager<>(ParallelConsumerOptions.<String, String>builder().consumer(mockConsumer).build());
         wm.onPartitionsAssigned(UniLists.of(tp));
-        offsetCodecManager = new OffsetMapCodecManager<>(consumer);
+        offsetCodecManager = new OffsetMapCodecManager<>(mockConsumer);
     }
 
     @BeforeAll
