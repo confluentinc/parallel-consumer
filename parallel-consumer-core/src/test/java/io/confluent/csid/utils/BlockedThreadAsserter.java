@@ -9,6 +9,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static java.time.Duration.ofSeconds;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -25,6 +26,11 @@ public class BlockedThreadAsserter {
         return methodReturned.get();
     }
 
+
+    public void assertFunctionBlocks(Runnable functionExpectedToBlock) {
+        assertFunctionBlocks(functionExpectedToBlock, ofSeconds(1));
+    }
+
     /**
      * todo add string message param
      */
@@ -33,7 +39,7 @@ public class BlockedThreadAsserter {
             try {
                 functionExpectedToBlock.run();
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                log.error("Error in blocking function", e);
             }
             methodReturned.set(true);
         });
@@ -60,15 +66,25 @@ public class BlockedThreadAsserter {
         AtomicBoolean unblockerHasRun = new AtomicBoolean(false);
         scheduledExecutorService.schedule(() -> {
                     log.debug("Running unblocking function - blocked function should return ONLY after this (which will be tested)");
-                    unblockingFunction.run();
+                    try {
+                        unblockingFunction.run();
+                    } catch (Exception e) {
+                        log.error("Error in unlocking function", e);
+                    }
                     unblockerHasRun.set(true);
+                    log.debug("Blocked function returned");
                 },
                 unblocksAfter.toMillis(),
                 TimeUnit.MILLISECONDS);
 
         var time = TimeUtils.timeWithMeta(() -> {
-            log.debug("Running function expected to block for {}...", unblocksAfter);
-            functionExpectedToBlock.run();
+            log.debug("Running function expected to block for at least {}...", unblocksAfter);
+            try {
+                functionExpectedToBlock.run();
+            } catch (Exception e) {
+                log.error("Error in blocking function", e);
+            }
+            log.debug("Unblocking function finished returned");
             return Void.class;
         });
         log.debug("Function unblocked after {}", time.getElapsed());
@@ -79,4 +95,10 @@ public class BlockedThreadAsserter {
         Truth.assertWithMessage("Unblocking function should complete OK (if false, may not have run at all - or that the expected function to block did NOT block)")
                 .that(unblockerHasRun.get()).isTrue();
     }
+
+    public void assertUnblocksAfter(final Runnable functionExpectedToBlock,
+                                    final Runnable unblockingFunction) {
+        assertUnblocksAfter(functionExpectedToBlock, unblockingFunction, ofSeconds(1));
+    }
+
 }

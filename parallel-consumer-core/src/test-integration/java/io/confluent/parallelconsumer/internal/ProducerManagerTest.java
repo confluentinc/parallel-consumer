@@ -117,26 +117,16 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         var produceReadLock = pm.beginProducing();
         produceOneRecord();
 
-        {
-            // todo extract generic Blocked method tester
-            AtomicBoolean blockedCommitterReturned = new AtomicBoolean(false);
-            Thread blocked = new Thread(() -> {
-                pm.preAcquireWork();
-                pm.postCommit();
-                blockedCommitterReturned.set(true);
-            });
-            blocked.start();
+        new BlockedThreadAsserter().assertFunctionBlocks(() -> {
+            // commit sequence
+            pm.preAcquireWork();
+            pm.postCommit();
+        });
 
-            await("pretend to start to commit - acquire commit lock")
-                    .pollDelay(ofSeconds(1))
-                    .untilAsserted(
-                            () -> Truth.assertWithMessage("Thread should be sleeping/blocked and not have returned")
-                                    .that(blockedCommitterReturned.get())
-                                    .isFalse());
-        }
-
-        // pretend to finish producing records
+        // pretend to finish producing records, give the lock back
+        log.debug("Unlocking...");
         pm.finishProducing(produceReadLock);
+
 
         // start actual commit - acquire commit lock
         pm.preAcquireWork();
@@ -145,26 +135,15 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         assertThat(pm).isTransactionCommittingInProgress();
 
         // try to send more records, which will block as tx in process
-        final AtomicBoolean blockedRecordSenderReturned = new AtomicBoolean(false);
-        {
-            Thread blocked = new Thread(() -> {
-                var produceLock = pm.beginProducing();
-                pm.finishProducing(produceLock);
-                blockedRecordSenderReturned.set(true);
-            });
-            blocked.start();
+        // Thread should be sleeping/blocked and not have returned
+        var blockedRecordSenderReturned = new BlockedThreadAsserter();
+        blockedRecordSenderReturned.assertFunctionBlocks(() -> {
+            log.debug("Starting sending records - will block due to open commit");
+            var produceLock = pm.beginProducing();
+            log.debug("Then after released by finishing tx, complete the producing");
+            pm.finishProducing(produceLock);
+        });
 
-            await("starting sending records blocked")
-                    .pollDelay(ofSeconds(1))
-                    .untilAsserted(
-                            () -> Truth.assertWithMessage("Thread should be sleeping/blocked and not have returned")
-                                    .that(blockedRecordSenderReturned.get())
-                                    .isFalse());
-
-//            var blockedSends = produceOneRecord();
-//            // assert these sends are blocked from sending their output record, as tx in progress
-//            assertThat(blockedSends).hasSize(-1);
-        }
 
         // pretend to finish tx
         pm.postCommit();
@@ -173,7 +152,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         assertThat(pm).isNotTransactionCommittingInProgress();
 
         //
-        await("blocked sends should only now complete").untilTrue(blockedRecordSenderReturned);
+        await("blocked sends should only now complete").until(blockedRecordSenderReturned::functionHasCompleted);
     }
 
     private List<ParallelConsumer.Tuple<ProducerRecord<String, String>, Future<RecordMetadata>>> produceOneRecord() {
@@ -581,5 +560,15 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
     }
 
     // todo test allowEagerProcessingDuringTransactionCommit
+
+    @Test
+    @Disabled
+    void commitLockTimeoutShouldRecover() {
+    }
+
+    @Test
+    @Disabled
+    void produceLockTimeoutShouldRecover() {
+    }
 
 }

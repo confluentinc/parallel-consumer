@@ -404,13 +404,14 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         boolean gotLock = false;
         try {
             log.debug("Acquiring commit lock...");
-            gotLock = writeLock.tryLock() || writeLock.tryLock(12, TimeUnit.SECONDS);
-            log.debug("Commit lock acquired.");
+            gotLock = writeLock.tryLock() || writeLock.tryLock(6, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
         if (!gotLock) {
             throw new InternalRuntimeError("Timeout getting commit lock - slow or too many records being ack'd?");
+        } else {
+            log.debug("Commit lock acquired.");
         }
     }
 
