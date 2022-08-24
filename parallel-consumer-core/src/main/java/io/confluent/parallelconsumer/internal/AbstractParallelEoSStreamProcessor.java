@@ -220,8 +220,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
-    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
-        this(newOptions, new PCModuleProd<>(newOptions));
+    protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
+        this(newOptions, new PCModule<>(newOptions));
     }
 
     /**
@@ -230,7 +230,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see ParallelConsumerOptions
      */
-    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
+    protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         module.setParallelEoSStreamProcessor(this);
