@@ -8,17 +8,14 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.SneakyThrows;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.*;
-import org.apache.kafka.clients.producer.internals.TransactionManager;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
@@ -29,15 +26,16 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 
+/**
+ * todo docs
+ */
 @Slf4j
+@ToString(onlyExplicitlyIncluded = true)
 public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
-    protected final Producer<K, V> producer;
+    protected final ProducerWrap<K, V> producer;
 
-    private final ParallelConsumerOptions options;
-
-    private final boolean producerIsConfiguredForTransactions;
-
+    private final ParallelConsumerOptions<K, V> options;
 
     /**
      * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
@@ -46,17 +44,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     private ReentrantReadWriteLock producerTransactionLock;
 
-    // nasty reflection
-    private Field txManagerField;
-    private Method txManagerMethodIsCompleting;
-    private Method txManagerMethodIsReady;
-
-    public ProducerManager(final Producer<K, V> newProducer, final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> wm, ParallelConsumerOptions options) {
+    public ProducerManager(ProducerWrap<K, V> newProducer,
+                           ConsumerManager<K, V> newConsumer,
+                           WorkManager<K, V> wm,
+                           ParallelConsumerOptions<K, V> options) {
         super(newConsumer, wm);
         this.producer = newProducer;
         this.options = options;
-
-        producerIsConfiguredForTransactions = setupReflection();
 
         initProducer();
     }
@@ -64,10 +58,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private void initProducer() {
         producerTransactionLock = new ReentrantReadWriteLock(true);
 
-        // String transactionIdProp = options.getProducerConfig().getProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
-        // boolean txIdSupplied = isBlank(transactionIdProp);
         if (options.isUsingTransactionalProducer()) {
-            if (!producerIsConfiguredForTransactions) {
+            if (!producer.isConfiguredForTransactions()) {
                 throw new IllegalArgumentException("Using transactional option, yet Producer doesn't have a transaction ID - Producer needs a transaction id");
             }
             try {
@@ -79,39 +71,12 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                 throw e;
             }
         } else {
-            if (producerIsConfiguredForTransactions) {
-                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - " +
-                        "the Producer must not have a transaction ID for this option. This is because having such an ID forces the " +
-                        "Producer into transactional mode - i.e. you cannot use it without using transactions.");
+            if (producer.isConfiguredForTransactions()) {
+                throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - "
+                        + "the Producer must not have a transaction ID for this option. This is because having such an ID forces the "
+                        + "Producer into transactional mode - i.e. you cannot use it without using transactions.");
             }
         }
-    }
-
-    /**
-     * Nasty reflection but better than relying on user supplying their config
-     *
-     * @see AbstractParallelEoSStreamProcessor#checkAutoCommitIsDisabled
-     */
-    @SneakyThrows
-    private boolean getProducerIsTransactional() {
-        if (producer instanceof MockProducer) {
-            // can act as both, delegate to user selection
-            return options.isUsingTransactionalProducer();
-        } else {
-            TransactionManager transactionManager = getTransactionManager();
-            if (transactionManager == null) {
-                return false;
-            } else {
-                return transactionManager.isTransactional();
-            }
-        }
-    }
-
-    @SneakyThrows
-    private TransactionManager getTransactionManager() {
-        if (txManagerField == null) return null;
-        TransactionManager transactionManager = (TransactionManager) txManagerField.get(producer);
-        return transactionManager;
     }
 
     /**
@@ -179,10 +144,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             if (retryCount > arbitrarilyChosenLimitForArbitraryErrorSituation) {
                 String msg = msg("Retired too many times ({} > limit of {}), giving up. See error above.", retryCount, arbitrarilyChosenLimitForArbitraryErrorSituation);
                 log.error(msg, lastErrorSavedForRethrow);
-                throw new RuntimeException(msg, lastErrorSavedForRethrow);
+                throw new InternalRuntimeError(msg, lastErrorSavedForRethrow);
             }
             try {
-                if (producer instanceof MockProducer) {
+                if (producer.isMockProducer()) {
                     // see bug https://issues.apache.org/jira/browse/KAFKA-10382
                     // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
                     synchronized (producer) {
@@ -194,15 +159,15 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     // producer commit lock should already be acquired at this point, before work was retrieved to commit,
                     // so that more messages don't sneak into this tx block - the consumer records of which won't yet be
                     // in this offset collection
-                    ensureLockHeld();
+                    ensureCommitLockHeld();
 
                     boolean retrying = retryCount > 0;
                     if (retrying) {
-                        if (isTransactionCompleting()) {
+                        if (producer.isTransactionCompleting()) {
                             // try wait again
-                            producer.commitTransaction();
+                            commitTransaction();
                         }
-                        if (isTransactionReady()) {
+                        if (producer.isTransactionReady()) {
                             // tx has completed since we last tried, start a new one
                             producer.beginTransaction();
                         }
@@ -213,8 +178,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                         }
                     } else {
                         // happy path
-                        producer.commitTransaction();
-                        producer.beginTransaction();
+                        commitTransaction();
+                        // delete
+//                        beginTransaction();
                     }
                 }
 
@@ -230,67 +196,60 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         }
     }
 
-    /**
-     * @return boolean which shows if we are setup for transactions or now
-     */
-    @SneakyThrows
-    private boolean setupReflection() {
-        if (producer instanceof KafkaProducer) {
-            txManagerField = producer.getClass().getDeclaredField("transactionManager");
-            txManagerField.setAccessible(true);
-
-            boolean producerIsConfiguredForTransactions = getProducerIsTransactional();
-            if (producerIsConfiguredForTransactions) {
-                TransactionManager transactionManager = getTransactionManager();
-                txManagerMethodIsCompleting = transactionManager.getClass().getDeclaredMethod("isCompleting");
-                txManagerMethodIsCompleting.setAccessible(true);
-
-                txManagerMethodIsReady = transactionManager.getClass().getDeclaredMethod("isReady");
-                txManagerMethodIsReady.setAccessible(true);
-            }
-            return producerIsConfiguredForTransactions;
-        } else if (producer instanceof MockProducer) {
-            // can act as both, delegate to user selection
-            return options.isUsingTransactionalProducer();
-        } else {
-            // unknown
-            return false;
-        }
+    private void commitTransaction() {
+        producer.commitTransaction();
     }
 
     /**
-     * TODO talk about alternatives to this brute force approach for retrying committing transactions
+     * todo tx starting should be on demand of next send only? dangling tx on quiet topics will block topic reading in isolate committed mode
+     * todo only do this lazy when actually sending a message when state is NOT_BEGUN
      */
-    @SneakyThrows
-    private boolean isTransactionCompleting() {
-        if (producer instanceof MockProducer) return false;
-        return (boolean) txManagerMethodIsCompleting.invoke(getTransactionManager());
+    private void beginTransaction() {
+        /*
+         // terminal general
+         AuthorizationException – fatal error indicating that the configured transactional.id is not authorized. See the exception for more details
+         KafkaException – if the producer has encountered a previous fatal error or for any other unexpected error
+
+         // terminal tx
+         IllegalStateException – if no transactional.id has been configured or if initTransactions() has not yet been invoked
+         UnsupportedVersionException – fatal error indicating the broker does not support transactions (i.e. if its version is lower than 0.11.0.0)
+         ProducerFencedException – if another producer with the same transactional.id is active
+         InvalidProducerEpochException – if the producer has attempted to produce with an old epoch to the partition leader. See the exception for more details
+
+         // retriable tx
+         none
+         */
+        producer.beginTransaction();
     }
 
-    /**
-     * TODO talk about alternatives to this brute force approach for retrying committing transactions
-     */
-    @SneakyThrows
-    private boolean isTransactionReady() {
-        if (producer instanceof MockProducer) return true;
-        return (boolean) txManagerMethodIsReady.invoke(getTransactionManager());
+    public enum ProducerState {
+        INSTANTIATED, INIT, BEGIN, COMMIT, ABORT, CLOSE
     }
 
     /**
      * Assumes the system is drained at this point, or draining is not desired.
      */
-    public void close(final Duration timeout) {
+    public void close(Duration timeout) {
         log.debug("Closing producer, assuming no more in flight...");
-        if (options.isUsingTransactionalProducer() && !isTransactionReady()) {
+        if (options.isUsingTransactionalProducer() && !producer.isTransactionReady()) {
             acquireCommitLock();
             try {
                 // close started after tx began, but before work was done, otherwise a tx wouldn't have been started
-                producer.abortTransaction();
+                abortTransaction();
             } finally {
                 releaseCommitLock();
             }
         }
+        closeProducer(timeout);
+    }
+
+    private void closeProducer(Duration timeout) {
         producer.close(timeout);
+    }
+
+    private void abortTransaction() {
+        producer.abortTransaction();
+
     }
 
     private void acquireCommitLock() {
@@ -304,19 +263,23 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void releaseCommitLock() {
-        log.trace("Release commit lock");
+        log.debug("Releasing commit lock...");
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
         if (!producerTransactionLock.isWriteLockedByCurrentThread())
             throw new IllegalStateException("Not held be me");
         writeLock.unlock();
+        log.debug("Commit lock released.");
     }
 
-    private void ensureLockHeld() {
+    private void ensureCommitLockHeld() {
         if (!producerTransactionLock.isWriteLockedByCurrentThread())
             throw new IllegalStateException("Expected commit lock to be held");
     }
 
-    public boolean isTransactionInProgress() {
+    /**
+     * todo docs
+     */
+    public boolean isTransactionCommittingInProgress() {
         return producerTransactionLock.isWriteLocked();
     }
 }
