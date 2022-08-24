@@ -333,6 +333,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * loaded records.
      */
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
+        log.debug("Incoming {} new records...", recordsMap.count());
         for (var partition : recordsMap.partitions()) {
             var recordsList = recordsMap.records(partition);
             var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();

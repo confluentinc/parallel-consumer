@@ -54,10 +54,11 @@ public class EpochAndRecordsMap<K, V> {
      * The number of records for all topics
      */
     public int count() {
-        int count = 0;
-        for (var recs : this.recordMap.values())
-            count += recs.getRecords().size();
-        return count;
+        return this.recordMap.values().stream()
+                .mapToInt(x ->
+                        x.getRecords().size()
+                )
+                .sum();
     }
 
     @Value

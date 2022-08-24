@@ -30,6 +30,8 @@
     <!--    <logger name="io.confluent.parallelconsumer" level="info"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
+    <logger name="org.apache.kafka" level="warn"/>
+
 
     <!--    <logger name="io.confluent.csid.utils.LatchTestUtils" level="trace"/>-->
 

@@ -701,10 +701,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
                                    Consumer<R> callback) throws TimeoutException, ExecutionException {
-        //
-        handleWork(userFunction, callback);
-
-        //
+        // todo refactor to method?
         if (state == running) {
             if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
@@ -713,7 +710,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 brokerPollSubsystem.wakeupIfPaused();
             }
         }
-
 
         // acquiring the commit lock here, still allows user function side effects to run while committing a transaction
         // todo optionally prevent side affects during transaction commit by acquiring the lock before getting work
@@ -741,13 +737,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // offsets will be committed when the consumer has its partitions revoked
             log.trace("Loop: Maybe commit");
             commitOffsetsThatAreReady();
-//            commitOffsetsMaybe();
         }
 
-        // blocking version if box empty
-        if (workMailBox.isEmpty()) {
-            Duration timeToBlockFor = getTimeToBlockFor();
-            processWorkCompleteMailBox(timeToBlockFor);
+        {
+            // blocking on inbox should only be done after we've distributed potential work
+            // todo refactor to method so cannot be seperated
+
+            //
+            handleWork(userFunction, callback);
+
+            // blocking version if box empty
+            if (workMailBox.isEmpty()) {
+                Duration timeToBlockFor = getTimeToBlockFor();
+                processWorkCompleteMailBox(timeToBlockFor);
+            }
         }
 
         // run call back
@@ -780,6 +783,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
+    // todo rename to retrieveAndDistribute
     private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
@@ -1060,7 +1064,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         //
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
-        log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
+        log.debug("Calculated next commit time in {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
     }
 
