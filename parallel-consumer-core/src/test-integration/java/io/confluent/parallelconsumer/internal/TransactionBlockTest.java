@@ -31,16 +31,20 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
  * Tests around ensuring the Producer system blocks further work collection and record sending through the commit phase
  *
  * @author Antony Stubbs
+ * @see ProducerManagerTest
  */
 @Tag("transactions")
 @Tag("#355")
 @Slf4j
+        // todo implement or delete - all covered in ProducerManagerTest
 // todo extend broker integration test instead
 class TransactionBlockTest extends TransactionMarkersTest {
 
     /**
      * Producer blocks any further work being started or records being sent during commit phase
      */
+    // todo implement or delete
+    @Disabled
     @Test
     void testProducerLock() {
         var isolationCommittedConsumer = kcu.createNewConsumer(NEW_GROUP);
@@ -115,6 +119,8 @@ class TransactionBlockTest extends TransactionMarkersTest {
      * Test aborting the second tx has only first plus nothing in result topic
      */
     @Test
+    // todo implement or delete
+    @Disabled
     void abortedSecondTransaction() {
         Truth.assertThat(true).isFalse();
     }
@@ -123,6 +129,8 @@ class TransactionBlockTest extends TransactionMarkersTest {
      * Test aborting the first tx ends up with nothing
      */
     @Test
+    // todo implement or delete
+    @Disabled
     void abortedBothTransactions() {
         // do the above again, but instead abort the transaction
         // assert nothing on result topic
@@ -134,6 +142,7 @@ class TransactionBlockTest extends TransactionMarkersTest {
      * otherwise they already be drained in the producer flush) while blocking any further work from being started.
      */
     @Test()
+    // todo implement or delete
     @Disabled("Not implemented")
     void drainInflightWork() {
     }
@@ -150,6 +159,8 @@ class TransactionBlockTest extends TransactionMarkersTest {
      * slow
      */
     @Test
+    @Disabled
+    // todo delete - effectively done in the ProducerManagerTest's
     void mockTest() {
         Class<?> dynamicType = new ByteBuddy()
                 .subclass(Object.class)
