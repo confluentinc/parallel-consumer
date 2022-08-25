@@ -727,9 +727,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
+    /**
+     * If we don't have enough work queued, and the poller is paused for throttling,
+     * <p>
+     * todo move into {@link WorkManager}?
+     */
     private void maybeWakeupPoller() {
         if (state == running) {
-            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
+            if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
                         options.getTargetAmountOfRecordsInFlight());
@@ -739,10 +744,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
+     * If it's time to commit, and using transactional system, tries to acquire the commit lock.
+     * <p>
      * Call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
      * (so no more records can be sent, before collecting offsets to commit).
      *
-     * @return true if committing should be attempted now
+     * @return true if committing should either way be attempted now
      */
     private boolean maybeAcquireCommitLock() {
         final boolean shouldTryCommitNow = isTimeToCommitNow();
