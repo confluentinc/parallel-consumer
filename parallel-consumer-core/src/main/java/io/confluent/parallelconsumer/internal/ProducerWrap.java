@@ -18,7 +18,7 @@ import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
- * todo docs
+ * Our extension of the standard Consumer to mostly add some introspection functions and state tracking.
  *
  * @author Antony Stubbs
  */
