@@ -181,6 +181,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     } else {
                         // happy path
                         commitTransaction();
+                        producer.beginTransaction();
                     }
                 }
 
