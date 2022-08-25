@@ -11,6 +11,8 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
 
+import static org.mockito.Mockito.mock;
+
 /**
  * Version of the {@link PCModule} in test contexts.
  *
@@ -32,7 +34,10 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     }
 
     public PCModuleTestEnv() {
-        this(ParallelConsumerOptions.<String, String>builder().build());
+        this(ParallelConsumerOptions.<String, String>builder()
+                .producer(mock(Producer.class))
+                .consumer(mock(Consumer.class))
+                .build());
     }
 
     @Override
