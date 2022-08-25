@@ -8,7 +8,6 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.internal.PCModule;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -79,7 +79,12 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // if running strict with no processing during commit - get the produce lock first
         if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
-            var produceLock = pm.beginProducing();
+            ProducerManager<K, V>.ProducingLock produceLock = null;
+            try {
+                produceLock = pm.beginProducing();
+            } catch (TimeoutException e) {
+                throw new RuntimeException("Timeout trying to early acquire produce lock", e);
+            }
             context.setProducingLock(of(produceLock));
         }
 
@@ -97,7 +102,12 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
         if (options.isUsingTransactionCommitMode() && options.isAllowEagerProcessingDuringTransactionCommit()) {
-            var produceLock = pm.beginProducing();
+            ProducerManager<K, V>.ProducingLock produceLock = null;
+            try {
+                produceLock = pm.beginProducing();
+            } catch (TimeoutException e) {
+                throw new RuntimeException("Timeout trying to late acquire produce lock", e);
+            }
             context.setProducingLock(of(produceLock));
         }
 
@@ -112,8 +122,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                     var recordMetadata = futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
 
                     var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
-                results.add(result);
-            }
+                    results.add(result);
+                }
                 return null; // return from timer function
             });
         } catch (Exception e) {

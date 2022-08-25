@@ -106,7 +106,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * @return true if closed cleanly
      */
-    private boolean controlLoop() {
+    private boolean controlLoop() throws TimeoutException {
         Thread.currentThread().setName("pc-broker-poll");
         pc.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
@@ -322,8 +322,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Will silently skip if not configured with a committer
      */
-    private void maybeDoCommit() {
-        committer.ifPresent(ConsumerOffsetCommitter::maybeDoCommit);
+    private void maybeDoCommit() throws TimeoutException {
+        if (!committer.isEmpty()) {
+            committer.get().maybeDoCommit();
+        }
     }
 
     /**
@@ -337,8 +339,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Pause polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#running
-     * running}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#running running}, calling this method will be a no-op.
      * </p>
      */
     public void pausePollingAndWorkRegistrationIfRunning() {
@@ -353,8 +355,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Resume polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#paused
-     * paused}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#paused paused}, calling this method will be a no-op.
      * </p>
      */
     public void resumePollingAndWorkRegistrationIfPaused() {

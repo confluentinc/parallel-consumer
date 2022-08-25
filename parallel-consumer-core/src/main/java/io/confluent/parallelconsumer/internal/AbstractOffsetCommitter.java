@@ -12,6 +12,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -24,7 +25,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
      * Get offsets from {@link WorkManager} that are ready to commit
      */
     @Override
-    public void retrieveOffsetsAndCommit() {
+    public void retrieveOffsetsAndCommit() throws TimeoutException {
         log.debug("Find completed work to commit offsets");
         preAcquireWork();
         try {
@@ -50,7 +51,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    protected void preAcquireWork() {
+    protected void preAcquireWork() throws TimeoutException {
         // default noop
     }
 

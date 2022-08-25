@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -90,6 +91,7 @@ class ProducerManagerTest {
     /**
      * Cannot send a record during a tx commit
      */
+    @SneakyThrows
     @Test
     void sendingGetsLockedInTx() {
         assertThat(pm).isNotTransactionCommittingInProgress();
@@ -100,7 +102,11 @@ class ProducerManagerTest {
 
         new BlockedThreadAsserter().assertFunctionBlocks(() -> {
             // commit sequence
-            pm.preAcquireWork();
+            try {
+                pm.preAcquireWork();
+            } catch (TimeoutException e) {
+                throw new RuntimeException(e);
+            }
             pm.postCommit();
         });
 
@@ -120,7 +126,12 @@ class ProducerManagerTest {
         var blockedRecordSenderReturned = new BlockedThreadAsserter();
         blockedRecordSenderReturned.assertFunctionBlocks(() -> {
             log.debug("Starting sending records - will block due to open commit");
-            var produceLock = pm.beginProducing();
+            ProducerManager<String, String>.ProducingLock produceLock = null;
+            try {
+                produceLock = pm.beginProducing();
+            } catch (TimeoutException e) {
+                throw new RuntimeException(e);
+            }
             log.debug("Then after released by finishing tx, complete the producing");
             pm.finishProducing(produceLock);
         });
@@ -147,6 +158,7 @@ class ProducerManagerTest {
     /**
      * Make sure transaction get started lazy - only when a record is sent, not proactively
      */
+    @SneakyThrows
     @Test
     void txOnlyStartedUponMessageSend() {
         assertThat(pm).isNotTransactionCommittingInProgress();
@@ -230,7 +242,12 @@ class ProducerManagerTest {
             var offset1Mutex = new CountDownLatch(1);
             var blockedOn1 = new AtomicBoolean(false);
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
-                var newValue = pm.beginProducing();
+                ProducerManager<String, String>.ProducingLock newValue = null;
+                try {
+                    newValue = pm.beginProducing();
+                } catch (TimeoutException e) {
+                    throw new RuntimeException(e);
+                }
                 try {
                     producingLockRef.set(
                             newValue

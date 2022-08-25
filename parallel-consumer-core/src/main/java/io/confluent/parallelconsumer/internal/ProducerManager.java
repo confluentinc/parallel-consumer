@@ -43,7 +43,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 @ToString(onlyExplicitlyIncluded = true)
 public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
-    @Getter//(AccessLevel.PACKAGE)
+    @Getter
     protected final ProducerWrap<K, V> producerWrap;
 
     private final ParallelConsumerOptions<K, V> options;
@@ -172,11 +172,24 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         lock.unlock();
     }
 
-    @lombok.SneakyThrows
-    protected ProducingLock acquireProduceLock() {
+    protected ProducingLock acquireProduceLock() throws java.util.concurrent.TimeoutException {
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         log.trace("Acquiring produce lock...");
-        readLock.tryLock(5, TimeUnit.SECONDS);
+        Duration produceLockTimeout = options.getProduceLockAcquisitionTimeout();
+        boolean lockAcquired = false;
+        try {
+            lockAcquired = readLock.tryLock(produceLockTimeout.toSeconds(), TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new InternalRuntimeError("Interrupted while waiting to get produce lock (timeout was set to {})", e, produceLockTimeout);
+        }
+
+        if (lockAcquired) {
+            log.debug("Produce lock acquired.");
+        } else {
+            throw new java.util.concurrent.TimeoutException(msg("Timeout while waiting to get produce lock (was set to {}). " +
+                    "Commit taking too long? Try increasing the produce lock timeout.", produceLockTimeout));
+        }
+
         log.trace("Produce lock acquired.");
         return new ProducingLock(readLock);
     }
@@ -186,7 +199,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * calling {@link Producer#flush()}.
      */
     @Override
-    protected void preAcquireWork() {
+    protected void preAcquireWork() throws java.util.concurrent.TimeoutException {
         acquireCommitLock();
         drain();
     }
@@ -332,7 +345,11 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     public void close(Duration timeout) {
         log.debug("Closing producer, assuming no more in flight...");
         if (options.isUsingTransactionalProducer() && !producerWrap.isTransactionReady()) {
-            acquireCommitLock();
+            try {
+                acquireCommitLock();
+            } catch (java.util.concurrent.TimeoutException e) {
+                log.error("Timeout acquiring commit lock, will try to abort anyway", e);
+            }
             try {
                 // close started after tx began, but before work was done, otherwise a tx wouldn't have been started
                 abortTransaction();
@@ -351,7 +368,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         producerWrap.abortTransaction();
     }
 
-    private void acquireCommitLock() {
+    private void acquireCommitLock() throws java.util.concurrent.TimeoutException {
         if (producerTransactionLock.isWriteLocked() && producerTransactionLock.isWriteLockedByCurrentThread()) {
             log.debug("Lock already held, returning with-out reentering to avoid write lock layers...");
             return;
@@ -362,19 +379,22 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             throw new ConcurrentModificationException(this.getClass().getSimpleName() + " is not safe for multi-threaded access");
         }
 
-        // lock the lock
-        // todo remove or use sensible value
+        // acquire lock the commit lock
         boolean gotLock = false;
+        var commitLockTimeout = options.getCommitLockAcquisitionTimeout();
         try {
             log.debug("Acquiring commit lock...");
-            gotLock = writeLock.tryLock() || writeLock.tryLock(6, TimeUnit.SECONDS);
+            gotLock = writeLock.tryLock(commitLockTimeout.toSeconds(), TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            log.error("Interrupted during write lock acquire", e);
+            throw new InternalRuntimeError("Interrupted during write lock acquire", e);
         }
-        if (!gotLock) {
-            throw new InternalRuntimeError("Timeout getting commit lock - slow or too many records being ack'd?");
-        } else {
+
+        if (gotLock) {
             log.debug("Commit lock acquired.");
+        } else {
+            var msg = msg("Timeout getting commit lock (which was set to {}). Slow or too many records being ack'd? " +
+                    "Try increasing the commit lock timeout, or reduce your record processing time.", commitLockTimeout);
+            throw new java.util.concurrent.TimeoutException(msg);
         }
     }
 
@@ -402,7 +422,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     /**
      * Must call before sending records - acquires the lock on sending records, which blocks committing transactions)
      */
-    public ProducingLock beginProducing() {
+    public ProducingLock beginProducing() throws java.util.concurrent.TimeoutException {
         return acquireProduceLock();
     }
 

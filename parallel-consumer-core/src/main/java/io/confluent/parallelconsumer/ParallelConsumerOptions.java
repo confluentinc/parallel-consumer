@@ -202,6 +202,20 @@ public class ParallelConsumerOptions<K, V> {
     private boolean allowEagerProcessingDuringTransactionCommit = false;
 
     /**
+     * Time to allow for acquiring the commit lock. If record processing or producing takes a long time, you may need to
+     * increase this.
+     */
+    @Builder.Default
+    private Duration commitLockAcquisitionTimeout = Duration.ofMinutes(5);
+
+    /**
+     * Time to allow for acquiring the produce lock. If transaction committing a long time, you may need to increase
+     * this.
+     */
+    @Builder.Default
+    private Duration produceLockAcquisitionTimeout = Duration.ofMinutes(1);
+
+    /**
      * Time between commits. Using a higher frequency (a lower value) will put more load on the brokers.
      */
     @Builder.Default
