@@ -199,7 +199,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * calling {@link Producer#flush()}.
      */
     @Override
-    protected void preAcquireWork() throws java.util.concurrent.TimeoutException {
+    protected void preAcquireWork() throws java.util.concurrent.TimeoutException, InterruptedException {
         acquireCommitLock();
         drain();
     }
@@ -347,8 +347,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         if (options.isUsingTransactionalProducer() && !producerWrap.isTransactionReady()) {
             try {
                 acquireCommitLock();
-            } catch (java.util.concurrent.TimeoutException e) {
-                log.error("Timeout acquiring commit lock, will try to abort anyway", e);
+            } catch (java.util.concurrent.TimeoutException | InterruptedException e) {
+                log.error("Exception acquiring commit lock, will try to abort anyway", e);
             }
             try {
                 // close started after tx began, but before work was done, otherwise a tx wouldn't have been started
@@ -368,7 +368,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         producerWrap.abortTransaction();
     }
 
-    private void acquireCommitLock() throws java.util.concurrent.TimeoutException {
+    private void acquireCommitLock() throws java.util.concurrent.TimeoutException, InterruptedException {
         if (producerTransactionLock.isWriteLocked() && producerTransactionLock.isWriteLockedByCurrentThread()) {
             log.debug("Lock already held, returning with-out reentering to avoid write lock layers...");
             return;
@@ -380,14 +380,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         }
 
         // acquire lock the commit lock
-        boolean gotLock = false;
         var commitLockTimeout = options.getCommitLockAcquisitionTimeout();
-        try {
-            log.debug("Acquiring commit lock...");
-            gotLock = writeLock.tryLock(commitLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            throw new InternalRuntimeError("Interrupted during write lock acquire", e);
-        }
+        log.debug("Acquiring commit lock...");
+        boolean gotLock = writeLock.tryLock(commitLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
         if (gotLock) {
             log.debug("Commit lock acquired.");

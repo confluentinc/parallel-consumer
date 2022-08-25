@@ -104,7 +104,7 @@ class ProducerManagerTest {
             // commit sequence
             try {
                 pm.preAcquireWork();
-            } catch (TimeoutException e) {
+            } catch (Exception e) {
                 throw new RuntimeException(e);
             }
             pm.postCommit();

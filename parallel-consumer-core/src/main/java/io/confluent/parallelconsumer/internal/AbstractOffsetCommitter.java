@@ -25,7 +25,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
      * Get offsets from {@link WorkManager} that are ready to commit
      */
     @Override
-    public void retrieveOffsetsAndCommit() throws TimeoutException {
+    public void retrieveOffsetsAndCommit() throws TimeoutException, InterruptedException {
         log.debug("Find completed work to commit offsets");
         preAcquireWork();
         try {
@@ -51,7 +51,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    protected void preAcquireWork() throws TimeoutException {
+    protected void preAcquireWork() throws TimeoutException, InterruptedException {
         // default noop
     }
 

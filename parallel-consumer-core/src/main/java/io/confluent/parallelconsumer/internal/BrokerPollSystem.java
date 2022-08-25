@@ -106,11 +106,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * @return true if closed cleanly
      */
-    private boolean controlLoop() throws TimeoutException {
+    private boolean controlLoop() throws TimeoutException, InterruptedException {
         Thread.currentThread().setName("pc-broker-poll");
         pc.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
-        committer.ifPresent(x -> x.claim());
+        committer.ifPresent(ConsumerOffsetCommitter::claim);
         try {
             while (runState != closed) {
                 handlePoll();
@@ -322,7 +322,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Will silently skip if not configured with a committer
      */
-    private void maybeDoCommit() throws TimeoutException {
+    private void maybeDoCommit() throws TimeoutException, InterruptedException {
         if (committer.isPresent()) {
             committer.get().maybeDoCommit();
         }

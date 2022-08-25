@@ -67,7 +67,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
-    void commit() throws TimeoutException {
+    void commit() throws TimeoutException, InterruptedException {
         if (isOwner()) {
             retrieveOffsetsAndCommit();
         } else if (isSync()) {
@@ -169,7 +169,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         return request;
     }
 
-    void maybeDoCommit() throws TimeoutException {
+    void maybeDoCommit() throws TimeoutException, InterruptedException {
         CommitRequest poll = commitRequestQueue.poll();
         if (poll != null) {
             log.debug("Commit requested, performing...");

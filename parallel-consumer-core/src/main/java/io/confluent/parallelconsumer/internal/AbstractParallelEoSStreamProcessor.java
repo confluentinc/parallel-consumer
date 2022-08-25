@@ -492,7 +492,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private void doClose(Duration timeout) throws TimeoutException, ExecutionException {
+    private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
@@ -653,6 +653,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             while (state != closed) {
                 try {
                     controlLoop(userFunctionWrapped, callback);
+                } catch (InterruptedException e) {
+                    log.debug("Control loop interrupted, closing");
+                    doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
@@ -678,7 +681,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Main control loop
      */
     protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
-                                   Consumer<R> callback) throws TimeoutException, ExecutionException {
+                                   Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
         maybeWakeupPoller();
 
         //
@@ -751,7 +754,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @return true if committing should either way be attempted now
      */
-    private boolean maybeAcquireCommitLock() throws TimeoutException {
+    private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
         final boolean shouldTryCommitNow = isTimeToCommitNow();
         // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
@@ -1125,12 +1128,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Visible for testing
      */
-    protected void commitOffsetsThatAreReady() throws TimeoutException {
-        if (!isIdlingOrRunning()) {
-            log.debug("Not running so skipping commit");
-            return;
-        }
-
+    protected void commitOffsetsThatAreReady() throws TimeoutException, InterruptedException {
         log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");
