@@ -38,7 +38,7 @@ import java.util.function.Function;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
-import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
+import static io.confluent.parallelconsumer.internal.ProducerWrap.ProducerState.*;
 import static java.time.Duration.ofSeconds;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
