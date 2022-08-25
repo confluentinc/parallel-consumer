@@ -267,11 +267,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                             // try wait again
                             commitTransaction();
                         }
-                        // delete
-//                        if (producer.isTransactionReady()) {
-//                            // tx has completed since we last tried, start a new one
-//                            beginTransaction();
-//                        }
                         boolean transactionModeIsREADY = lastErrorSavedForRethrow == null || !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION");
                         if (transactionModeIsREADY) {
                             // try again

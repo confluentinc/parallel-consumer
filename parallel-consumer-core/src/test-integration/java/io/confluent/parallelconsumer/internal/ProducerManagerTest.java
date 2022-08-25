@@ -11,7 +11,6 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContextInternal;
-import io.confluent.parallelconsumer.integrationTests.utils.RecordFactory;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
@@ -108,8 +107,6 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
         pm = module.producerManager();
     }
 
-    RecordFactory rf = new RecordFactory();
-
     /**
      * Cannot send a record during a tx commit
      */
@@ -164,7 +161,7 @@ class ProducerManagerTest { //extends BrokerIntegrationTest<String, String> {
     }
 
     private List<ProducerRecord<String, String>> makeRecord() {
-        return rf.createRecords("topic", 1);
+        return mu.createProducerRecords("topic", 1);
     }
 
     /**

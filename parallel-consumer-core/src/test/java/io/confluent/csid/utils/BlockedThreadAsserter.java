@@ -18,6 +18,8 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * System for asserting that a given method blocks for some period of time, and optionally unblocks.
+ * <p>
+ * JUnit has {@link org.junit.jupiter.api.Assertions#assertTimeoutPreemptively} which is useful but has limitations.
  *
  * @author Antony Stubbs
  */
@@ -35,9 +37,6 @@ public class BlockedThreadAsserter {
         assertFunctionBlocks(functionExpectedToBlock, ofSeconds(1));
     }
 
-    /**
-     * todo add string message param
-     */
     public void assertFunctionBlocks(Runnable functionExpectedToBlock, final Duration blockedForAtLeast) {
         Thread blocked = new Thread(() -> {
             try {
@@ -58,9 +57,6 @@ public class BlockedThreadAsserter {
                                 .isFalse());
     }
 
-    // todo: method: assert function doesn't block. Note on JUnit's technique about it not always working.
-
-    // todo method: assert function unblocks only after 2 seconds - useful for when we can't use a separate thread to check due to locking semantics
     final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
 
     public void assertUnblocksAfter(final Runnable functionExpectedToBlock,

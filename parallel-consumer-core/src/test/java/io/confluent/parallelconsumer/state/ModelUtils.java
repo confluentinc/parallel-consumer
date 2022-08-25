@@ -19,6 +19,7 @@ import org.mockito.Mockito;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -66,7 +67,6 @@ public class ModelUtils {
         return cr;
     }
 
-    // todo duplicate?
     public ProducerRecord<String, String> createProducerRecords() {
         return new ProducerRecord<>(topic, "a-key", "a-value");
     }
@@ -76,4 +76,16 @@ public class ModelUtils {
     public ConsumerGroupMetadata consumerGroupMeta() {
         return new ConsumerGroupMetadata(groupId);
     }
+
+
+    public List<ProducerRecord<String, String>> createProducerRecords(String topicName, long numberToSend) {
+        List<ProducerRecord<String, String>> recs = new ArrayList<>();
+        for (int i = 0; i < numberToSend; i++) {
+            String key = "key-" + i;
+            ProducerRecord<String, String> record = new ProducerRecord<>(topicName, key, "value-" + i);
+            recs.add(record);
+        }
+        return recs;
+    }
+
 }

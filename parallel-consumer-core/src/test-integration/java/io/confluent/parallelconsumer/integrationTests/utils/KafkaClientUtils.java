@@ -8,6 +8,8 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -247,8 +249,8 @@ public class KafkaClientUtils {
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
 
-            var rf = new RecordFactory();
-            List<ProducerRecord<String, String>> recs = rf.createRecords(topicName, numberToSend);
+            var mu = new ModelUtils(new PCModuleTestEnv());
+            List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend);
 
             for (var record : recs) {
                 Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {

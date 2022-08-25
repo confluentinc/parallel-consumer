@@ -231,14 +231,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
     }
 
-    // todo delete
-//    public void onPostAddToMailBox() {
-////        this.produceLock.map(locl->lock.finish());
-//    }
-
     /**
-     * todo docs
-     * <p>
      * Only unlock our producing lock, when we're had the {@link WorkContainer} returned to the controllers inbound queue, so we know it'll be included properly before the next commit as a succeeded offset.
      */
     public void onPostAddToMailBox(PollContextInternal<K, V> context, Optional<ProducerManager<K, V>> producerManager) {
