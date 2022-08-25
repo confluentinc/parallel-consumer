@@ -178,7 +178,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         Duration produceLockTimeout = options.getProduceLockAcquisitionTimeout();
         boolean lockAcquired = false;
         try {
-            lockAcquired = readLock.tryLock(produceLockTimeout.toSeconds(), TimeUnit.SECONDS);
+            lockAcquired = readLock.tryLock(produceLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new InternalRuntimeError("Interrupted while waiting to get produce lock (timeout was set to {})", e, produceLockTimeout);
         }
@@ -384,7 +384,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         var commitLockTimeout = options.getCommitLockAcquisitionTimeout();
         try {
             log.debug("Acquiring commit lock...");
-            gotLock = writeLock.tryLock(commitLockTimeout.toSeconds(), TimeUnit.SECONDS);
+            gotLock = writeLock.tryLock(commitLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new InternalRuntimeError("Interrupted during write lock acquire", e);
         }
