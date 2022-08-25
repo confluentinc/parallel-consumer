@@ -149,9 +149,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * todo docs
-     * <p>
-     * Optimistic locking for synchronising on the producer to ensure single writer for transaction state. The other methods that manipulate the transaction must be single writer - i.e. from the controller thread actually doing the commit.
+     * Optimistic locking for synchronising on the producer to ensure single writer for transaction state. The other
+     * methods that manipulate the transaction must be single writer - i.e. from the controller thread actually doing
+     * the commit.
      * <p>
      * Thread safe.
      */
@@ -184,7 +184,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     protected ProducingLock acquireProduceLock() {
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
         log.trace("Acquiring produce lock...");
-//        readLock.lock();
         readLock.tryLock(5, TimeUnit.SECONDS);
         log.trace("Produce lock acquired.");
         return new ProducingLock(readLock);
@@ -318,10 +317,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         this.producerState = COMMIT;
     }
 
-    /**
-     * todo tx starting should be on demand of next send only? dangling tx on quiet topics will block topic reading in isolate committed mode
-     * todo only do this lazy when actually sending a message when state is NOT_BEGUN
-     */
     private void beginTransaction() {
         /*
          // terminal general
@@ -350,6 +345,9 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         return this.producerState.equals(BEGIN);
     }
 
+    /**
+     * Used to track Producer's transaction state, as it' isn't otherwise exposed.
+     */
     public enum ProducerState {
         INSTANTIATED, INIT, BEGIN, COMMIT, ABORT, CLOSE
     }
@@ -430,21 +428,24 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * todo docs
+     * Must call before sending records - acquires the lock on sending records, which blocks committing transactions)
      */
     public ProducingLock beginProducing() {
         return acquireProduceLock();
     }
 
     /**
-     * todo docs
+     * Must call after finishing sending records - unlocks the produce lock to potentially unblock transaction
+     * committing.
      */
     public void finishProducing(@NonNull ProducingLock produceLock) {
         ensureProduceStarted();
         releaseProduceLock(produceLock);
     }
 
-
+    /**
+     * Sanity check to make sure the produce lock is held.
+     */
     private void ensureProduceStarted() {
         if (options.isUsingTransactionCommitMode() && producerTransactionLock.getReadHoldCount() < 1) {
             throw new InternalRuntimeError("Need to call #beginProducing first");
@@ -452,12 +453,15 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * todo docs
+     * Readability wrapper on the {@link ReentrantReadWriteLock.ReadLock}s of our {@link #producerTransactionLock}.
      */
     @RequiredArgsConstructor
     public class ProducingLock {
         private final ReentrantReadWriteLock.ReadLock produceLock;
 
+        /**
+         * Unlocks the produce lock
+         */
         protected void unlock() {
             log.debug("Unlocking produce lock...");
             produceLock.unlock();

@@ -679,52 +679,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
                                    Consumer<R> callback) throws TimeoutException, ExecutionException {
-        // todo refactor to method?
-        if (state == running) {
-            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
-                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
-                        options.getTargetAmountOfRecordsInFlight());
-                brokerPollSubsystem.wakeupIfPaused();
-            }
-        }
+        maybeWakeupPoller();
 
-        // acquiring the commit lock here, still allows user function side effects to run while committing a transaction
-        // todo optionally prevent side affects during transaction commit by acquiring the lock before getting work
-        /**
-         * call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
-         */
-        // todo also check tx is used
-        // could do this optimistically as well, and only get the lock if state is dirty
-        final boolean shouldTryCommitNow = isTimeToCommitNow();
-        updateLastCommitCheckTime();
-        Duration timeToBlockFor;
-        if (shouldTryCommitNow) {
-            if (options.isUsingTransactionCommitMode()) {
-                // get into write lock queue, so that no new work can be started from here on
-                log.debug("Acquire commit lock pessimistically, before we try to collect offsets for committing");
-                producerManager.ifPresent(ProducerManager::preAcquireWork);
-            }
-
-            timeToBlockFor = Duration.ZERO;
-        } else {
-            timeToBlockFor = getTimeToBlockFor();
-        }
+        //
+        final boolean shouldTryCommitNow = maybeAcquireCommitLock();
 
         // make sure all work that's been completed are arranged ready for commit
-        log.trace("Loop: Process mailbox");
+        Duration timeToBlockFor = shouldTryCommitNow ? Duration.ZERO : getTimeToBlockFor();
         processWorkCompleteMailBox(timeToBlockFor);
 
         //
-        if (isIdlingOrRunning() && shouldTryCommitNow) {
+        if (shouldTryCommitNow) {
             // offsets will be committed when the consumer has its partitions revoked
-            log.trace("Loop: Maybe commit");
             commitOffsetsThatAreReady();
         }
 
-
         // distribute more work
-        handleWork(userFunction, callback);
+        retrieveAndDistributeWork(userFunction, callback);
 
         // run call back
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
@@ -756,8 +727,35 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    // todo rename to retrieveAndDistribute
-    private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    private void maybeWakeupPoller() {
+        if (state == running) {
+            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
+                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
+                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
+                        options.getTargetAmountOfRecordsInFlight());
+                brokerPollSubsystem.wakeupIfPaused();
+            }
+        }
+    }
+
+    /**
+     * Call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
+     * (so no more records can be sent, before collecting offsets to commit).
+     *
+     * @return true if committing should be attempted now
+     */
+    private boolean maybeAcquireCommitLock() {
+        final boolean shouldTryCommitNow = isTimeToCommitNow();
+        // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
+        if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
+            // get into write lock queue, so that no new work can be started from here on
+            log.debug("Acquiring commit lock pessimistically, before we try to collect offsets for committing");
+            producerManager.ifPresent(ProducerManager::preAcquireWork);
+        }
+        return shouldTryCommitNow;
+    }
+
+    private <R> int retrieveAndDistributeWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
 
@@ -1046,6 +1044,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     protected boolean isTimeToCommitNow() {
+        updateLastCommitCheckTime();
+
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
         boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;
@@ -1117,6 +1117,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Visible for testing
      */
     protected void commitOffsetsThatAreReady() {
+        if (!isIdlingOrRunning()) {
+            log.debug("Not running so skipping commit");
+            return;
+        }
+
         log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");
