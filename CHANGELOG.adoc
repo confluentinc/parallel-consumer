@@ -21,7 +21,6 @@ endif::[]
 === Improvements
 
 - Adds a very simple Dependency Injection system modeled on Dagger (#398)
-- Various refactorings e.g. new ProducerWrap
 
 == v0.5.2.2
 
