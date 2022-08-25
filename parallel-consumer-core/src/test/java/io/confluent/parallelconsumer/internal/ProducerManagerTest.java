@@ -358,15 +358,4 @@ class ProducerManagerTest {
         Truth.assertThat(true).isFalse();
     }
 
-    /**
-     * Test option to drain consumer records (work records) that are in flight (but haven't produced a record yet,
-     * otherwise they already be drained in the producer flush) while blocking any further work from being started.
-     */
-    @Test()
-    // todo implement or delete
-    @Disabled("Not implemented")
-    void drainInflightWork() {
-    }
-
-
 }
