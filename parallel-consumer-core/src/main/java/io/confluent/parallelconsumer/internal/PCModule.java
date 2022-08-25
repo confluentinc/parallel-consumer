@@ -13,11 +13,9 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
 /**
- * DI
+ * Minimum dependency injection system, modled on how Dagger works.
  * <p>
- * todo docs
- * <p>
- * A-la' Dagger.
+ * Note: Not using Dagger as PC has a zero dependency policy, and franky it would be overkill for our needs.
  *
  * @author Antony Stubbs
  */
