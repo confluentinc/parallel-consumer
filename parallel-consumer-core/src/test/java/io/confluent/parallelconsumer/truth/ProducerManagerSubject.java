@@ -45,6 +45,8 @@ public class ProducerManagerSubject extends ProducerManagerParentSubject impleme
     }
 
     public void stateIs(ProducerWrap.ProducerState targetState) {
-        check("getProducerState()").that(actual.getProducerWrap().getProducerState()).isEqualTo(targetState);
+        var producerWrap = actual.getProducerWrap();
+        var producerState = producerWrap.getProducerState();
+        check("getProducerState()").that(producerState).isEqualTo(targetState);
     }
 }

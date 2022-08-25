@@ -14,8 +14,10 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.hamcrest.Matchers;
@@ -59,6 +61,8 @@ class ProducerManagerTest {
 
     ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder()
             .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+            .producer(mock(Producer.class))
+            .consumer(mock(Consumer.class))
             .build();
 
     PCModuleTestEnv module = new PCModuleTestEnv(opts) {

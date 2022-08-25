@@ -5,10 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
-import lombok.ToString;
+import lombok.*;
 import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -49,6 +46,7 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     private volatile ProducerState producerState = ProducerState.INSTANTIATED;
 
 
+    @NonNull
     private final ParallelConsumerOptions<K, V> options;
 
     /**
@@ -61,6 +59,7 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
 
+    @NonNull
     @Delegate(excludes = Excludes.class)
     private final Producer<K, V> producer;
 

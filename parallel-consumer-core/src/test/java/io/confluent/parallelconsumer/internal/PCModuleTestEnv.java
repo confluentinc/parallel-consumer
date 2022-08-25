@@ -11,9 +11,6 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 /**
  * Version of the {@link PCModule} in test contexts.
  *
@@ -25,11 +22,11 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
-        Consumer mockConsumer = mock(Consumer.class);
-        when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
+        Consumer mockConsumer = Mockito.mock(Consumer.class);
+        Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
         var override = options().toBuilder()
                 .consumer(mockConsumer)
-                .producer(mock(Producer.class))
+                .producer(Mockito.mock(Producer.class))
                 .build();
         super.optionsInstance = override;
     }
@@ -43,16 +40,11 @@ public class PCModuleTestEnv extends PCModule<String, String> {
         return mockProducerWrapTransactional();
     }
 
-    ProducerWrap mock = mock(ProducerWrap.class);
-
-    {
-        Mockito.when(mock.isConfiguredForTransactions()).thenReturn(true);
-
-    }
+    ProducerWrap<String, String> mockProduceWrap = Mockito.spy(new ProducerWrap<>(options(), true, producer()));
 
     @NonNull
     private ProducerWrap mockProducerWrapTransactional() {
-        return mock;
+        return mockProduceWrap;
     }
 
     @Override
