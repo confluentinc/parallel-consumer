@@ -27,7 +27,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
- * todo docs
+ * Sub system for interacting with the Producer and managing transactions (and thus offset committing through the
+ * Producer).
  */
 @Slf4j
 @ToString(onlyExplicitlyIncluded = true)
@@ -38,9 +39,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private final ParallelConsumerOptions<K, V> options;
 
     /**
-     * The {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must
-     * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
-     * state COMMITTING_TRANSACTION".
+     * The
+     * {@link KafkaProducer) isn't actually completely thread safe, at least when using it transactionally. We must be
+     * careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in state
+     * COMMITTING_TRANSACTION".
      */
     private ReentrantReadWriteLock producerTransactionLock;
 
@@ -161,6 +163,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     // in this offset collection
                     ensureCommitLockHeld();
 
+                    // TODO talk about alternatives to this brute force approach for retrying committing transactions
                     boolean retrying = retryCount > 0;
                     if (retrying) {
                         if (producer.isTransactionCompleting()) {
@@ -179,8 +182,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     } else {
                         // happy path
                         commitTransaction();
-                        // delete
-//                        beginTransaction();
                     }
                 }
 
@@ -198,32 +199,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     private void commitTransaction() {
         producer.commitTransaction();
-    }
-
-    /**
-     * todo tx starting should be on demand of next send only? dangling tx on quiet topics will block topic reading in isolate committed mode
-     * todo only do this lazy when actually sending a message when state is NOT_BEGUN
-     */
-    private void beginTransaction() {
-        /*
-         // terminal general
-         AuthorizationException – fatal error indicating that the configured transactional.id is not authorized. See the exception for more details
-         KafkaException – if the producer has encountered a previous fatal error or for any other unexpected error
-
-         // terminal tx
-         IllegalStateException – if no transactional.id has been configured or if initTransactions() has not yet been invoked
-         UnsupportedVersionException – fatal error indicating the broker does not support transactions (i.e. if its version is lower than 0.11.0.0)
-         ProducerFencedException – if another producer with the same transactional.id is active
-         InvalidProducerEpochException – if the producer has attempted to produce with an old epoch to the partition leader. See the exception for more details
-
-         // retriable tx
-         none
-         */
-        producer.beginTransaction();
-    }
-
-    public enum ProducerState {
-        INSTANTIATED, INIT, BEGIN, COMMIT, ABORT, CLOSE
     }
 
     /**
@@ -277,7 +252,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * todo docs
+     * @return true if the commit lock has been acquired by any thread.
      */
     public boolean isTransactionCommittingInProgress() {
         return producerTransactionLock.isWriteLocked();
