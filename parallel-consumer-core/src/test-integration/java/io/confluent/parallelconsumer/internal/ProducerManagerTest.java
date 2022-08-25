@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.BlockedThreadAsserter;
 import io.confluent.csid.utils.LatchTestUtils;

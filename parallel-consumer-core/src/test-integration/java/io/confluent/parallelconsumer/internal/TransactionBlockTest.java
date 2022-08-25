@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.TransactionMarkersTest;
