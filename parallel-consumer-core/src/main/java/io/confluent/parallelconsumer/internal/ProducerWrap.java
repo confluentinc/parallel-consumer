@@ -32,9 +32,8 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     private final ParallelConsumerOptions<K, V> options;
 
     /**
-     * todo docs
+     * Cached discovery of whether the underlying Producer has been set up for transactions or not.
      */
-//    @Getter
     private final boolean producerIsConfiguredForTransactions;
 
     // nasty reflection
@@ -43,9 +42,9 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     private Method txManagerMethodIsReady;
 
     @Delegate(excludes = Excludes.class)
-    private final Producer producer;
+    private final Producer<K, V> producer;
 
-    public ProducerWrap(ParallelConsumerOptions options) {
+    public ProducerWrap(ParallelConsumerOptions<K, V> options) {
         this.options = options;
         producer = options.getProducer();
         this.producerIsConfiguredForTransactions = discoverIfProducerIsConfiguredForTransactions();
@@ -70,6 +69,9 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
                                       ConsumerGroupMetadata groupMetadata) throws ProducerFencedException;
     }
 
+    /**
+     * @deprecated use {@link #sendOffsetsToTransaction(Map, ConsumerGroupMetadata)}
+     */
     @Deprecated
     public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
                                          String consumerGroupId) throws ProducerFencedException {
@@ -85,7 +87,6 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     /**
      * @return boolean which shows if we are set up for transactions or not
      */
-    // todo rename
     @SneakyThrows
     private boolean discoverIfProducerIsConfiguredForTransactions() {
         if (producer instanceof KafkaProducer) {
@@ -112,7 +113,7 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     }
 
     /**
-     * Nasty reflection but better than relying on user supplying their config
+     * Nasty reflection but better than relying on user supplying a copy of their config, maybe
      *
      * @see AbstractParallelEoSStreamProcessor#checkAutoCommitIsDisabled
      */
@@ -138,23 +139,16 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
         return transactionManager;
     }
 
-    /**
-     * TODO talk about alternatives to this brute force approach for retrying committing transactions
-     */
     @SneakyThrows
     protected boolean isTransactionCompleting() {
         if (producer instanceof MockProducer) return false;
         return (boolean) txManagerMethodIsCompleting.invoke(getTransactionManager());
     }
 
-    /**
-     * TODO talk about alternatives to this brute force approach for retrying committing transactions
-     */
     @SneakyThrows
     protected boolean isTransactionReady() {
         if (producer instanceof MockProducer) return true;
         return (boolean) txManagerMethodIsReady.invoke(getTransactionManager());
     }
-
 
 }
