@@ -29,7 +29,9 @@
     <!-- primary -->
     <!--    <logger name="io.confluent.parallelconsumer" level="info"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
-    <logger name="io.confluent.csid" level="debug"/>
+    <!--    <logger name="io.confluent.parallelconsumer" level="trace"/>-->
+
+    <!--    <logger name="io.confluent.csid" level="debug"/>-->
     <logger name="org.apache.kafka" level="warn"/>
 
 

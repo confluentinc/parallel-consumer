@@ -1245,6 +1245,18 @@ endif::[]
 
 == Next Version
 
+== v0.5.2.3
+
+=== Improvements
+
+- Adds a very simple Dependency Injection system modeled on Dagger (#398)
+
+== v0.5.2.2
+
+=== Fixes
+
+- Fixes dependency scope for Mockito from compile to test (#376)
+
 == v0.5.2.1
 
 === Fixes

@@ -15,7 +15,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * todo docs
+ * Version of the {@link PCModule} in test contexts.
  *
  * @author Antony Stubbs
  */

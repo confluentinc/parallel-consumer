@@ -36,7 +36,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
+    public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions, final PCModule<K, V> module) {
         super(newOptions, module);
     }
 
