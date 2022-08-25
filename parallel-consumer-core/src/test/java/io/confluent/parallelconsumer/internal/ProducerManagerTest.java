@@ -324,12 +324,49 @@ class ProducerManagerTest {
 
     @Test
     @Disabled
+        // todo implement or delete
     void commitLockTimeoutShouldRecover() {
     }
 
     @Test
     @Disabled
+        // todo implement or delete
     void produceLockTimeoutShouldRecover() {
     }
+
+
+    /**
+     * Test aborting the second tx has only first plus nothing in result topic
+     */
+    @Test
+    // todo implement or delete
+    @Disabled
+    void abortedSecondTransaction() {
+        Truth.assertThat(true).isFalse();
+    }
+
+
+    /**
+     * Test aborting the first tx ends up with nothing
+     */
+    @Test
+    // todo implement or delete
+    @Disabled
+    void abortedBothTransactions() {
+        // do the above again, but instead abort the transaction
+        // assert nothing on result topic
+        Truth.assertThat(true).isFalse();
+    }
+
+    /**
+     * Test option to drain consumer records (work records) that are in flight (but haven't produced a record yet,
+     * otherwise they already be drained in the producer flush) while blocking any further work from being started.
+     */
+    @Test()
+    // todo implement or delete
+    @Disabled("Not implemented")
+    void drainInflightWork() {
+    }
+
 
 }
