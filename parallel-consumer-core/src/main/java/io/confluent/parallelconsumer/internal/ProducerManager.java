@@ -37,7 +37,8 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.ProducerManager.ProducerState.*;
 
 /**
- * todo docs
+ * Sub system for interacting with the Producer and managing transactions (and thus offset committing through the
+ * Producer).
  */
 @Slf4j
 @ToString(onlyExplicitlyIncluded = true)
@@ -259,6 +260,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 //                        beginTransaction();
                     }
                 } else {
+                    // TODO talk about alternatives to this brute force approach for retrying committing transactions
                     boolean retrying = retryCount > 0;
                     if (retrying) {
                         if (producer.isTransactionCompleting()) {
@@ -278,8 +280,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     } else {
                         // happy path
                         commitTransaction();
-                        // delete
-//                        beginTransaction();
                     }
                 }
 
@@ -430,7 +430,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * todo docs
+     * @return true if the commit lock has been acquired by any thread.
      */
     public boolean isTransactionCommittingInProgress() {
         return producerTransactionLock.isWriteLocked();
