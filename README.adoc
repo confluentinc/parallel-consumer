@@ -1167,6 +1167,10 @@ http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and ht
 
 = Change Log
 
+A high level summary of noteworthy changes in each version.
+
+NOTE:: Dependency version bumps are not listed here.
+
 // git log --pretty="* %s" 0.3.0.2..HEAD
 
 // only show TOC if this is the root document (not in the README)
