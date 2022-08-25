@@ -91,12 +91,16 @@ public class ParallelConsumerOptions<K, V> {
         /**
          * Periodically commits through the Producer using transactions.
          * <p>
+         * Messages sent in parallel by different workers get added to the same transaction block - you end up with
+         * transactions 100ms (by default) "large", containing all records sent during that time period, from the
+         * offsets being committed.
+         * <p>
          * Of no use, if not also producing messages (i.e. using a {@link ParallelStreamProcessor#pollAndProduce}
          * variation).
          * <p>
-         * Unlike Kafka Streams, the records being sent by different threads will all be in a single transaction, as PC
-         * shares a single Producer instance. This could be seen as an performance overhead advantage, efficient
-         * resource use, for a loss in granularity.
+         * Note: Records being sent by different threads will all be in a single transaction, as PC shares a single
+         * Producer instance. This could be seen as a performance overhead advantage, efficient resource use, in
+         * exchange for a loss in transaction granularity.
          * <p>
          * The benefits of using this mode are:
          * <p>
@@ -104,8 +108,8 @@ public class ParallelConsumerOptions<K, V> {
          * ({@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}).
          * <p>
          * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
-         * finishing sending all the records and committing, none will ever be visible and the system will retry the
-         * whole set in a new transaction.
+         * finishing sending all the records and committing, none will ever be visible and the system will eventually
+         * retry the in new transactions - potentially with different combinations of records from the original.
          * <p>
          * c) A source offset, and it's produced records will be committed as an atomic set. Normally: either the record
          * producing could fail, or the committing of the source offset could fail, as they are separate individual
@@ -143,14 +147,14 @@ public class ParallelConsumerOptions<K, V> {
          * The system must prevent records from being produced to the brokers whose source consumer record offsets has
          * not been included in this transaction. Otherwise, the transactions would include produced records from
          * consumer offsets which would only be committed in the NEXT transaction, which wouldn't make sense. To achieve
-         * this, after succeeded consumer offsets are gathered, work processing and record producing is suspended, until
-         * the transaction has finished committing. This periodically slows down record production during this phase, by
-         * the time needed to commit the transaction.
+         * this, work processing and record producing is suspended, after succeeded consumer offsets are gathered,
+         * commit takes place, then the transaction has finished committing, processing resumes. This periodically slows
+         * down record production during this phase, by the time needed to commit the transaction.
          * <p>
          * This is all separate from using an IDEMPOTENT Producer, which can be used, along with
          * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
          *
-         * @see AbstractParallelEoSStreamProcessor#getTimeBetweenCommits()
+         * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits
          */
         // end::transactionalJavadoc[]
         PERIODIC_TRANSACTIONAL_PRODUCER,
@@ -205,7 +209,7 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * @deprecated only settable during {@code deprecation phase} - use
-     *         {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits}} instead.
+     *         {@link ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits}} instead.
      */
     // todo delete in next major version
     @Deprecated

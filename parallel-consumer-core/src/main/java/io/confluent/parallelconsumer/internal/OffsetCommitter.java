@@ -5,7 +5,8 @@ package io.confluent.parallelconsumer.internal;
  */
 
 /**
- * todo docs
+ * Contract for committing offsets. As there are two ways to commit offsets - through the Consumer or Producer, and
+ * several systems involved, we need a contract.
  *
  * @author Antony Stubbs
  */

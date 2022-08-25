@@ -125,8 +125,6 @@
                     <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
                     <releaseTarget>8</releaseTarget>
                     <classes>
-                        <!--                        todo why doesn't this work?-->
-                        <!--                        <class>io.confluent.csid.utils.BlockedThreadAsserter</class>-->
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.internal.ProducerManager</class>

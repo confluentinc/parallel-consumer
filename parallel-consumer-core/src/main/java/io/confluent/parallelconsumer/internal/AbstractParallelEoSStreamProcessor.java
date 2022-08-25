@@ -53,7 +53,6 @@ import static lombok.AccessLevel.PROTECTED;
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
-    public static final String MDC_OFFSET_MARKER = "offset";
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
@@ -619,11 +618,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Optional<String> myId = Optional.empty();
 
     /**
-     * todo docs
-     * <p>
-     * Kicks of the control loop in the executor and returns.
-     * <p>
-     * Supervisor loop for the main loop.
+     * Kicks of the control loop in the executor, with supervision and returns.
      *
      * @see #supervisorLoop(Function, Consumer)
      */
