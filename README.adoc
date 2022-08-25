@@ -1167,6 +1167,10 @@ http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and ht
 
 = Change Log
 
+A high level summary of noteworthy changes in each version.
+
+NOTE:: Dependency version bumps are not listed here.
+
 // git log --pretty="* %s" 0.3.0.2..HEAD
 
 // only show TOC if this is the root document (not in the README)
@@ -1175,6 +1179,19 @@ toc::[]
 endif::[]
 
 == Next Version
+
+== v0.5.2.3
+
+=== Improvements
+
+- Adds a very simple Dependency Injection system modeled on Dagger (#398)
+- Various refactorings e.g. new ProducerWrap
+
+== v0.5.2.2
+
+=== Fixes
+
+- Fixes dependency scope for Mockito from compile to test (#376)
 
 == v0.5.2.1
 
