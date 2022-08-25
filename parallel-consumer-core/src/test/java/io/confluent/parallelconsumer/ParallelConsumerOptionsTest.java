@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -10,9 +14,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.apache.kafka.clients.consumer.OffsetResetStrategy.EARLIEST;
 
 /**
- * todo docs
+ * Check that various validation and combinations of {@link ParallelConsumerOptions} works.
  *
  * @author Antony Stubbs
+ * @see ParallelConsumerOptions
  */
 @Tag("transactions")
 @Tag("#355")

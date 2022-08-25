@@ -1,5 +1,9 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import com.google.common.truth.Truth;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,7 +17,7 @@ import static java.time.Duration.ofSeconds;
 import static org.awaitility.Awaitility.await;
 
 /**
- * todo docs
+ * System for asserting that a given method blocks for some period of time, and optionally unblocks.
  *
  * @author Antony Stubbs
  */
