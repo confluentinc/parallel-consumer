@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -18,7 +22,7 @@ import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
- * todo docs
+ * Our extension of the standard Consumer to mostly add some introspection functions and state tracking.
  *
  * @author Antony Stubbs
  */
