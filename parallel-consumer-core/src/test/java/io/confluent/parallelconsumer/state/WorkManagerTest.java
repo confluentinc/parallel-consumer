@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -61,7 +62,8 @@ public class WorkManagerTest {
 
     @BeforeEach
     public void setup() {
-        setupWorkManager(ParallelConsumerOptions.builder().build());
+        var options = ParallelConsumerOptions.builder().build();
+        setupWorkManager(options);
     }
 
     protected List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
@@ -72,7 +74,7 @@ public class WorkManagerTest {
         var mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         var optsOverride = options.toBuilder().consumer(mockConsumer).build();
 
-        wm = new WorkManager<>(optsOverride, time);
+        wm = new WorkManager<>(new PCModule<String, String>(optsOverride), time);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);

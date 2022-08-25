@@ -8,34 +8,29 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.Getter;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
 /**
- * DI
+ * Minimum dependency injection system, modled on how Dagger works.
  * <p>
- * todo docs
- * <p>
- * A-la' Dagger.
+ * Note: Not using Dagger as PC has a zero dependency policy, and franky it would be overkill for our needs.
  *
  * @author Antony Stubbs
  */
-public abstract class PCModule<K, V> {
+public class PCModule<K, V> {
 
-    @Getter
     protected ParallelConsumerOptions<K, V> optionsInstance;
 
     @Setter
     protected AbstractParallelEoSStreamProcessor<K, V> parallelEoSStreamProcessor;
 
-    protected PCModule(ParallelConsumerOptions<K, V> options) {
+    public PCModule(ParallelConsumerOptions<K, V> options) {
         this.optionsInstance = options;
-        options.setModule(this);
     }
 
-    protected ParallelConsumerOptions<K, V> options() {
+    public ParallelConsumerOptions<K, V> options() {
         return optionsInstance;
     }
 
@@ -78,7 +73,7 @@ public abstract class PCModule<K, V> {
 
     public WorkManager<K, V> workManager() {
         if (workManager == null) {
-            workManager = new WorkManager<>(options(), dynamicExtraLoadFactor(), TimeUtils.getClock());
+            workManager = new WorkManager<>(this, dynamicExtraLoadFactor(), TimeUtils.getClock());
         }
         return workManager;
     }
