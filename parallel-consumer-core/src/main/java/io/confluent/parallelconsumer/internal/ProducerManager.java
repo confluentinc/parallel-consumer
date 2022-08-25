@@ -256,8 +256,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                     // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
                     synchronized (producer) {
                         commitTransaction();
-                        // delete
-//                        beginTransaction();
                     }
                 } else {
                     // TODO talk about alternatives to this brute force approach for retrying committing transactions
@@ -347,7 +345,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * todo docs
      *
      * @return
-         */
+     */
     public boolean isTransactionOpen() {
         return this.producerState.equals(BEGIN);
     }
@@ -401,7 +399,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             log.debug("Acquiring commit lock...");
             gotLock = writeLock.tryLock() || writeLock.tryLock(6, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            log.error("Interrupted during write lock acquire", e);
         }
         if (!gotLock) {
             throw new InternalRuntimeError("Timeout getting commit lock - slow or too many records being ack'd?");
