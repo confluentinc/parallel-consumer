@@ -418,4 +418,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
     }
 
+    public boolean isDirty() {
+        return this.partitionStates.values().stream()
+                .anyMatch(PartitionState::isDirty);
+    }
 }

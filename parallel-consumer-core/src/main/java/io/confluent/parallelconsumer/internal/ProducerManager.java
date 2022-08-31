@@ -4,10 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumer;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.NonNull;
@@ -172,10 +169,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         lock.unlock();
     }
 
-    protected ProducingLock acquireProduceLock() throws java.util.concurrent.TimeoutException {
+    protected ProducingLock acquireProduceLock(PollContextInternal<K, V> context) throws java.util.concurrent.TimeoutException {
         ReentrantReadWriteLock.ReadLock readLock = producerTransactionLock.readLock();
-        log.trace("Acquiring produce lock...");
         Duration produceLockTimeout = options.getProduceLockAcquisitionTimeout();
+        log.debug("Acquiring produce lock (timeout: {})...", produceLockTimeout);
         boolean lockAcquired = false;
         try {
             lockAcquired = readLock.tryLock(produceLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -184,14 +181,14 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         }
 
         if (lockAcquired) {
-            log.debug("Produce lock acquired.");
+            log.debug("Produce lock acquired (context: {}).", context.getOffsets());
         } else {
             throw new java.util.concurrent.TimeoutException(msg("Timeout while waiting to get produce lock (was set to {}). " +
                     "Commit taking too long? Try increasing the produce lock timeout.", produceLockTimeout));
         }
 
         log.trace("Produce lock acquired.");
-        return new ProducingLock(readLock);
+        return new ProducingLock(context, readLock);
     }
 
     /**
@@ -381,14 +378,17 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         // acquire lock the commit lock
         var commitLockTimeout = options.getCommitLockAcquisitionTimeout();
-        log.debug("Acquiring commit lock...");
+        log.debug("Acquiring commit lock (timeout: {})...", commitLockTimeout);
         boolean gotLock = writeLock.tryLock(commitLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
         if (gotLock) {
             log.debug("Commit lock acquired.");
         } else {
-            var msg = msg("Timeout getting commit lock (which was set to {}). Slow or too many records being ack'd? " +
-                    "Try increasing the commit lock timeout, or reduce your record processing time.", commitLockTimeout);
+            var msg = msg("Timeout getting commit lock (which was set to {}). Slow processing or too many records being ack'd? " +
+                            "Try increasing the commit lock timeout ({}), or reduce your record processing time.",
+                    commitLockTimeout,
+                    ParallelConsumerOptions.Fields.commitLockAcquisitionTimeout
+            );
             throw new java.util.concurrent.TimeoutException(msg);
         }
     }
@@ -417,8 +417,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     /**
      * Must call before sending records - acquires the lock on sending records, which blocks committing transactions)
      */
-    public ProducingLock beginProducing() throws java.util.concurrent.TimeoutException {
-        return acquireProduceLock();
+    public ProducingLock beginProducing(PollContextInternal<K, V> context) throws java.util.concurrent.TimeoutException {
+        return acquireProduceLock(context);
     }
 
     /**
@@ -444,14 +444,16 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     @RequiredArgsConstructor
     public class ProducingLock {
+
+        private final PollContextInternal<K, V> context;
         private final ReentrantReadWriteLock.ReadLock produceLock;
 
         /**
          * Unlocks the produce lock
          */
         protected void unlock() {
-            log.debug("Unlocking produce lock...");
             produceLock.unlock();
+            log.debug("Unlocking produce locked (context: {}).", context.getOffsets());
         }
     }
 }

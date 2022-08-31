@@ -66,9 +66,9 @@ public class TransactionMarkersTest extends BrokerIntegrationTest<String, String
         setupTopic();
         consumer = getKcu().getConsumer();
 
-        txProducer = getKcu().createNewTransactionalProducer();
-        txProducerTwo = getKcu().createNewTransactionalProducer();
-        txProducerThree = getKcu().createNewTransactionalProducer();
+        txProducer = getKcu().createAndInitNewTransactionalProducer();
+        txProducerTwo = getKcu().createAndInitNewTransactionalProducer();
+        txProducerThree = getKcu().createAndInitNewTransactionalProducer();
 
         normalProducer = getKcu().createNewProducer(NOT_TRANSACTIONAL);
         pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()

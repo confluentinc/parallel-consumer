@@ -81,7 +81,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
             ProducerManager<K, V>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing();
+                produceLock = pm.beginProducing(context);
             } catch (TimeoutException e) {
                 throw new RuntimeException("Timeout trying to early acquire produce lock", e);
             }
@@ -104,7 +104,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         if (options.isUsingTransactionCommitMode() && options.isAllowEagerProcessingDuringTransactionCommit()) {
             ProducerManager<K, V>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing();
+                produceLock = pm.beginProducing(context);
             } catch (TimeoutException e) {
                 throw new RuntimeException("Timeout trying to late acquire produce lock", e);
             }

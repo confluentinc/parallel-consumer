@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.experimental.FieldNameConstants;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
@@ -30,6 +31,7 @@ import static java.time.Duration.ofMillis;
 @Getter
 @Builder(toBuilder = true)
 @ToString
+@FieldNameConstants
 public class ParallelConsumerOptions<K, V> {
 
     /**
@@ -190,12 +192,13 @@ public class ParallelConsumerOptions<K, V> {
     public static final Duration DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS = ofMillis(100);
 
     /**
-     * Allow new records to be processed while a transaction is being committed. Default disabled.
+     * Allow new records to be processed UP UNTIL the record processing step, while a transaction is being committed.
+     * Disabled by default.
      * <p>
      * Doesn't interfere with the transaction.
      * <p>
      * Recommended to leave this off to avoid side effect duplicates upon rebalance after a crash. Enabling could
-     * improve performance as the produce lock will only be taken right before it's needed to produce the result record
+     * improve performance as the produce lock will only be taken right before it's needed to produce the result record,
      * instead of pessimistically.
      */
     @Builder.Default
@@ -362,16 +365,28 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     private void transactionsValidation() {
-        if (isUsingTransactionalProducer()) {
+        boolean commitFrequencyHasntBeenSet = getTimeBetweenCommits() == DEFAULT_TIME_BETWEEN_COMMITS;
+
+        if (isUsingTransactionCommitMode()) {
             if (producer == null) {
-                throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
+                throw new IllegalArgumentException(msg("Cannot set {} to Transaction Producer mode ({}) without supplying a Producer instance",
+                        Fields.commitMode,
                         commitMode));
             }
 
             // update commit frequency
-            boolean commitFrequencyHasntBeenSet = getTimeBetweenCommits() == DEFAULT_TIME_BETWEEN_COMMITS;
             if (commitFrequencyHasntBeenSet) {
                 this.timeBetweenCommits = DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS;
+            }
+        }
+
+        // inverse
+        if (!isUsingTransactionCommitMode()) {
+            if (isAllowEagerProcessingDuringTransactionCommit()) {
+                throw new IllegalArgumentException(msg("Cannot set {} (eager record processing) when not using transactional commit mode ({}={}).",
+                        Fields.allowEagerProcessingDuringTransactionCommit,
+                        Fields.commitMode,
+                        commitMode));
             }
         }
     }

@@ -52,6 +52,8 @@ import static org.mockito.Mockito.*;
  *
  * @author Antony Stubbs
  * @see ProducerManager
+ * @see io.confluent.parallelconsumer.integrationTests.TransactionTimeoutsTest for integration tests checking timeout
+ *         behaiviour
  */
 @Tag("transactions")
 @Tag("#355")
@@ -63,6 +65,8 @@ class ProducerManagerTest {
             .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
             .producer(mock(Producer.class))
             .consumer(mock(Consumer.class))
+            .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+            .commitLockAcquisitionTimeout(ofSeconds(2))
             .build();
 
     PCModuleTestEnv module = new PCModuleTestEnv(opts) {
@@ -101,7 +105,7 @@ class ProducerManagerTest {
         assertThat(pm).isNotTransactionCommittingInProgress();
 
         // should send fine, futures should finish
-        var produceReadLock = pm.beginProducing();
+        var produceReadLock = pm.beginProducing(mock(PollContextInternal.class));
         produceOneRecord();
 
         new BlockedThreadAsserter().assertFunctionBlocks(() -> {
@@ -132,7 +136,7 @@ class ProducerManagerTest {
             log.debug("Starting sending records - will block due to open commit");
             ProducerManager<String, String>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing();
+                produceLock = pm.beginProducing(mock(PollContextInternal.class));
             } catch (TimeoutException e) {
                 throw new RuntimeException(e);
             }
@@ -173,7 +177,7 @@ class ProducerManagerTest {
                 .transactionNotOpen();
 
         {
-            var produceLock = pm.beginProducing();
+            var produceLock = pm.beginProducing(mock(PollContextInternal.class));
 
             {
                 var notBlockedSends = produceOneRecord();
@@ -208,7 +212,7 @@ class ProducerManagerTest {
 
         // do another round of producing and check state
         {
-            var producingLock = pm.beginProducing();
+            var producingLock = pm.beginProducing(mock(PollContextInternal.class));
             assertThat(pm).transactionNotOpen();
             produceOneRecord();
             assertThat(pm).transactionOpen();
@@ -226,9 +230,10 @@ class ProducerManagerTest {
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffsetDirect() {
 
-        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
-                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-                .build();
+//        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
+//                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+//                .commitLockAcquisitionTimeout(ofSeconds(2))
+//                .build();
 
         try (var pc = module.pc()) {
 
@@ -248,7 +253,7 @@ class ProducerManagerTest {
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
                 ProducerManager<String, String>.ProducingLock newValue = null;
                 try {
-                    newValue = pm.beginProducing();
+                    newValue = pm.beginProducing(mock(PollContextInternal.class));
                 } catch (TimeoutException e) {
                     throw new RuntimeException(e);
                 }
@@ -279,27 +284,32 @@ class ProducerManagerTest {
 
 
             // won't block because offset 0 goes through
+            // purpose?
             pc.controlLoop(userFunc, o -> {
             });
 
 
+            // change to TM?
             Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
 
 
             // won't block - not dirty
+            // purpose?
             pc.controlLoop(userFunc, o -> {
             });
 
-            // send another record, return the work, but don't process inbox
+            // send another record, register the work, but don't process inbox
             freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
-            // will first try to commit - fine no produce lock yet
-            // then gets the work, distributes it
+
+            // will first try to commit - which will work fine, as there's no produce lock yet held yet
+            // then it will get the work, distributes it
             // will then return
             // -- in the worker thread - will trigger the block and hold the produce lock
             pc.controlLoop(userFunc, o -> {
             });
 
+            // change to TM?
             Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
 
             // blocks as offset 1 is blocked sending and so cannot acquire commit lock
@@ -307,6 +317,10 @@ class ProducerManagerTest {
             var msg = "Ensure expected produce lock is now held by blocked worker thread";
             log.debug(msg);
             await(msg).untilAtomic(blockedOn1, Matchers.is(Matchers.equalTo(true)));
+
+            pc.controlLoop(userFunc, o -> {
+            });
+
             var commitBlocks = new BlockedThreadAsserter();
             commitBlocks.assertUnblocksAfter(() -> {
                 log.debug("Running control loop which should block until offset 1 is released by finishing produce");
@@ -319,7 +333,7 @@ class ProducerManagerTest {
             }, () -> {
                 log.debug("Unblocking offset processing offset1Mutex...");
                 offset1Mutex.countDown();
-            }, ofSeconds(2));
+            }, ofSeconds(60));
 
             //
             await().untilAsserted(() -> Truth.assertWithMessage("commit should now have unlocked and returned")
@@ -342,6 +356,11 @@ class ProducerManagerTest {
     }
 
     // todo test allowEagerProcessingDuringTransactionCommit
+    @Test
+    @Disabled
+    void allowEagerProcessingDuringTransactionCommit(){
+
+    }
 
     @Test
     @Disabled
@@ -377,6 +396,22 @@ class ProducerManagerTest {
         // do the above again, but instead abort the transaction
         // assert nothing on result topic
         Truth.assertThat(true).isFalse();
+    }
+
+    @Test
+    void testOptions() {
+        // todo expect expcetions
+        ParallelConsumerOptions.builder()
+                .consumer(mock(Consumer.class))
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+                .build()
+                .validate();
+
+        ParallelConsumerOptions.builder()
+                .consumer(mock(Consumer.class))
+                .allowEagerProcessingDuringTransactionCommit(true)
+                .build()
+                .validate();
     }
 
 }

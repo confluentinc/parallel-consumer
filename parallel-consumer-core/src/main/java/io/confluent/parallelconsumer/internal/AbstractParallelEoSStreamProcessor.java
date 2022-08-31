@@ -623,8 +623,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
         if (state != State.unused) {
-            throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
-                    "state is {})", state));
+            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
+                    "more than once (they are asynchronous) (current state is {})", state));
         } else {
             state = running;
         }
@@ -649,6 +649,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             controlThread.setName("pc-control");
             this.blockableControlThread = controlThread;
             while (state != closed) {
+                log.debug("Control loop start");
                 try {
                     controlLoop(userFunctionWrapped, callback);
                 } catch (InterruptedException e) {
@@ -753,7 +754,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return true if committing should either way be attempted now
      */
     private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
-        final boolean shouldTryCommitNow = isTimeToCommitNow();
+        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty();
         // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on
@@ -890,7 +891,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
         }
 
-        log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
+        log.debug("Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
                 target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
         return delta;
     }
@@ -1187,7 +1188,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox. Context: {}", context, e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
                 addToMailbox(context, wc); // always add on error
