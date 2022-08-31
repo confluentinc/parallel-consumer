@@ -9,16 +9,15 @@ import com.google.common.truth.Truth8;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
-import io.confluent.parallelconsumer.state.*;
+import io.confluent.parallelconsumer.state.PartitionState;
+import io.confluent.parallelconsumer.state.ShardManager;
+import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.Isolated;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
@@ -36,7 +35,6 @@ import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
-import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -45,34 +43,17 @@ import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.waitAtMost;
 
 /**
- * Writes to static state to perform test - needs to be run in isolation. However it runs very fast, so it doesn't slow
- * down parallel test suite much.
- * <p>
- * Runs in isolation regardless of the resource lock read/write setting, because actually various tests depend
- * indirectly on the behaviour of the metadata size, even if not so explicitly.
- * <p>
- * See {@link OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK}
- *
- * @see OffsetMapCodecManager#METADATA_DATA_SIZE_RESOURCE_LOCK
  * @see OffsetEncodingBackPressureUnitTest
  */
-@Isolated // messes with static state - breaks other tests running in parallel
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
-    @AfterAll
-    static void cleanup() {
-        PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT);
-    }
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
      * that no further messages for the given partitions can be taken for processing, until more messages complete.
      */
-    // todo refactor test to use the new DI system, to manipulate one of the mocks to force test scenario, instead of messing with static state
     @Test
-    // needed due to static accessors in parallel tests
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = ResourceAccessMode.READ_WRITE)
     void backPressureShouldPreventTooManyMessagesBeingQueuedForProcessing() throws OffsetDecodingError {
         // mock messages downloaded for processing > MAX_TO_QUEUE
         // make sure work manager doesn't queue more than MAX_TO_QUEUE
@@ -80,12 +61,9 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         final int numberOfRecordsToPrimeWith = 1_00;
         parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
-        // todo - very smelly - store for restoring
-        var realMax = OffsetMapCodecManager.DefaultMaxMetadataSize;
-
-        // todo don't use static public accessors to change things - makes parallel testing harder and is smelly
-        OffsetMapCodecManager.DefaultMaxMetadataSize = 40; // reduce available to make testing easier
-        OffsetMapCodecManager.forcedCodec = Optional.of(OffsetEncoding.BitSetV2); // force one that takes a predictable large amount of space
+        // override to simulate sitation
+        module.setMaxMetadataSize(40); // reduce available to make testing easier
+        module.setForcedCodec(Optional.of(OffsetEncoding.BitSetV2)); // force one that takes a predictable / deterministic large amount of space
 
         //
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecordsToPrimeWith);
@@ -137,7 +115,6 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
         ShardManager<String, String> sm = wm.getSm();
 
-        try {
 
             // wait for all pre-produced messages to be processed and produced
             waitAtMost(ofSeconds(120))
@@ -225,20 +202,20 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
             // recreates the situation where the payload size is too large and must be dropped
             log.debug("// test max payload exceeded, payload dropped");
-            {
-                log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
-                        "(i.e. the actual system attempts to never allow the payload to grow this big) " +
-                        "i.e. effectively this disables blocking mechanism for the partition");
-                PartitionStateManager.setUSED_PAYLOAD_THRESHOLD_MULTIPLIER(30);
-                OffsetMapCodecManager.DefaultMaxMetadataSize = 30; // reduce max cut off size - could use DI mock instead to change method return value?
+        {
+            log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
+                    "(i.e. the actual system attempts to never allow the payload to grow this big) " +
+                    "i.e. effectively this disables blocking mechanism for the partition");
+            module.setPayloadThresholdMultiplier(99);
+            module.setMaxMetadataSize(30); // reduce max cut off size
 
-                //
-                log.debug("// unlock record to make the state dirty to get a commit");
+            //
+            log.debug("// unlock record to make the state dirty to get a commit");
 
-                msgLockThree.countDown();
+            msgLockThree.countDown();
 
-                parallelConsumer.requestCommitAsap();
-                awaitForSomeLoopCycles(2);
+            parallelConsumer.requestCommitAsap();
+            awaitForSomeLoopCycles(2);
 
 
                 assertTruth(partitionState).isBlocked();
@@ -289,12 +266,6 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 });
                 await().untilAsserted(() -> assertTruth(partitionState).isAllowedMoreRecords());
             }
-        } finally {
-            // todo restore static defaults - lazy way to override settings at runtime but causes bugs by allowing them to be statically changeable
-            OffsetMapCodecManager.DefaultMaxMetadataSize = realMax; // todo wow this is smelly, but convenient
-            OffsetMapCodecManager.forcedCodec = Optional.empty();
-        }
-
 
     }
 

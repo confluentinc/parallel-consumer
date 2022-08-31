@@ -5,11 +5,20 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.offsets.ForcedOffsetSimultaneousEncoder;
+import io.confluent.parallelconsumer.offsets.OffsetEncoding;
+import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
 import io.confluent.parallelconsumer.state.ModelUtils;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
+
+import java.util.Optional;
+import java.util.Set;
 
 import static org.mockito.Mockito.mock;
 
@@ -20,15 +29,15 @@ import static org.mockito.Mockito.mock;
  */
 public class PCModuleTestEnv extends PCModule<String, String> {
 
-    ModelUtils mu = new ModelUtils(this);
+    protected ModelUtils mu = new ModelUtils(this);
 
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
-        Consumer mockConsumer = Mockito.mock(Consumer.class);
+        Consumer mockConsumer = mock(Consumer.class);
         Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
         var override = options().toBuilder()
                 .consumer(mockConsumer)
-                .producer(Mockito.mock(Producer.class))
+                .producer(mock(Producer.class))
                 .build();
         super.optionsInstance = override;
     }
@@ -61,4 +70,46 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
         return consumerManager;
     }
+
+    @Setter
+    private int maxMetadataSize = 4096;
+
+    @Override
+    public int getMaxMetadataSize() {
+        return maxMetadataSize;
+    }
+
+    /**
+     * Forces the use of a specific codec, instead of choosing the most efficient one. Useful for testing.
+     */
+    @Setter
+    @Getter
+    private Optional<OffsetEncoding> forcedCodec = Optional.empty();
+
+    /**
+     * Force the encoder to also add the compressed versions. Useful for testing.
+     */
+    public boolean compressionForced = false;
+
+    @Override
+    public OffsetSimultaneousEncoder createOffsetSimultaneousEncoder(final long baseOffsetForPartition, final long highestSucceeded, final Set<Long> incompleteOffsets) {
+        return new ForcedOffsetSimultaneousEncoder(this, baseOffsetForPartition, highestSucceeded, incompleteOffsets);
+    }
+
+    @Override
+    public OffsetMapCodecManager<String, String> createOffsetMapCodecManager() {
+        return new OffsetMapCodecManager<>(consumer());
+    }
+
+    /**
+     * @see #getPayloadThresholdMultiplier()
+     */
+    @Setter
+    private double payloadThresholdMultiplier = PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+
+    @Override
+    public double getPayloadThresholdMultiplier() {
+        return payloadThresholdMultiplier;
+    }
+
 }

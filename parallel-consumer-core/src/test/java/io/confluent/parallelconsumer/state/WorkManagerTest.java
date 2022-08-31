@@ -58,7 +58,7 @@ public class WorkManagerTest {
 
     int offset;
 
-    MutableClock time = MutableClock.epochUTC();
+    MutableClock time;
 
     @BeforeEach
     public void setup() {
@@ -74,7 +74,7 @@ public class WorkManagerTest {
         var mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         var optsOverride = options.toBuilder().consumer(mockConsumer).build();
 
-        wm = new WorkManager<>(new PCModule<String, String>(optsOverride), time);
+        wm = new WorkManager<>(new PCModule<String, String>(optsOverride));
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);

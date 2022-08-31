@@ -67,13 +67,6 @@ public class OffsetSimultaneousEncoder {
     SortedSet<EncodedOffsetPair> sortedEncodings = new TreeSet<>();
 
     /**
-     * Force the encoder to also add the compressed versions. Useful for testing.
-     * <p>
-     * Visible for testing.
-     */
-    public static boolean compressionForced = false;
-
-    /**
      * Used to prevent tests running in parallel that depends on setting static state in this class. Manipulation of
      * static state in tests needs to be removed to this isn't necessary.
      */
@@ -231,7 +224,7 @@ public class OffsetSimultaneousEncoder {
         return this;
     }
 
-    private void registerEncodings(final Set<? extends OffsetEncoder> encoders) {
+    protected void registerEncodings(final Set<? extends OffsetEncoder> encoders) {
         List<OffsetEncoder> toRemove = new ArrayList<>();
         for (OffsetEncoder encoder : encoders) {
             try {
@@ -246,7 +239,7 @@ public class OffsetSimultaneousEncoder {
         // compressed versions
         // sizes over LARGE_INPUT_MAP_SIZE_THRESHOLD bytes seem to benefit from compression
         boolean noEncodingsAreSmallEnough = encoders.stream().noneMatch(OffsetEncoder::quiteSmall);
-        if (noEncodingsAreSmallEnough || compressionForced) {
+        if (noEncodingsAreSmallEnough) {
             encoders.forEach(OffsetEncoder::registerCompressed);
         }
     }

@@ -9,6 +9,7 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -54,6 +55,8 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 // todo migrate commit assertion methods in to a Truth Subject
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
+
+    protected PCModuleTestEnv module = new PCModuleTestEnv();
 
     public String INPUT_TOPIC;
     public String OUTPUT_TOPIC;

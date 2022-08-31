@@ -6,15 +6,10 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -41,16 +36,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 @RequiredArgsConstructor
 public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
-    public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
-    /**
-     * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
-     * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
-     * have to drop the offset payload entirely.
-     */
-    @Getter
-    @Setter
-    // todo remove static
-    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+    private final PCModule<K, V> module;
 
     private final Consumer<K, V> consumer;
 
@@ -186,7 +172,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             // by replacing with a no op implementation, we protect for stale messages still in queues which reference it
             // however it means the map will only grow, but only it's key set
             var partition = this.partitionStates.get(removedPartition);
-            partitionStates.put(removedPartition, RemovedPartitionState.getSingleton());
+            partitionStates.put(removedPartition, module.removedPartitionStateSingleton());
 
             //
             partition.onPartitionsRemoved(sm);
@@ -305,7 +291,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * <p>
      * Default (missing elements) is true - more messages can be processed.
      *
-     * @see OffsetMapCodecManager#DefaultMaxMetadataSize
+     * @see OffsetMapCodecManager#KAFKA_MAX_METADATA_SIZE_DEFAULT
      */
     public boolean isBlocked(final TopicPartition topicPartition) {
         return !isAllowedMoreRecords(topicPartition);

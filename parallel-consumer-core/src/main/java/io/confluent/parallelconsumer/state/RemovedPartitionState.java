@@ -5,13 +5,16 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.KafkaUtils;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * No op version of {@link PartitionState} used for when partition assignments are removed, to avoid managing null
@@ -29,18 +32,12 @@ import java.util.concurrent.ConcurrentSkipListMap;
 @Slf4j
 public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
-    private static final NavigableMap READ_ONLY_EMPTY_MAP = Collections.unmodifiableNavigableMap(new ConcurrentSkipListMap<>());
-    private static final Set READ_ONLY_EMPTY_SET = Collections.unmodifiableSet(new HashSet<>());
+    private static final Set<Long> READ_ONLY_EMPTY_SET = Collections.unmodifiableSet(new HashSet<>());
 
-    private static final PartitionState singleton = new RemovedPartitionState();
     public static final String NO_OP = "no-op";
 
-    public RemovedPartitionState() {
-        super(null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
-    }
-
-    public static PartitionState getSingleton() {
-        return RemovedPartitionState.singleton;
+    public RemovedPartitionState(PCModule<K, V> module) {
+        super(module, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     @Override

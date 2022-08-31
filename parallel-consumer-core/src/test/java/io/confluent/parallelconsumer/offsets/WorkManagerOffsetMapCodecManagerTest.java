@@ -8,6 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -76,7 +77,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     long highestSucceeded = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
+    PartitionState<String, String> state = new PartitionState<>(new PCModuleTestEnv(), tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
 
     @Mock
     ConsumerRecord<String, String> mockCr;

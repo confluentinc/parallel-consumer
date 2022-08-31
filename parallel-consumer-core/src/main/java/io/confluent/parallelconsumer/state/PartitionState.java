@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -23,7 +24,6 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
@@ -34,6 +34,8 @@ import static lombok.AccessLevel.*;
 @ToString
 @Slf4j
 public class PartitionState<K, V> {
+
+    private final PCModule<K, V> module;
 
     /**
      * Symbolic value for a parameter which is initialised as having an offset absent (instead of using Optional or
@@ -98,7 +100,7 @@ public class PartitionState<K, V> {
      * <p>
      * AKA high water mark (which is a deprecated description).
      *
-     * @see OffsetMapCodecManager#DefaultMaxMetadataSize
+     * @see OffsetMapCodecManager#KAFKA_MAX_METADATA_SIZE_DEFAULT
      */
     @Getter(PACKAGE)
     @Setter(PRIVATE)
@@ -121,7 +123,8 @@ public class PartitionState<K, V> {
         return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
-    public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+    public PartitionState(PCModule<K, V> module, TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+        this.module = module;
         this.tp = tp;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
@@ -270,8 +273,8 @@ public class PartitionState<K, V> {
 
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
-     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see {@link
-     * OffsetMapCodecManager#makeOffsetMetadataPayload}.
+     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see
+     * {@link OffsetMapCodecManager#makeOffsetMetadataPayload}.
      *
      * @return if possible, the String encoded offset map
      */
@@ -282,9 +285,9 @@ public class PartitionState<K, V> {
         }
 
         try {
-            // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
+            // todo refactor is OffsetMapCodecManager stateful? #233
             long offsetOfNextExpectedMessage = getNextExpectedPolledOffset();
+            OffsetMapCodecManager<K, V> om = module.createOffsetMapCodecManager();
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
@@ -306,20 +309,22 @@ public class PartitionState<K, V> {
         int metaPayloadLength = offsetMapPayload.length();
         boolean mustStrip = false;
 
-        if (metaPayloadLength > DefaultMaxMetadataSize) {
+        if (metaPayloadLength > module.getMaxMetadataSize()) {
             // exceeded maximum API allowed, strip the payload
             mustStrip = true;
             setAllowedMoreRecords(false);
             log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
                             "Warning: messages might be replayed on rebalance. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
-                    metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+                    metaPayloadLength, module.getMaxMetadataSize(), OffsetMapCodecManager.KAFKA_MAX_METADATA_SIZE_DEFAULT);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
             log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
                             "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                    metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
+                    metaPayloadLength,
+                    getPressureThresholdValue(),
+                    module.getMaxMetadataSize());
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
             setAllowedMoreRecords(true);
@@ -330,7 +335,7 @@ public class PartitionState<K, V> {
     }
 
     private double getPressureThresholdValue() {
-        return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+        return module.getMaxMetadataSize() * module.getPayloadThresholdMultiplier();
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {

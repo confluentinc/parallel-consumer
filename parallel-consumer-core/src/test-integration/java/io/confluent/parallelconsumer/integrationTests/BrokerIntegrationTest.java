@@ -9,6 +9,7 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
@@ -29,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
+
+    PCModuleTestEnv module;
 
     static {
         System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");

@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -23,7 +22,6 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import pl.tlinkowski.unij.api.UniLists;
@@ -31,7 +29,6 @@ import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -48,7 +45,6 @@ import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
 
 /**
  * Series of tests that check when we close a PC with incompletes encoded, when we open a new one, the correct messages
@@ -88,14 +84,13 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
     @SneakyThrows
     @ParameterizedTest
     @EnumSource()
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
     void offsetsOpenClose(OffsetEncoding encoding) {
         var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
         assumeFalse(skip.contains(encoding));
 
-        // todo remove - not even relevant to this test? smelly
-        OffsetMapCodecManager.forcedCodec = Optional.of(encoding);
-        OffsetSimultaneousEncoder.compressionForced = true;
+        // todo test removal - not even relevant to this test?
+//        module.compressionForced = true;
+//        module.setForcedCodec(Optional.of(encoding));
 
         // 2 partition topic
         try {
@@ -204,9 +199,6 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
                                         .containsExactlyInAnyOrder("2", "4"));
             }
         }
-
-        OffsetMapCodecManager.forcedCodec = Optional.empty();
-        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
     private Properties customClientId(final String id) {
