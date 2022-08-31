@@ -509,9 +509,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 boolean terminationFinishedWithoutTimeout = workerThreadPool.awaitTermination(toSeconds(timeout), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked or otherwise stuck?", timeout);
-                    boolean shutdown = workerThreadPool.isShutdown();
-                    boolean terminated = workerThreadPool.isTerminated();
+                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
                 }
             } catch (InterruptedException e) {
                 log.error("InterruptedException", e);
@@ -1297,7 +1295,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
-            log.info("Transitioning paarallel consumer to state running.");
+            log.info("Transitioning parallel consumer to state running.");
             this.state = State.running;
             notifySomethingToDo();
         } else {
