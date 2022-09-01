@@ -93,7 +93,7 @@ class ProducerManagerTest {
 
     private final ModelUtils mu = new ModelUtils(module);
 
-    ProducerManager<String, String> pm = module.producerManager();
+    ProducerManager<String, String> producerManager = module.producerManager();
 
 
     /**
@@ -102,10 +102,10 @@ class ProducerManagerTest {
     @SneakyThrows
     @Test
     void sendingGetsLockedInTx() {
-        assertThat(pm).isNotTransactionCommittingInProgress();
+        assertThat(producerManager).isNotTransactionCommittingInProgress();
 
         // should send fine, futures should finish
-        var produceReadLock = pm.beginProducing(mock(PollContextInternal.class));
+        var produceReadLock = producerManager.beginProducing(mock(PollContextInternal.class));
         produceOneRecord();
 
         // acquire work should block
@@ -113,26 +113,26 @@ class ProducerManagerTest {
         blockedCommit.assertFunctionBlocks(() -> {
             // commit sequence
             try {
-                pm.preAcquireWork();
+                producerManager.preAcquireWork();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
             // releases the commit lock that was acquired
-            pm.postCommit();
+            producerManager.postCommit();
         });
 
         // pretend to finish producing records, give the lock back
         log.debug("Unlocking produce lock...");
-        pm.finishProducing(produceReadLock); // triggers commit lock to become acquired as the produce lock is now released
+        producerManager.finishProducing(produceReadLock); // triggers commit lock to become acquired as the produce lock is now released
 
         log.debug("Waiting for commit lock to release...");
         blockedCommit.awaitReturnFully();
 
         // start actual commit - acquire commit lock
-        pm.preAcquireWork();
+        producerManager.preAcquireWork();
 
         //
-        assertThat(pm).isTransactionCommittingInProgress();
+        assertThat(producerManager).isTransactionCommittingInProgress();
 
         // try to send more records, which will block as tx in process
         // Thread should be sleeping/blocked and not have returned
@@ -141,27 +141,27 @@ class ProducerManagerTest {
             log.debug("Starting sending records - will block due to open commit");
             ProducerManager<String, String>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing(mock(PollContextInternal.class));
+                produceLock = producerManager.beginProducing(mock(PollContextInternal.class));
             } catch (TimeoutException e) {
                 throw new RuntimeException(e);
             }
             log.debug("Then after released by finishing tx, complete the producing");
-            pm.finishProducing(produceLock);
+            producerManager.finishProducing(produceLock);
         });
 
 
         // pretend to finish tx
-        pm.postCommit();
+        producerManager.postCommit();
 
         //
-        assertThat(pm).isNotTransactionCommittingInProgress();
+        assertThat(producerManager).isNotTransactionCommittingInProgress();
 
         //
         await("blocked sends should only now complete").until(blockedRecordSenderReturned::functionHasCompleted);
     }
 
     private List<ParallelConsumer.Tuple<ProducerRecord<String, String>, Future<RecordMetadata>>> produceOneRecord() {
-        return pm.produceMessages(makeRecord());
+        return producerManager.produceMessages(makeRecord());
     }
 
     private List<ProducerRecord<String, String>> makeRecord() {
@@ -174,60 +174,60 @@ class ProducerManagerTest {
     @SneakyThrows
     @Test
     void txOnlyStartedUponMessageSend() {
-        assertThat(pm).isNotTransactionCommittingInProgress();
-        assertThat(pm).stateIs(INIT);
+        assertThat(producerManager).isNotTransactionCommittingInProgress();
+        assertThat(producerManager).stateIs(INIT);
 
         assertWithMessage("Transaction is started as not open")
-                .that(pm)
+                .that(producerManager)
                 .transactionNotOpen();
 
         {
-            var produceLock = pm.beginProducing(mock(PollContextInternal.class));
+            var produceLock = producerManager.beginProducing(mock(PollContextInternal.class));
 
             {
                 var notBlockedSends = produceOneRecord();
             }
 
-            assertThat(pm).stateIs(BEGIN);
-            assertThat(pm).transactionOpen();
+            assertThat(producerManager).stateIs(BEGIN);
+            assertThat(producerManager).transactionOpen();
 
             {
                 var notBlockedSends = produceOneRecord();
             }
 
-            pm.finishProducing(produceLock);
+            producerManager.finishProducing(produceLock);
         }
 
-        pm.preAcquireWork();
+        producerManager.preAcquireWork();
 
-        assertThat(pm).isTransactionCommittingInProgress();
+        assertThat(producerManager).isTransactionCommittingInProgress();
 
-        pm.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+        producerManager.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
 
-        assertThat(pm).isTransactionCommittingInProgress();
+        assertThat(producerManager).isTransactionCommittingInProgress();
 
-        pm.postCommit();
+        producerManager.postCommit();
 
-        assertThat(pm).isNotTransactionCommittingInProgress();
+        assertThat(producerManager).isNotTransactionCommittingInProgress();
 
         //
         assertWithMessage("A new transaction hasn't been opened")
-                .that(pm)
+                .that(producerManager)
                 .transactionNotOpen();
 
         // do another round of producing and check state
         {
-            var producingLock = pm.beginProducing(mock(PollContextInternal.class));
-            assertThat(pm).transactionNotOpen();
+            var producingLock = producerManager.beginProducing(mock(PollContextInternal.class));
+            assertThat(producerManager).transactionNotOpen();
             produceOneRecord();
-            assertThat(pm).transactionOpen();
-            pm.finishProducing(producingLock);
-            assertThat(pm).transactionOpen();
-            pm.preAcquireWork();
-            assertThat(pm).transactionOpen();
-            pm.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
-            assertThat(pm).transactionNotOpen();
-            assertThat(pm).stateIs(COMMIT);
+            assertThat(producerManager).transactionOpen();
+            producerManager.finishProducing(producingLock);
+            assertThat(producerManager).transactionOpen();
+            producerManager.preAcquireWork();
+            assertThat(producerManager).transactionOpen();
+            producerManager.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+            assertThat(producerManager).transactionNotOpen();
+            assertThat(producerManager).stateIs(COMMIT);
         }
     }
 
@@ -250,7 +250,7 @@ class ProducerManagerTest {
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
 
-            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
 
             var producingLockRef = new AtomicReference<ProducerManager.ProducingLock>();
             var offset1Mutex = new CountDownLatch(1);
@@ -258,7 +258,7 @@ class ProducerManagerTest {
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
                 ProducerManager<String, String>.ProducingLock newValue = null;
                 try {
-                    newValue = pm.beginProducing(mock(PollContextInternal.class));
+                    newValue = producerManager.beginProducing(mock(PollContextInternal.class));
                 } catch (TimeoutException e) {
                     throw new RuntimeException(e);
                 }
@@ -285,7 +285,7 @@ class ProducerManagerTest {
             };
 
 
-            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
 
 
             // won't block because offset 0 goes through
@@ -295,7 +295,7 @@ class ProducerManagerTest {
 
 
             // change to TM?
-            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
 
 
             // won't block - not dirty
@@ -315,7 +315,7 @@ class ProducerManagerTest {
             });
 
             // change to TM?
-            Truth.assertThat(pm.getProducerTransactionLock().isWriteLocked()).isFalse();
+            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
 
             // blocks as offset 1 is blocked sending and so cannot acquire commit lock
             // unblock 1 as unblocking function, and make sure that makes us return
