@@ -5,6 +5,7 @@ package io.confluent.csid.utils;
  */
 
 import com.google.common.truth.Truth;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -26,7 +27,8 @@ import static org.awaitility.Awaitility.await;
 @Slf4j
 public class BlockedThreadAsserter {
 
-    AtomicBoolean methodReturned = new AtomicBoolean(false);
+    @Getter
+    private final AtomicBoolean methodReturned = new AtomicBoolean(false);
 
     public boolean functionHasCompleted() {
         return methodReturned.get();
@@ -40,7 +42,9 @@ public class BlockedThreadAsserter {
     public void assertFunctionBlocks(Runnable functionExpectedToBlock, final Duration blockedForAtLeast) {
         Thread blocked = new Thread(() -> {
             try {
+                log.debug("Running function expected to block for at least {}...", blockedForAtLeast);
                 functionExpectedToBlock.run();
+                log.debug("Unblocking function finished");
             } catch (Exception e) {
                 log.error("Error in blocking function", e);
             }
