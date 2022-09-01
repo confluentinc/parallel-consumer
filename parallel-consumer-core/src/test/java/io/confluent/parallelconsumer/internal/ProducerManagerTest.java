@@ -19,11 +19,7 @@ import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
 import org.mockito.Mockito;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -61,36 +57,59 @@ import static org.mockito.Mockito.*;
 @Slf4j
 class ProducerManagerTest {
 
-    ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder()
-            .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-            .commitLockAcquisitionTimeout(ofSeconds(2))
-            .build();
+    ParallelConsumerOptions<String, String> opts;
 
-    PCModuleTestEnv module = new PCModuleTestEnv(opts) {
-        @Override
-        protected AbstractParallelEoSStreamProcessor<String, String> pc() {
-            if (parallelEoSStreamProcessor == null) {
-                AbstractParallelEoSStreamProcessor<String, String> raw = super.pc();
-                parallelEoSStreamProcessor = spy(raw);
+    PCModuleTestEnv module;
 
-                parallelEoSStreamProcessor = new ParallelEoSStreamProcessor<>(options(), this) {
-                    @Override
-                    protected boolean isTimeToCommitNow() {
-                        return true;
-                    }
+    ModelUtils mu;
 
-                    @Override
-                    public void close(final Duration timeout, final DrainingMode drainMode) {
-                    }
-                };
+    ProducerManager<String, String> producerManager;
+
+    /**
+     * Default settings
+     */
+    @BeforeEach
+    void setup() {
+        setup(ParallelConsumerOptions.<String, String>builder()
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+                .commitLockAcquisitionTimeout(ofSeconds(2)));
+    }
+
+    private void setup(ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> optionsBuilder) {
+        opts = optionsBuilder.build();
+
+        buildModule(opts);
+
+        module = buildModule(opts);
+
+        mu = new ModelUtils(module);
+
+        producerManager = module.producerManager();
+    }
+
+    private PCModuleTestEnv buildModule(ParallelConsumerOptions<String, String> opts) {
+        return new PCModuleTestEnv(opts) {
+            @Override
+            protected AbstractParallelEoSStreamProcessor<String, String> pc() {
+                if (parallelEoSStreamProcessor == null) {
+                    AbstractParallelEoSStreamProcessor<String, String> raw = super.pc();
+                    parallelEoSStreamProcessor = spy(raw);
+
+                    parallelEoSStreamProcessor = new ParallelEoSStreamProcessor<>(options(), this) {
+                        @Override
+                        protected boolean isTimeToCommitNow() {
+                            return true;
+                        }
+
+                        @Override
+                        public void close(final Duration timeout, final DrainingMode drainMode) {
+                        }
+                    };
+                }
+                return parallelEoSStreamProcessor;
             }
-            return parallelEoSStreamProcessor;
-        }
-    };
-
-    private final ModelUtils mu = new ModelUtils(module);
-
-    ProducerManager<String, String> producerManager = module.producerManager();
+        };
+    }
 
 
     /**
@@ -231,21 +250,26 @@ class ProducerManagerTest {
     @SneakyThrows
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffsetDirect() {
-        try (var pc = module.pc()) {
+        // custom settings
+        setup(ParallelConsumerOptions.<String, String>builder()
+                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER));
 
-            // send a record
+        try (var pc = module.pc()) {
             pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
             pc.setState(State.running);
 
+            // "send" one record
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
 
-            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
+            assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
+
 
             var producingLockRef = new AtomicReference<ProducerManager.ProducingLock>();
             var offset1Mutex = new CountDownLatch(1);
             var blockedOn1 = new AtomicBoolean(false);
+            // todo refactor to use real user function directly
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
                 ProducerManager<String, String>.ProducingLock newValue = null;
                 try {
@@ -276,29 +300,34 @@ class ProducerManagerTest {
             };
 
 
-            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
+            assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
 
             // won't block because offset 0 goes through
-            // purpose?
+            // distributes first work
             pc.controlLoop(userFunc, o -> {
             });
 
 
             // change to TM?
-            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
+            assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
+            {
+                var msg = "wait for first record to finish";
+                log.debug(msg);
+                await(msg).untilAsserted(() -> assertThat(pc.getWorkMailBox()).hasSize(1));
+            }
 
             // won't block - not dirty
-            // purpose?
+            // collects first work results
             pc.controlLoop(userFunc, o -> {
             });
 
-            // send another record, register the work, but don't process inbox
+            // send another record, register the work
             freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
 
-            // will first try to commit - which will work fine, as there's no produce lock yet held yet
+            // will first try to commit - which will work fine, as there's no produce lock isn't held yet (off 0 goes through fine)
             // then it will get the work, distributes it
             // will then return
             // -- in the worker thread - will trigger the block and hold the produce lock
@@ -306,18 +335,17 @@ class ProducerManagerTest {
             });
 
             // change to TM?
-            Truth.assertThat(producerManager.getProducerTransactionLock().isWriteLocked()).isFalse();
+            assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
-            // blocks as offset 1 is blocked sending and so cannot acquire commit lock
-            // unblock 1 as unblocking function, and make sure that makes us return
+
+            // blocks, as offset 1 is blocked sending and so cannot acquire commit lock
             var msg = "Ensure expected produce lock is now held by blocked worker thread";
             log.debug(msg);
-            await(msg).untilAtomic(blockedOn1, Matchers.is(Matchers.equalTo(true)));
+            await(msg).untilTrue(blockedOn1);
 
-            pc.controlLoop(userFunc, o -> {
-            });
 
             var commitBlocks = new BlockedThreadAsserter();
+            // unblock 1 as unblocking function, and make sure that makes us return
             commitBlocks.assertUnblocksAfter(() -> {
                 log.debug("Running control loop which should block until offset 1 is released by finishing produce");
                 try {
@@ -329,7 +357,7 @@ class ProducerManagerTest {
             }, () -> {
                 log.debug("Unblocking offset processing offset1Mutex...");
                 offset1Mutex.countDown();
-            }, ofSeconds(60));
+            }, ofSeconds(10));
 
             //
             await().untilAsserted(() -> Truth.assertWithMessage("commit should now have unlocked and returned")
