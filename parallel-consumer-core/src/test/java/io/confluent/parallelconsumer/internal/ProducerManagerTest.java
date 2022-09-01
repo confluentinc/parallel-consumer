@@ -126,7 +126,7 @@ class ProducerManagerTest {
         pm.finishProducing(produceReadLock); // triggers commit lock to become acquired as the produce lock is now released
 
         log.debug("Waiting for commit lock to release...");
-        await().untilTrue(blockedCommit.getMethodReturned());
+        blockedCommit.awaitReturnFully();
 
         // start actual commit - acquire commit lock
         pm.preAcquireWork();
