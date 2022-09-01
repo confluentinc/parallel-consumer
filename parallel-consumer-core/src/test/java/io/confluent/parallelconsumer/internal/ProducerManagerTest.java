@@ -312,6 +312,7 @@ class ProducerManagerTest {
             // change to TM?
             assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
+            //
             {
                 var msg = "wait for first record to finish";
                 log.debug(msg);
@@ -320,8 +321,9 @@ class ProducerManagerTest {
 
             // won't block - not dirty
             // collects first work results
-            pc.controlLoop(userFunc, o -> {
-            });
+            // todo delete?
+//            pc.controlLoop(userFunc, o -> {
+//            });
 
             // send another record, register the work
             freshWork = mu.createFreshWork();

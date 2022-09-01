@@ -758,7 +758,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return true if committing should either way be attempted now
      */
     private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
-        final boolean shouldTryCommitNow = isTimeToCommitNow(); // && wm.isDirty();
+        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty();
         // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on

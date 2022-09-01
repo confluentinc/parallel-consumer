@@ -118,7 +118,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
 
         //
-        await().until(() -> pc.isClosedOrFailed());
+        await().untilAsserted(() -> assertThat(pc).isClosedOrFailed());
         assertThat(pc).getFailureCause().hasMessageThat().contains("timeout");
 
 
