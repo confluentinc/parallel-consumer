@@ -373,7 +373,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         ReentrantReadWriteLock.WriteLock writeLock = producerTransactionLock.writeLock();
         if (producerTransactionLock.isWriteLocked() && !producerTransactionLock.isWriteLockedByCurrentThread()) {
-            throw new ConcurrentModificationException(this.getClass().getSimpleName() + " is not safe for multi-threaded access");
+            throw new ConcurrentModificationException(this.getClass().getSimpleName() + " is not safe for multi-threaded access - write lock already held by another thread");
         }
 
         // acquire lock the commit lock
