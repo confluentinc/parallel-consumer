@@ -109,20 +109,25 @@ class ProducerManagerTest {
         var produceReadLock = producerManager.beginProducing(mock(PollContextInternal.class));
         produceOneRecord();
 
-        new BlockedThreadAsserter().assertFunctionBlocks(() -> {
+        // acquire work should block
+        var blockedCommit = new BlockedThreadAsserter();
+        blockedCommit.assertFunctionBlocks(() -> {
             // commit sequence
             try {
                 producerManager.preAcquireWork();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+            // releases the commit lock that was acquired
             producerManager.postCommit();
         });
 
         // pretend to finish producing records, give the lock back
-        log.debug("Unlocking...");
-        producerManager.finishProducing(produceReadLock);
+        log.debug("Unlocking produce lock...");
+        producerManager.finishProducing(produceReadLock); // triggers commit lock to become acquired as the produce lock is now released
 
+        log.debug("Waiting for commit lock to release...");
+        blockedCommit.awaitReturnFully();
 
         // start actual commit - acquire commit lock
         producerManager.preAcquireWork();
