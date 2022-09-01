@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.hamcrest.Matchers;
@@ -63,9 +62,6 @@ import static org.mockito.Mockito.*;
 class ProducerManagerTest {
 
     ParallelConsumerOptions<String, String> opts = ParallelConsumerOptions.<String, String>builder()
-            .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-            .producer(mock(Producer.class))
-            .consumer(mock(Consumer.class))
             .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
             .commitLockAcquisitionTimeout(ofSeconds(2))
             .build();
@@ -235,12 +231,6 @@ class ProducerManagerTest {
     @SneakyThrows
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffsetDirect() {
-
-//        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
-//                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-//                .commitLockAcquisitionTimeout(ofSeconds(2))
-//                .build();
-
         try (var pc = module.pc()) {
 
             // send a record

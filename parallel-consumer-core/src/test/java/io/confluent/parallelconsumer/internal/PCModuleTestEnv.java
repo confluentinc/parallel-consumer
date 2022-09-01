@@ -11,8 +11,6 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
 
-import static org.mockito.Mockito.mock;
-
 /**
  * Version of the {@link PCModule} in test contexts.
  *
@@ -24,6 +22,14 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
+
+        ParallelConsumerOptions<String, String> override = enhanceOptions(optionsInstance);
+
+        // overwrite super's with new instance
+        super.optionsInstance = override;
+    }
+
+    private ParallelConsumerOptions<String, String> enhanceOptions(ParallelConsumerOptions<String, String> optionsInstance) {
         var copy = options().toBuilder();
 
         if (optionsInstance.getConsumer() == null) {
@@ -36,15 +42,11 @@ public class PCModuleTestEnv extends PCModule<String, String> {
                 .producer(Mockito.mock(Producer.class))
                 .build();
 
-        // overwrite super's with new instance
-        super.optionsInstance = override;
+        return override;
     }
 
     public PCModuleTestEnv() {
-        this(ParallelConsumerOptions.<String, String>builder()
-                .producer(mock(Producer.class))
-                .consumer(mock(Consumer.class))
-                .build());
+        this(ParallelConsumerOptions.<String, String>builder().build());
     }
 
     @Override
@@ -52,10 +54,13 @@ public class PCModuleTestEnv extends PCModule<String, String> {
         return mockProducerWrapTransactional();
     }
 
-    ProducerWrap<String, String> mockProduceWrap = Mockito.spy(new ProducerWrap<>(options(), true, producer()));
+    ProducerWrap<String, String> mockProduceWrap;
 
     @NonNull
     private ProducerWrap mockProducerWrapTransactional() {
+        if (mockProduceWrap == null) {
+            mockProduceWrap = Mockito.spy(new ProducerWrap<>(options(), true, producer()));
+        }
         return mockProduceWrap;
     }
 
@@ -63,7 +68,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     protected ConsumerManager<String, String> consumerManager() {
         ConsumerManager<String, String> consumerManager = super.consumerManager();
 
-        // force update to set cache, otherwise maybe never called (fake consuemr)
+        // force update to set cache, otherwise maybe never called (fake consumer)
         consumerManager.updateMetadataCache();
 
         return consumerManager;
