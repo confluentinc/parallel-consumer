@@ -10,6 +10,7 @@ import io.confluent.csid.utils.StringUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
+import org.assertj.core.data.Percentage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -25,6 +26,11 @@ import static org.awaitility.Awaitility.await;
 
 @Slf4j
 class ReactorPCTest extends ReactorUnitTestBase {
+
+    /**
+     * The percent of the max concurrency tolerance allowed
+     */
+    public static final Percentage MAX_CONCURRENCY_OVERFLOW_ALLOWANCE = Percentage.withPercentage(1.2);
 
     @BeforeEach
     public void setupData() {
@@ -80,50 +86,47 @@ class ReactorPCTest extends ReactorUnitTestBase {
         var completeOrProblem = new CountDownLatch(1);
         var maxConcurrency = MAX_CONCURRENCY;
 
-        reactorPC.react((rec) -> {
-            Mono<String> result = Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()))
-                    .doOnNext(ignore -> {
-                        // add that our mono processing has started
-                        log.trace("Reactor user function executing: {}", rec);
-                        msgs.add(rec);
-                        if (msgs.size() > maxConcurrency) {
-                            log.error("More records submitted for processing than max concurrency settings ({} vs {})", msgs.size(), maxConcurrency);
-                            // fail fast - test already failed
-                            completeOrProblem.countDown();
-                        }
-                    })
-                    // delay the Mono to simulate a slow async processing time, to cause our concurrency to be reached for sure
-                    .delayElement(Duration.ofMillis((int) (100 * Math.random())))
-                    .doOnNext(s -> {
-                        log.trace("User function after delay. Records pending: {}, removing from out for processing: {}", msgs.size(), rec);
-                        int currentConcurrentRecords = msgs.size();
-                        int highestSoFar = Math.max(currentConcurrentRecords, maxConcurrentRecordsSeen.get());
-                        maxConcurrentRecordsSeen.set(highestSoFar);
+        reactorPC.react(recordContext -> Mono.just(StringUtils.msg("result: {}:{}", recordContext.offset(), recordContext.value()))
+                .doOnNext(ignore -> {
+                    // add that our mono processing has started
+                    log.trace("Reactor user function executing: {}", recordContext);
+                    msgs.add(recordContext);
+                    if (msgs.size() > maxConcurrency) {
+                        log.error("More records submitted for processing than max concurrency settings ({} vs {})", msgs.size(), maxConcurrency);
+                        // fail fast - test already failed
+                        completeOrProblem.countDown();
+                    }
+                })
+                // delay the Mono to simulate a slow async processing time, to cause our concurrency to be reached for sure
+                .delayElement(Duration.ofMillis((int) (100 * Math.random())))
+                .doOnNext(s -> {
+                    log.trace("User function after delay. Records pending: {}, removing from out for processing: {}", msgs.size(), recordContext);
+                    int currentConcurrentRecords = msgs.size();
+                    int highestSoFar = Math.max(currentConcurrentRecords, maxConcurrentRecordsSeen.get());
+                    maxConcurrentRecordsSeen.set(highestSoFar);
 
-                        //
-                        boolean removed = msgs.remove(rec);
-                        assertWithMessage("record was present and removed")
-                                .that(removed).isTrue();
+                    //
+                    boolean removed = msgs.remove(recordContext);
+                    assertWithMessage("record was present and removed")
+                            .that(removed).isTrue();
 
-                        //
-                        int numberOfFinishedRecords = finishedCount.incrementAndGet();
-                        boolean allExpectedRecordsAreProcessed = numberOfFinishedRecords > quantity - 1;
-                        if (allExpectedRecordsAreProcessed) {
-                            // release the latch to indicate processing complete
-                            completeOrProblem.countDown();
-                        }
+                    //
+                    int numberOfFinishedRecords = finishedCount.incrementAndGet();
+                    boolean allExpectedRecordsAreProcessed = numberOfFinishedRecords > quantity - 1;
+                    if (allExpectedRecordsAreProcessed) {
+                        // release the latch to indicate processing complete
+                        completeOrProblem.countDown();
+                    }
 
-                        //
-                        bar.step();
-                    });
-            return result;
-        });
+                    //
+                    bar.step();
+                }));
 
         // block here until all messages processed
         LatchTestUtils.awaitLatch(completeOrProblem, defaultTimeoutSeconds);
 
         //
-        int maxConcurrencyAllowedThreshold = (int) (maxConcurrency * 1.1);
+        int maxConcurrencyAllowedThreshold = maxConcurrency * MAX_CONCURRENCY_OVERFLOW_ALLOWANCE;
         assertWithMessage("Max concurrency should never be exceeded")
                 .that(maxConcurrentRecordsSeen.get()).isLessThan(maxConcurrencyAllowedThreshold);
         log.info("Max concurrency was {}", maxConcurrentRecordsSeen.get());
