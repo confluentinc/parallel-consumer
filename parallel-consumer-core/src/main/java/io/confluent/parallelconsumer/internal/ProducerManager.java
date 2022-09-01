@@ -366,6 +366,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void acquireCommitLock() throws java.util.concurrent.TimeoutException, InterruptedException {
+        log.debug("Acquiring commit - checking lock state...");
         if (producerTransactionLock.isWriteLocked() && producerTransactionLock.isWriteLockedByCurrentThread()) {
             log.debug("Lock already held, returning with-out reentering to avoid write lock layers...");
             return;
