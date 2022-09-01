@@ -19,7 +19,10 @@ import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.Mockito;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -319,12 +322,6 @@ class ProducerManagerTest {
                 await(msg).untilAsserted(() -> assertThat(pc.getWorkMailBox()).hasSize(1));
             }
 
-            // won't block - not dirty
-            // collects first work results
-            // todo delete?
-//            pc.controlLoop(userFunc, o -> {
-//            });
-
             // send another record, register the work
             freshWork = mu.createFreshWork();
             pc.registerWork(freshWork);
@@ -336,9 +333,8 @@ class ProducerManagerTest {
             pc.controlLoop(userFunc, o -> {
             });
 
-            // change to TM?
+            //
             assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
-
 
             // blocks, as offset 1 is blocked sending and so cannot acquire commit lock
             var msg = "Ensure expected produce lock is now held by blocked worker thread";
@@ -379,49 +375,6 @@ class ProducerManagerTest {
 
             }
         }
-    }
-
-    // todo test allowEagerProcessingDuringTransactionCommit
-    @Test
-    @Disabled
-    void allowEagerProcessingDuringTransactionCommit() {
-
-    }
-
-    @Test
-    @Disabled
-        // todo implement or delete
-    void commitLockTimeoutShouldRecover() {
-    }
-
-    @Test
-    @Disabled
-        // todo implement or delete
-    void produceLockTimeoutShouldRecover() {
-    }
-
-
-    /**
-     * Test aborting the second tx has only first plus nothing in result topic
-     */
-    @Test
-    // todo implement or delete
-    @Disabled
-    void abortedSecondTransaction() {
-        Truth.assertThat(true).isFalse();
-    }
-
-
-    /**
-     * Test aborting the first tx ends up with nothing
-     */
-    @Test
-    // todo implement or delete
-    @Disabled
-    void abortedBothTransactions() {
-        // do the above again, but instead abort the transaction
-        // assert nothing on result topic
-        Truth.assertThat(true).isFalse();
     }
 
     @Test

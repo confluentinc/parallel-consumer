@@ -91,9 +91,8 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
     void commitTimeout(int multiple) {
         var options = createOptions()
                 .allowEagerProcessingDuringTransactionCommit(false)
-//                .producer(kcu.createNewProducer(KafkaClientUtils.ProducerMode.TRANSACTIONAL))
                 .build();
-        setup(new PCModule(options));
+        setup(new PCModule<>(options));
 
         final int offsetToFail = 0;
         pc.pollAndProduce(recordContexts -> {
@@ -123,26 +122,16 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
 
         // check what exists in the output topic
-//        2nd commit will have succeeded
+        // 2nd commit will have succeeded
         var newConsumer = kcu.createNewConsumer(REUSE_GROUP);
         newConsumer.subscribe(of(getTopic()));
 
         newConsumer.poll(ofSeconds(20));
 
-//        final boolean smallTimeout = multiple == SMALL_TIMEOUT;
-
         var commitHistorySubject = assertThat(newConsumer).hasCommittedToPartition(new TopicPartition(getTopic(), offsetToFail));
 
-
-//        if (smallTimeout) {
-//            // small timeout and record get's committed
-//            commitHistorySubject.encodingEmpty();
-//            commitHistorySubject.offset(NUMBER_TO_SEND);
-//        } else {
-        // much larger timeout, sleep gets interrupted, but doesn't complete
         commitHistorySubject.encodedIncomplete(0);
         commitHistorySubject.offset(0);
-//        }
     }
 
     @Test
