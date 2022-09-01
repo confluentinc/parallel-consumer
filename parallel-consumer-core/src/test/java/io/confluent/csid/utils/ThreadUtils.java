@@ -12,7 +12,9 @@ public class ThreadUtils {
 
     @SneakyThrows
     public static void sleepQuietly(final int ms) {
+        log.debug("Sleeping for {}", ms);
         Thread.sleep(ms);
+        log.debug("Woke up (slept for {})", ms);
     }
 
     public static void sleepLog(final int ms) {

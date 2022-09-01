@@ -453,7 +453,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
          */
         protected void unlock() {
             produceLock.unlock();
-            log.debug("Unlocking produce locked (context: {}).", context.getOffsets());
+            log.debug("Unlocking produce lock (context: {}).", context.getOffsets());
         }
     }
 }

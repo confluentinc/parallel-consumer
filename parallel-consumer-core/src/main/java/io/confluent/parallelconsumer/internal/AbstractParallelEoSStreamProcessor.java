@@ -534,6 +534,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.debug("Close complete.");
         this.state = closed;
+
+        if (this.getFailureCause() != null) {
+            log.error("PC closed due to error: {}", getFailureCause(), null);
+        }
     }
 
     /**
@@ -657,8 +661,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
-                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw failureReason;
                 }
             }

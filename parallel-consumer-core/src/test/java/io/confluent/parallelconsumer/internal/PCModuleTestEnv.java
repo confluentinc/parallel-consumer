@@ -24,12 +24,19 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
-        Consumer mockConsumer = Mockito.mock(Consumer.class);
-        Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
-        var override = options().toBuilder()
-                .consumer(mockConsumer)
+        var copy = options().toBuilder();
+
+        if (optionsInstance.getConsumer() == null) {
+            Consumer<String, String> mockConsumer = Mockito.mock(Consumer.class);
+            Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
+            copy.consumer(mockConsumer);
+        }
+
+        var override = copy
                 .producer(Mockito.mock(Producer.class))
                 .build();
+
+        // overwrite super's with new instance
         super.optionsInstance = override;
     }
 

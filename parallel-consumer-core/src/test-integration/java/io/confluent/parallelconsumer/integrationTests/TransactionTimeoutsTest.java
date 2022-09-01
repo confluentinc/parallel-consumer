@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.PCModule;
-import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import io.confluent.parallelconsumer.internal.ProducerWrap;
 import lombok.SneakyThrows;
@@ -21,18 +20,23 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.REUSE_GROUP;
+import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static org.mockito.ArgumentMatchers.any;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Tests behaviour under timeouts
@@ -43,6 +47,8 @@ import static org.mockito.ArgumentMatchers.any;
 @Slf4j
 class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
+    public static final int NUMBER_TO_SEND = 5;
+    public static final int SMALL_TIMEOUT = 3;
     private ParallelEoSStreamProcessor<String, String> pc;
 
     @SneakyThrows
@@ -51,27 +57,54 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         pc = new ParallelEoSStreamProcessor<>(module.options(), module);
 
-        kcu.produceMessages(getTopic(), 5);
+        kcu.produceMessages(getTopic(), NUMBER_TO_SEND);
 
-        pc.subscribe(UniLists.of(getTopic()));
+        pc.subscribe(of(getTopic()));
     }
 
-    private ParallelConsumerOptions<String, String> createOptions() {
-        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
+    private ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> createOptions() {
+        return ParallelConsumerOptions.<String, String>builder()
                 .consumer(kcu.createNewConsumer())
                 .producer(kcu.createNewProducer(CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER))
                 .commitMode(CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER)
                 .commitLockAcquisitionTimeout(ofSeconds(2))
+                .defaultMessageRetryDelay(ofMillis(100))
                 .produceLockAcquisitionTimeout(ofSeconds(2))
-                .timeBetweenCommits(ofSeconds(5))
-                .allowEagerProcessingDuringTransactionCommit(true)
-                .build();
-        return options;
+                .timeBetweenCommits(ofSeconds(NUMBER_TO_SEND))
+                .allowEagerProcessingDuringTransactionCommit(true);
     }
 
-    @Test
-    void commitTimeout() {
-        setup(new PCModuleTestEnv(createOptions()));
+    /**
+     * Sleep time multiplier:
+     * <p>
+     * 5: triggers a timeout
+     * <p>
+     * 50: triggers a timeout with a much longer deadlock
+     *
+     * @param multiple
+     */
+    @ParameterizedTest()
+    @ValueSource(ints = {
+            SMALL_TIMEOUT, // triggers a timeout, but get's committed in the shutdown commit
+            50 // a much longer deadlock, which is still blocked at shutdown, and so shutdown interrupts the sleep, but it never got succeeded, so when shutdown commit runs, it successdully commits, but base offset will be zero, with the incomplete data encoded.
+    })
+    void commitTimeout(int multiple) {
+        var options = createOptions()
+                .allowEagerProcessingDuringTransactionCommit(false)
+//                .producer(kcu.createNewProducer(KafkaClientUtils.ProducerMode.TRANSACTIONAL))
+                .build();
+        setup(new PCModule(options));
+
+        final int offsetToFail = 0;
+        pc.pollAndProduce(recordContexts -> {
+            long offset = recordContexts.offset();
+            if (offset == offsetToFail) {
+                // triggers deadlock as controller can't acquire commit lock fast enough due to this sleeping thread
+                ThreadUtils.sleepQuietly(1000 * multiple);
+            }
+            return new ProducerRecord<>(getTopic() + "-output", "random");
+        });
+
 
         // send, process, commit
         // assert output topic
@@ -84,19 +117,32 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         // assert output topic
 
 
-        pc.pollAndProduce(recordContexts -> {
-            long offset = recordContexts.offset();
-            if (offset == 0) {
-                // triggers deadlock
-                ThreadUtils.sleepQuietly(5000);
-            }
-            return new ProducerRecord<>(getTopic() + "-output", "random");
-        });
-
         //
-        Awaitility.await().until(() -> pc.getFailureCause() != null);
+        await().until(() -> pc.isClosedOrFailed());
+        assertThat(pc).getFailureCause().hasMessageThat().contains("timeout");
+
 
         // check what exists in the output topic
+//        2nd commit will have succeeded
+        var newConsumer = kcu.createNewConsumer(REUSE_GROUP);
+        newConsumer.subscribe(of(getTopic()));
+
+        newConsumer.poll(ofSeconds(20));
+
+//        final boolean smallTimeout = multiple == SMALL_TIMEOUT;
+
+        var commitHistorySubject = assertThat(newConsumer).hasCommittedToPartition(new TopicPartition(getTopic(), offsetToFail));
+
+
+//        if (smallTimeout) {
+//            // small timeout and record get's committed
+//            commitHistorySubject.encodingEmpty();
+//            commitHistorySubject.offset(NUMBER_TO_SEND);
+//        } else {
+        // much larger timeout, sleep gets interrupted, but doesn't complete
+        commitHistorySubject.encodedIncomplete(0);
+        commitHistorySubject.offset(0);
+//        }
     }
 
     @Test
@@ -104,7 +150,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         CountDownLatch produceLock = new CountDownLatch(1);
 
-        PCModule<String, String> slowCommitModule = new PCModule<>(createOptions()) {
+        PCModule<String, String> slowCommitModule = new PCModule<>(createOptions().build()) {
 
             @Override
             protected ProducerWrap<String, String> producerWrap() {
@@ -158,7 +204,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         // assert output topic
 
-        Awaitility.await().atMost(ofSeconds(60)).untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
+        await().atMost(ofSeconds(60)).untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
 
         // assert output topic
 

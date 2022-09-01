@@ -11,7 +11,9 @@ import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedSubject;
 
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.google.common.truth.Truth.assertAbout;
 
@@ -67,4 +69,16 @@ public class CommitHistorySubject extends Subject {
         nothing();
     }
 
+    public void encodedIncomplete(int... expectedEncodedOffsetsArray) {
+        check("encodedSucceeded()")
+                .that(actual.getEncodedSucceeded().getIncompleteOffsets())
+                .containsExactlyElementsIn(Arrays.stream(expectedEncodedOffsetsArray)
+                        .boxed()
+                        .map(Long::valueOf)
+                        .collect(Collectors.toList()));
+    }
+
+    public void encodingEmpty() {
+        check("encodedMetadata()").that(actual.getEncoding()).isEmpty();
+    }
 }
