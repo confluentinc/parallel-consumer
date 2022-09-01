@@ -126,7 +126,7 @@ class ReactorPCTest extends ReactorUnitTestBase {
         LatchTestUtils.awaitLatch(completeOrProblem, defaultTimeoutSeconds);
 
         //
-        int maxConcurrencyAllowedThreshold = maxConcurrency * MAX_CONCURRENCY_OVERFLOW_ALLOWANCE;
+        int maxConcurrencyAllowedThreshold = (int) (maxConcurrency * MAX_CONCURRENCY_OVERFLOW_ALLOWANCE.value);
         assertWithMessage("Max concurrency should never be exceeded")
                 .that(maxConcurrentRecordsSeen.get()).isLessThan(maxConcurrencyAllowedThreshold);
         log.info("Max concurrency was {}", maxConcurrentRecordsSeen.get());
