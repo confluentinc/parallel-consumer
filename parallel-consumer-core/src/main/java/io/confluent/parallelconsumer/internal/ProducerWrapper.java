@@ -24,7 +24,7 @@ import java.util.Map;
 import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerState.*;
 
 /**
- * Our extension of the standard Consumer to mostly add some introspection functions and state tracking.
+ * Our extension of the standard Producer to mostly add some introspection functions and state tracking.
  *
  * @author Antony Stubbs
  */
