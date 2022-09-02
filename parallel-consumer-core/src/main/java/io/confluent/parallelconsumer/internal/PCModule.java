@@ -12,8 +12,6 @@ import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
-import java.util.function.Supplier;
-
 /**
  * Minimum dependency injection system, modled on how Dagger works.
  * <p>
@@ -36,34 +34,46 @@ public class PCModule<K, V> {
         return optionsInstance;
     }
 
-    private ProducerManager<K, V> kvProducerManager;
+    private ProducerWrapper<K, V> producerWrapper;
 
-    //Provides
-    protected ProducerManager<K, V> producerManager() {
-        if (kvProducerManager == null) {
-            this.kvProducerManager = new ProducerManager<K, V>(producer(), consumerManager(), workManager(), options());
+    protected ProducerWrapper<K, V> producerWrap() {
+        if (this.producerWrapper == null) {
+            this.producerWrapper = new ProducerWrapper<>(options());
         }
-        return kvProducerManager;
+        return producerWrapper;
     }
 
-    private Producer<K, V> producer() {
+    private ProducerManager<K, V> producerManager;
+
+    protected ProducerManager<K, V> producerManager() {
+        if (producerManager == null) {
+            this.producerManager = new ProducerManager<>(producerWrap(), consumerManager(), workManager(), options());
+        }
+        return producerManager;
+    }
+
+    public Producer<K, V> producer() {
         return optionsInstance.getProducer();
     }
 
-    private ConsumerManager consumerManager;
+    public Consumer<K, V> consumer() {
+        return optionsInstance.getConsumer();
+    }
+
+    private ConsumerManager<K, V> consumerManager;
 
     protected ConsumerManager<K, V> consumerManager() {
         if (consumerManager == null) {
-            consumerManager = new ConsumerManager(optionsInstance.getConsumer());
+            consumerManager = new ConsumerManager<>(optionsInstance.getConsumer());
         }
         return consumerManager;
     }
 
-    private WorkManager workManager;
+    private WorkManager<K, V> workManager;
 
     public WorkManager<K, V> workManager() {
         if (workManager == null) {
-            workManager = new WorkManager<K, V>(this, dynamicExtraLoadFactor(), TimeUtils.getClock());
+            workManager = new WorkManager<>(this, dynamicExtraLoadFactor(), TimeUtils.getClock());
         }
         return workManager;
     }
@@ -81,21 +91,13 @@ public class PCModule<K, V> {
         return dynamicLoadFactor;
     }
 
-    private BrokerPollSystem brokerPollSystem;
+    private BrokerPollSystem<K, V> brokerPollSystem;
 
     protected BrokerPollSystem<K, V> brokerPoller(AbstractParallelEoSStreamProcessor<K, V> pc) {
         if (brokerPollSystem == null) {
-//            final ParallelEoSStreamProcessor<K, V> pc = pc();
             brokerPollSystem = new BrokerPollSystem<>(consumerManager(), workManager(), pc, options());
         }
         return brokerPollSystem;
     }
 
-    public Supplier<AbstractParallelEoSStreamProcessor<K, V>> pcSupplier() {
-        return this::pc;
-    }
-
-    public Consumer<K, V> consumer() {
-        return optionsInstance.getConsumer();
-    }
 }
