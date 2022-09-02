@@ -51,7 +51,7 @@ public class TransactionMarkersTest extends BrokerIntegrationTest<String, String
     Producer<String, String> txProducerThree;
     Producer<String, String> normalProducer;
     Consumer<String, String> consumer;
-    ParallelEoSStreamProcessor<String, String> pc;
+    protected ParallelEoSStreamProcessor<String, String> pc;
 
     @BeforeEach
         // todo move to super?
