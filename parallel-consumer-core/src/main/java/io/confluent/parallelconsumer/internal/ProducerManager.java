@@ -253,11 +253,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             }
             try {
                 if (producerWrapper.isMockProducer()) {
-                    // see bug https://issues.apache.org/jira/browse/KAFKA-10382
-                    // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
-                    synchronized (producerWrapper) {
-                        commitTransaction();
-                    }
+                    commitTransaction();
                 } else {
                     // TODO talk about alternatives to this brute force approach for retrying committing transactions
                     boolean retrying = retryCount > 0;
