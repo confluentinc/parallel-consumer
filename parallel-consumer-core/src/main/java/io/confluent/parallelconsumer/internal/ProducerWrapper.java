@@ -21,7 +21,7 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Map;
 
-import static io.confluent.parallelconsumer.internal.ProducerWrap.ProducerState.*;
+import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerState.*;
 
 /**
  * Our extension of the standard Consumer to mostly add some introspection functions and state tracking.
@@ -29,7 +29,7 @@ import static io.confluent.parallelconsumer.internal.ProducerWrap.ProducerState.
  * @author Antony Stubbs
  */
 @RequiredArgsConstructor
-public class ProducerWrap<K, V> implements Producer<K, V> {
+public class ProducerWrapper<K, V> implements Producer<K, V> {
 
     /**
      * Used to track Producer's transaction state, as it' isn't otherwise exposed.
@@ -63,7 +63,7 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     @Delegate(excludes = Excludes.class)
     private final Producer<K, V> producer;
 
-    public ProducerWrap(ParallelConsumerOptions<K, V> options) {
+    public ProducerWrapper(ParallelConsumerOptions<K, V> options) {
         this.options = options;
         producer = options.getProducer();
         this.producerIsConfiguredForTransactions = discoverIfProducerIsConfiguredForTransactions();

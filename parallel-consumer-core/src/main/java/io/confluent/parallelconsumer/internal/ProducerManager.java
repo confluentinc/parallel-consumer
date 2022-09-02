@@ -41,7 +41,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
     @Getter
-    protected final ProducerWrap<K, V> producerWrap;
+    protected final ProducerWrapper<K, V> producerWrapper;
 
     private final ParallelConsumerOptions<K, V> options;
 
@@ -68,12 +68,12 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     @Getter
     private ReentrantReadWriteLock producerTransactionLock;
 
-    public ProducerManager(ProducerWrap<K, V> newProducer,
+    public ProducerManager(ProducerWrapper<K, V> newProducer,
                            ConsumerManager<K, V> newConsumer,
                            WorkManager<K, V> wm,
                            ParallelConsumerOptions<K, V> options) {
         super(newConsumer, wm);
-        this.producerWrap = newProducer;
+        this.producerWrapper = newProducer;
         this.options = options;
 
         initProducer();
@@ -83,18 +83,18 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         producerTransactionLock = new ReentrantReadWriteLock(true);
 
         if (options.isUsingTransactionalProducer()) {
-            if (!producerWrap.isConfiguredForTransactions()) {
+            if (!producerWrapper.isConfiguredForTransactions()) {
                 throw new IllegalArgumentException("Using transactional option, yet Producer doesn't have a transaction ID - Producer needs a transaction id");
             }
             try {
                 log.debug("Initialising producer transaction session...");
-                producerWrap.initTransactions();
+                producerWrapper.initTransactions();
             } catch (KafkaException e) {
                 log.error("Make sure your producer is setup for transactions - specifically make sure it's {} is set.", ProducerConfig.TRANSACTIONAL_ID_CONFIG, e);
                 throw e;
             }
         } else {
-            if (producerWrap.isConfiguredForTransactions()) {
+            if (producerWrapper.isConfiguredForTransactions()) {
                 throw new IllegalArgumentException("Using non-transactional producer option, but Producer has a transaction ID - "
                         + "the Producer must not have a transaction ID for this option. This is because having such an ID forces the "
                         + "Producer into transactional mode - i.e. you cannot use it without using transactions.");
@@ -131,7 +131,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         List<ParallelConsumer.Tuple<ProducerRecord<K, V>, Future<RecordMetadata>>> futures = new ArrayList<>(outMsgs.size());
         for (ProducerRecord<K, V> rec : outMsgs) {
             log.trace("Producing {}", rec);
-            var future = producerWrap.send(rec, callback);
+            var future = producerWrapper.send(rec, callback);
             futures.add(ParallelConsumer.Tuple.pairOf(rec, future));
         }
         return futures;
@@ -146,7 +146,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     private void lazyMaybeBeginTransaction() {
         if (options.isUsingTransactionCommitMode()) {
-            boolean txNotBegunAlready = !producerWrap.isTransactionOpen();
+            boolean txNotBegunAlready = !producerWrapper.isTransactionOpen();
             if (txNotBegunAlready) {
                 syncBeginTransaction();
             }
@@ -159,7 +159,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * Thread safe.
      */
     private synchronized void syncBeginTransaction() {
-        boolean txNotBegunAlready = !producerWrap.isTransactionOpen();
+        boolean txNotBegunAlready = !producerWrapper.isTransactionOpen();
         if (txNotBegunAlready) {
             beginTransaction();
         }
@@ -206,7 +206,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * Wait for all in flight records to be ack'd before continuing, so they are all in the tx.
      */
     private void drain() {
-        producerWrap.flush();
+        producerWrapper.flush();
     }
 
     /**
@@ -238,7 +238,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         //
         lazyMaybeBeginTransaction(); // if not using a produce flow, a tx will need to be started here (as no records are being produced)
-        producerWrap.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+        producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
         boolean committed = false;
@@ -252,17 +252,17 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                 throw new InternalRuntimeError(msg, lastErrorSavedForRethrow);
             }
             try {
-                if (producerWrap.isMockProducer()) {
+                if (producerWrapper.isMockProducer()) {
                     // see bug https://issues.apache.org/jira/browse/KAFKA-10382
                     // KAFKA-10382 - MockProducer is not ThreadSafe, ideally it should be as the implementation it mocks is
-                    synchronized (producerWrap) {
+                    synchronized (producerWrapper) {
                         commitTransaction();
                     }
                 } else {
                     // TODO talk about alternatives to this brute force approach for retrying committing transactions
                     boolean retrying = retryCount > 0;
                     if (retrying) {
-                        if (producerWrap.isTransactionCompleting()) {
+                        if (producerWrapper.isTransactionCompleting()) {
                             // try wait again
                             commitTransaction();
                         }
@@ -315,7 +315,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void commitTransaction() {
-        producerWrap.commitTransaction();
+        producerWrapper.commitTransaction();
     }
 
     private void beginTransaction() {
@@ -333,7 +333,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
          // retriable tx
          none
          */
-        producerWrap.beginTransaction();
+        producerWrapper.beginTransaction();
     }
 
     /**
@@ -341,7 +341,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     public void close(Duration timeout) {
         log.debug("Closing producer, assuming no more in flight...");
-        if (options.isUsingTransactionalProducer() && !producerWrap.isTransactionReady()) {
+        if (options.isUsingTransactionalProducer() && !producerWrapper.isTransactionReady()) {
             try {
                 acquireCommitLock();
             } catch (java.util.concurrent.TimeoutException | InterruptedException e) {
@@ -358,11 +358,11 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     private void closeProducer(Duration timeout) {
-        producerWrap.close(timeout);
+        producerWrapper.close(timeout);
     }
 
     private void abortTransaction() {
-        producerWrap.abortTransaction();
+        producerWrapper.abortTransaction();
     }
 
     private void acquireCommitLock() throws java.util.concurrent.TimeoutException, InterruptedException {

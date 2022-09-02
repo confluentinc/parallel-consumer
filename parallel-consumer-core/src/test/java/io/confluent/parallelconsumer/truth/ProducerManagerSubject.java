@@ -8,7 +8,7 @@ import com.google.common.truth.FailureMetadata;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import io.confluent.parallelconsumer.internal.ProducerManagerChildSubject;
 import io.confluent.parallelconsumer.internal.ProducerManagerParentSubject;
-import io.confluent.parallelconsumer.internal.ProducerWrap;
+import io.confluent.parallelconsumer.internal.ProducerWrapper;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedMiddleSubject;
 import io.stubbs.truth.generator.UserManagedSubject;
@@ -44,7 +44,7 @@ public class ProducerManagerSubject extends ProducerManagerParentSubject impleme
         check("isTransactionOpen()").that(actual.getProducerWrap().isTransactionOpen()).isTrue();
     }
 
-    public void stateIs(ProducerWrap.ProducerState targetState) {
+    public void stateIs(ProducerWrapper.ProducerState targetState) {
         var producerWrap = actual.getProducerWrap();
         var producerState = producerWrap.getProducerState();
         check("getProducerState()").that(producerState).isEqualTo(targetState);

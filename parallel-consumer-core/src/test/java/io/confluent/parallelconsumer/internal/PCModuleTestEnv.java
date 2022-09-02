@@ -50,16 +50,16 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     }
 
     @Override
-    protected ProducerWrap<String, String> producerWrap() {
+    protected ProducerWrapper<String, String> producerWrap() {
         return mockProducerWrapTransactional();
     }
 
-    ProducerWrap<String, String> mockProduceWrap;
+    ProducerWrapper<String, String> mockProduceWrap;
 
     @NonNull
-    private ProducerWrap mockProducerWrapTransactional() {
+    private ProducerWrapper mockProducerWrapTransactional() {
         if (mockProduceWrap == null) {
-            mockProduceWrap = Mockito.spy(new ProducerWrap<>(options(), true, producer()));
+            mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), true, producer()));
         }
         return mockProduceWrap;
     }
