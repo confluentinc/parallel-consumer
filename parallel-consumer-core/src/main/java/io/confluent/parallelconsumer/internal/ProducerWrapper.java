@@ -5,7 +5,8 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import lombok.*;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.experimental.Delegate;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -18,10 +19,7 @@ import org.apache.kafka.common.errors.ProducerFencedException;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.time.Duration;
 import java.util.Map;
-
-import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerState.*;
 
 /**
  * Our extension of the standard Producer to mostly add some introspection functions and state tracking.
@@ -31,22 +29,6 @@ import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerSta
 @RequiredArgsConstructor
 public class ProducerWrapper<K, V> implements Producer<K, V> {
 
-    /**
-     * Used to track Producer's transaction state, as it' isn't otherwise exposed.
-     */
-    public enum ProducerState {
-        INSTANTIATED, INIT, BEGIN, COMMIT, ABORT, CLOSE
-    }
-
-    /**
-     * Tracks the internal transaction state of the Prodocer
-     */
-    @ToString.Include
-    @Getter
-    private volatile ProducerState producerState = ProducerState.INSTANTIATED;
-
-
-    @NonNull
     private final ParallelConsumerOptions<K, V> options;
 
     /**
@@ -59,7 +41,6 @@ public class ProducerWrapper<K, V> implements Producer<K, V> {
     private Method txManagerMethodIsCompleting;
     private Method txManagerMethodIsReady;
 
-    @NonNull
     @Delegate(excludes = Excludes.class)
     private final Producer<K, V> producer;
 
@@ -170,48 +151,4 @@ public class ProducerWrapper<K, V> implements Producer<K, V> {
         return (boolean) txManagerMethodIsReady.invoke(getTransactionManager());
     }
 
-    @Override
-    public void initTransactions() {
-        producer.initTransactions();
-        this.producerState = INIT;
-    }
-
-    @Override
-    public void beginTransaction() throws ProducerFencedException {
-        producer.beginTransaction();
-        this.producerState = BEGIN;
-    }
-
-    @Override
-    public void commitTransaction() throws ProducerFencedException {
-        producer.commitTransaction();
-        this.producerState = COMMIT;
-    }
-
-    @Override
-    public void abortTransaction() throws ProducerFencedException {
-        producer.abortTransaction();
-        this.producerState = ABORT;
-    }
-
-    @Override
-    public void close() {
-        producer.close();
-        this.producerState = CLOSE;
-    }
-
-    @Override
-    public void close(final Duration timeout) {
-        producer.close(timeout);
-        this.producerState = CLOSE;
-    }
-
-    /**
-     * According to our state tracking, does the Producer have an open transaction
-     *
-     * @return true if there's an open transaction
-     */
-    public boolean isTransactionOpen() {
-        return this.producerState.equals(BEGIN);
-    }
 }
