@@ -8,6 +8,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -18,10 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
+import static java.util.Optional.of;
 
 @Slf4j
 public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V>
@@ -64,36 +67,72 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         }
 
         // wrap user func to add produce function
-        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc =
-                context -> userFunctionWrap(userFunction, context);
+        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> producingUserFunctionWrapper =
+                context -> processAndProduceResults(userFunction, context);
 
-        supervisorLoop(wrappedUserFunc, callback);
+        supervisorLoop(producingUserFunctionWrapper, callback);
     }
 
-    private List<ConsumeProduceResult<K, V, K, V>> userFunctionWrap(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                                                    PollContextInternal<K, V> context) {
+    /**
+     * todo refactor to it's own class, so that the wrapping function can be used directly from
+     *  tests, e.g. see: {@see ProducerManagerTest#producedRecordsCantBeInTransactionWithoutItsOffsetDirect}
+     */
+    private List<ConsumeProduceResult<K, V, K, V>> processAndProduceResults(final Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                                                            final PollContextInternal<K, V> context) {
+        ProducerManager<K, V> pm = super.getProducerManager().get();
+
+        // if running strict with no processing during commit - get the produce lock first
+        if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
+            ProducerManager<K, V>.ProducingLock produceLock = null;
+            try {
+                produceLock = pm.beginProducing(context);
+            } catch (TimeoutException e) {
+                throw new RuntimeException("Timeout trying to early acquire produce lock", e);
+            }
+            context.setProducingLock(of(produceLock));
+        }
+
+        //
         List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
 
         if (recordListToProduce.isEmpty()) {
             log.debug("No result returned from function to send.");
+            return UniLists.of();
         }
         log.trace("asyncPoll and Stream - Consumed a record ({}), and returning a derivative result record to be produced: {}", context, recordListToProduce);
 
         List<ConsumeProduceResult<K, V, K, V>> results = new ArrayList<>();
         log.trace("Producing {} messages in result...", recordListToProduce.size());
 
-        var futures = super.getProducerManager().get().produceMessages(recordListToProduce);
-        try {
-            for (Tuple<ProducerRecord<K, V>, Future<RecordMetadata>> future : futures) {
-                var recordMetadata = TimeUtils.time(() ->
-                        future.getRight().get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS));
-                var result = new ConsumeProduceResult<>(context.getPollContext(), future.getLeft(), recordMetadata);
-                results.add(result);
+        // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
+        if (options.isUsingTransactionCommitMode() && options.isAllowEagerProcessingDuringTransactionCommit()) {
+            ProducerManager<K, V>.ProducingLock produceLock = null;
+            try {
+                produceLock = pm.beginProducing(context);
+            } catch (TimeoutException e) {
+                throw new RuntimeException("Timeout trying to late acquire produce lock", e);
             }
+            context.setProducingLock(of(produceLock));
+        }
+
+        // wait for all ack's to complete, see PR #356 for async version
+        try {
+            var futures = pm.produceMessages(recordListToProduce);
+
+            TimeUtils.time(() -> {
+                for (var futureTuple : futures) {
+                    Future<RecordMetadata> futureSend = futureTuple.getRight();
+
+                    var recordMetadata = futureSend.get(options.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+
+                    var result = new ConsumeProduceResult<>(context.getPollContext(), futureTuple.getLeft(), recordMetadata);
+                    results.add(result);
+                }
+                return null; // return from timer function
+            });
         } catch (Exception e) {
             throw new InternalRuntimeError("Error while waiting for produce results", e);
         }
-
         return results;
     }
 
