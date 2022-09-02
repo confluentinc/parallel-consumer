@@ -35,8 +35,6 @@ import org.junitpioneer.jupiter.CartesianProductTest;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
@@ -44,7 +42,8 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
@@ -269,24 +268,6 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         // todo performance: tighten up progress check (<2)
         assertThat(progressTracker.getHighestRoundCountSeen()).isLessThan(40);
         bar.close();
-    }
-
-    @Test
-    void customRepresentationFail() {
-        List<Integer> one = IntStream.range(0, 1000).boxed().collect(Collectors.toList());
-        List<Integer> two = IntStream.range(999, 2000).boxed().collect(Collectors.toList());
-        assertThatThrownBy(() -> assertThat(one).withRepresentation(new TrimListRepresentation()).containsAll(two))
-                .hasMessageContaining("trimmed");
-    }
-
-    @Test
-    void customRepresentationPass() {
-        Assertions.useRepresentation(new TrimListRepresentation());
-        List<Integer> one = IntStream.range(0, 1000).boxed().collect(Collectors.toList());
-        List<Integer> two = IntStream.range(0, 1000).boxed().collect(Collectors.toList());
-        SoftAssertions all = new SoftAssertions();
-        all.assertThat(one).containsAll(two);
-        all.assertAll();
     }
 
 }

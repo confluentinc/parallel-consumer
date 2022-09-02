@@ -34,11 +34,20 @@ public class PCModule<K, V> {
         return optionsInstance;
     }
 
+    private ProducerWrapper<K, V> producerWrapper;
+
+    protected ProducerWrapper<K, V> producerWrap() {
+        if (this.producerWrapper == null) {
+            this.producerWrapper = new ProducerWrapper<>(options());
+        }
+        return producerWrapper;
+    }
+
     private ProducerManager<K, V> producerManager;
 
     protected ProducerManager<K, V> producerManager() {
         if (producerManager == null) {
-            this.producerManager = new ProducerManager<>(producer(), consumerManager(), workManager(), options());
+            this.producerManager = new ProducerManager<>(producerWrap(), consumerManager(), workManager(), options());
         }
         return producerManager;
     }
