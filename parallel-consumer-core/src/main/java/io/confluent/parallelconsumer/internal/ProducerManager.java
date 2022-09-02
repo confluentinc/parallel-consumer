@@ -237,7 +237,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         ensureCommitLockHeld();
 
         //
-        lazyMaybeBeginTransaction(); // if not using a produce flow, a tx will need to be started here (as no records are being produced)
+        lazyMaybeBeginTransaction(); // if not using a produce flow or if no records sent yet, a tx will need to be started here (as no records are being produced)
         producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
@@ -266,8 +266,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                             // try wait again
                             commitTransaction();
                         }
-                        boolean transactionModeIsREADY = lastErrorSavedForRethrow == null || !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION");
-                        if (transactionModeIsREADY) {
+                        boolean transactionModeIsReady = lastErrorSavedForRethrow == null || !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION");
+                        if (transactionModeIsReady) {
                             // try again
                             log.error("Transaction was already in READY state - tx completed between interrupt and retry");
                         }
@@ -304,8 +304,6 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
              InterruptException – if the thread is interrupted while blocked
 
              Only catch and retry the retriable ones, others fail fast the control thread
-             todo verify
-
              */ catch (TimeoutException | InterruptException e) {
                 log.warn("Commit exception, will retry, have tried {} times (see KafkaProducer#commit)", retryCount, e);
                 lastErrorSavedForRethrow = e;
@@ -320,6 +318,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
     private void beginTransaction() {
         /*
+         FYI:
          // terminal general
          AuthorizationException – fatal error indicating that the configured transactional.id is not authorized. See the exception for more details
          KafkaException – if the producer has encountered a previous fatal error or for any other unexpected error

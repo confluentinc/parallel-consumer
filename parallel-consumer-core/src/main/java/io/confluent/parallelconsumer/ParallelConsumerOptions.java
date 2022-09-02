@@ -153,8 +153,9 @@ public class ParallelConsumerOptions<K, V> {
          * commit takes place, then the transaction has finished committing, processing resumes. This periodically slows
          * down record production during this phase, by the time needed to commit the transaction.
          * <p>
-         * This is all separate from using an IDEMPOTENT Producer, which can be used, along with
-         * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         * This is all separate from using an IDEMPOTENT Producer, which can be used, along with the
+         * {@link ParallelConsumerOptions#commitMode} {@link CommitMode#PERIODIC_CONSUMER_SYNC} or
+         * {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
          *
          * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits
          */
