@@ -34,7 +34,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 @ToString(onlyExplicitlyIncluded = true)
 public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
-    protected final ProducerWrap<K, V> producer;
+    protected final ProducerWrapper<K, V> producer;
 
     private final ParallelConsumerOptions<K, V> options;
 
@@ -45,7 +45,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     private ReentrantReadWriteLock producerTransactionLock;
 
-    public ProducerManager(ProducerWrap<K, V> newProducer,
+    public ProducerManager(ProducerWrapper<K, V> newProducer,
                            ConsumerManager<K, V> newConsumer,
                            WorkManager<K, V> wm,
                            ParallelConsumerOptions<K, V> options) {

@@ -22,12 +22,12 @@ import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
- * Our extension of the standard Consumer to mostly add some introspection functions and state tracking.
+ * Our extension of the standard Producer to mostly add some introspection functions and state tracking.
  *
  * @author Antony Stubbs
  */
 @RequiredArgsConstructor
-public class ProducerWrap<K, V> implements Producer<K, V> {
+public class ProducerWrapper<K, V> implements Producer<K, V> {
 
     private final ParallelConsumerOptions<K, V> options;
 
@@ -44,7 +44,7 @@ public class ProducerWrap<K, V> implements Producer<K, V> {
     @Delegate(excludes = Excludes.class)
     private final Producer<K, V> producer;
 
-    public ProducerWrap(ParallelConsumerOptions<K, V> options) {
+    public ProducerWrapper(ParallelConsumerOptions<K, V> options) {
         this.options = options;
         producer = options.getProducer();
         this.producerIsConfiguredForTransactions = discoverIfProducerIsConfiguredForTransactions();

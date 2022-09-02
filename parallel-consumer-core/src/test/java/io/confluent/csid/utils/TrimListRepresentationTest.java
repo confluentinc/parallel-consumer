@@ -6,7 +6,6 @@ package io.confluent.csid.utils;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -20,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * @author Antony Stubbs
  * @see TrimListRepresentation
  */
-@Tag("transactions")
 class TrimListRepresentationTest {
 
     @Test
