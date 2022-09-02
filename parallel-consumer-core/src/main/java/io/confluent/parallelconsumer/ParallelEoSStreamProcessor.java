@@ -73,6 +73,10 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         supervisorLoop(wrappedUserFunc, callback);
     }
 
+    /**
+     * todo refactor to it's own class, so that the wrapping function can be used directly from
+     *  tests, e.g. see: {@see ProducerManagerTest#producedRecordsCantBeInTransactionWithoutItsOffsetDirect}
+     */
     private List<ConsumeProduceResult<K, V, K, V>> userFunctionWrap(final Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                                                     final PollContextInternal<K, V> context) {
         ProducerManager<K, V> pm = super.getProducerManager().get();
