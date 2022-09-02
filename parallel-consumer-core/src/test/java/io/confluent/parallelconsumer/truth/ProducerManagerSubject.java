@@ -37,16 +37,17 @@ public class ProducerManagerSubject extends ProducerManagerParentSubject impleme
     }
 
     public void transactionNotOpen() {
-        check("isTransactionOpen()").that(actual.getProducerWrap().isTransactionOpen()).isFalse();
+        check("isTransactionOpen()").that(actual.getProducerWrapper().isTransactionOpen()).isFalse();
     }
 
     public void transactionOpen() {
-        check("isTransactionOpen()").that(actual.getProducerWrap().isTransactionOpen()).isTrue();
+        check("isTransactionOpen()").that(actual.getProducerWrapper().isTransactionOpen()).isTrue();
     }
 
     public void stateIs(ProducerWrapper.ProducerState targetState) {
-        var producerWrap = actual.getProducerWrap();
+        var producerWrap = actual.getProducerWrapper();
         var producerState = producerWrap.getProducerState();
         check("getProducerState()").that(producerState).isEqualTo(targetState);
     }
+
 }

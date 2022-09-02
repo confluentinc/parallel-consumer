@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
+import io.confluent.parallelconsumer.internal.ProducerWrapper;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
@@ -141,7 +142,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         PCModule<String, String> slowCommitModule = new PCModule<>(createOptions().build()) {
 
             @Override
-            protected ProducerWrap<String, String> producerWrap() {
+            protected ProducerWrapper<String, String> producerWrap() {
                 var pw = Mockito.spy(super.producerWrap());
 
                 // inject a long sleep in the commit flow
