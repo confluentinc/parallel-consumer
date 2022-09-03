@@ -43,7 +43,7 @@ import static org.awaitility.Awaitility.waitAtMost;
  * @see io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest#closeOpenBoundaryCommits
  */
 @Slf4j
-class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
+public class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
 
     @Test
     void shouldNotSkipAnyMessagesOnRestartRoot() throws Exception {
@@ -141,7 +141,7 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         pc.closeDrainFirst();
     }
 
-    private enum CheckMode {
+    public enum CheckMode {
         CHECK_CONSUMED, JUST_SLEEP
     }
 
