@@ -25,12 +25,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
+import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.REUSE_GROUP;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
@@ -42,6 +44,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * Tests behaviour under timeouts
  *
  * @see ProducerManager
+ * @see io.confluent.parallelconsumer.internal.ProducerManagerTest
  */
 @Tag("transactions")
 @Slf4j
@@ -52,7 +55,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
     private ParallelEoSStreamProcessor<String, String> pc;
 
     @SneakyThrows
-    void setup(PCModule module) {
+    void setup(PCModule<String, String> module) {
         setupTopic(TransactionTimeoutsTest.class.getSimpleName());
 
         pc = new ParallelEoSStreamProcessor<>(module.options(), module);
@@ -83,6 +86,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
      *
      * @param multiple
      */
+    @SneakyThrows
     @ParameterizedTest()
     @ValueSource(ints = {
             SMALL_TIMEOUT, // triggers a timeout, but get's committed in the shutdown commit
@@ -94,7 +98,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
                 .build();
         setup(new PCModule<>(options));
 
-        final int offsetToFail = 0;
+        final int offsetToFail = 3;
         pc.pollAndProduce(recordContexts -> {
             long offset = recordContexts.offset();
             if (offset == offsetToFail) {
@@ -105,18 +109,17 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         });
 
 
-        // send, process, commit
-        // assert output topic
+        // send 1 more
+        getKcu().produceMessages(getTopic(), 2);
 
-        // send, process, block
+        // assert output topic only
+        var target = 1;
+        assertConsumedOffset(target);
 
+        // send 1 more, upon which offset the pc function will block forever, causing a commit timeout
+        getKcu().produceMessages(getTopic(), 2);
 
-        // wait for timeout death
-
-        // assert output topic
-
-
-        //
+        // wait until pc dies from commit timeout
         await().untilAsserted(() -> assertThat(pc).isClosedOrFailed());
         assertThat(pc).getFailureCause().hasMessageThat().contains("timeout");
 
@@ -125,7 +128,6 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         // 2nd commit will have succeeded
         var newConsumer = kcu.createNewConsumer(REUSE_GROUP);
         newConsumer.subscribe(of(getTopic()));
-
         newConsumer.poll(ofSeconds(20));
 
         var commitHistorySubject = assertThat(newConsumer).hasCommittedToPartition(new TopicPartition(getTopic(), offsetToFail));
@@ -134,11 +136,24 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         commitHistorySubject.offset(0);
     }
 
+    private void assertConsumedOffset(int target) {
+        try (var assertConsumer = getKcu().createNewConsumer(NEW_GROUP)) {
+            assertConsumer.subscribe(UniSets.of(getTopic()));
+
+            await().untilAsserted(() -> {
+                var poll = assertConsumer.poll(ofSeconds(1));
+                assertThat(poll).hasHeadOffset(target);
+            });
+        }
+    }
+
+    @SneakyThrows
     @Test
     void produceTimeout() {
 
         CountDownLatch produceLock = new CountDownLatch(1);
 
+        // inject system that causes commit to take too long
         PCModule<String, String> slowCommitModule = new PCModule<>(createOptions().build()) {
 
             @Override
@@ -184,18 +199,22 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
             return new ProducerRecord<>(getTopic() + "-output", "random");
         });
 
-        // send, process, commit
+        //// send, process, commit
         // assert output topic
+        assertConsumedOffset(5); // happy path, all base records committed ok
 
-        // send, process, block
+        //// send, process, block, retry, succeed
+        // send 3 more records
+        getKcu().produceMessages(getTopic(), 3);
 
-        // wait for timeout death
+        // assert output topic - has got the new records due to commit blocked
+        assertConsumedOffset(5); // happy path, all base records committed ok
 
-        // assert output topic
-
+        // wait for retry
         await().atMost(ofSeconds(60)).untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
 
         // assert output topic
+        assertConsumedOffset(8); // happy path after retry, all records committed and read ok
 
     }
 
