@@ -112,16 +112,16 @@ public class PCModule<K, V> {
 
     public PartitionStateManager<K, V> partitionStateManager() {
         if (partitionStateManager == null) {
-            partitionStateManager = new PartitionStateManager<>(this, consumer(), shardManager(), options(), clock());
+            partitionStateManager = new PartitionStateManager<>(this, consumer(), shardManager(workManager()), options(), clock());
         }
         return partitionStateManager;
     }
 
     private ShardManager<K, V> shardManager;
 
-    public ShardManager<K, V> shardManager() {
+    public ShardManager<K, V> shardManager(WorkManager<K, V> workManager) {
         if (shardManager == null) {
-            shardManager = new ShardManager<>(options(), workManager(), clock());
+            shardManager = new ShardManager<>(options(), workManager, clock());
         }
         return shardManager;
     }
