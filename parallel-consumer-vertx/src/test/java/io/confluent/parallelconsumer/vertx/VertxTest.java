@@ -26,7 +26,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.parallel.Isolated;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.util.ArrayList;
@@ -43,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Isolated
+//@Isolated
 @Slf4j
 @ExtendWith(VertxExtension.class)
 class VertxTest extends VertxBaseUnitTest {
