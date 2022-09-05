@@ -46,7 +46,7 @@ public class PartitionState<K, V> {
     public static final long KAFKA_OFFSET_ABSENCE = -1L;
 
     @Getter
-    private final TopicPartition tp;
+    private final TopicPartition topicPartition;
 
     /**
      * Offset data beyond the highest committable offset, which haven't totally succeeded.
@@ -125,9 +125,9 @@ public class PartitionState<K, V> {
         return Collections.unmodifiableNavigableMap(commitQueue);
     }
 
-    public PartitionState(PCModule<K, V> module, TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+    public PartitionState(@NonNull PCModule<K, V> module, TopicPartition topicPartition, @NonNull OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.module = module;
-        this.tp = tp;
+        this.topicPartition = topicPartition;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;

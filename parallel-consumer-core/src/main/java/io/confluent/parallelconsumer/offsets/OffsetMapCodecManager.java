@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
+import lombok.NonNull;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -37,7 +38,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Slf4j
 public class OffsetMapCodecManager<K, V> {
 
-    PCModule<K, V> module;
+    @NonNull PCModule<K, V> module;
 
     /**
      * Maximum size of the commit offset metadata
@@ -83,8 +84,9 @@ public class OffsetMapCodecManager<K, V> {
     }
 
     // todo remove consumer #233
-    public OffsetMapCodecManager(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this.consumer = consumer;
+    public OffsetMapCodecManager(PCModule<K, V> newModule) {
+        this.module = newModule;
+        this.consumer = newModule.consumer();
     }
 
     /**
@@ -187,7 +189,7 @@ public class OffsetMapCodecManager<K, V> {
         long highestSucceeded = partitionState.getOffsetHighestSucceeded();
         if (log.isDebugEnabled()) {
             log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
-                    partitionState.getTp(),
+                    partitionState.getTopicPartition(),
                     highestSucceeded,
                     partitionState.getIncompleteOffsetsBelowHighestSucceeded());
         }

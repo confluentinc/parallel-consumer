@@ -52,13 +52,13 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 public class WorkManagerTest {
 
     public static final String INPUT_TOPIC = "input";
-    public static final String OUTPUT_TOPIC = "output";
+    // todo delete? public static final String OUTPUT_TOPIC = "output";
 
     WorkManager<String, String> wm;
 
     int offset;
 
-    MutableClock time;
+    MutableClock time = MutableClock.epochUTC();
 
     @BeforeEach
     public void setup() {
@@ -74,7 +74,10 @@ public class WorkManagerTest {
         var mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         var optsOverride = options.toBuilder().consumer(mockConsumer).build();
 
-        wm = new WorkManager<>(new PCModule<String, String>(optsOverride));
+        PCModule<String, String> module = new PCModule<String, String>(optsOverride);
+//        time = module.
+
+        wm = new WorkManager<>(module);
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);

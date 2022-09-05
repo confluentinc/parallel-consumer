@@ -131,7 +131,7 @@ public class PCModule<K, V> {
     }
 
     public OffsetMapCodecManager<K, V> createOffsetMapCodecManager() {
-        return new OffsetMapCodecManager<>(consumer());
+        return new OffsetMapCodecManager<>(this);
     }
 
     public int getMaxMetadataSize() {

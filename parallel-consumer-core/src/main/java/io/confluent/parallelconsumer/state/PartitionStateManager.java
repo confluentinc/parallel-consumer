@@ -90,7 +90,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         incrementPartitionAssignmentEpoch(assignedPartitions);
 
         try {
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(module); // todo remove throw away instance creation - #233
             var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
             this.partitionStates.putAll(partitionStates);
         } catch (Exception e) {
@@ -359,7 +359,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         var dirties = new HashMap<TopicPartition, OffsetAndMetadata>();
         for (var state : getAssignedPartitions().values()) {
             var offsetAndMetadata = state.getCommitDataIfDirty();
-            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTp(), andMetadata));
+            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTopicPartition(), andMetadata));
         }
         return dirties;
     }

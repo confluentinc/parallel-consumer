@@ -112,7 +112,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     @Override
     public OffsetMapCodecManager<String, String> createOffsetMapCodecManager() {
-        return new OffsetMapCodecManager<>(consumer());
+        return new OffsetMapCodecManager<>(this);
     }
 
     /**

@@ -125,7 +125,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 .build();
         wm = new WorkManager<>(new PCModule<>(options));
         wm.onPartitionsAssigned(UniLists.of(tp));
-        offsetCodecManager = new OffsetMapCodecManager<>(mockConsumer);
+        offsetCodecManager = new OffsetMapCodecManager<>(new PCModuleTestEnv());
     }
 
     @BeforeAll

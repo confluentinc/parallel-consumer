@@ -47,7 +47,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public TopicPartition getTp() {
+    public TopicPartition getTopicPartition() {
         return null;
     }
 

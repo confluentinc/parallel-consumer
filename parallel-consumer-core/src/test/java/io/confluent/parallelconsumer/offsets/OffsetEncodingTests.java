@@ -192,7 +192,7 @@ class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             {
                 // check for graceful fall back to the smallest available encoder
-                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
+                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(module);
                 module.setForcedCodec(Optional.empty());  // turn off forced
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(1, state);

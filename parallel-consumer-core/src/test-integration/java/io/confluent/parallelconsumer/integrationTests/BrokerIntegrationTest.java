@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
 
-    PCModuleTestEnv module;
+    PCModuleTestEnv module = new PCModuleTestEnv(); // default
 
     static {
         System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
