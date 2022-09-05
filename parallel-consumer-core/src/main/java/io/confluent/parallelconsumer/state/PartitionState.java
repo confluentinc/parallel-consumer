@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ import static lombok.AccessLevel.*;
 @Slf4j
 public class PartitionState<K, V> {
 
+    @NonNull
     private final PCModule<K, V> module;
 
     /**

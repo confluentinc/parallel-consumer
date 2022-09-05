@@ -110,9 +110,9 @@ public class PCModule<K, V> {
 
     private PartitionStateManager<K, V> partitionStateManager;
 
-    public PartitionStateManager<K, V> partitionStateManager() {
+    public PartitionStateManager<K, V> partitionStateManager(WorkManager<K, V> workManager) {
         if (partitionStateManager == null) {
-            partitionStateManager = new PartitionStateManager<>(this, consumer(), shardManager(workManager()), options(), clock());
+            partitionStateManager = new PartitionStateManager<>(this, consumer(), shardManager(workManager), options(), clock());
         }
         return partitionStateManager;
     }
