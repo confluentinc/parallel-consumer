@@ -26,7 +26,10 @@ import static org.awaitility.Awaitility.await;
 @Slf4j
 public class BlockedThreadAsserter {
 
-    AtomicBoolean methodReturned = new AtomicBoolean(false);
+    /**
+     * Could do this faster with a {@link java.util.concurrent.CountDownLatch}
+     */
+    private final AtomicBoolean methodReturned = new AtomicBoolean(false);
 
     public boolean functionHasCompleted() {
         return methodReturned.get();
@@ -40,7 +43,9 @@ public class BlockedThreadAsserter {
     public void assertFunctionBlocks(Runnable functionExpectedToBlock, final Duration blockedForAtLeast) {
         Thread blocked = new Thread(() -> {
             try {
+                log.debug("Running function expected to block for at least {}...", blockedForAtLeast);
                 functionExpectedToBlock.run();
+                log.debug("Blocked function finished.");
             } catch (Exception e) {
                 log.error("Error in blocking function", e);
             }
@@ -101,4 +106,9 @@ public class BlockedThreadAsserter {
         assertUnblocksAfter(functionExpectedToBlock, unblockingFunction, ofSeconds(1));
     }
 
+    public void awaitReturnFully() {
+        log.debug("Waiting for blocked method to fully finish...");
+        await().untilTrue(this.methodReturned);
+        log.debug("Waiting on blocked method to fully finish is complete.");
+    }
 }

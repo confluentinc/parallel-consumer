@@ -94,7 +94,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         return topic;
     }
 
-    protected void ensureTopic(String topic, int numPartitions) {
+    protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
@@ -104,6 +104,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        return topics;
     }
 
 }

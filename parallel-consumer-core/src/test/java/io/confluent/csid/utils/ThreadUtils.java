@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import lombok.SneakyThrows;
@@ -12,7 +12,9 @@ public class ThreadUtils {
 
     @SneakyThrows
     public static void sleepQuietly(final int ms) {
+        log.debug("Sleeping for {}", ms);
         Thread.sleep(ms);
+        log.debug("Woke up (slept for {})", ms);
     }
 
     public static void sleepLog(final int ms) {

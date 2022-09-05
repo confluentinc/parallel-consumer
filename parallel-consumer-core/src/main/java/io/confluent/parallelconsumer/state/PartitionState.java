@@ -68,7 +68,7 @@ public class PartitionState<K, V> {
      * clean after a successful commit of the state.
      */
     @Setter(PRIVATE)
-    @Getter(PRIVATE)
+    @Getter(PACKAGE)
     private boolean dirty;
 
     /**

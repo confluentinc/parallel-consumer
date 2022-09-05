@@ -42,13 +42,13 @@ public class PCModule<K, V> {
         return optionsInstance;
     }
 
-    private ProducerWrap<K, V> producerWrap;
+    private ProducerWrapper<K, V> producerWrapper;
 
-    protected ProducerWrap<K, V> producerWrap() {
-        if (this.producerWrap == null) {
-            this.producerWrap = new ProducerWrap<>(options());
+    protected ProducerWrapper<K, V> producerWrap() {
+        if (this.producerWrapper == null) {
+            this.producerWrapper = new ProducerWrapper<>(options());
         }
-        return producerWrap;
+        return producerWrapper;
     }
 
     private ProducerManager<K, V> producerManager;

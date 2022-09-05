@@ -36,11 +36,11 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
      *
      * @see ParallelConsumerOptions
      */
-    public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions, final PCModule<K, V> module) {
+    public ParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         super(newOptions, module);
     }
 
-    public ParallelEoSStreamProcessor(final ParallelConsumerOptions<K, V> newOptions) {
+    public ParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         super(newOptions);
     }
 
@@ -67,21 +67,25 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         }
 
         // wrap user func to add produce function
-        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc =
-                context -> userFunctionWrap(userFunction, context);
+        Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> producingUserFunctionWrapper =
+                context -> processAndProduceResults(userFunction, context);
 
-        supervisorLoop(wrappedUserFunc, callback);
+        supervisorLoop(producingUserFunctionWrapper, callback);
     }
 
-    private List<ConsumeProduceResult<K, V, K, V>> userFunctionWrap(final Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
-                                                                    final PollContextInternal<K, V> context) {
+    /**
+     * todo refactor to it's own class, so that the wrapping function can be used directly from
+     *  tests, e.g. see: {@see ProducerManagerTest#producedRecordsCantBeInTransactionWithoutItsOffsetDirect}
+     */
+    private List<ConsumeProduceResult<K, V, K, V>> processAndProduceResults(final Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
+                                                                            final PollContextInternal<K, V> context) {
         ProducerManager<K, V> pm = super.getProducerManager().get();
 
         // if running strict with no processing during commit - get the produce lock first
         if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
             ProducerManager<K, V>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing();
+                produceLock = pm.beginProducing(context);
             } catch (TimeoutException e) {
                 throw new RuntimeException("Timeout trying to early acquire produce lock", e);
             }
@@ -104,7 +108,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         if (options.isUsingTransactionCommitMode() && options.isAllowEagerProcessingDuringTransactionCommit()) {
             ProducerManager<K, V>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing();
+                produceLock = pm.beginProducing(context);
             } catch (TimeoutException e) {
                 throw new RuntimeException("Timeout trying to late acquire produce lock", e);
             }

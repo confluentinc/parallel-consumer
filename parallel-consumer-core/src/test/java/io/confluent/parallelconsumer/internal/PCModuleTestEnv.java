@@ -33,31 +33,45 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
-        Consumer mockConsumer = mock(Consumer.class);
-        Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
-        var override = options().toBuilder()
-                .consumer(mockConsumer)
-                .producer(mock(Producer.class))
-                .build();
+
+        ParallelConsumerOptions<String, String> override = enhanceOptions(optionsInstance);
+
+        // overwrite super's with new instance
         super.optionsInstance = override;
     }
 
-    public PCModuleTestEnv() {
-        this(ParallelConsumerOptions.<String, String>builder()
+    private ParallelConsumerOptions<String, String> enhanceOptions(ParallelConsumerOptions<String, String> optionsInstance) {
+        var copy = options().toBuilder();
+
+        if (optionsInstance.getConsumer() == null) {
+            Consumer<String, String> mockConsumer = mock(Consumer.class);
+            Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
+            copy.consumer(mockConsumer);
+        }
+
+        var override = copy
                 .producer(mock(Producer.class))
-                .consumer(mock(Consumer.class))
-                .build());
+                .build();
+
+        return override;
+    }
+
+    public PCModuleTestEnv() {
+        this(ParallelConsumerOptions.<String, String>builder().build());
     }
 
     @Override
-    protected ProducerWrap<String, String> producerWrap() {
+    protected ProducerWrapper<String, String> producerWrap() {
         return mockProducerWrapTransactional();
     }
 
-    ProducerWrap<String, String> mockProduceWrap = Mockito.spy(new ProducerWrap<>(options(), true, producer()));
+    ProducerWrapper<String, String> mockProduceWrap;
 
     @NonNull
-    private ProducerWrap mockProducerWrapTransactional() {
+    private ProducerWrapper mockProducerWrapTransactional() {
+        if (mockProduceWrap == null) {
+            mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), true, producer()));
+        }
         return mockProduceWrap;
     }
 
@@ -65,7 +79,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     protected ConsumerManager<String, String> consumerManager() {
         ConsumerManager<String, String> consumerManager = super.consumerManager();
 
-        // force update to set cache, otherwise maybe never called (fake consuemr)
+        // force update to set cache, otherwise maybe never called (fake consumer)
         consumerManager.updateMetadataCache();
 
         return consumerManager;

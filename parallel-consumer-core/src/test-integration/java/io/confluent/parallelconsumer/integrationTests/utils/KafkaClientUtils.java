@@ -180,7 +180,10 @@ public class KafkaClientUtils {
         return kvKafkaConsumer;
     }
 
-    public <K, V> KafkaProducer<K, V> createNewTransactionalProducer() {
+    /**
+     * Initialises the producer as well, so can't use with PC
+     */
+    public <K, V> KafkaProducer<K, V> createAndInitNewTransactionalProducer() {
         KafkaProducer<K, V> txProd = createNewProducer(TRANSACTIONAL);
         txProd.initTransactions();
         return txProd;
