@@ -5,7 +5,6 @@ package io.confluent.csid.utils;
  */
 public class MathUtils {
 
-
     /**
      * Ensures exact conversion from a Long to a Short.
      * <p>
