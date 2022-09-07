@@ -763,7 +763,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on
             log.debug("Acquiring commit lock pessimistically, before we try to collect offsets for committing");
-            if (producerManager.isPresent()) {
+            if (options.isUsingTransactionCommitMode()) {
+                //noinspection OptionalGetWithoutIsPresent - options will already be verified
                 producerManager.get().preAcquireWork();
             }
         }
