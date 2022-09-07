@@ -179,24 +179,24 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         // write offsets
         final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
         {
-            WorkManager<String, String> wmm = new WorkManager<>(new PCModule<>(newOptions));
-            wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
-            wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
+            WorkManager<String, String> workManager = new WorkManager<>(new PCModule<>(newOptions));
+            workManager.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
+            workManager.registerWork(new EpochAndRecordsMap<>(testRecords, workManager.getPm()));
 
-            List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
+            List<WorkContainer<String, String>> work = workManager.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
 
-            KafkaTestUtils.completeWork(wmm, work, 0);
+            KafkaTestUtils.completeWork(workManager, work, 0);
 
-            KafkaTestUtils.completeWork(wmm, work, 69);
+            KafkaTestUtils.completeWork(workManager, work, 69);
 
-            KafkaTestUtils.completeWork(wmm, work, 25_000);
+            KafkaTestUtils.completeWork(workManager, work, 25_000);
 
-            KafkaTestUtils.completeWork(wmm, work, highest);
+            KafkaTestUtils.completeWork(workManager, work, highest);
 
 
             // make the commit
-            var completedEligibleOffsets = wmm.collectCommitDataForDirtyPartitions();
+            var completedEligibleOffsets = workManager.collectCommitDataForDirtyPartitions();
             assertThat(completedEligibleOffsets.get(tp).offset()).isEqualTo(1L);
             consumerSpy.commitSync(completedEligibleOffsets);
 
@@ -204,7 +204,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 // check for graceful fall back to the smallest available encoder
                 OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
                 OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
-                var state = wmm.getPm().getPartitionState(tp);
+                var state = workManager.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(1, state);
                 assertThat(bestPayload).isNotEmpty();
             }

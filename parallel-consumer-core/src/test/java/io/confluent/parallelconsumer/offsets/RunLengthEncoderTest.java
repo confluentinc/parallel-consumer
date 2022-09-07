@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.SneakyThrows;
+import one.util.streamex.StreamEx;
 import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
@@ -29,7 +30,7 @@ class RunLengthEncoderTest {
     void noGaps() {
         Set<Long> incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
         Set<Long> completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
-        List<Integer> runs = UniLists.of(1, 3, 1, 1, 3, 1, 1);
+        List<Long> runs = StreamEx.of(1, 3, 1, 1, 3, 1, 1).mapToLong(value -> value).boxed().toList();
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
 
         {
@@ -51,7 +52,7 @@ class RunLengthEncoderTest {
 
             // before serialisation
             {
-                assertThat(rl.getRunLengthEncodingIntegers()).containsExactlyElementsOf(runs);
+                assertThat(rl.getRunLengthEncodingLongs()).containsExactlyElementsOf(runs);
 
                 List<Long> calculatedCompletedOffsets = rl.calculateSucceededActualOffsets(0);
 
@@ -114,7 +115,7 @@ class RunLengthEncoderTest {
 
         // NB: gaps between completed offsets get encoded as succeeded offsets. This doesn't matter because they don't exist and we'll neve see them.
         Set<Long> completes = UniSets.of(1, 2, 3, 4, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
-        List<Integer> runs = UniLists.of(1, 5, 3, 1, 1);
+        List<Long> runs = StreamEx.of(1, 5, 3, 1, 1).mapToLong(value -> value).boxed().toList();
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
 
         {
@@ -134,7 +135,7 @@ class RunLengthEncoderTest {
 
             rl.addTail();
 
-            assertThat(rl.getRunLengthEncodingIntegers()).containsExactlyElementsOf(runs);
+            assertThat(rl.getRunLengthEncodingLongs()).containsExactlyElementsOf(runs);
 
             List<Long> calculatedCompletedOffsets = rl.calculateSucceededActualOffsets(0);
 

@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
@@ -24,12 +25,14 @@ import static io.confluent.csid.utils.Range.range;
 @Slf4j
 public class OffsetBitSet {
 
+    @SneakyThrows
     static String deserialiseBitSetWrap(ByteBuffer wrap, OffsetEncoding.Version version) {
         wrap.rewind();
 
         int originalBitsetSize = switch (version) {
             case v1 -> (int) wrap.getShort(); // up cast ok
             case v2 -> wrap.getInt();
+            case v3 -> throw new BitSetEncodingNotSupportedException("No v3 implementation for BitSet");
         };
 
         ByteBuffer slice = wrap.slice();

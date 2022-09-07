@@ -12,8 +12,13 @@ import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 /**
+ * Range function for Java
+ * <p>
  * https://stackoverflow.com/a/16570509/105741
+ *
+ * @deprecated use {@link java.util.stream.LongStream#range} instead
  */
+@Deprecated
 public class Range implements Iterable<Integer> {
 
     private final long limit;
@@ -24,7 +29,10 @@ public class Range implements Iterable<Integer> {
 
     /**
      * Exclusive of max
+     *
+     * @deprecated use {@link java.util.stream.LongStream#range} instead
      */
+    @Deprecated
     public static Range range(long max) {
         return new Range(max);
     }

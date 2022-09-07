@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.BufferOverflowException;
@@ -73,6 +74,7 @@ public class BitSetEncoder extends OffsetEncoder {
         return switch (newVersion) {
             case v1 -> initV1(length);
             case v2 -> initV2(length);
+            case v3 -> throw new BitSetEncodingNotSupportedException("No v3 implementation for BitSet");
         };
     }
 
@@ -102,8 +104,6 @@ public class BitSetEncoder extends OffsetEncoder {
 
     /**
      * This was a bit "short" sighted of me....
-     *
-     * @return
      */
     private ByteBuffer initV1(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > Short.MAX_VALUE) {
@@ -123,19 +123,23 @@ public class BitSetEncoder extends OffsetEncoder {
         return wrappedBitSetBytesBuffer;
     }
 
+    @SneakyThrows
     @Override
     protected OffsetEncoding getEncodingType() {
         return switch (version) {
             case v1 -> BitSet;
             case v2 -> BitSetV2;
+            case v3 -> throw new BitSetEncodingNotSupportedException("No v3 implementation for BitSet");
         };
     }
 
+    @SneakyThrows
     @Override
     protected OffsetEncoding getEncodingTypeCompressed() {
         return switch (version) {
             case v1 -> BitSetCompressed;
             case v2 -> BitSetV2Compressed;
+            case v3 -> throw new BitSetEncodingNotSupportedException("No v3 implementation for BitSet");
         };
     }
 

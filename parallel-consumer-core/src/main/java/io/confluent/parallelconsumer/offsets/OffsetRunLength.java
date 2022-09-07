@@ -3,21 +3,23 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
-import java.nio.ShortBuffer;
+import java.nio.*;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
 
+/**
+ * @author Antony Stubbs
+ */
+// todo rename - resolve name against RunLengthEncoder
 @Slf4j
 @UtilityClass
 public class OffsetRunLength {
@@ -74,25 +76,27 @@ public class OffsetRunLength {
         in.rewind();
         final ShortBuffer v1ShortBuffer = in.asShortBuffer();
         final IntBuffer v2IntegerBuffer = in.asIntBuffer();
+        final LongBuffer v3LongBuffer = in.asLongBuffer();
 
         final var incompletes = new HashSet<Long>(); // we don't know the capacity yet
 
         long highestSeenOffset = 0L;
 
-        Supplier<Boolean> hasRemainingTest = () -> {
-            return switch (encoding.version) {
-                case v1 -> v1ShortBuffer.hasRemaining();
-                case v2 -> v2IntegerBuffer.hasRemaining();
-            };
-        };
+        BooleanSupplier hasRemainingTest = () ->
+                switch (encoding.version) {
+                    case v1 -> v1ShortBuffer.hasRemaining();
+                    case v2 -> v2IntegerBuffer.hasRemaining();
+                    case v3 -> v3LongBuffer.hasRemaining();
+                };
         if (log.isTraceEnabled()) {
             // print out all run lengths
             var runlengths = new ArrayList<Number>();
             try {
-                while (hasRemainingTest.get()) {
+                while (hasRemainingTest.getAsBoolean()) {
                     Number runLength = switch (encoding.version) {
                         case v1 -> v1ShortBuffer.get();
                         case v2 -> v2IntegerBuffer.get();
+                        case v3 -> v3LongBuffer.get();
                     };
                     runlengths.add(runLength);
                 }
@@ -107,11 +111,12 @@ public class OffsetRunLength {
         // decodes incompletes
         boolean currentRunLengthIsComplete = false;
         long currentOffset = baseOffset;
-        while (hasRemainingTest.get()) {
+        while (hasRemainingTest.getAsBoolean()) {
             try {
                 Number runLength = switch (encoding.version) {
                     case v1 -> v1ShortBuffer.get();
                     case v2 -> v2IntegerBuffer.get();
+                    case v3 -> v3LongBuffer.get();
                 };
 
                 if (currentRunLengthIsComplete) {

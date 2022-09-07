@@ -15,8 +15,7 @@ import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
+import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.*;
 
 /**
  * Encode with multiple strategies at the same time.
@@ -158,6 +157,7 @@ public class OffsetSimultaneousEncoder {
 
         newEncoders.add(new RunLengthEncoder(this, v1));
         newEncoders.add(new RunLengthEncoder(this, v2));
+        newEncoders.add(new RunLengthEncoder(this, v3));
 
         return newEncoders;
     }
@@ -213,8 +213,8 @@ public class OffsetSimultaneousEncoder {
             List<OffsetEncoder> removeToBeRemoved = new ArrayList<>();
             if (this.incompleteOffsets.contains(offset)) {
                 log.trace("Found an incomplete offset {}", offset);
-                encoders.forEach(x -> {
-                    x.encodeIncompleteOffset(rangeIndex);
+                encoders.forEach(encoder -> {
+                    encoder.encodeIncompleteOffset(rangeIndex);
                 });
             } else {
                 encoders.forEach(x -> {

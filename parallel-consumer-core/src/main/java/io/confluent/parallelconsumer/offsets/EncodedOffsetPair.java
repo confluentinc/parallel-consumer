@@ -16,8 +16,7 @@ import java.util.Comparator;
 import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrap;
 import static io.confluent.parallelconsumer.offsets.OffsetBitSet.deserialiseBitSetWrapToIncompletes;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
-import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
+import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.*;
 import static io.confluent.parallelconsumer.offsets.OffsetRunLength.*;
 import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.decompressZstd;
 import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
@@ -91,7 +90,10 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrap(data, v2);
             case RunLengthV2 -> deserialiseBitSetWrap(data, v2);
             case RunLengthV2Compressed -> deserialiseBitSetWrap(data, v2);
-            default -> throw new InternalRuntimeError("Invalid state"); // todo why is this needed? what's not covered?
+            case RunLengthV3 -> deserialiseBitSetWrap(data, v3);
+            case RunLengthV3Compressed -> deserialiseBitSetWrap(data, v3);
+            default ->
+                    throw new InternalRuntimeError("Invalid state"); // only needed for coding errors during dev phase
         };
         return binaryArrayString;
     }
@@ -109,7 +111,10 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrapToIncompletes(BitSetV2, baseOffset, decompressZstd(data));
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
-            default -> throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
+            case RunLengthV3 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
+            case RunLengthV3Compressed -> runLengthDecodeToIncompletes(RunLengthV3, baseOffset, decompressZstd(data));
+            default ->
+                    throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };
         return binaryArrayString;
     }
