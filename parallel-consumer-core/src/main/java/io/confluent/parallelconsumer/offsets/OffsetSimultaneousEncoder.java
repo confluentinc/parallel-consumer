@@ -22,6 +22,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.*;
  * <p>
  * Have results in an accessible structure, easily selecting the highest compression.
  *
+ * @author Antony Stubbs
  * @see #invoke()
  */
 @Slf4j

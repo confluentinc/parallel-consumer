@@ -25,6 +25,8 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * support the worst case scenarios without running out of run length, as {@link Integer#MAX_VALUE} of 2,147,483,647 (2
  * billion records) is not completely inconceivable, whereas {@link Long#MAX_VALUE} of 9,223,372,036,854,775,807 (~9
  * quintillion / 9 x 10^18) is.
+ *
+ * @author Antony Stubbs
  */
 public class RunLengthEncoder extends OffsetEncoder {
 

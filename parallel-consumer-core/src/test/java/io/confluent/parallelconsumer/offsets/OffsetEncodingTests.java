@@ -39,6 +39,9 @@ import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
 import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ_WRITE;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+/**
+ * @author Antony Stubbs
+ */
 @Slf4j
 public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 

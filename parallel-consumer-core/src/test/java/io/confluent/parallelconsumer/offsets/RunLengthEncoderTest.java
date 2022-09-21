@@ -19,7 +19,11 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * @author Antony Stubbs
+ */
 class RunLengthEncoderTest {
+
 
     /**
      * Check that run length supports gaps in the source partition - i.e. compacted topics where offsets aren't strictly
@@ -28,6 +32,7 @@ class RunLengthEncoderTest {
     @SneakyThrows
     @Test
     void noGaps() {
+
         Set<Long> incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
         Set<Long> completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
         List<Long> runs = StreamEx.of(1, 3, 1, 1, 3, 1, 1).mapToLong(value -> value).boxed().toList();

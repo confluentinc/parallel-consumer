@@ -16,6 +16,7 @@ import java.util.stream.IntStream;
  * <p>
  * https://stackoverflow.com/a/16570509/105741
  *
+ * @author Antony Stubbs
  * @deprecated use {@link java.util.stream.LongStream#range} instead
  */
 @Deprecated

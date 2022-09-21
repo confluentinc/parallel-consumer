@@ -34,6 +34,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * record should be skipped or not. So if record 8 is recorded as completed, it will be absent from the restored
  * INCOMPLETES list, and we are assured we will never see record 8.
  *
+ * @author Antony Stubbs
  * @see RunLengthEncoder
  * @see OffsetBitSet
  */
