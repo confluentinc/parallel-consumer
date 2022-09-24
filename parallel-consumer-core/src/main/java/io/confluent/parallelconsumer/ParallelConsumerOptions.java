@@ -9,13 +9,16 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.Value;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -90,15 +93,15 @@ public class ParallelConsumerOptions<K, V> {
          * Periodically commits through the Producer using transactions. Slowest of the options, but no duplicates in
          * Kafka guaranteed (message replay may cause duplicates in external systems which is unavoidable with Kafka).
          * <p>
-         * This is separate from using an IDEMPOTENT Producer, which can be used, along with {@link
-         * CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         * This is separate from using an IDEMPOTENT Producer, which can be used, along with
+         * {@link CommitMode#PERIODIC_CONSUMER_SYNC} or {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
          */
         PERIODIC_TRANSACTIONAL_PRODUCER,
 
         /**
-         * Periodically synchronous commits with the Consumer. Much faster than {@link
-         * #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than {@link
-         * #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
+         * Periodically synchronous commits with the Consumer. Much faster than
+         * {@link #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than
+         * {@link #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
          */
         PERIODIC_CONSUMER_SYNC,
 
@@ -126,9 +129,9 @@ public class ParallelConsumerOptions<K, V> {
      * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
      * maximum to prevent overloading them or to a degree, using up quotas.
      * <p>
-     * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a {@link
-     * #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15} records being
-     * processed at once.
+     * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a
+     * {@link #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15}
+     * records being processed at once.
      * <p>
      * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
      * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
@@ -163,8 +166,9 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
-     * returned from the user-function. Only relevant if using one of the produce-flows and providing a {@link
-     * ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
+     * returned from the user-function. Only relevant if using one of the produce-flows and providing a
+     * {@link ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the
+     * user-function.
      * <p>
      * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary
      * re-processing and duplicates on slow {@link Producer#send} calls.
@@ -175,8 +179,8 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration sendTimeout = Duration.ofSeconds(10);
 
     /**
-     * Controls how long to block while waiting for offsets to be committed. Only relevant if using {@link
-     * CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
+     * Controls how long to block while waiting for offsets to be committed. Only relevant if using
+     * {@link CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
      */
     @Builder.Default
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
@@ -193,9 +197,9 @@ public class ParallelConsumerOptions<K, V> {
      * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
      * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      * <p>
-     * Note that there is no relationship between the {@link ConsumerConfig} setting of {@link
-     * ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large layer
-     * of indirection between the managed consumer, and the managed queues we use.
+     * Note that there is no relationship between the {@link ConsumerConfig} setting of
+     * {@link ConsumerConfig#MAX_POLL_RECORDS_CONFIG} and this configured batch size, as this library introduces a large
+     * layer of indirection between the managed consumer, and the managed queues we use.
      * <p>
      * This indirection effectively disconnects the processing of messages from "polling" them from the managed client,
      * as we do not wait to process them before calling poll again. We simply call poll as much as we need to, in order
@@ -223,6 +227,24 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final int maxFailureHistory = 10;
 
+    public static final Percentage DEFAULT_PRIORITY_RATIO = Percentage.fromDouble(0.1);
+
+    /**
+     * The fraction of the {@link #maxConcurrency} target that should first priorities records in priority queues, if
+     * there are any.
+     * <p>
+     * Note this is not RESERVED capacity. If there are no priority queues with records, then the system will operate as
+     * normal and all capacity will go towards processing all normal queues.
+     */
+    @Builder.Default
+    private Percentage priorityQueueRatio = DEFAULT_PRIORITY_RATIO;
+
+    /**
+     * A function to determine a key's priority from it's {@link RecordContext}.
+     */
+    @Builder.Default
+    private Optional<PriorityQueueSupplier> priorityQueueSupplier = Optional.empty();
+
     /**
      * @return the combined target of the desired concurrency by the configured batch size
      */
@@ -248,5 +270,13 @@ public class ParallelConsumerOptions<K, V> {
 
     public boolean isProducerSupplied() {
         return getProducer() != null;
+    }
+
+    public interface PriorityQueueSupplier extends Supplier<Priority> {
+    }
+
+    @Value
+    private static class Priority {
+        double value;
     }
 }
