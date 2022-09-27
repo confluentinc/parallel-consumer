@@ -96,9 +96,9 @@ public class ParallelConsumerOptions<K, V> {
         PERIODIC_TRANSACTIONAL_PRODUCER,
 
         /**
-         * Periodically synchronous commits with the Consumer. Much faster than {@link
-         * #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than {@link
-         * #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
+         * Periodically synchronous commits with the Consumer. Much faster than
+         * {@link #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially fewer duplicates than
+         * {@link #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
          */
         PERIODIC_CONSUMER_SYNC,
 

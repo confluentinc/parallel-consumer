@@ -83,7 +83,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
     // static instance so can't access generics - but don't need them as Options class ensures type is correct
+//    private static Function<RecordContext, Duration> retryDelayProvider;
     private static Function<Object, Duration> retryDelayProvider;
+
 
     public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
         Objects.requireNonNull(workType);
@@ -143,6 +145,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      */
     public Duration getRetryDelayConfig() {
         if (retryDelayProvider != null) {
+//            return retryDelayProvider.apply(new RecordContext<>(this));
             return retryDelayProvider.apply(this);
         } else {
             return defaultRetryDelay;
