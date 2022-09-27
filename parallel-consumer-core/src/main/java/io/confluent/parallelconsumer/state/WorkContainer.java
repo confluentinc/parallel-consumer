@@ -98,6 +98,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
         if (WorkContainer.retryDelayProvider == null) { // only set once
             // static instance so can't access generics - but don't need them as Options class ensures type is correct
+            // todo this case removes any type safety - which got bit in issue #412
             WorkContainer.retryDelayProvider = (Function) retryDelayProvider;
         }
     }
