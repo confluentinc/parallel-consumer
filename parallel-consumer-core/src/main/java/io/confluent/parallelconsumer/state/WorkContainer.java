@@ -145,8 +145,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      */
     public Duration getRetryDelayConfig() {
         if (retryDelayProvider != null) {
-//            return retryDelayProvider.apply(new RecordContext<>(this));
-            return retryDelayProvider.apply(this);
+            return retryDelayProvider.apply(new RecordContext<>(this));
         } else {
             return defaultRetryDelay;
         }
