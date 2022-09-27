@@ -4,17 +4,12 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
-import lombok.AccessLevel;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
@@ -22,7 +17,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
-import java.util.function.Function;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
@@ -32,6 +26,18 @@ import static java.util.Optional.of;
 public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     static final String DEFAULT_TYPE = "DEFAULT";
+
+    /**
+     * Reference to parent for memory efficient static object access with generic parameters.
+     * <p>
+     * Not static, but only a single reference - replacing previous single reference, but allows for access to several
+     * global state instances and simplifies the architecture.
+     *
+     * @see PartitionStateManager#getClock
+     * @see PartitionStateManager#getOptions
+     */
+    @NonNull
+    private final PartitionStateManager<K, V> partitionStateManagerParent;
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -51,8 +57,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     @Getter
     private final ConsumerRecord<K, V> cr;
 
-    private final Clock clock;
-
     @Getter
     private int numberOfFailedAttempts = 0;
 
@@ -70,44 +74,25 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     @Getter
     private Optional<Boolean> maybeUserFunctionSucceeded = Optional.empty();
 
-    /**
-     * @see ParallelConsumerOptions#getDefaultMessageRetryDelay()
-     * @see ParallelConsumerOptions#validate()
-     */
-    @Setter
-    // todo remove unused default field init
-    static Duration defaultRetryDelay;
-
     @Getter
     @Setter(AccessLevel.PUBLIC)
     private Future<List<?>> future;
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
-    // static instance so can't access generics - but don't need them as Options class ensures type is correct
-    @Setter
-    private static Function<RecordContext<Object, Object>, Duration> retryDelayProvider;
-    //    private static Function<Object, Duration> retryDelayProvider;
-    private static ParallelConsumerOptions<K, V> opts;
 
-
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, String workType, PartitionStateManager<K, V> psm) {
         Objects.requireNonNull(workType);
 
         this.epoch = epoch;
         this.cr = cr;
         this.workType = workType;
-        this.clock = clock;
 
-        if (WorkContainer.retryDelayProvider == null) { // only set once
-//            AbstractParallelEoSStreamProcessor.
-                    // todo this case removes any type safety - which got bit in issue #412
-            WorkContainer.retryDelayProvider = retryDelayProvider;
-        }
+        this.partitionStateManagerParent = psm;
     }
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, Clock clock) {
-        this(epoch, cr, retryDelayProvider, DEFAULT_TYPE, clock);
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, PartitionStateManager<K, V> psm) {
+        this(epoch, cr, DEFAULT_TYPE, psm);
     }
 
     public void endFlight() {
@@ -129,7 +114,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return time until it should be retried
      */
     public Duration getDelayUntilRetryDue() {
-        Instant now = clock.instant();
+        Instant now = partitionStateManagerParent.getClock().instant();
         Temporal nextAttemptAt = tryAgainAt();
         return Duration.between(now, nextAttemptAt);
     }
@@ -149,11 +134,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return the delay between retries e.g. retry after 1 second
      */
     public Duration getRetryDelayConfig() {
-        this.
+        var options = partitionStateManagerParent.getOptions();
+        var retryDelayProvider = options.getRetryDelayProvider();
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(new RecordContext<>(this));
         } else {
-            return defaultRetryDelay;
+            return options.getDefaultMessageRetryDelay();
         }
     }
 
@@ -184,7 +170,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     public void onUserFunctionSuccess() {
-        this.succeededAt = of(clock.instant());
+        this.succeededAt = of(partitionStateManagerParent.getClock().instant());
         this.maybeUserFunctionSucceeded = of(true);
     }
 
@@ -198,7 +184,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     private void updateFailureHistory(Throwable cause) {
         numberOfFailedAttempts++;
-        lastFailedAt = of(Instant.now(clock));
+        lastFailedAt = of(Instant.now(partitionStateManagerParent.getClock()));
         lastFailureReason = Optional.ofNullable(cause);
     }
 

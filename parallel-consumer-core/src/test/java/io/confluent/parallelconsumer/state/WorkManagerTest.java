@@ -43,6 +43,7 @@ import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -329,7 +330,7 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, null, null, WorkContainer.DEFAULT_TYPE, this.time);
+        var wc = new WorkContainer<String, String>(0, null, WorkContainer.DEFAULT_TYPE, mock(PartitionStateManager.class));
         assertThat(wc.hasDelayPassed()).isTrue(); // when new, there's no delay
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
         assertThat(wc.hasDelayPassed()).isFalse();

@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -237,10 +236,6 @@ public class ParallelConsumerOptions<K, V> {
             throw new IllegalArgumentException(msg("Wanting to use Transaction Producer mode ({}) without supplying a Producer instance",
                     commitMode));
         }
-
-        // set static work container settings
-        WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
-        WorkContainer.setRetryDelayProvider((Function<RecordContext, Duration>) retryDelayProvider);
     }
 
     public boolean isUsingTransactionalProducer() {

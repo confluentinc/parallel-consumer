@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -55,6 +56,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
+    @Getter(AccessLevel.PACKAGE)
     private final ParallelConsumerOptions<K, V> options;
 
     /**
@@ -73,6 +75,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
+    @Getter(AccessLevel.PACKAGE)
     private final Clock clock;
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
@@ -356,7 +359,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             if (isRecordPreviouslyCompleted(rec)) {
                 log.trace("Record previously completed, skipping. offset: {}", rec.offset());
             } else {
-                var work = new WorkContainer<>(epochOfInboundRecords, rec, options.getRetryDelayProvider(), clock);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, this);
 
                 sm.addWorkContainer(work);
                 addWorkContainer(work);
