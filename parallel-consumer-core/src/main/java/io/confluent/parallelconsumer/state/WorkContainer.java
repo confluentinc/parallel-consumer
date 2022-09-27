@@ -21,6 +21,9 @@ import java.util.concurrent.Future;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
 
+/**
+ * TODO docs
+ */
 @Slf4j
 @EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
@@ -30,8 +33,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     /**
      * Reference to parent for memory efficient static object access with generic parameters.
      * <p>
-     * Not static, but only a single reference - replacing previous single reference, but allows for access to several
-     * global state instances and simplifies the architecture.
+     * Not static, but only a single reference - replacing previous single reference field, but allows for access to
+     * several global state instances and simplifies the architecture.
      *
      * @see PartitionStateManager#getClock
      * @see PartitionStateManager#getOptions
