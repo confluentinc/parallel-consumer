@@ -12,6 +12,8 @@ import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
+import java.time.Clock;
+
 /**
  * Minimum dependency injection system, modled on how Dagger works.
  * <p>
@@ -73,7 +75,7 @@ public class PCModule<K, V> {
 
     public WorkManager<K, V> workManager() {
         if (workManager == null) {
-            workManager = new WorkManager<>(this, dynamicExtraLoadFactor(), TimeUtils.getClock());
+            workManager = new WorkManager<>(this, dynamicExtraLoadFactor());
         }
         return workManager;
     }
@@ -100,4 +102,7 @@ public class PCModule<K, V> {
         return brokerPollSystem;
     }
 
+    public Clock clock() {
+        return TimeUtils.getClock();
+    }
 }

@@ -75,7 +75,7 @@ public class WorkManagerTest {
         var mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         var optsOverride = options.toBuilder().consumer(mockConsumer).build();
 
-        wm = new WorkManager<>(new PCModule<String, String>(optsOverride), time);
+        wm = new WorkManager<>(new PCModule<String, String>(optsOverride)); // inject time
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);

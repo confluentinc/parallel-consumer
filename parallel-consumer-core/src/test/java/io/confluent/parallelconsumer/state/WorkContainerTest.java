@@ -7,8 +7,8 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
-import io.confluent.parallelconsumer.internal.WorkContainerContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +40,7 @@ class WorkContainerTest {
 
         WorkContainer<String, String> wc = new WorkContainer<String, String>(0,
                 mock(ConsumerRecord.class),
-                mock(WorkContainerContext.class));
+                mock(PCModule.class));
 
         //
         int numberOfFailures = 3;

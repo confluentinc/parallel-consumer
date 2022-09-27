@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -17,7 +16,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -51,8 +49,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
-    private final ParallelConsumerOptions<K, V> options;
-
     /**
      * Hold the tracking state for each of our managed partitions.
      */
@@ -69,16 +65,12 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
-    private final Clock clock;
+    private final PCModule<K, V> module;
 
-    private final WorkContainerContext<K, V> context;
-
-    public PartitionStateManager(Consumer<K, V> consumer, ShardManager<K, V> sm, ParallelConsumerOptions<K, V> options, Clock clock) {
-        this.consumer = consumer;
+    public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
+        this.consumer = module.consumer();
         this.sm = sm;
-        this.options = options;
-        this.clock = clock;
-        this.context = new WorkContainerContext<>(options, clock);
+        this.module = module;
     }
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
@@ -362,7 +354,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             if (isRecordPreviouslyCompleted(rec)) {
                 log.trace("Record previously completed, skipping. offset: {}", rec.offset());
             } else {
-                var work = new WorkContainer<>(epochOfInboundRecords, rec, context);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, module);
 
                 sm.addWorkContainer(work);
                 addWorkContainer(work);
