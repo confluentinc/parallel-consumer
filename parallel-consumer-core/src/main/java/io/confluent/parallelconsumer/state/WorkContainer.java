@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -85,8 +86,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
     // static instance so can't access generics - but don't need them as Options class ensures type is correct
-    private static Function<RecordContext, Duration> retryDelayProvider;
-
+    private static Function<RecordContext<K, V>, Duration> retryDelayProvider;
 
     public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
         Objects.requireNonNull(workType);
@@ -97,9 +97,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         this.clock = clock;
 
         if (WorkContainer.retryDelayProvider == null) { // only set once
-            // static instance so can't access generics - but don't need them as Options class ensures type is correct
-            // todo this case removes any type safety - which got bit in issue #412
-            WorkContainer.retryDelayProvider = (Function) retryDelayProvider;
+            AbstractParallelEoSStreamProcessor.
+                    // todo this case removes any type safety - which got bit in issue #412
+            WorkContainer.retryDelayProvider = retryDelayProvider;
         }
     }
 
@@ -146,6 +146,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return the delay between retries e.g. retry after 1 second
      */
     public Duration getRetryDelayConfig() {
+        this.
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(new RecordContext<>(this));
         } else {
