@@ -238,8 +238,9 @@ public class ParallelConsumerOptions<K, V> {
                     commitMode));
         }
 
-        //
+        // set static work container settings
         WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
+        WorkContainer.setRetryDelayProvider((Function<RecordContext, Duration>) retryDelayProvider);
     }
 
     public boolean isUsingTransactionalProducer() {

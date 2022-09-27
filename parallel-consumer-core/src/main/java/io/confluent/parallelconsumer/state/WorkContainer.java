@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -77,7 +76,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      */
     @Setter
     // todo remove unused default field init
-    static Duration defaultRetryDelay = Duration.ofSeconds(1);
+    static Duration defaultRetryDelay;
 
     @Getter
     @Setter(AccessLevel.PUBLIC)
@@ -86,7 +85,11 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
     // static instance so can't access generics - but don't need them as Options class ensures type is correct
-    private static Function<RecordContext<K, V>, Duration> retryDelayProvider;
+    @Setter
+    private static Function<RecordContext<Object, Object>, Duration> retryDelayProvider;
+    //    private static Function<Object, Duration> retryDelayProvider;
+    private static ParallelConsumerOptions<K, V> opts;
+
 
     public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
         Objects.requireNonNull(workType);
@@ -97,7 +100,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         this.clock = clock;
 
         if (WorkContainer.retryDelayProvider == null) { // only set once
-            AbstractParallelEoSStreamProcessor.
+//            AbstractParallelEoSStreamProcessor.
                     // todo this case removes any type safety - which got bit in issue #412
             WorkContainer.retryDelayProvider = retryDelayProvider;
         }
