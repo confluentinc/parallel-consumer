@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.WorkContainerContext;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -31,16 +32,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     static final String DEFAULT_TYPE = "DEFAULT";
 
     /**
-     * Reference to parent for memory efficient static object access with generic parameters.
+     * Memory efficient static object access with generic parameters.
      * <p>
      * Not static, but only a single reference - replacing previous single reference field, but allows for access to
      * several global state instances and simplifies the architecture.
-     *
-     * @see PartitionStateManager#getClock
-     * @see PartitionStateManager#getOptions
      */
     @NonNull
-    private final PartitionStateManager<K, V> partitionStateManagerParent;
+    private final WorkContainerContext<K, V> context;
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -84,18 +82,18 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, String workType, PartitionStateManager<K, V> psm) {
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, WorkContainerContext<K, V> context, String workType) {
         Objects.requireNonNull(workType);
 
         this.epoch = epoch;
         this.cr = cr;
         this.workType = workType;
 
-        this.partitionStateManagerParent = psm;
+        this.context = context;
     }
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, PartitionStateManager<K, V> psm) {
-        this(epoch, cr, DEFAULT_TYPE, psm);
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, WorkContainerContext<K, V> context) {
+        this(epoch, cr, context, DEFAULT_TYPE);
     }
 
     public void endFlight() {
@@ -117,7 +115,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return time until it should be retried
      */
     public Duration getDelayUntilRetryDue() {
-        Instant now = partitionStateManagerParent.getClock().instant();
+        Instant now = context.getClock().instant();
         Temporal nextAttemptAt = tryAgainAt();
         return Duration.between(now, nextAttemptAt);
     }
@@ -137,7 +135,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return the delay between retries e.g. retry after 1 second
      */
     public Duration getRetryDelayConfig() {
-        var options = partitionStateManagerParent.getOptions();
+        var options = context.getOptions();
         var retryDelayProvider = options.getRetryDelayProvider();
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(new RecordContext<>(this));
@@ -173,7 +171,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     public void onUserFunctionSuccess() {
-        this.succeededAt = of(partitionStateManagerParent.getClock().instant());
+        this.succeededAt = of(context.getClock().instant());
         this.maybeUserFunctionSucceeded = of(true);
     }
 
@@ -187,7 +185,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     private void updateFailureHistory(Throwable cause) {
         numberOfFailedAttempts++;
-        lastFailedAt = of(Instant.now(partitionStateManagerParent.getClock()));
+        lastFailedAt = of(Instant.now(context.getClock()));
         lastFailureReason = Optional.ofNullable(cause);
     }
 

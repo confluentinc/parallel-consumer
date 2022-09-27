@@ -8,11 +8,10 @@ import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
-import org.apache.kafka.clients.consumer.Consumer;
+import io.confluent.parallelconsumer.internal.WorkContainerContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.function.Function;
 
@@ -39,11 +38,9 @@ class WorkContainerTest {
                 .retryDelayProvider(retryDelayProvider)
                 .build();
 
-        PartitionStateManager<String, String> psm = new PartitionStateManager<>(mock(Consumer.class), mock(ShardManager.class), opts, mock(Clock.class));
-
         WorkContainer<String, String> wc = new WorkContainer<String, String>(0,
                 mock(ConsumerRecord.class),
-                psm);
+                mock(WorkContainerContext.class));
 
         //
         int numberOfFailures = 3;

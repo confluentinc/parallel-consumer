@@ -6,14 +6,9 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -38,10 +33,10 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * @see PartitionState
  */
 @Slf4j
-@RequiredArgsConstructor
 public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
+
     /**
      * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
      * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
@@ -56,7 +51,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final ShardManager<K, V> sm;
 
-    @Getter(AccessLevel.PACKAGE)
     private final ParallelConsumerOptions<K, V> options;
 
     /**
@@ -75,8 +69,17 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
-    @Getter(AccessLevel.PACKAGE)
     private final Clock clock;
+
+    private final WorkContainerContext<K, V> context;
+
+    public PartitionStateManager(Consumer<K, V> consumer, ShardManager<K, V> sm, ParallelConsumerOptions<K, V> options, Clock clock) {
+        this.consumer = consumer;
+        this.sm = sm;
+        this.options = options;
+        this.clock = clock;
+        this.context = new WorkContainerContext<>(options, clock);
+    }
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         return partitionStates.get(tp);
@@ -359,7 +362,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             if (isRecordPreviouslyCompleted(rec)) {
                 log.trace("Record previously completed, skipping. offset: {}", rec.offset());
             } else {
-                var work = new WorkContainer<>(epochOfInboundRecords, rec, this);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, context);
 
                 sm.addWorkContainer(work);
                 addWorkContainer(work);
