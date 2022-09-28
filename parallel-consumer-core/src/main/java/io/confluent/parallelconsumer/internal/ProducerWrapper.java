@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.*;
 import lombok.experimental.Delegate;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -28,6 +29,7 @@ import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerSta
  *
  * @author Antony Stubbs
  */
+@Slf4j
 @RequiredArgsConstructor
 public class ProducerWrapper<K, V> implements Producer<K, V> {
 
@@ -184,6 +186,7 @@ public class ProducerWrapper<K, V> implements Producer<K, V> {
 
     @Override
     public void commitTransaction() throws ProducerFencedException {
+        log.debug("Committing transaction...");
         producer.commitTransaction();
         this.producerState = COMMIT;
     }

@@ -20,6 +20,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
@@ -28,6 +29,7 @@ import org.testcontainers.containers.KafkaContainer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -98,15 +100,16 @@ public class KafkaClientUtils {
         return producerProps;
     }
 
-    private Properties setupConsumerProps() {
+    private Properties setupConsumerProps(String groupIdToUse) {
         var consumerProps = setupCommonProps();
 
         //
-        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupIdToUse);
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
         consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        consumerProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.toString().toLowerCase(Locale.ROOT));
 
         //
         //    consumerProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10);
@@ -143,6 +146,10 @@ public class KafkaClientUtils {
     }
 
 
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(String groupId) {
+        return createNewConsumer(groupId, new Properties());
+    }
+
     public <K, V> KafkaConsumer<K, V> createNewConsumer(GroupOption reuseGroup) {
         return createNewConsumer(reuseGroup.equals(GroupOption.NEW_GROUP));
     }
@@ -161,16 +168,18 @@ public class KafkaClientUtils {
         return createNewConsumer(false, options);
     }
 
-    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup, Properties options) {
-        Properties properties = setupConsumerProps();
-
         if (newConsumerGroup) {
             // overwrite the group id with a new one
             String newGroupId = GROUP_ID_PREFIX + nextInt();
             this.groupId = newGroupId; // save it for reuse later
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, newGroupId); // new group
         }
+        return createNewConsumer(this.groupId, options);
+    }
+
+    @Deprecated
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(String groupId, Properties options) {
+        Properties properties = setupConsumerProps(groupId);
 
         // override with custom
         properties.putAll(options);

@@ -232,7 +232,11 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     /**
-     * Only unlock our producing lock, when we're had the {@link WorkContainer} returned to the controllers inbound queue, so we know it'll be included properly before the next commit as a succeeded offset.
+     * Only unlock our producing lock, when we've had the {@link WorkContainer} state safely returned to the controllers
+     * inbound queue, so we know it'll be included properly before the next commit as a succeeded offset. As in order
+     * for the controller to perform the transaction commit, it will be blocked from acquiring its commit lock until all
+     * produce locks have been returned, inbound queue processed, and thus their representative offsets placed into the
+     * commit payload (offset map).
      */
     public void onPostAddToMailBox(PollContextInternal<K, V> context, Optional<ProducerManager<K, V>> producerManager) {
         producerManager.ifPresent(pm -> {
