@@ -111,7 +111,7 @@ public class ParallelConsumerOptions<K, V> {
          * <p>
          * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
          * finishing sending all the records and committing, none will ever be visible and the system will eventually
-         * retry the in new transactions - potentially with different combinations of records from the original.
+         * retry them in new transactions - potentially with different combinations of records from the original.
          * <p>
          * c) A source offset, and it's produced records will be committed as an atomic set. Normally: either the record
          * producing could fail, or the committing of the source offset could fail, as they are separate individual
@@ -128,7 +128,7 @@ public class ParallelConsumerOptions<K, V> {
          * commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY} gets
          * automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
          * href=https://docs.confluent.io/platform/current/streams/developer-guide/config-streams.html">commit.interval.ms</a>).
-         * Reducing this configuration places higher loads on the broker, but will reduce (but cannot eliminate) replay
+         * Reducing this configuration places higher load on the broker, but will reduce (but cannot eliminate) replay
          * upon failure. Note also that when using transactions in Kafka, consumption in {@code READ_COMMITTED} mode is
          * blocked up to the offset of the first STILL open transaction. Using a smaller commit frequency reduces this
          * minimum consumption latency - the faster transactions are closed, the faster the transaction content can be
@@ -144,7 +144,7 @@ public class ParallelConsumerOptions<K, V> {
          * Records produced while running in this mode, won't be seen by consumer running in
          * {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG} {@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}
          * mode until the transaction is complete and all records are produced successfully. Records produced into a
-         * transactions that gets aborted or timed out, will never be visible.
+         * transaction that gets aborted or timed out, will never be visible.
          * <p>
          * The system must prevent records from being produced to the brokers whose source consumer record offsets has
          * not been included in this transaction. Otherwise, the transactions would include produced records from

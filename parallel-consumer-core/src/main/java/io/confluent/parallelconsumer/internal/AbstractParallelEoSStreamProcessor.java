@@ -620,7 +620,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Optional<String> myId = Optional.empty();
 
     /**
-     * Kicks of the control loop in the executor, with supervision and returns.
+     * Kicks off the control loop in the executor, with supervision and returns.
      *
      * @see #supervisorLoop(Function, Consumer)
      */
