@@ -67,3 +67,9 @@ delombok/
 # Maven
 target
 release.properties
+/.idea/encodings.xml
+/.idea/misc.xml
+/.idea/codeStyles/Project.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/uiDesigner.xml
+/.idea/vcs.xml
