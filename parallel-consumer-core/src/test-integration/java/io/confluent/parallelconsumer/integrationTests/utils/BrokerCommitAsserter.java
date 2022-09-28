@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.util.Set;
+
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static java.time.Duration.ofSeconds;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
@@ -34,13 +36,18 @@ public class BrokerCommitAsserter {
 
     public void assertConsumedOffset(String topic, int target) {
         log.debug("Asserting against topic: {}, expecting to consume at least offset {}", topic, target);
-        assertConsumer.subscribe(UniSets.of(topic));
+        Set<String> topicSet = UniSets.of(topic);
+        assertConsumer.subscribe(topicSet);
+        assertConsumer.seekToBeginning(UniSets.of());
 
         await().untilAsserted(() -> {
             var poll = assertConsumer.poll(ofSeconds(1));
+
             log.debug("Polled {} records, looking for at least offset {}", poll.count(), target);
             assertThat(poll).hasHeadOffsetAnyTopicPartition(target);
         });
+
+        assertConsumer.unsubscribe();
     }
 
 }

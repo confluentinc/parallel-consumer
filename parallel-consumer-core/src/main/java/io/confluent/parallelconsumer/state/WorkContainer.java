@@ -125,11 +125,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      */
     public Duration getDelayUntilRetryDue() {
         Instant now = clock.instant();
-        Temporal nextAttemptAt = tryAgainAt();
+        Temporal nextAttemptAt = getRetryDueAt();
         return Duration.between(now, nextAttemptAt);
     }
 
-    private Temporal tryAgainAt() {
+    /**
+     * @return The point in time at which the record should ideally be retried.
+     */
+    public Instant getRetryDueAt() {
         if (lastFailedAt.isPresent()) {
             // previously failed, so add the delay to the last failed time
             Duration retryDelay = getRetryDelayConfig();

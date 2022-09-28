@@ -19,6 +19,7 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.InvalidProducerEpochException;
+import org.apache.kafka.common.errors.ProducerFencedException;
 import org.apache.kafka.common.errors.TimeoutException;
 
 import java.time.Duration;
@@ -238,7 +239,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         //
         lazyMaybeBeginTransaction(); // if not using a produce flow or if no records sent yet, a tx will need to be started here (as no records are being produced)
-        producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+        try {
+            producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+        } catch (ProducerFencedException e) {
+            // todo consider wrapping all client calls with a catch and new exception in the ProducerWrapper, so can get stack traces
+            //  see APIException#fillInStackTrace
+            throw new InternalRuntimeError(e);
+        }
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
         boolean committed = false;

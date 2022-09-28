@@ -34,6 +34,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static org.mockito.ArgumentMatchers.any;
@@ -73,8 +74,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         originalGroupId = getKcu().getConsumer().groupMetadata().groupId();
 
-        // todo losses the original group id
-        assertConsumer = new BrokerCommitAsserter(getTopic(), getKcu().createNewConsumer());
+        assertConsumer = new BrokerCommitAsserter(getTopic(), getKcu().createNewConsumer(NEW_GROUP));
     }
 
     private ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> createOptions() {
@@ -170,22 +170,28 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
     }
 
     /**
-     * Tests what happens when the record sending stage times out.
+     * Tests what happens when there is a timeout trying to acquire to produce lock, due to a commit taking too long
      */
     @SneakyThrows
     @Test
     void produceTimeout() {
+        final int OFFSET_TO_PRODUCE_SLOWLY = NUMBER_TO_SEND + 2;
 
         CountDownLatch produceLock = new CountDownLatch(1);
 
         // inject system that causes commit to take too long
         PCModule<String, String> slowCommitModule = new PCModule<>(createOptions().build()) {
 
+            /**
+             * Inject a special {@link ProducerWrapper} to manipulate for the test
+             *
+             * @return
+             */
             @Override
             protected ProducerWrapper<String, String> producerWrap() {
                 var pw = Mockito.spy(super.producerWrap());
 
-                // inject a long sleep in the commit flow
+                // inject a long sleep in the commit flow, so simulate a slow commit
                 Mockito.doAnswer(this::maybeSleep)
                         .when(pw)
                         .sendOffsetsToTransaction(ArgumentMatchers.anyMap(), any(ConsumerGroupMetadata.class));
@@ -200,10 +206,12 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
                 OffsetAndMetadata offsetAndMetadata = offsets.get(new TopicPartition(getTopic(), 0));
                 long offset = offsetAndMetadata.offset();
 
-                if (offset == 4) {
+                boolean firstCycle = produceLock.getCount() > 0;
+                if (offset == OFFSET_TO_PRODUCE_SLOWLY && firstCycle) {
                     log.debug("Causing commit to take too long which will trigger produce lock timeout");
                     produceLock.countDown();
-                    ThreadUtils.sleepQuietly(10000); // sleep for 10 seconds to simulate timeout
+                    ThreadUtils.sleepQuietly(5000); // sleep for some time to simulate timeout
+                    log.debug("Causing commit to take too long COMPLETE");
                 }
 
                 return invocation.callRealMethod();
@@ -211,35 +219,46 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         };
         setup(slowCommitModule);
 
-        //
+
+        // pc
         AtomicInteger retryCount = new AtomicInteger();
+        final String OUTPUT_TOPIC = getTopic() + "-output";
         pc.pollAndProduce(recordContexts -> {
             long offset = recordContexts.offset();
-            ThreadUtils.sleepQuietly(1000);
-            if (offset == 4) {
-                retryCount.set(recordContexts.getSingleRecord().getNumberOfFailedAttempts());
-                LatchTestUtils.awaitLatch(produceLock);
-                ThreadUtils.sleepQuietly(1000); // block offset 4 for a second
+            log.debug("Processing {}", recordContexts.offset());
+            if (offset == OFFSET_TO_PRODUCE_SLOWLY) {
+                int numberOfFailedAttempts = recordContexts.getSingleRecord().getNumberOfFailedAttempts();
+                log.debug("Updating failed attempts to {}", numberOfFailedAttempts);
+                retryCount.set(numberOfFailedAttempts);
+
+                boolean firstCycle = produceLock.getCount() > 0;
+                if (firstCycle) {
+                    log.debug("Waiting for commit to start before trying to acquire produce lock");
+                    LatchTestUtils.awaitLatch(produceLock);
+                    ThreadUtils.sleepQuietly(1000); // block offset for a second for commit flow to reach lock acquisition stage
+                }
             }
-            return new ProducerRecord<>(getTopic() + "-output", "random");
+
+            return new ProducerRecord<>(OUTPUT_TOPIC, "random");
         });
 
-        //// send, process, commit
+        //// phase 1 - happy path - send, process, commit
         // assert output topic
-        assertConsumer.assertConsumedOffset(5); // happy path, all base records committed ok
+        assertConsumer.assertConsumedOffset(OUTPUT_TOPIC, NUMBER_TO_SEND - 1); // happy path, all base records committed ok
 
-        //// send, process, block, retry, succeed
-        // send 3 more records
-        getKcu().produceMessages(getTopic(), 3);
+        //// phase 2 - unhappy path where produce lock times out, but recovers: send, process, block, retry, succeed
+        log.debug("Send more records to trigger timeout condition above...");
+        final int EXTRA_TO_SEND = 4;
+        getKcu().produceMessages(getTopic(), EXTRA_TO_SEND);
 
-        // assert output topic - has got the new records due to commit blocked
-        assertConsumer.assertConsumedOffset(5); // happy path, all base records committed ok
+        // assert output topic - still has ONLY got the new records due to commit being blocked
+        assertConsumer.assertConsumedOffset(OUTPUT_TOPIC, NUMBER_TO_SEND - 1); // happy path, all base records committed ok
 
-        // wait for retry
-        await().atMost(ofSeconds(60)).untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
+        // wait for eventually retry on the blocked / slow sending offset
+        await().untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
 
         // assert output topic
-        assertConsumer.assertConsumedOffset(8); // happy path after retry, all records committed and read ok
+        assertConsumer.assertConsumedOffset(OUTPUT_TOPIC, NUMBER_TO_SEND + EXTRA_TO_SEND); // happy path after retry, all records committed and read ok
     }
 
 }

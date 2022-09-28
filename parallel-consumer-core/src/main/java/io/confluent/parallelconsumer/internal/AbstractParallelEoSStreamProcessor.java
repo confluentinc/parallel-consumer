@@ -1044,7 +1044,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 Duration timeBetweenCommits = getTimeBetweenCommits();
                 Duration effectiveRetryDelay = lowestScheduled.toMillis() < retryDelay.toMillis() ? retryDelay : lowestScheduled;
                 Duration result = timeBetweenCommits.toMillis() < effectiveRetryDelay.toMillis() ? timeBetweenCommits : effectiveRetryDelay;
-                log.debug("Not enough work in flight, while work is waiting to be retried - so will only sleep until next retry time of {}", result);
+                log.debug("Not enough work in flight, while work is waiting to be retried - so will only sleep until next retry time of {} (lowestScheduled = {})", result, lowestScheduled);
                 return result;
             }
         }

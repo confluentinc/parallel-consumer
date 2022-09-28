@@ -23,6 +23,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 import static java.util.Optional.of;
 
@@ -87,7 +89,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
             try {
                 produceLock = pm.beginProducing(context);
             } catch (TimeoutException e) {
-                throw new RuntimeException("Timeout trying to early acquire produce lock", e);
+                throw new RuntimeException(msg("Timeout trying to early acquire produce lock to send record in {} mode - could not START record processing phase", PERIODIC_TRANSACTIONAL_PRODUCER), e);
+
             }
             context.setProducingLock(of(produceLock));
         }
@@ -110,7 +113,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
             try {
                 produceLock = pm.beginProducing(context);
             } catch (TimeoutException e) {
-                throw new RuntimeException("Timeout trying to late acquire produce lock", e);
+                throw new RuntimeException(msg("Timeout trying to late acquire produce lock to send record in {} mode", PERIODIC_TRANSACTIONAL_PRODUCER), e);
             }
             context.setProducingLock(of(produceLock));
         }
