@@ -181,9 +181,26 @@ public class ShardManager<K, V> {
         return empty();
     }
 
-    public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
-        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
+    public List<WorkContainer<K, V>> getWorkIfAvailable(int requestedMaxWorkToRetrieve) {
+        List<WorkContainer<K, V>> work = new ArrayList<>(); // faster structure?
 
+        work.addAll(getHighPriorityWork(requestedMaxWorkToRetrieve));
+        work.addAll(getNormalPriorityWork(requestedMaxWorkToRetrieve));
+
+        return work;
+    }
+
+    private Collection<? extends WorkContainer<K, V>> getNormalPriorityWork(int requestedMaxWorkToRetrieve) {
+        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
+        return getWorkFromShards(requestedMaxWorkToRetrieve, shardQueueIterator);
+    }
+
+    private Collection<? extends WorkContainer<K, V>> getHighPriorityWork(int requestedMaxWorkToRetrieve) {
+        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator = getHighPrioirtyIterator();
+        return getWorkFromShards(requestedMaxWorkToRetrieve, shardQueueIterator);
+    }
+
+    private static List<WorkContainer<K, V>> getWorkFromShards(int requestedMaxWorkToRetrieve, LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator) {
         //
         List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
 
