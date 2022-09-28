@@ -10,6 +10,7 @@ import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.integrationTests.utils.BrokerCommitAsserter;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import io.confluent.parallelconsumer.internal.ProducerWrapper;
@@ -26,14 +27,12 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.REUSE_GROUP;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
@@ -44,6 +43,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 /**
  * Tests behaviour under timeouts
  *
+ * @author Antony Stubbs
  * @see ProducerManager
  * @see io.confluent.parallelconsumer.internal.ProducerManagerTest
  */
@@ -52,8 +52,12 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
     public static final int NUMBER_TO_SEND = 5;
+
     public static final int SMALL_TIMEOUT = 3;
+
     private ParallelEoSStreamProcessor<String, String> pc;
+
+    BrokerCommitAsserter broker;
 
     @SneakyThrows
     void setup(PCModule<String, String> module) {
@@ -64,6 +68,8 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         kcu.produceMessages(getTopic(), NUMBER_TO_SEND);
 
         pc.subscribe(of(getTopic()));
+
+        broker = new BrokerCommitAsserter(getKcu(), getTopic());
     }
 
     private ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> createOptions() {
@@ -115,7 +121,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         // assert output topic only
         var target = 1;
-        assertConsumedOffset(target);
+        broker.assertConsumedOffset(target);
 
         // send 1 more, upon which offset the pc function will block forever, causing a commit timeout
         getKcu().produceMessages(getTopic(), 2);
@@ -135,17 +141,6 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         commitHistorySubject.encodedIncomplete(0);
         commitHistorySubject.offset(0);
-    }
-
-    private void assertConsumedOffset(int target) {
-        try (var assertConsumer = getKcu().createNewConsumer(NEW_GROUP)) {
-            assertConsumer.subscribe(UniSets.of(getTopic()));
-
-            await().untilAsserted(() -> {
-                var poll = assertConsumer.poll(ofSeconds(1));
-                assertThat(poll).hasHeadOffsetAnyTopicPartition(target);
-            });
-        }
     }
 
     @SneakyThrows
@@ -202,20 +197,20 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         //// send, process, commit
         // assert output topic
-        assertConsumedOffset(5); // happy path, all base records committed ok
+        broker.assertConsumedOffset(5); // happy path, all base records committed ok
 
         //// send, process, block, retry, succeed
         // send 3 more records
         getKcu().produceMessages(getTopic(), 3);
 
         // assert output topic - has got the new records due to commit blocked
-        assertConsumedOffset(5); // happy path, all base records committed ok
+        broker.assertConsumedOffset(5); // happy path, all base records committed ok
 
         // wait for retry
         await().atMost(ofSeconds(60)).untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
 
         // assert output topic
-        assertConsumedOffset(8); // happy path after retry, all records committed and read ok
+        broker.assertConsumedOffset(8); // happy path after retry, all records committed and read ok
 
     }
 

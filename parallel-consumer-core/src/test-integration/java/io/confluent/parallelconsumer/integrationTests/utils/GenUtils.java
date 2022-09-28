@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.integrationTests;
+package io.confluent.parallelconsumer.integrationTests.utils;
 
 /*-
  * Copyright (C) 2020-2021 Confluent, Inc.
