@@ -1,4 +1,5 @@
 package io.confluent.parallelconsumer.integrationTests;
+
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
@@ -142,7 +143,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
             await().untilAsserted(() -> {
                 var poll = assertConsumer.poll(ofSeconds(1));
-                assertThat(poll).hasHeadOffset(target);
+                assertThat(poll).hasHeadOffsetAnyTopicPartition(target);
             });
         }
     }
