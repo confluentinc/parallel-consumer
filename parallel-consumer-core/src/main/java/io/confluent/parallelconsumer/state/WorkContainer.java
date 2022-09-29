@@ -17,7 +17,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
 
@@ -87,9 +86,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, String workType) {
-        Objects.requireNonNull(workType);
-
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, @NonNull String workType) {
         this.epoch = epoch;
         this.cr = cr;
         this.workType = workType;
