@@ -4,11 +4,10 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.RecordContext;
-import io.confluent.parallelconsumer.internal.ProducerManager;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -26,7 +25,7 @@ import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
 
 /**
- * TODO docs
+ * Model object for metadata around processing state of {@link ConsumerRecord}s.
  */
 @Slf4j
 @EqualsAndHashCode
