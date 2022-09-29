@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.time.Duration;
 import java.util.Set;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -34,24 +35,52 @@ public class BrokerCommitAsserter {
     @NonNull
     private final KafkaConsumer<?, ?> assertConsumer;
 
-    public void assertConsumedOffset(int target) {
-        assertConsumedOffset(getDefaultTopic(), target);
+    public void assertConsumedAtLeastOffset(int target) {
+        assertConsumedAtLeastOffset(getDefaultTopic(), target);
     }
 
-    public void assertConsumedOffset(String topic, int target) {
-        log.debug("Asserting against topic: {}, expecting to consume at least offset {}", topic, target);
-        Set<String> topicSet = UniSets.of(topic);
-        assertConsumer.subscribe(topicSet);
-        assertConsumer.seekToBeginning(UniSets.of());
+    public void assertConsumedAtLeastOffset(String topic, int target) {
+        setup(topic, target);
 
         await().untilAsserted(() -> {
             var poll = assertConsumer.poll(ofSeconds(1));
 
             log.debug("Polled {} records, looking for at least offset {}", poll.count(), target);
-            assertThat(poll).hasHeadOffsetAnyTopicPartition(target);
+            assertThat(poll).hasHeadOffsetAtLeastInAnyTopicPartition(target);
         });
 
+        post();
+    }
+
+    private void post() {
         assertConsumer.unsubscribe();
     }
 
+    private void setup(String topic, int target) {
+        log.debug("Asserting against topic: {}, expecting to consume at LEAST offset {}", topic, target);
+        Set<String> topicSet = UniSets.of(topic);
+        assertConsumer.subscribe(topicSet);
+        assertConsumer.seekToBeginning(UniSets.of());
+    }
+
+    /**
+     * Checks only once, with an assertion delay of 5 second
+     */
+    public void assertConsumedAtMostOffset(String topic, int atMost) {
+        setup(topic, atMost);
+
+        Duration delay = ofSeconds(5);
+        log.debug("Delaying by {} to check consumption from topic {} by at most {}", delay, topic, atMost);
+        await()
+                .pollDelay(delay)
+                .timeout(delay.plusSeconds(1))
+                .untilAsserted(() -> {
+                    var poll = assertConsumer.poll(ofSeconds(1));
+
+                    log.debug("Polled {} records, looking for at MOST offset {}", poll.count(), atMost);
+                    assertThat(poll).hasHeadOffsetAtMostInAnyTopicPartition(atMost);
+                });
+
+        post();
+    }
 }

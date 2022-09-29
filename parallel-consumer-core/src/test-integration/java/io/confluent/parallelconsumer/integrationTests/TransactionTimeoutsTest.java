@@ -149,7 +149,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         // assert output topic contains records from processing function - so commit must have committed cleanly
         var target = NUMBER_TO_SEND - 1;
-        assertConsumer.assertConsumedOffset(outputTopic, target); // check a new consumer group can consme the records expected to be committed to the partition
+        assertConsumer.assertConsumedAtLeastOffset(outputTopic, target); // check a new consumer group can consme the records expected to be committed to the partition
 
         // send more, upon which offset the pc function will block forever, causing a commit timeout
         getKcu().produceMessages(getTopic(), 10);
@@ -244,7 +244,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         //// phase 1 - happy path - send, process, commit
         // assert output topic
-        assertConsumer.assertConsumedOffset(OUTPUT_TOPIC, NUMBER_TO_SEND - 1); // happy path, all base records committed ok
+        assertConsumer.assertConsumedAtLeastOffset(OUTPUT_TOPIC, NUMBER_TO_SEND - 1); // happy path, all base records committed ok
 
         //// phase 2 - unhappy path where produce lock times out, but recovers: send, process, block, retry, succeed
         log.debug("Send more records to trigger timeout condition above...");
@@ -252,13 +252,13 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         getKcu().produceMessages(getTopic(), EXTRA_TO_SEND);
 
         // assert output topic - still has ONLY got the new records due to commit being blocked
-        assertConsumer.assertConsumedOffset(OUTPUT_TOPIC, NUMBER_TO_SEND - 1); // happy path, all base records committed ok
+        assertConsumer.assertConsumedAtMostOffset(OUTPUT_TOPIC, NUMBER_TO_SEND - 1); // only base records committed ok to output topic
 
         // wait for eventually retry on the blocked / slow sending offset
         await().untilAsserted(() -> Truth.assertThat(retryCount.get()).isAtLeast(1));
 
         // assert output topic
-        assertConsumer.assertConsumedOffset(OUTPUT_TOPIC, NUMBER_TO_SEND + EXTRA_TO_SEND); // happy path after retry, all records committed and read ok
+        assertConsumer.assertConsumedAtLeastOffset(OUTPUT_TOPIC, NUMBER_TO_SEND + EXTRA_TO_SEND); // happy path after retry, all records committed and read ok
     }
 
 }

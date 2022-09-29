@@ -38,21 +38,23 @@ public class ConsumerRecordsSubject extends ConsumerRecordsParentSubject impleme
         return ConsumerRecordsSubject::new;
     }
 
-    public void hasHeadOffsetAnyTopicPartition(int target) {
-        long highestOffset = findHighestOffsetAnyPartition(target);
+    public void hasHeadOffsetAtLeastInAnyTopicPartition(int target) {
+        long highestOffset = findHighestOffsetAnyPartition();
         check("headOffset").that(highestOffset).isAtLeast(target);
     }
 
-    private long findHighestOffsetAnyPartition(int target) {
+    public void hasHeadOffsetAtMostInAnyTopicPartition(int atMost) {
+        long highestOffset = findHighestOffsetAnyPartition();
+        check("headOffset").that(highestOffset).isAtMost(atMost);
+    }
+
+    private long findHighestOffsetAnyPartition() {
         var iterator = getConsumerRecordIterator();
         long highestOffset = PartitionState.KAFKA_OFFSET_ABSENCE;
         while (iterator.hasNext()) {
             ConsumerRecord<?, ?> next = iterator.next();
             long offset = next.offset();
             highestOffset = offset;
-            if (offset >= target) {
-                break;
-            }
         }
         return highestOffset;
     }
