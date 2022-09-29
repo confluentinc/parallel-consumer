@@ -101,7 +101,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         inFlight = false;
     }
 
-    public boolean hasDelayPassed() {
+    public boolean isDelayPassed() {
         if (!hasPreviouslyFailed()) {
             // if never failed, there is no artificial delay, so "delay" has always passed
             return true;
@@ -229,7 +229,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * {@link PartitionStateManager#isAllowedMoreRecords(WorkContainer)}.
      */
     public boolean isAvailableToTakeAsWork() {
-        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
+        return isNotInFlight() && !isUserFunctionSucceeded() && isDelayPassed();
     }
 
     /**

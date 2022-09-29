@@ -78,6 +78,7 @@ public class PCModule<K, V> {
         return consumerManager;
     }
 
+    @Setter
     private WorkManager<K, V> workManager;
 
     public WorkManager<K, V> workManager() {
