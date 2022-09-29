@@ -26,6 +26,9 @@ import java.util.concurrent.ExecutionException;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * @author Antony Stubbs
+ */
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
@@ -35,6 +38,7 @@ public abstract class BrokerIntegrationTest<K, V> {
     }
 
     int numPartitions = 1;
+    int partitionNumber = 0;
 
     @Getter
     String topic;
@@ -91,7 +95,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         return topic;
     }
 
-    protected void ensureTopic(String topic, int numPartitions) {
+    protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
@@ -101,6 +105,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        return topics;
     }
 
 }

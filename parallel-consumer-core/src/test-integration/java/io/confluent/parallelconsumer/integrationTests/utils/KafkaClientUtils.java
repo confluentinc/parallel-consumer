@@ -8,6 +8,8 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
@@ -26,20 +29,25 @@ import org.testcontainers.containers.KafkaContainer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 
 /**
- * todo docs
+ * Utilities for creating and manipulating clients
+ * <p>
+ * Caution: When creating new consumers with new group ids, the old group id is overwritten and so cannot be
+ * automatically be reused anymore.
  *
  * @author Antony Stubbs
  */
@@ -95,15 +103,16 @@ public class KafkaClientUtils {
         return producerProps;
     }
 
-    private Properties setupConsumerProps() {
+    private Properties setupConsumerProps(String groupIdToUse) {
         var consumerProps = setupCommonProps();
 
         //
-        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupIdToUse);
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
         consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        consumerProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.toString().toLowerCase(Locale.ROOT));
 
         //
         //    consumerProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10);
@@ -135,10 +144,14 @@ public class KafkaClientUtils {
     }
 
     public enum GroupOption {
-        RESUE_GROUP,
+        REUSE_GROUP,
         NEW_GROUP
     }
 
+
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(String groupId) {
+        return createNewConsumer(groupId, new Properties());
+    }
 
     public <K, V> KafkaConsumer<K, V> createNewConsumer(GroupOption reuseGroup) {
         return createNewConsumer(reuseGroup.equals(GroupOption.NEW_GROUP));
@@ -158,16 +171,18 @@ public class KafkaClientUtils {
         return createNewConsumer(false, options);
     }
 
-    @Deprecated
     public <K, V> KafkaConsumer<K, V> createNewConsumer(boolean newConsumerGroup, Properties options) {
-        Properties properties = setupConsumerProps();
-
         if (newConsumerGroup) {
             // overwrite the group id with a new one
             String newGroupId = GROUP_ID_PREFIX + nextInt();
             this.groupId = newGroupId; // save it for reuse later
-            properties.put(ConsumerConfig.GROUP_ID_CONFIG, newGroupId); // new group
         }
+        return createNewConsumer(this.groupId, options);
+    }
+
+    @Deprecated
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(String groupId, Properties options) {
+        Properties properties = setupConsumerProps(groupId);
 
         // override with custom
         properties.putAll(options);
@@ -177,7 +192,10 @@ public class KafkaClientUtils {
         return kvKafkaConsumer;
     }
 
-    public <K, V> KafkaProducer<K, V> createNewTransactionalProducer() {
+    /**
+     * Initialises the producer as well, so can't use with PC
+     */
+    public <K, V> KafkaProducer<K, V> createAndInitNewTransactionalProducer() {
         KafkaProducer<K, V> txProd = createNewProducer(TRANSACTIONAL);
         txProd.initTransactions();
         return txProd;
@@ -188,8 +206,12 @@ public class KafkaClientUtils {
      */
     @Deprecated
     public <K, V> KafkaProducer<K, V> createNewProducer(boolean transactional) {
-        var mode = transactional ? TRANSACTIONAL : NORMAL;
+        var mode = transactional ? TRANSACTIONAL : NOT_TRANSACTIONAL;
         return createNewProducer(mode);
+    }
+
+    public KafkaProducer<String, String> createNewProducer(CommitMode commitMode) {
+        return createNewProducer(ProducerMode.matching(commitMode));
     }
 
     public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode mode) {
@@ -215,7 +237,13 @@ public class KafkaClientUtils {
     }
 
     public enum ProducerMode {
-        TRANSACTIONAL, NORMAL
+        TRANSACTIONAL, NOT_TRANSACTIONAL;
+
+        public static ProducerMode matching(CommitMode commitMode) {
+            return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)
+                    ? TRANSACTIONAL
+                    : NOT_TRANSACTIONAL;
+        }
     }
 
     @SneakyThrows
@@ -230,21 +258,23 @@ public class KafkaClientUtils {
         return newTopics;
     }
 
-    public List<String> produceMessages(String inputName, long numberToSend) throws InterruptedException, ExecutionException {
-        log.info("Producing {} messages to {}", numberToSend, inputName);
+    public List<String> produceMessages(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
+        log.info("Producing {} messages to {}", numberToSend, topicName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
-            for (int i = 0; i < numberToSend; i++) {
-                String key = "key-" + i;
-                ProducerRecord<String, String> record = new ProducerRecord<>(inputName, key, "value-" + i);
+
+            var mu = new ModelUtils(new PCModuleTestEnv());
+            List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend);
+
+            for (var record : recs) {
                 Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
                     if (exception != null) {
                         log.error("Error sending, ", exception);
                     }
                 });
                 sends.add(send);
-                expectedKeys.add(key);
+                expectedKeys.add(record.key());
             }
             log.debug("Finished sending test data");
         }

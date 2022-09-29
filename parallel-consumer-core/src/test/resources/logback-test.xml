@@ -3,7 +3,7 @@
     Copyright (C) 2020-2022 Confluent, Inc.
 
 -->
-<configuration packagingData="true" scan="true" scanPeriod="5 seconds" debug="true">
+<configuration packagingData="true" scan="true" scanPeriod="5 seconds" debug="false">
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <!-- encoders are assigned the type
@@ -27,12 +27,16 @@
     </root>
 
     <!-- primary -->
-    <logger name="io.confluent.parallelconsumer" level="info"/>
-    <!--        <logger name="io.confluent.parallelconsumer" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer" level="info"/>-->
+    <!-- <logger name="io.confluent.parallelconsumer" level="debug"/> -->
     <!--    <logger name="io.confluent.parallelconsumer" level="trace"/>-->
 
-    <!--    <logger name="io.confluent.csid" level="debug"/>-->
+    <!-- <logger name="io.confluent.csid" level="debug"/> -->
+
     <logger name="org.apache.kafka" level="warn"/>
+
+    <!-- docker logs -->
+    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="warn"/>
 
 
     <!--    <logger name="io.confluent.csid.utils.LatchTestUtils" level="trace"/>-->
@@ -74,9 +78,6 @@
     <!--        <logger name="io.confluent.parallelconsumer" level="trace"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="error"/>-->
 
-    <!--        <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="info"/> &lt;!&ndash; docker logs &ndash;&gt;-->
-    <!--    <logger name="io.confluent.csid" level="info"/>-->
-    <!--        <logger name="io.confluent.csid.utils" level="debug"/>-->
 
 
     <!--            <logger name="io.confluent.parallelconsumer" level="trace" />-->

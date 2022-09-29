@@ -59,7 +59,7 @@ public class ShardManager<K, V> {
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
     private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(wc -> wc.getDelayUntilRetryDue()));
+    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(WorkContainer::getRetryDueAt));
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -144,7 +144,7 @@ public class ShardManager<K, V> {
     }
 
     public void onSuccess(WorkContainer<?, ?> wc) {
-        //
+        // remove from the retry queue if it's contained
         this.retryQueue.remove(wc);
 
         // remove from processing queues
@@ -153,7 +153,6 @@ public class ShardManager<K, V> {
         if (shardOptional.isPresent()) {
             //
             shardOptional.get().onSuccess(wc);
-
             removeShardIfEmpty(key);
         } else {
             log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());

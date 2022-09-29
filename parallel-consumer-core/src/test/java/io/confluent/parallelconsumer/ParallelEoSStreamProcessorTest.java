@@ -84,7 +84,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     }
 
     /**
-     * Checks that for messages that are currently undergoing processing, that no offsets for them are committed
+     * Checks that - for messages that are currently undergoing processing, that no offsets for them are committed
      */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
@@ -107,7 +107,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
-        parallelConsumer.poll((context) -> {
+        parallelConsumer.poll(context -> {
             log.error("msg: {}", context);
             startBarrierLatch.countDown();
             int offset = (int) context.offset();
@@ -389,8 +389,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
-        parallelConsumer.poll((record) -> {
-            myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+        parallelConsumer.poll(context -> {
+            log.debug("Processing test context...");
+            var singleRecord = context.getSingleConsumerRecord();
+            myRecordProcessingAction.apply(singleRecord);
             msgCompleteBarrier.countDown();
         });
 
