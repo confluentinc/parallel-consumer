@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -21,34 +22,37 @@ class WorkContainerTest {
 
     @Test
     void basics() {
-        var workContainer = new ModelUtils(new PCModuleTestEnv()).createWorkFor(0);
+        final var workContainer = new ModelUtils(new PCModuleTestEnv()).createWorkFor(0);
         assertThat(workContainer).getDelayUntilRetryDue().isNotNegative();
     }
 
     @Test
     void retryDelayProvider() {
-        Function<RecordContext<String, String>, Duration> retryDelayProvider = context -> {
-            int numberOfFailedAttempts = context.getNumberOfFailedAttempts();
-            return Duration.ofSeconds(numberOfFailedAttempts);
+        final int uniqueMultiplier = 7;
+
+        final Function<RecordContext<String, String>, Duration> retryDelayProvider = context -> {
+            final int numberOfFailedAttempts = context.getNumberOfFailedAttempts();
+            return Duration.ofSeconds(numberOfFailedAttempts * uniqueMultiplier);
         };
 
         //
-        var opts = ParallelConsumerOptions.<String, String>builder()
+        final var opts = ParallelConsumerOptions.<String, String>builder()
                 .retryDelayProvider(retryDelayProvider)
                 .build();
+        final PCModule module = new PCModuleTestEnv(opts);
 
-        WorkContainer<String, String> wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class));
+        final WorkContainer<String, String> wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class));
 
         //
-        int numberOfFailures = 3;
+        final int numberOfFailures = 3;
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
 
         //
-        Duration retryDelayConfig = wc.getRetryDelayConfig();
+        final Duration retryDelayConfig = wc.getRetryDelayConfig();
 
         //
-        assertThat(retryDelayConfig).getSeconds().isEqualTo(numberOfFailures);
+        assertThat(retryDelayConfig).getSeconds().isEqualTo(numberOfFailures * uniqueMultiplier);
     }
 }
