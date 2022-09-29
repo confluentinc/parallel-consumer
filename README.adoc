@@ -918,7 +918,7 @@ For implementations details, see the <<Transactional System Architecture>> secti
          * <p>
          * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
          * finishing sending all the records and committing, none will ever be visible and the system will eventually
-         * retry the in new transactions - potentially with different combinations of records from the original.
+         * retry them in new transactions - potentially with different combinations of records from the original.
          * <p>
          * c) A source offset, and it's produced records will be committed as an atomic set. Normally: either the record
          * producing could fail, or the committing of the source offset could fail, as they are separate individual
@@ -931,11 +931,10 @@ For implementations details, see the <<Transactional System Architecture>> secti
          * message replay may cause duplicates in external systems which is unavoidable - external systems must be
          * idempotent).
          * <p>
-         * Note that the system can potentially cause very large transactions (for transaction standards). The default
-         * commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY} gets
-         * automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
+         * The default commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY}
+         * gets automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
          * href=https://docs.confluent.io/platform/current/streams/developer-guide/config-streams.html">commit.interval.ms</a>).
-         * Reducing this configuration places higher loads on the broker, but will reduce (but cannot eliminate) replay
+         * Reducing this configuration places higher load on the broker, but will reduce (but cannot eliminate) replay
          * upon failure. Note also that when using transactions in Kafka, consumption in {@code READ_COMMITTED} mode is
          * blocked up to the offset of the first STILL open transaction. Using a smaller commit frequency reduces this
          * minimum consumption latency - the faster transactions are closed, the faster the transaction content can be
@@ -951,20 +950,35 @@ For implementations details, see the <<Transactional System Architecture>> secti
          * Records produced while running in this mode, won't be seen by consumer running in
          * {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG} {@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}
          * mode until the transaction is complete and all records are produced successfully. Records produced into a
-         * transactions that gets aborted or timed out, will never be visible.
+         * transaction that gets aborted or timed out, will never be visible.
          * <p>
          * The system must prevent records from being produced to the brokers whose source consumer record offsets has
          * not been included in this transaction. Otherwise, the transactions would include produced records from
-         * consumer offsets which would only be committed in the NEXT transaction, which wouldn't make sense. To achieve
-         * this, work processing and record producing is suspended, after succeeded consumer offsets are gathered,
-         * commit takes place, then the transaction has finished committing, processing resumes. This periodically slows
-         * down record production during this phase, by the time needed to commit the transaction.
+         * consumer offsets which would only be committed in the NEXT transaction, which would break the EoS guarantees.
+         * To achieve this, first work processing and record producing is suspended (by acquiring the commit lock -
+         * see{@link #commitLockAcquisitionTimeout}, as record processing requires the produce lock), then succeeded
+         * consumer offsets are gathered, transaction commit is made, then when the transaction has finished, processing
+         * resumes by releasing the commit lock. This periodically slows down record production during this phase, by
+         * the time needed to commit the transaction.
          * <p>
          * This is all separate from using an IDEMPOTENT Producer, which can be used, along with the
          * {@link ParallelConsumerOptions#commitMode} {@link CommitMode#PERIODIC_CONSUMER_SYNC} or
          * {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         * <p>
+         * Failure:
+         * <p>
+         * Commit lock: If the system cannot acquire the commit lock in time, it will shut down for whatever reason, the
+         * system will shut down (fail fast) - during the shutdown a final commit attempt will be made. The default
+         * timeout for acquisition is very high though - see {@link #commitLockAcquisitionTimeout}. This can be caused
+         * by the user processing function taking too long to complete.
+         * <p>
+         * Produce lock: If the system cannot acquire the produce lock in time, it will fail the record processing and
+         * retry the record later. This can be caused by the controller taking too long to commit for some reason. See
+         * {@link #produceLockAcquisitionTimeout}. If using {@link #allowEagerProcessingDuringTransactionCommit}, this
+         * may cause side effect replay when the record is retried, otherwise there is no replay. See
+         * {@link #allowEagerProcessingDuringTransactionCommit} for more details.
          *
-         * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits
+         * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval
          */
 ----
 
@@ -1257,6 +1271,14 @@ toc::[]
 endif::[]
 
 == Next Version
+
+=== Improvements
+
+* Transactional commit mode system improvements and docs (#355)
+** Clarifies transaction system with much better documentation.
+** Fixes a potential race condition which could cause an offset leaks between transactions.
+** Introduces lock acquisition time outs.
+** Fixes a potential issue with removing records from the retry incorrectly from having an inconsistency between compareTo and equals in the retry TreeMap.
 
 == v0.5.2.3
 

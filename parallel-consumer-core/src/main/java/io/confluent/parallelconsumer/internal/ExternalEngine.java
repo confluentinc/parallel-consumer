@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
+import static io.confluent.csid.utils.StringUtils.msg;
+
 /**
  * Overrides key aspects required in common for other threading engines like Vert.x and Reactor
  */
@@ -20,11 +22,19 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
 
     protected ExternalEngine(final ParallelConsumerOptions<K, V> newOptions) {
         super(newOptions);
+
+        validate(options);
+    }
+
+    private void validate(ParallelConsumerOptions options) {
+        if (options.isUsingTransactionCommitMode()) {
+            throw new IllegalStateException(msg("External engines (such as Vert.x and Reactor) do not support transactions / EoS ({})", ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER));
+        }
     }
 
     /**
      * @return the number of records to try to get, based on the current count of records outstanding - but unlike core,
-     * we don't pipeline messages into the executor pool for processing.
+     *         we don't pipeline messages into the executor pool for processing.
      */
     protected int getTargetOutForProcessing() {
         return getOptions().getTargetAmountOfRecordsInFlight();
