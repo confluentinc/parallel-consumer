@@ -72,25 +72,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Sets the time between commits. Using a higher frequency will put more load on the brokers.
      *
-     * @deprecated use {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits}} instead. This
+     * @deprecated use {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval}} instead. This
      *         will be deleted in the next major version.
      */
     // todo delete in next major version
     @Deprecated
     public void setTimeBetweenCommits(final Duration timeBetweenCommits) {
-        options.setTimeBetweenCommits(timeBetweenCommits);
+        options.setCommitInterval(timeBetweenCommits);
     }
 
     /**
      * Gets the time between commits.
      *
-     * @deprecated use {@link ParallelConsumerOptions#setTimeBetweenCommits} instead. This will be deleted in the next
-     *         major version.
+     * @deprecated use {@link ParallelConsumerOptions#setCommitInterval} instead. This will be deleted in the next major
+     *         version.
      */
     // todo delete in next major version
     @Deprecated
     public Duration getTimeBetweenCommits() {
-        return options.getTimeBetweenCommits();
+        return options.getCommitInterval();
     }
 
     private Instant lastCommitCheckTime = Instant.now();

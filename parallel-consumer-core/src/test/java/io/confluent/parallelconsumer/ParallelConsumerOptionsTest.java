@@ -30,12 +30,12 @@ class ParallelConsumerOptionsTest {
     void setTimeBetweenCommits() {
         var newFreq = Duration.ofMillis(100);
         var options = ParallelConsumerOptions.<String, String>builder()
-                .timeBetweenCommits(newFreq)
+                .commitInterval(newFreq)
                 .consumer(new LongPollingMockConsumer<>(EARLIEST))
                 .build();
 
         //
-        assertThat(options.getTimeBetweenCommits()).isEqualTo(newFreq);
+        assertThat(options.getCommitInterval()).isEqualTo(newFreq);
 
         //
         var pc = new ParallelEoSStreamProcessor<>(options);
@@ -49,6 +49,6 @@ class ParallelConsumerOptionsTest {
 
         //
         assertThat(pc.getTimeBetweenCommits()).isEqualTo(testFreq);
-        assertThat(options.getTimeBetweenCommits()).isEqualTo(testFreq);
+        assertThat(options.getCommitInterval()).isEqualTo(testFreq);
     }
 }

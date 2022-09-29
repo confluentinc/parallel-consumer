@@ -85,7 +85,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
                 .commitLockAcquisitionTimeout(ofSeconds(1))
                 .defaultMessageRetryDelay(ofMillis(100))
                 .produceLockAcquisitionTimeout(ofSeconds(2))
-                .timeBetweenCommits(ofSeconds(1))
+                .commitInterval(ofSeconds(1))
                 .allowEagerProcessingDuringTransactionCommit(true);
     }
 
