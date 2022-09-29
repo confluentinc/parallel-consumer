@@ -5,8 +5,6 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.state.ModelUtils;
-import lombok.NonNull;
 import io.confluent.parallelconsumer.offsets.ForcedOffsetSimultaneousEncoder;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -18,12 +16,9 @@ import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
-import org.mockito.Mockito;
 
 import java.util.Optional;
 import java.util.Set;
-
-import static org.mockito.Mockito.mock;
 
 /**
  * Version of the {@link PCModule} in test contexts.
