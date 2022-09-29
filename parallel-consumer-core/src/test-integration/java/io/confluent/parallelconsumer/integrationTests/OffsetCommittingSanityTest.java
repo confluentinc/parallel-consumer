@@ -1,11 +1,7 @@
-
-/*-
- * Copyright (C) 2020-2022 Confluent, Inc.
- */
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;

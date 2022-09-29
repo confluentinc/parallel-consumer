@@ -229,8 +229,13 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         return getNumberOfFailedAttempts() > 0;
     }
 
+    /**
+     * Checks the work is not already in flight, it's retry delay has passed and that it's not already been succeeded.
+     * <p>
+     * Checking that there's no back pressure for the partition it belongs to is covered by
+     * {@link PartitionStateManager#isAllowedMoreRecords(WorkContainer)}.
+     */
     public boolean isAvailableToTakeAsWork() {
-        // todo missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);?
         return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
     }
 

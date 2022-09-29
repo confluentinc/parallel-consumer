@@ -47,7 +47,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private final ParallelConsumerOptions<K, V> options;
 
     /**
-     * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transitionally. We must
+     * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transactionally. We must
      * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
      * state COMMITTING_TRANSACTION".
      * <p>
@@ -199,14 +199,14 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     @Override
     protected void preAcquireOffsetsToCommit() throws java.util.concurrent.TimeoutException, InterruptedException {
         acquireCommitLock();
-        drain();
+        flush();
     }
 
 
     /**
      * Wait for all in flight records to be ack'd before continuing, so they are all in the tx.
      */
-    private void drain() {
+    private void flush() {
         producerWrapper.flush();
     }
 
@@ -269,7 +269,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
                             // try wait again
                             commitTransaction();
                         }
-                        boolean transactionModeIsReady = lastErrorSavedForRethrow == null || !lastErrorSavedForRethrow.getMessage().contains("Invalid transition attempted from state READY to state COMMITTING_TRANSACTION");
+                        boolean transactionModeIsReady = lastErrorSavedForRethrow == null || !lastErrorSavedForRethrow.getMessage().contains("Invalid transaction attempted from state READY to state COMMITTING_TRANSACTION");
                         if (transactionModeIsReady) {
                             // try again
                             log.error("Transaction was already in READY state - tx completed between interrupt and retry");

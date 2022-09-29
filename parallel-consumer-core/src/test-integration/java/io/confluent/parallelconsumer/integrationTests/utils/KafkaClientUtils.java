@@ -44,7 +44,10 @@ import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 
 /**
- * todo docs
+ * Utilities for creating and manipulating clients
+ * <p>
+ * Caution: When creating new consumers with new group ids, the old group id is overwritten and so cannot be
+ * automatically be reused anymore.
  *
  * @author Antony Stubbs
  */

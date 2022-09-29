@@ -42,7 +42,7 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Tests behaviour under timeouts
+ * Tests transaction behaviour under timeouts
  *
  * @author Antony Stubbs
  * @see ProducerManager
