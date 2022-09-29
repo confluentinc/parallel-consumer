@@ -283,4 +283,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getLowestRetryTime();
     }
 
+    public boolean isDirty() {
+        return pm.isDirty();
+    }
 }

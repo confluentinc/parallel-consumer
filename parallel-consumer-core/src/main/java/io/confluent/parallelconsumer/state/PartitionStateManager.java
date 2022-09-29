@@ -8,6 +8,8 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -330,6 +332,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * loaded records.
      */
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
+        log.debug("Incoming {} new records...", recordsMap.count());
         for (var partition : recordsMap.partitions()) {
             var recordsList = recordsMap.records(partition);
             var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
@@ -342,7 +345,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
      */
-    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, ConsumerRecord<K, V> rec) {
+    private void maybeRegisterNewRecordAsWork(@NonNull Long epochOfInboundRecords, @NonNull ConsumerRecord<K, V> rec) {
         // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
         var currentPartitionEpoch = getEpochOfPartitionForRecord(rec);
         if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {
@@ -414,4 +417,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return workContainer.offset() < partitionState.getOffsetHighestSucceeded();
     }
 
+    public boolean isDirty() {
+        return this.partitionStates.values().stream()
+                .anyMatch(PartitionState::isDirty);
+    }
 }

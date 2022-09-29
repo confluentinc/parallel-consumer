@@ -16,6 +16,14 @@ endif::[]
 
 == Next Version
 
+=== Improvements
+
+* Transactional commit mode system improvements and docs (#355)
+** Clarifies transaction system with much better documentation.
+** Fixes a potential race condition which could cause offset leaks between transactions boundaries.
+** Introduces lock acquisition timeouts.
+** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
+
 == v0.5.2.3
 
 === Improvements

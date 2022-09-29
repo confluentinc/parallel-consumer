@@ -18,10 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
@@ -70,7 +67,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
-    void commit() {
+    void commit() throws TimeoutException, InterruptedException {
         if (isOwner()) {
             retrieveOffsetsAndCommit();
         } else if (isSync()) {
@@ -172,7 +169,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         return request;
     }
 
-    void maybeDoCommit() {
+    void maybeDoCommit() throws TimeoutException, InterruptedException {
         CommitRequest poll = commitRequestQueue.poll();
         if (poll != null) {
             log.debug("Commit requested, performing...");
