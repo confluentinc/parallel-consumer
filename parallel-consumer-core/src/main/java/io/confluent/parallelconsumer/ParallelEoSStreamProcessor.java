@@ -85,19 +85,19 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // if running strict with no processing during commit - get the produce lock first
         if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
-            ProducerManager<K, V>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing(context);
+                ProducerManager<K, V>.ProducingLock produceLock = pm.beginProducing(context);
+                context.setProducingLock(of(produceLock));
             } catch (TimeoutException e) {
                 throw new RuntimeException(msg("Timeout trying to early acquire produce lock to send record in {} mode - could not START record processing phase", PERIODIC_TRANSACTIONAL_PRODUCER), e);
-
             }
-            context.setProducingLock(of(produceLock));
         }
 
-        //
+
+        // run the user function, which is expected to return records to be sent
         List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, context.getPollContext());
 
+        //
         if (recordListToProduce.isEmpty()) {
             log.debug("No result returned from function to send.");
             return UniLists.of();
@@ -109,16 +109,15 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
         // by having the produce lock span the block on acks, means starting a commit cycle blocks until ack wait is finished
         if (options.isUsingTransactionCommitMode() && options.isAllowEagerProcessingDuringTransactionCommit()) {
-            ProducerManager<K, V>.ProducingLock produceLock = null;
             try {
-                produceLock = pm.beginProducing(context);
+                ProducerManager<K, V>.ProducingLock produceLock = pm.beginProducing(context);
+                context.setProducingLock(of(produceLock));
             } catch (TimeoutException e) {
                 throw new RuntimeException(msg("Timeout trying to late acquire produce lock to send record in {} mode", PERIODIC_TRANSACTIONAL_PRODUCER), e);
             }
-            context.setProducingLock(of(produceLock));
         }
 
-        // wait for all ack's to complete, see PR #356 for async version
+        // wait for all acks to complete, see PR #356 for a fully async version which doesn't need to block here
         try {
             var futures = pm.produceMessages(recordListToProduce);
 

@@ -701,7 +701,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         // distribute more work
-        retrieveAndDistributeWork(userFunction, callback);
+        retrieveAndDistributeNewWork(userFunction, callback);
 
         // run call back
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
@@ -736,7 +736,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * If we don't have enough work queued, and the poller is paused for throttling,
      * <p>
-     * todo move into {@link WorkManager}?
+     * todo move into {@link WorkManager} as it's specific to WM having enough work?
      */
     private void maybeWakeupPoller() {
         if (state == running) {
@@ -752,8 +752,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * If it's time to commit, and using transactional system, tries to acquire the commit lock.
      * <p>
-     * Call {@link ProducerManager#preAcquireWork()} early, to initiate the record sending barrier for this transaction
-     * (so no more records can be sent, before collecting offsets to commit).
+     * Call {@link ProducerManager#preAcquireOffsetsToCommit()} early, to initiate the record sending barrier for this
+     * transaction (so no more records can be sent, before collecting offsets to commit).
      *
      * @return true if committing should either way be attempted now
      */
@@ -763,15 +763,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on
             log.debug("Acquiring commit lock pessimistically, before we try to collect offsets for committing");
-            if (options.isUsingTransactionCommitMode()) {
-                //noinspection OptionalGetWithoutIsPresent - options will already be verified
-                producerManager.get().preAcquireWork();
-            }
+            //noinspection OptionalGetWithoutIsPresent - options will already be verified
+            producerManager.get().preAcquireOffsetsToCommit();
         }
         return shouldTryCommitNow;
     }
 
-    private <R> int retrieveAndDistributeWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    private <R> int retrieveAndDistributeNewWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
 

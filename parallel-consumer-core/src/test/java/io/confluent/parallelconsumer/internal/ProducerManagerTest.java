@@ -132,7 +132,7 @@ class ProducerManagerTest {
         blockedCommit.assertFunctionBlocks(() -> {
             // commit sequence
             try {
-                producerManager.preAcquireWork();
+                producerManager.preAcquireOffsetsToCommit();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -148,7 +148,7 @@ class ProducerManagerTest {
         blockedCommit.awaitReturnFully();
 
         // start actual commit - acquire commit lock
-        producerManager.preAcquireWork();
+        producerManager.preAcquireOffsetsToCommit();
 
         //
         assertThat(producerManager).isTransactionCommittingInProgress();
@@ -217,7 +217,7 @@ class ProducerManagerTest {
             producerManager.finishProducing(produceLock);
         }
 
-        producerManager.preAcquireWork();
+        producerManager.preAcquireOffsetsToCommit();
 
         assertThat(producerManager).isTransactionCommittingInProgress();
 
@@ -242,7 +242,7 @@ class ProducerManagerTest {
             assertThat(producerManager).transactionOpen();
             producerManager.finishProducing(producingLock);
             assertThat(producerManager).transactionOpen();
-            producerManager.preAcquireWork();
+            producerManager.preAcquireOffsetsToCommit();
             assertThat(producerManager).transactionOpen();
             producerManager.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
             assertThat(producerManager).transactionNotOpen();

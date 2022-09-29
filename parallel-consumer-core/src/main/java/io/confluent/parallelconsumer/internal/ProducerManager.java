@@ -197,7 +197,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * calling {@link Producer#flush()}.
      */
     @Override
-    protected void preAcquireWork() throws java.util.concurrent.TimeoutException, InterruptedException {
+    protected void preAcquireOffsetsToCommit() throws java.util.concurrent.TimeoutException, InterruptedException {
         acquireCommitLock();
         drain();
     }
