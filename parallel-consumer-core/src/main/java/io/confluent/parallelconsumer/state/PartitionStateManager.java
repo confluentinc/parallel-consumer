@@ -9,7 +9,6 @@ import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -67,12 +66,9 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
-    private final PCModule<K, V> module;
-
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
         this.consumer = module.consumer();
         this.sm = sm;
-        this.module = module;
     }
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
@@ -357,7 +353,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             if (isRecordPreviouslyCompleted(rec)) {
                 log.trace("Record previously completed, skipping. offset: {}", rec.offset());
             } else {
-                var work = new WorkContainer<>(epochOfInboundRecords, rec, module);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec);
 
                 sm.addWorkContainer(work);
                 addWorkContainer(work);

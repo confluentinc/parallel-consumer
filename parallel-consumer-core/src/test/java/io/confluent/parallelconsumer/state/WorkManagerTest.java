@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.state;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -43,7 +42,6 @@ import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -330,7 +328,7 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, null, WorkContainer.DEFAULT_TYPE, mock(PartitionStateManager.class));
+        var wc = new WorkContainer<String, String>(0, null, WorkContainer.DEFAULT_TYPE);
         assertThat(wc.hasDelayPassed()).isTrue(); // when new, there's no delay
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
         assertThat(wc.hasDelayPassed()).isFalse();
@@ -342,13 +340,13 @@ public class WorkManagerTest {
     }
 
     private void advanceClockBySlightlyLessThanDelay() {
-        Duration retryDelay = WorkContainer.defaultRetryDelay;
+        Duration retryDelay = ParallelConsumerOptions.DEFAULT_STATIC_RETRY_DELAY;
         Duration duration = retryDelay.dividedBy(2);
         time.add(duration);
     }
 
     private void advanceClockByDelay() {
-        time.add(WorkContainer.defaultRetryDelay);
+        time.add(ParallelConsumerOptions.DEFAULT_STATIC_RETRY_DELAY);
     }
 
     private void advanceClock(Duration by) {
@@ -590,7 +588,7 @@ public class WorkManagerTest {
 
         var treeMap = new TreeMap<Long, WorkContainer<String, String>>();
         for (ConsumerRecord<String, String> record : records) {
-            treeMap.put(record.offset(), new WorkContainer<>(0, record, null, TimeUtils.getClock()));
+            treeMap.put(record.offset(), new WorkContainer<>(0, record, null));
         }
 
         // read back, assert correct order

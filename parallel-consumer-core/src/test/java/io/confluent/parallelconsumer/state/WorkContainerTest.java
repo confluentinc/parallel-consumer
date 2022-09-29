@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -38,9 +37,7 @@ class WorkContainerTest {
                 .retryDelayProvider(retryDelayProvider)
                 .build();
 
-        WorkContainer<String, String> wc = new WorkContainer<String, String>(0,
-                mock(ConsumerRecord.class),
-                mock(PCModule.class));
+        WorkContainer<String, String> wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class));
 
         //
         int numberOfFailures = 3;

@@ -33,8 +33,17 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     static final String DEFAULT_TYPE = "DEFAULT";
 
+    /**
+     * @see PCModule#setStaticReferences()
+     */
+    @Setter
     @NonNull
-    private final PCModule<K, V> module;
+    private static PCModule<?, ?> staticModule;
+
+    private PCModule<K, V> getModule() {
+        // Cast the type parameters of WorkContainer as static fields cannot access them, however as built they are guaranteed to match.
+        return (PCModule<K, V>) staticModule;
+    }
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -78,17 +87,16 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, PCModule<K, V> module, String workType) {
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, String workType) {
         Objects.requireNonNull(workType);
 
         this.epoch = epoch;
         this.cr = cr;
         this.workType = workType;
-        this.module = module;
     }
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, PCModule<K, V> module) {
-        this(epoch, cr, module, DEFAULT_TYPE);
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr) {
+        this(epoch, cr, DEFAULT_TYPE);
     }
 
     public void endFlight() {
@@ -110,7 +118,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return time until it should be retried
      */
     public Duration getDelayUntilRetryDue() {
-        Instant now = module.clock().instant();
+        Instant now = getModule().clock().instant();
         Temporal nextAttemptAt = getRetryDueAt();
         return Duration.between(now, nextAttemptAt);
     }
@@ -133,7 +141,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return the delay between retries e.g. retry after 1 second
      */
     public Duration getRetryDelayConfig() {
-        var options = module.options();
+        var options = getModule().options();
         var retryDelayProvider = options.getRetryDelayProvider();
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(new RecordContext<>(this));
@@ -169,7 +177,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     public void onUserFunctionSuccess() {
-        this.succeededAt = of(module.clock().instant());
+        this.succeededAt = of(getModule().clock().instant());
         this.maybeUserFunctionSucceeded = of(true);
     }
 
@@ -183,7 +191,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     private void updateFailureHistory(Throwable cause) {
         numberOfFailedAttempts++;
-        lastFailedAt = of(Instant.now(module.clock()));
+        lastFailedAt = of(Instant.now(getModule().clock()));
         lastFailureReason = Optional.ofNullable(cause);
     }
 

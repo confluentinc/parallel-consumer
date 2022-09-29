@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -87,7 +86,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     }
 
     private void injectSucceededWorkAtOffset(long offset) {
-        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null, TimeUtils.getClock());
+        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null);
         Mockito.doReturn(offset).when(mockCr).offset();
         state.addWorkContainer(workContainer);
         state.onSuccess(workContainer); // in this case the highest seen is also the highest succeeded
