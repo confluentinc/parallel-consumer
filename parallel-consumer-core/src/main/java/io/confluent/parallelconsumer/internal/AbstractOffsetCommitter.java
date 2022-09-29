@@ -27,7 +27,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
     @Override
     public void retrieveOffsetsAndCommit() throws TimeoutException, InterruptedException {
         log.debug("Find completed work to commit offsets");
-        preAcquireWork();
+        preAcquireOffsetsToCommit();
         try {
             var offsetsToCommit = wm.collectCommitDataForDirtyPartitions();
             if (offsetsToCommit.isEmpty()) {
@@ -51,7 +51,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    protected void preAcquireWork() throws TimeoutException, InterruptedException {
+    protected void preAcquireOffsetsToCommit() throws TimeoutException, InterruptedException {
         // default noop
     }
 

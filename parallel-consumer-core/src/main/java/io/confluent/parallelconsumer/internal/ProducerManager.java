@@ -19,6 +19,10 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.InvalidProducerEpochException;
+import org.apache.kafka.common.errors.ProducerFencedException;
+import org.apache.kafka.common.errors.TimeoutException;
+import org.apache.kafka.common.errors.InterruptException;
+import org.apache.kafka.common.errors.InvalidProducerEpochException;
 import org.apache.kafka.common.errors.TimeoutException;
 
 import java.time.Duration;
@@ -196,16 +200,16 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * calling {@link Producer#flush()}.
      */
     @Override
-    protected void preAcquireWork() throws java.util.concurrent.TimeoutException, InterruptedException {
+    protected void preAcquireOffsetsToCommit() throws java.util.concurrent.TimeoutException, InterruptedException {
         acquireCommitLock();
-        drain();
+        flush();
     }
 
 
     /**
      * Wait for all in flight records to be ack'd before continuing, so they are all in the tx.
      */
-    private void drain() {
+    private void flush() {
         producerWrapper.flush();
     }
 
@@ -238,7 +242,13 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
 
         //
         lazyMaybeBeginTransaction(); // if not using a produce flow or if no records sent yet, a tx will need to be started here (as no records are being produced)
-        producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+        try {
+            producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+        } catch (ProducerFencedException e) {
+            // todo consider wrapping all client calls with a catch and new exception in the ProducerWrapper, so can get stack traces
+            //  see APIException#fillInStackTrace
+            throw new InternalRuntimeError(e);
+        }
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
         boolean committed = false;

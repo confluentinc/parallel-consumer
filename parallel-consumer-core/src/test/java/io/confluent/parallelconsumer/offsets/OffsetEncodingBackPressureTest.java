@@ -53,6 +53,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
      * that no further messages for the given partitions can be taken for processing, until more messages complete.
      */
+    // todo refactor test to use the new DI system, to manipulate one of the mocks to force test scenario, instead of messing with static state
     @Test
     void backPressureShouldPreventTooManyMessagesBeingQueuedForProcessing() throws OffsetDecodingError {
         // mock messages downloaded for processing > MAX_TO_QUEUE
@@ -203,9 +204,9 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // recreates the situation where the payload size is too large and must be dropped
             log.debug("// test max payload exceeded, payload dropped");
         {
-            log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
-                    "(i.e. the actual system attempts to never allow the payload to grow this big) " +
-                    "i.e. effectively this disables blocking mechanism for the partition");
+                log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
+                        "(i.e. the actual system attempts to never allow the payload to grow this big) " +
+                        "i.e. effectively this disables blocking mechanism for the partition");
             module.setPayloadThresholdMultiplier(99);
             module.setMaxMetadataSize(30); // reduce max cut off size
 

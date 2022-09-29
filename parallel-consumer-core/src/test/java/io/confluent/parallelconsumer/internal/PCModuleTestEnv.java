@@ -5,6 +5,8 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.state.ModelUtils;
+import lombok.NonNull;
 import io.confluent.parallelconsumer.offsets.ForcedOffsetSimultaneousEncoder;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
@@ -15,6 +17,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
+import org.mockito.Mockito;
 import org.mockito.Mockito;
 
 import java.util.Optional;
@@ -44,13 +47,13 @@ public class PCModuleTestEnv extends PCModule<String, String> {
         var copy = options().toBuilder();
 
         if (optionsInstance.getConsumer() == null) {
-            Consumer<String, String> mockConsumer = mock(Consumer.class);
+            Consumer<String, String> mockConsumer = Mockito.mock(Consumer.class);
             Mockito.when(mockConsumer.groupMetadata()).thenReturn(mu.consumerGroupMeta());
             copy.consumer(mockConsumer);
         }
 
         var override = copy
-                .producer(mock(Producer.class))
+                .producer(Mockito.mock(Producer.class))
                 .build();
 
         return override;

@@ -10,9 +10,12 @@ import com.google.common.truth.Subject;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedSubject;
+import lombok.ToString;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Collectors;
 
 import static com.google.common.truth.Truth.assertAbout;
@@ -21,6 +24,7 @@ import static com.google.common.truth.Truth.assertAbout;
  * @author Antony Stubbs
  * @see CommitHistory
  */
+@ToString
 @UserManagedSubject(CommitHistory.class)
 public class CommitHistorySubject extends Subject {
     private final CommitHistory actual;
@@ -69,9 +73,13 @@ public class CommitHistorySubject extends Subject {
         nothing();
     }
 
+    /**
+     * Asserts that the given offsets are in the offset metadata as incomplete.
+     */
     public void encodedIncomplete(int... expectedEncodedOffsetsArray) {
+        Set<Long> incompleteOffsets = actual.getEncodedSucceeded().getIncompleteOffsets();
         check("encodedSucceeded()")
-                .that(actual.getEncodedSucceeded().getIncompleteOffsets())
+                .that(incompleteOffsets)
                 .containsExactlyElementsIn(Arrays.stream(expectedEncodedOffsetsArray)
                         .boxed()
                         .map(Long::valueOf)

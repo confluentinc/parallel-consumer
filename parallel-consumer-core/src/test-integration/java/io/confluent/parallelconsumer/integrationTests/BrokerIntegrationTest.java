@@ -27,6 +27,9 @@ import java.util.concurrent.ExecutionException;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * @author Antony Stubbs
+ */
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
@@ -38,6 +41,7 @@ public abstract class BrokerIntegrationTest<K, V> {
     }
 
     int numPartitions = 1;
+    int partitionNumber = 0;
 
     @Getter
     String topic;

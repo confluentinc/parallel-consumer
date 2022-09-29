@@ -111,7 +111,7 @@ public class ParallelConsumerOptions<K, V> {
          * <p>
          * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
          * finishing sending all the records and committing, none will ever be visible and the system will eventually
-         * retry the in new transactions - potentially with different combinations of records from the original.
+         * retry them in new transactions - potentially with different combinations of records from the original.
          * <p>
          * c) A source offset, and it's produced records will be committed as an atomic set. Normally: either the record
          * producing could fail, or the committing of the source offset could fail, as they are separate individual
@@ -124,11 +124,10 @@ public class ParallelConsumerOptions<K, V> {
          * message replay may cause duplicates in external systems which is unavoidable - external systems must be
          * idempotent).
          * <p>
-         * Note that the system can potentially cause very large transactions (for transaction standards). The default
-         * commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY} gets
-         * automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
+         * The default commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY}
+         * gets automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
          * href=https://docs.confluent.io/platform/current/streams/developer-guide/config-streams.html">commit.interval.ms</a>).
-         * Reducing this configuration places higher loads on the broker, but will reduce (but cannot eliminate) replay
+         * Reducing this configuration places higher load on the broker, but will reduce (but cannot eliminate) replay
          * upon failure. Note also that when using transactions in Kafka, consumption in {@code READ_COMMITTED} mode is
          * blocked up to the offset of the first STILL open transaction. Using a smaller commit frequency reduces this
          * minimum consumption latency - the faster transactions are closed, the faster the transaction content can be
@@ -144,20 +143,35 @@ public class ParallelConsumerOptions<K, V> {
          * Records produced while running in this mode, won't be seen by consumer running in
          * {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG} {@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}
          * mode until the transaction is complete and all records are produced successfully. Records produced into a
-         * transactions that gets aborted or timed out, will never be visible.
+         * transaction that gets aborted or timed out, will never be visible.
          * <p>
          * The system must prevent records from being produced to the brokers whose source consumer record offsets has
          * not been included in this transaction. Otherwise, the transactions would include produced records from
-         * consumer offsets which would only be committed in the NEXT transaction, which wouldn't make sense. To achieve
-         * this, work processing and record producing is suspended, after succeeded consumer offsets are gathered,
-         * commit takes place, then the transaction has finished committing, processing resumes. This periodically slows
-         * down record production during this phase, by the time needed to commit the transaction.
+         * consumer offsets which would only be committed in the NEXT transaction, which would break the EoS guarantees.
+         * To achieve this, first work processing and record producing is suspended (by acquiring the commit lock -
+         * see{@link #commitLockAcquisitionTimeout}, as record processing requires the produce lock), then succeeded
+         * consumer offsets are gathered, transaction commit is made, then when the transaction has finished, processing
+         * resumes by releasing the commit lock. This periodically slows down record production during this phase, by
+         * the time needed to commit the transaction.
          * <p>
          * This is all separate from using an IDEMPOTENT Producer, which can be used, along with the
          * {@link ParallelConsumerOptions#commitMode} {@link CommitMode#PERIODIC_CONSUMER_SYNC} or
          * {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         * <p>
+         * Failure:
+         * <p>
+         * Commit lock: If the system cannot acquire the commit lock in time, it will shut down for whatever reason, the
+         * system will shut down (fail fast) - during the shutdown a final commit attempt will be made. The default
+         * timeout for acquisition is very high though - see {@link #commitLockAcquisitionTimeout}. This can be caused
+         * by the user processing function taking too long to complete.
+         * <p>
+         * Produce lock: If the system cannot acquire the produce lock in time, it will fail the record processing and
+         * retry the record later. This can be caused by the controller taking too long to commit for some reason. See
+         * {@link #produceLockAcquisitionTimeout}. If using {@link #allowEagerProcessingDuringTransactionCommit}, this
+         * may cause side effect replay when the record is retried, otherwise there is no replay. See
+         * {@link #allowEagerProcessingDuringTransactionCommit} for more details.
          *
-         * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits
+         * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval
          */
         // end::transactionalJavadoc[]
         PERIODIC_TRANSACTIONAL_PRODUCER,
@@ -178,43 +192,44 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     /**
-     * Kafka's default auto commit frequency - which is 5000ms.
+     * Kafka's default auto commit interval - which is 5000ms.
      *
      * @see org.apache.kafka.clients.consumer.ConsumerConfig#AUTO_COMMIT_INTERVAL_MS_CONFIG
      * @see org.apache.kafka.clients.consumer.ConsumerConfig#CONFIG
      */
-    public static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS = 5000;
+    public static final int KAFKA_DEFAULT_AUTO_COMMIT_INTERVAL_MS = 5000;
 
-    public static final Duration DEFAULT_TIME_BETWEEN_COMMITS = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY_MS);
+    public static final Duration DEFAULT_COMMIT_INTERVAL = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_INTERVAL_MS);
 
     /*
      * The same as Kafka Streams
      */
-    public static final Duration DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS = ofMillis(100);
+    public static final Duration DEFAULT_COMMIT_INTERVAL_FOR_TRANSACTIONS = ofMillis(100);
 
     /**
-     * Allow new records to be processed UP UNTIL the record processing step, while a transaction is being committed.
-     * Disabled by default.
+     * When using {@link CommitMode#PERIODIC_TRANSACTIONAL_PRODUCER}, allows new records to be processed UP UNTIL the
+     * result record SENDING ({@link Producer#send}) step, potentially while a transaction is being committed. Disabled
+     * by default as to prevent replay side effects when records need to be retried in some scenarios.
      * <p>
-     * Doesn't interfere with the transaction.
+     * Doesn't interfere with the transaction itself, just reduces side effects.
      * <p>
-     * Recommended to leave this off to avoid side effect duplicates upon rebalance after a crash. Enabling could
-     * improve performance as the produce lock will only be taken right before it's needed to produce the result record,
-     * instead of pessimistically.
+     * Recommended to leave this off to avoid side effect duplicates upon rebalances after a crash. Enabling could
+     * improve performance as the produce lock will only be taken right before it's needed (optimistic locking) to
+     * produce the result record, instead of pessimistically locking.
      */
     @Builder.Default
     private boolean allowEagerProcessingDuringTransactionCommit = false;
 
     /**
      * Time to allow for acquiring the commit lock. If record processing or producing takes a long time, you may need to
-     * increase this.
+     * increase this. If this fails, the system will shut down (fail fast) and attempt to commit once more.
      */
     @Builder.Default
     private Duration commitLockAcquisitionTimeout = Duration.ofMinutes(5);
 
     /**
      * Time to allow for acquiring the produce lock. If transaction committing a long time, you may need to increase
-     * this.
+     * this. If this fails, the record will be returned to the processing queue for later retry.
      */
     @Builder.Default
     private Duration produceLockAcquisitionTimeout = Duration.ofMinutes(1);
@@ -223,16 +238,16 @@ public class ParallelConsumerOptions<K, V> {
      * Time between commits. Using a higher frequency (a lower value) will put more load on the brokers.
      */
     @Builder.Default
-    private Duration timeBetweenCommits = DEFAULT_TIME_BETWEEN_COMMITS;
+    private Duration commitInterval = DEFAULT_COMMIT_INTERVAL;
 
     /**
      * @deprecated only settable during {@code deprecation phase} - use
-     *         {@link ParallelConsumerOptions.ParallelConsumerOptionsBuilder#timeBetweenCommits}} instead.
+     *         {@link ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval}} instead.
      */
     // todo delete in next major version
     @Deprecated
-    public void setTimeBetweenCommits(Duration timeBetweenCommits) {
-        this.timeBetweenCommits = timeBetweenCommits;
+    public void setCommitInterval(Duration commitInterval) {
+        this.commitInterval = commitInterval;
     }
 
     /**
@@ -366,7 +381,7 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     private void transactionsValidation() {
-        boolean commitFrequencyHasntBeenSet = getTimeBetweenCommits() == DEFAULT_TIME_BETWEEN_COMMITS;
+        boolean commitInternalHasNotBeenSet = getCommitInterval() == DEFAULT_COMMIT_INTERVAL;
 
         if (isUsingTransactionCommitMode()) {
             if (producer == null) {
@@ -376,8 +391,8 @@ public class ParallelConsumerOptions<K, V> {
             }
 
             // update commit frequency
-            if (commitFrequencyHasntBeenSet) {
-                this.timeBetweenCommits = DEFAULT_TIME_BETWEEN_COMMITS_FOR_TRANSACTIONS;
+            if (commitInternalHasNotBeenSet) {
+                this.commitInterval = DEFAULT_COMMIT_INTERVAL_FOR_TRANSACTIONS;
             }
         }
 
