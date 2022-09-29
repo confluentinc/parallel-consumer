@@ -22,35 +22,35 @@ class WorkContainerTest {
 
     @Test
     void basics() {
-        final var workContainer = new ModelUtils(new PCModuleTestEnv()).createWorkFor(0);
+        var workContainer = new ModelUtils(new PCModuleTestEnv()).createWorkFor(0);
         assertThat(workContainer).getDelayUntilRetryDue().isNotNegative();
     }
 
     @Test
     void retryDelayProvider() {
-        final int uniqueMultiplier = 7;
+        int uniqueMultiplier = 7;
 
-        final Function<RecordContext<String, String>, Duration> retryDelayProvider = context -> {
+        Function<RecordContext<String, String>, Duration> retryDelayProvider = context -> {
             final int numberOfFailedAttempts = context.getNumberOfFailedAttempts();
             return Duration.ofSeconds(numberOfFailedAttempts * uniqueMultiplier);
         };
 
         //
-        final var opts = ParallelConsumerOptions.<String, String>builder()
+        var opts = ParallelConsumerOptions.<String, String>builder()
                 .retryDelayProvider(retryDelayProvider)
                 .build();
-        final PCModule module = new PCModuleTestEnv(opts);
+        PCModule module = new PCModuleTestEnv(opts);
 
-        final WorkContainer<String, String> wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class));
-
-        //
-        final int numberOfFailures = 3;
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        WorkContainer<String, String> wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class));
 
         //
-        final Duration retryDelayConfig = wc.getRetryDelayConfig();
+        int numberOfFailures = 3;
+        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+
+        //
+        Duration retryDelayConfig = wc.getRetryDelayConfig();
 
         //
         assertThat(retryDelayConfig).getSeconds().isEqualTo(numberOfFailures * uniqueMultiplier);
