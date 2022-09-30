@@ -43,7 +43,7 @@ class WorkContainerTest {
 
         WorkContainer<String, String> wc = new WorkContainer<String, String>(0,
                 mock(ConsumerRecord.class),
-                mock(PCModule.class));
+                module);
 
         //
         int numberOfFailures = 3;

@@ -343,7 +343,7 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class), mock(PCModuleTestEnv.class));
+        var wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class), module);
         assertThat(wc.isDelayPassed()).isTrue(); // when new, there's no delay
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
         assertThat(wc.isDelayPassed()).isFalse();

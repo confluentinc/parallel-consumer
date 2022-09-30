@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import lombok.Getter;
 import lombok.NonNull;
@@ -22,8 +21,6 @@ import pl.tlinkowski.unij.api.UniMaps;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.mockito.Mockito.mock;
-
 @RequiredArgsConstructor
 public class ModelUtils {
 
@@ -31,7 +28,7 @@ public class ModelUtils {
 
     public WorkContainer<String, String> createWorkFor(long offset) {
         ConsumerRecord<String, String> mockCr = Mockito.mock(ConsumerRecord.class);
-        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, mock(PCModule.class));
+        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, module);
         Mockito.doReturn(offset).when(mockCr).offset();
         return workContainer;
     }
