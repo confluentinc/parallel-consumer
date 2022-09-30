@@ -23,6 +23,7 @@ class PartitionStateTest {
     /**
      * @see PartitionState#maybeTruncateBelow
      */
+    // parameter test with offsets closer together to check off by one
     @Test
     void bootstrapTruncation() {
         TopicPartition tp = new TopicPartition("topic", 0);
