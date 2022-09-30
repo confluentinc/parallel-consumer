@@ -29,6 +29,8 @@ import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
 /**
+ * todo docs
+ *
  * @author Antony Stubbs
  * @see PartitionStateManager
  */
