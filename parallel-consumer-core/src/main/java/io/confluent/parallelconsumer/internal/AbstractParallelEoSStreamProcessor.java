@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.ErrorInUserFunctionException;
+import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -367,7 +367,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             usersConsumerRebalanceListener.ifPresent(listener -> listener.onPartitionsRevoked(partitions));
         } catch (Exception e) {
-            throw new ErrorInUserFunctionException("Error from rebalance listener function after #onPartitionsRevoked", e);
+            throw new ExceptionInUserFunctionException("Error from rebalance listener function after #onPartitionsRevoked", e);
         }
     }
 

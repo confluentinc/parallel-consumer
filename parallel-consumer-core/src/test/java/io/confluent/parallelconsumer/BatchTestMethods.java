@@ -223,7 +223,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
             int targetAttempts = 3;
             if (numberOfFailedAttempts < targetAttempts) {
                 log.debug("Failing batch containing target offset {}", FAILURE_TARGET);
-                throw new FakeRuntimeError(msg("Testing failure processing a batch - pretend attempt #{}", numberOfFailedAttempts));
+                throw new FakeRuntimeException(msg("Testing failure processing a batch - pretend attempt #{}", numberOfFailedAttempts));
             } else {
                 log.debug("Failing target {} now completing as has has reached target attempts {}", offsets, targetAttempts);
             }

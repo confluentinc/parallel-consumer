@@ -7,8 +7,8 @@ package io.confluent.parallelconsumer;
 /**
  * Used for testing error handling - easier to identify than a plan exception.
  */
-public class FakeRuntimeError extends RuntimeException {
-    public FakeRuntimeError(String msg) {
+public class FakeRuntimeException extends RuntimeException {
+    public FakeRuntimeException(String msg) {
         super(msg);
     }
 }
