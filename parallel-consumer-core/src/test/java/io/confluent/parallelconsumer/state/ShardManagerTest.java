@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.state;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import org.junit.jupiter.api.Test;
 
