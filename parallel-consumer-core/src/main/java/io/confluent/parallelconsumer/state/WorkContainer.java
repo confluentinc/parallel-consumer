@@ -4,36 +4,40 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
-import lombok.AccessLevel;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
-import java.util.function.Function;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
 
+/**
+ * Model object for metadata around processing state of {@link ConsumerRecord}s.
+ */
 @Slf4j
 @EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     static final String DEFAULT_TYPE = "DEFAULT";
+
+    /**
+     * Instance reference to otherwise static state, for access to the instance type parameters of WorkContainer as
+     * static fields cannot access them.
+     */
+    @NonNull
+    private final PCModule<K, V> module;
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -53,8 +57,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     @Getter
     private final ConsumerRecord<K, V> cr;
 
-    private final Clock clock;
-
     @Getter
     private int numberOfFailedAttempts = 0;
 
@@ -72,37 +74,22 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     @Getter
     private Optional<Boolean> maybeUserFunctionSucceeded = Optional.empty();
 
-    /**
-     * @see ParallelConsumerOptions#getDefaultMessageRetryDelay()
-     */
-    @Setter
-    static Duration defaultRetryDelay = Duration.ofSeconds(1);
-
     @Getter
     @Setter(AccessLevel.PUBLIC)
     private Future<List<?>> future;
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
-    // static instance so can't access generics - but don't need them as Options class ensures type is correct
-    private static Function<Object, Duration> retryDelayProvider;
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, String workType, Clock clock) {
-        Objects.requireNonNull(workType);
-
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, @NonNull PCModule<K, V> module, @NonNull String workType) {
         this.epoch = epoch;
         this.cr = cr;
         this.workType = workType;
-        this.clock = clock;
-
-        if (WorkContainer.retryDelayProvider == null) { // only set once
-            // static instance so can't access generics - but don't need them as Options class ensures type is correct
-            WorkContainer.retryDelayProvider = (Function) retryDelayProvider;
-        }
+        this.module = module;
     }
 
-    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, Function<RecordContext<K, V>, Duration> retryDelayProvider, Clock clock) {
-        this(epoch, cr, retryDelayProvider, DEFAULT_TYPE, clock);
+    public WorkContainer(long epoch, ConsumerRecord<K, V> cr, PCModule<K, V> module) {
+        this(epoch, cr, module, DEFAULT_TYPE);
     }
 
     public void endFlight() {
@@ -110,7 +97,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         inFlight = false;
     }
 
-    public boolean hasDelayPassed() {
+    public boolean isDelayPassed() {
         if (!hasPreviouslyFailed()) {
             // if never failed, there is no artificial delay, so "delay" has always passed
             return true;
@@ -124,7 +111,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return time until it should be retried
      */
     public Duration getDelayUntilRetryDue() {
-        Instant now = clock.instant();
+        Instant now = module.clock().instant();
         Temporal nextAttemptAt = getRetryDueAt();
         return Duration.between(now, nextAttemptAt);
     }
@@ -147,10 +134,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return the delay between retries e.g. retry after 1 second
      */
     public Duration getRetryDelayConfig() {
+        var options = module.options();
+        var retryDelayProvider = options.getRetryDelayProvider();
         if (retryDelayProvider != null) {
-            return retryDelayProvider.apply(this);
+            return retryDelayProvider.apply(new RecordContext<>(this));
         } else {
-            return defaultRetryDelay;
+            return options.getDefaultMessageRetryDelay();
         }
     }
 
@@ -181,7 +170,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     public void onUserFunctionSuccess() {
-        this.succeededAt = of(clock.instant());
+        this.succeededAt = of(module.clock().instant());
         this.maybeUserFunctionSucceeded = of(true);
     }
 
@@ -195,7 +184,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     private void updateFailureHistory(Throwable cause) {
         numberOfFailedAttempts++;
-        lastFailedAt = of(Instant.now(clock));
+        lastFailedAt = of(Instant.now(module.clock()));
         lastFailureReason = Optional.ofNullable(cause);
     }
 
@@ -236,7 +225,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * {@link PartitionStateManager#isAllowedMoreRecords(WorkContainer)}.
      */
     public boolean isAvailableToTakeAsWork() {
-        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
+        return isNotInFlight() && !isUserFunctionSucceeded() && isDelayPassed();
     }
 
     /**
