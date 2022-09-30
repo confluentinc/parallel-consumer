@@ -1280,6 +1280,11 @@ endif::[]
 ** Introduces lock acquisition timeouts.
 ** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
 
+=== Fixes
+
+* Fixes #412: ClassCastException with retryDelayProvider (#417)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
 == v0.5.2.3
 
 === Improvements

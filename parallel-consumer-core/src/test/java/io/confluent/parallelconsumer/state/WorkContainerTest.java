@@ -23,7 +23,7 @@ class WorkContainerTest {
     @Test
     void basics() {
         var workContainer = new ModelUtils(new PCModuleTestEnv()).createWorkFor(0);
-        assertThat(workContainer).getDelayUntilRetryDue().isNotNegative();
+        assertThat(workContainer).getDelayUntilRetryDue().isNegative();
     }
 
     @Test
