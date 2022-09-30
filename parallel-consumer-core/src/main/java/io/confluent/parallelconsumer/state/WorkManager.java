@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.*;
 import lombok.Getter;
@@ -14,7 +13,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
@@ -68,24 +66,19 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    public WorkManager(PCModule<K, V> module) {
-        this(module, new DynamicLoadFactor(), TimeUtils.getClock());
-    }
-
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(PCModule<K, V> module, Clock clock) {
-        this(module, new DynamicLoadFactor(), clock);
+    public WorkManager(PCModule<K, V> module) {
+        this(module, new DynamicLoadFactor());
     }
 
-    public WorkManager(final PCModule<K, V> module,
-                       final DynamicLoadFactor dynamicExtraLoadFactor,
-                      final Clock clock) {
+    public WorkManager(PCModule<K, V> module,
+                       DynamicLoadFactor dynamicExtraLoadFactor) {
         this.options = module.options();
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
-        this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionStateManager<>(module.consumer(), sm, options, clock);
+        this.sm = new ShardManager<>(options, this);
+        this.pm = new PartitionStateManager<>(module, sm);
     }
 
     /**

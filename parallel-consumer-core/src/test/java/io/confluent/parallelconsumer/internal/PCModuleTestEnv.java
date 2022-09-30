@@ -6,10 +6,14 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.ModelUtils;
+import lombok.Getter;
 import lombok.NonNull;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
+import org.threeten.extra.MutableClock;
+
+import java.time.Clock;
 
 /**
  * Version of the {@link PCModule} in test contexts.
@@ -73,4 +77,13 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
         return consumerManager;
     }
+
+    @Getter
+    private final MutableClock mutableClock = MutableClock.epochUTC();
+
+    @Override
+    public Clock clock() {
+        return mutableClock;
+    }
+
 }

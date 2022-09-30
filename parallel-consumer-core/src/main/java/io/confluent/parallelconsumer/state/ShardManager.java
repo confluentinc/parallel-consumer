@@ -15,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -24,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Shards are local queues of work to be processed.
@@ -43,9 +41,6 @@ public class ShardManager<K, V> {
     private final ParallelConsumerOptions options;
 
     private final WorkManager<K, V> wm;
-
-    @Getter(PRIVATE)
-    private final Clock clock;
 
     /**
      * Map of Object keys to Shard

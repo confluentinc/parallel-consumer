@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import lombok.Getter;
@@ -33,9 +32,8 @@ public class ModelUtils {
     }
 
     public WorkContainer<String, String> createWorkFor(long offset) {
-        //noinspection unchecked
         ConsumerRecord<String, String> mockCr = Mockito.mock(ConsumerRecord.class);
-        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null, TimeUtils.getClock());
+        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, module);
         Mockito.doReturn(offset).when(mockCr).offset();
         return workContainer;
     }
