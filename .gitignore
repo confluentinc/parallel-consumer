@@ -1,3 +1,5 @@
+.DS_Store
+
 # Compiled class file
 *.class
 
@@ -22,9 +24,6 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 
-# IDEA run configurations
-target/
-.DS_Store
 *.versionsBackup
 
 # JENV
@@ -39,6 +38,9 @@ delombok/
 .idea/**/usage.statistics.xml
 .idea/**/dictionaries
 .idea/**/shelf
+.idea/sonarlint/
+.idea/libraries/
+
 
 # Generated files
 .idea/**/contentModel.xml
@@ -65,3 +67,9 @@ delombok/
 # Maven
 target
 release.properties
+/.idea/encodings.xml
+/.idea/misc.xml
+/.idea/codeStyles/Project.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/uiDesigner.xml
+/.idea/vcs.xml

@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -17,7 +18,6 @@ import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -25,7 +25,7 @@ import static org.mockito.internal.verification.VerificationModeFactory.times;
 
 // TODO this class shouldn't have access to the non streaming async consumer - refactor out another super class layer
 @Slf4j
-public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
+class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
     JStreamParallelEoSStreamProcessor<String, String> streaming;
 
@@ -42,7 +42,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
     }
 
     @Test
-    public void testStream() {
+    void testStream() {
         var latch = new CountDownLatch(1);
         Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
             ProducerRecord mock = mock(ProducerRecord.class);
@@ -58,13 +58,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
-        Stream<ConsumeProduceResult<String, String, String, String>> peekedStream = streamedResults.peek(x ->
-        {
-            log.info("streaming test {}", x.getIn().value());
-        });
-
-        await().untilAsserted(() ->
-                assertThat(peekedStream).hasSize(1));
+        assertThat(streamedResults).hasSize(1);
     }
 
     @Test
@@ -96,10 +90,8 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
             }
         });
 
-        await().untilAsserted(() ->
-                assertThat(myResultStream).hasSize(1));
+        assertThat(myResultStream).hasSize(1);
     }
-
 
     @Test
     void testFlatMapProduce() {
@@ -122,8 +114,8 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         verify(myRecordProcessingAction, times(2)).apply(any());
 
-        await().untilAsserted(() ->
-                assertThat(myResultStream).hasSize(2));
+
+        assertThat(myResultStream).hasSize(2);
     }
 
 }

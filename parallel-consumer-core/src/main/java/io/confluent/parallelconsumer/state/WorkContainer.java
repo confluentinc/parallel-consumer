@@ -5,7 +5,9 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -123,11 +125,14 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      */
     public Duration getDelayUntilRetryDue() {
         Instant now = clock.instant();
-        Temporal nextAttemptAt = tryAgainAt();
+        Temporal nextAttemptAt = getRetryDueAt();
         return Duration.between(now, nextAttemptAt);
     }
 
-    private Temporal tryAgainAt() {
+    /**
+     * @return The point in time at which the record should ideally be retried.
+     */
+    public Instant getRetryDueAt() {
         if (lastFailedAt.isPresent()) {
             // previously failed, so add the delay to the last failed time
             Duration retryDelay = getRetryDelayConfig();
@@ -224,9 +229,27 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         return getNumberOfFailedAttempts() > 0;
     }
 
+    /**
+     * Checks the work is not already in flight, it's retry delay has passed and that it's not already been succeeded.
+     * <p>
+     * Checking that there's no back pressure for the partition it belongs to is covered by
+     * {@link PartitionStateManager#isAllowedMoreRecords(WorkContainer)}.
+     */
     public boolean isAvailableToTakeAsWork() {
-        // todo missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
         return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed();
     }
 
+    /**
+     * Only unlock our producing lock, when we've had the {@link WorkContainer} state safely returned to the controllers
+     * inbound queue, so we know it'll be included properly before the next commit as a succeeded offset. As in order
+     * for the controller to perform the transaction commit, it will be blocked from acquiring its commit lock until all
+     * produce locks have been returned, inbound queue processed, and thus their representative offsets placed into the
+     * commit payload (offset map).
+     */
+    public void onPostAddToMailBox(PollContextInternal<K, V> context, Optional<ProducerManager<K, V>> producerManager) {
+        producerManager.ifPresent(pm -> {
+            var producingLock = context.getProducingLock();
+            producingLock.ifPresent(pm::finishProducing);
+        });
+    }
 }

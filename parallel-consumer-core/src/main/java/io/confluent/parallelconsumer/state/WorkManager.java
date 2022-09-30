@@ -81,7 +81,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public WorkManager(final PCModule<K, V> module,
                        final DynamicLoadFactor dynamicExtraLoadFactor,
-                       final Clock clock) {
+                      final Clock clock) {
         this.options = module.options();
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(options, this, clock);
@@ -290,4 +290,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getLowestRetryTime();
     }
 
+    public boolean isDirty() {
+        return pm.isDirty();
+    }
 }
