@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import com.google.common.truth.Truth8;
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
@@ -122,7 +122,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     int timeout = 120;
                     awaitLatch(finalMsgLock, timeout);
                     log.debug("Very slow message awoken, throwing exception");
-                    throw new FakeRuntimeError("Fake error");
+                    throw new FakeRuntimeException("Fake error");
                 } else {
                     log.debug("Second attempt, waiting for msgLockTwo countdown");
                     awaitLatch(msgLockTwo, 60);

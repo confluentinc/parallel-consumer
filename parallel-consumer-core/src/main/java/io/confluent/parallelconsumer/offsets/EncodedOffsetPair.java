@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -91,7 +91,8 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrap(data, v2);
             case RunLengthV2 -> deserialiseBitSetWrap(data, v2);
             case RunLengthV2Compressed -> deserialiseBitSetWrap(data, v2);
-            default -> throw new InternalRuntimeError("Invalid state"); // todo why is this needed? what's not covered?
+            default ->
+                    throw new InternalRuntimeException("Invalid state"); // todo why is this needed? what's not covered?
         };
         return binaryArrayString;
     }
