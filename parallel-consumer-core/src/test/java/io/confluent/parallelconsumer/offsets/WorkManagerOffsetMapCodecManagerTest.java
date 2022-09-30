@@ -5,9 +5,9 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -47,6 +47,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.of;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 // todo refactor - remove tests which use hard coded state vs dynamic state - #compressionCycle, #selialiseCycle, #runLengthEncoding, #loadCompressedRunLengthRncoding
 @Slf4j
@@ -87,7 +88,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     }
 
     private void injectSucceededWorkAtOffset(long offset) {
-        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null, TimeUtils.getClock());
+        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, mock(PCModuleTestEnv.class));
         Mockito.doReturn(offset).when(mockCr).offset();
         state.addWorkContainer(workContainer);
         state.onSuccess(workContainer); // in this case the highest seen is also the highest succeeded
