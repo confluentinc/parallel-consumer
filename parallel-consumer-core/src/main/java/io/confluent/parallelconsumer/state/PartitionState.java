@@ -206,7 +206,7 @@ public class PartitionState<K, V> {
 //        if (noWorkAddedYet) {
 //            noWorkAddedYet = false;
 //            long bootstrapOffset = wc.offset();
-        maybeTruncateBelow(newOffset);
+//        maybeTruncateBelow(newOffset);
 //        }
 
         maybeRaiseHighestSeenOffset(newOffset);
@@ -231,6 +231,21 @@ public class PartitionState<K, V> {
         }
 
         this.nextExpectedPolledOffset = polledOffset + 1;
+    }
+
+    public void maybeTruncate(long batchStartOffset, long batchEndOffset) {
+        long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
+        boolean bootstrapRecordAboveExpected = batchStartOffset > nextExpectedPolledOffset;
+        if (bootstrapRecordAboveExpected) {
+            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'",
+                    batchStartOffset,
+                    nextExpectedPolledOffset);
+            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(batchStartOffset);
+            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
+            this.incompleteOffsets = wrapped;
+        }
+
+        this.nextExpectedPolledOffset = batchEndOffset + 1;
     }
 
     private long nextExpectedPolledOffset = KAFKA_OFFSET_ABSENCE;
@@ -398,5 +413,6 @@ public class PartitionState<K, V> {
     public boolean isBlocked() {
         return !isAllowedMoreRecords();
     }
+
 }
 
