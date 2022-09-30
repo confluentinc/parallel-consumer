@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.RecordContext;
 import io.confluent.parallelconsumer.internal.PCModule;
@@ -47,9 +47,9 @@ class WorkContainerTest {
 
         //
         int numberOfFailures = 3;
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        wc.onUserFunctionFailure(new FakeRuntimeException(""));
+        wc.onUserFunctionFailure(new FakeRuntimeException(""));
+        wc.onUserFunctionFailure(new FakeRuntimeException(""));
 
         //
         Duration retryDelayConfig = wc.getRetryDelayConfig();

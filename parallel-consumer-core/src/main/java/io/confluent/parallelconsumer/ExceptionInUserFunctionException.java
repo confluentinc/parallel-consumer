@@ -10,5 +10,5 @@ import lombok.experimental.StandardException;
  * This exception is only used when there is an exception thrown from code provided by the user.
  */
 @StandardException
-public class ErrorInUserFunctionException extends ParallelConsumerException {
+public class ExceptionInUserFunctionException extends ParallelConsumerException {
 }

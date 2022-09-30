@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.csid.utils.Range;
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -128,11 +128,11 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
                 log.info("Read by consumer ONE: {}", x);
                 if (x.value().equals("4")) {
                     log.info("Throwing fake error for message 4");
-                    throw new FakeRuntimeError("Fake error - Message 4");
+                    throw new FakeRuntimeException("Fake error - Message 4");
                 }
                 if (x.value().equals("2")) {
                     log.info("Throwing fake error for message 2");
-                    throw new FakeRuntimeError("Fake error - Message 2");
+                    throw new FakeRuntimeException("Fake error - Message 2");
                 }
                 successfullInOne.add(x.getSingleConsumerRecord());
             });
@@ -344,7 +344,7 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
             asyncOne.poll(x -> {
                 String value = x.value();
                 if (failingMessages.contains(value)) {
-                    throw new FakeRuntimeError("Fake error for message " + value);
+                    throw new FakeRuntimeException("Fake error for message " + value);
                 }
                 readByOne.add(value);
             });
