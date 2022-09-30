@@ -38,8 +38,9 @@ endif::[]
 
 === Fixes
 
-* fixes #419 NoSuchElementException during race condition in PartitionState (#422)
+* fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
 
 
 == v0.5.2.2

@@ -1308,10 +1308,13 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
+
 === Fixes
 
-* fixes #419 NoSuchElementException during race condition in PartitionState (#422)
+* fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
 
 == v0.5.2.2
 
