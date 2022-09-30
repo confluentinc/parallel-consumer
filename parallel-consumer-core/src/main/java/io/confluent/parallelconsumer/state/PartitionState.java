@@ -15,10 +15,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collections;
-import java.util.NavigableMap;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
@@ -59,7 +56,12 @@ public class PartitionState<K, V> {
      * so that the broker polling thread can grab it, if it wants to commit - i.e. the poller would not prepare/query
      * the data for itself. See also #200 Refactor: Consider a shared nothing architecture.
      */
-    private final ConcurrentSkipListSet<Long> incompleteOffsets;
+    private ConcurrentSkipListSet<Long> incompleteOffsets;
+
+    /**
+     * Marker for the first record to be tracked. Used for some initial analysis.
+     */
+    private boolean noWorkAddedYet = true;
 
     /**
      * Cache view of the state of the partition. Is set dirty when the incomplete state of any offset changes. Is set
@@ -126,6 +128,7 @@ public class PartitionState<K, V> {
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
+        this.nextExpectedPolledOffset = getNextExpectedInitialPolledOffset();
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -199,9 +202,41 @@ public class PartitionState<K, V> {
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
+
+//        if (noWorkAddedYet) {
+//            noWorkAddedYet = false;
+//            long bootstrapOffset = wc.offset();
+        maybeTruncateBelow(newOffset);
+//        }
+
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
         incompleteOffsets.add(newOffset);
+    }
+
+    /**
+     * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
+     * Offsets between have disappeared and will never be polled again.
+     */
+    private void maybeTruncateBelow(long polledOffset) {
+        long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
+        boolean bootstrapRecordAboveExpected = polledOffset > nextExpectedPolledOffset;
+        if (bootstrapRecordAboveExpected) {
+            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'",
+                    polledOffset,
+                    nextExpectedPolledOffset);
+            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(polledOffset);
+            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
+            this.incompleteOffsets = wrapped;
+        }
+
+        this.nextExpectedPolledOffset = polledOffset + 1;
+    }
+
+    private long nextExpectedPolledOffset = KAFKA_OFFSET_ABSENCE;
+
+    private long getNextExpectedPolledOffset() {
+        return nextExpectedPolledOffset;
     }
 
     /**
@@ -220,18 +255,22 @@ public class PartitionState<K, V> {
             return empty();
     }
 
-    private OffsetAndMetadata createOffsetAndMetadata() {
+    // visible for testing
+    protected OffsetAndMetadata createOffsetAndMetadata() {
         Optional<String> payloadOpt = tryToEncodeOffsets();
-        long nextOffset = getNextExpectedPolledOffset();
+        long nextOffset = getNextExpectedInitialPolledOffset();
         return payloadOpt
                 .map(s -> new OffsetAndMetadata(nextOffset, s))
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
     /**
-     * Defines as the offset one below the highest sequentially succeeded offset
+     * Next offset expected to be polled, upon freshly connecting to a broker.
+     * <p>
+     * Defines as the offset one below the highest sequentially succeeded offset.
      */
-    private long getNextExpectedPolledOffset() {
+    // visible for testing
+    protected long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -297,7 +336,7 @@ public class PartitionState<K, V> {
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
-            long offsetOfNextExpectedMessage = getNextExpectedPolledOffset();
+            long offsetOfNextExpectedMessage = getNextExpectedInitialPolledOffset();
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
