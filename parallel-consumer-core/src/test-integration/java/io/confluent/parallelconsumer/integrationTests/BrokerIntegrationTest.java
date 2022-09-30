@@ -26,6 +26,9 @@ import java.util.concurrent.ExecutionException;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * @author Antony Stubbs
+ */
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest<K, V> {
@@ -35,14 +38,16 @@ public abstract class BrokerIntegrationTest<K, V> {
     }
 
     int numPartitions = 1;
+    int partitionNumber = 0;
 
+    @Getter
     String topic;
 
     /**
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
-    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.0.1"))
+    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
@@ -90,7 +95,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         return topic;
     }
 
-    protected void ensureTopic(String topic, int numPartitions) {
+    protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
@@ -100,6 +105,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        return topics;
     }
 
 }

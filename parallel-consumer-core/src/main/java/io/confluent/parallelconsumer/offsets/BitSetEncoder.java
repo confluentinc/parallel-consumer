@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.csid.utils.StringUtils;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -156,12 +156,12 @@ public class BitSetEncoder extends OffsetEncoder {
         ByteBuffer wrappedBitSetBytesBuffer = constructWrappedByteBuffer(originalLength, version);
 
         if (wrappedBitSetBytesBuffer.remaining() < bitSetArray.length)
-            throw new InternalRuntimeError("Not enough space in byte array");
+            throw new InternalRuntimeException("Not enough space in byte array");
 
         try {
             wrappedBitSetBytesBuffer.put(bitSetArray);
         } catch (BufferOverflowException e) {
-            throw new InternalRuntimeError("Error copying bitset into byte wrapper", e);
+            throw new InternalRuntimeException("Error copying bitset into byte wrapper", e);
         }
 
         final byte[] array = wrappedBitSetBytesBuffer.array();

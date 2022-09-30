@@ -67,7 +67,7 @@ public class PartitionState<K, V> {
      * clean after a successful commit of the state.
      */
     @Setter(PRIVATE)
-    @Getter(PRIVATE)
+    @Getter(PACKAGE)
     private boolean dirty;
 
     /**
@@ -81,6 +81,9 @@ public class PartitionState<K, V> {
 
     /**
      * Highest offset which has completed successfully ("succeeded").
+     * <p>
+     * Note that this may in some conditions, there may be a gap between this and the next offset to poll - that being,
+     * there may be some number of transaction marker records above it, and the next offset to poll.
      */
     @Getter(PUBLIC)
     private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
@@ -134,7 +137,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    public void onOffsetCommitSuccess(final OffsetAndMetadata committed) {
+    public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         setClean();
     }
 
@@ -168,7 +171,7 @@ public class PartitionState<K, V> {
     public void onSuccess(WorkContainer<K, V> work) {
         long offset = work.offset();
 
-        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(work.offset());
+        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(offset);
         assert (removedFromQueue != null);
 
         boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
@@ -196,9 +199,10 @@ public class PartitionState<K, V> {
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
-        maybeRaiseHighestSeenOffset(wc.offset());
-        commitQueue.put(wc.offset(), wc);
-        incompleteOffsets.add(wc.offset());
+        long newOffset = wc.offset();
+        maybeRaiseHighestSeenOffset(newOffset);
+        commitQueue.put(newOffset, wc);
+        incompleteOffsets.add(newOffset);
     }
 
     /**
@@ -225,6 +229,9 @@ public class PartitionState<K, V> {
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
+    /**
+     * Defines as the offset one below the highest sequentially succeeded offset
+     */
     private long getNextExpectedPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
@@ -250,18 +257,35 @@ public class PartitionState<K, V> {
                 .collect(Collectors.toSet()));
     }
 
+    /**
+     * Defined for our purpose (as only used in definition of what offset to poll for next), as the offset one below the
+     * lowest incomplete offset.
+     */
     public long getOffsetHighestSequentialSucceeded() {
-        if (this.incompleteOffsets.isEmpty()) {
-            return this.offsetHighestSeen;
+        /*
+         * Capture the current value in case it's changed during this operation - because if more records are added to
+         * the queue, after looking at the incompleteOffsets, offsetHighestSeen could increase drastically and will be
+         * incorrect for the value of getOffsetHighestSequentialSucceeded. So this is a ~pessimistic solution - as in a
+         * race case, there may be a higher getOffsetHighestSequentialSucceeded from the incompleteOffsets collection,
+         * but it will always at lease be pessimistically correct in terms of committing offsets to the broker.
+         *
+         * See #200 for the complete correct solution.
+         */
+        long currentOffsetHighestSeen = offsetHighestSeen;
+        Long firstIncompleteOffset = incompleteOffsets.ceiling(KAFKA_OFFSET_ABSENCE);
+        boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
+
+        if (incompleteOffsetsWasEmpty) {
+            return currentOffsetHighestSeen;
         } else {
-            return this.incompleteOffsets.first() - 1;
+            return firstIncompleteOffset - 1;
         }
     }
 
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
-     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see {@link
-     * OffsetMapCodecManager#makeOffsetMetadataPayload}.
+     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see
+     * {@link OffsetMapCodecManager#makeOffsetMetadataPayload}.
      *
      * @return if possible, the String encoded offset map
      */
