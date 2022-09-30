@@ -41,7 +41,9 @@ class WorkContainerTest {
                 .build();
         PCModule module = new PCModuleTestEnv(opts);
 
-        WorkContainer<String, String> wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class));
+        WorkContainer<String, String> wc = new WorkContainer<String, String>(0,
+                mock(ConsumerRecord.class),
+                mock(PCModule.class));
 
         //
         int numberOfFailures = 3;

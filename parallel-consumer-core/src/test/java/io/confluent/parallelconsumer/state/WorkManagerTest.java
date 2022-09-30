@@ -343,7 +343,7 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class), WorkContainer.DEFAULT_TYPE);
+        var wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class), mock(PCModuleTestEnv.class));
         assertThat(wc.isDelayPassed()).isTrue(); // when new, there's no delay
         wc.onUserFunctionFailure(new FakeRuntimeError(""));
         assertThat(wc.isDelayPassed()).isFalse();
@@ -603,7 +603,7 @@ public class WorkManagerTest {
 
         var treeMap = new TreeMap<Long, WorkContainer<String, String>>();
         for (ConsumerRecord<String, String> record : records) {
-            treeMap.put(record.offset(), new WorkContainer<>(0, record));
+            treeMap.put(record.offset(), new WorkContainer<>(0, record, mock(PCModuleTestEnv.class)));
         }
 
         // read back, assert correct order
