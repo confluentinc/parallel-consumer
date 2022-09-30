@@ -350,8 +350,6 @@ public class WorkManagerTest {
         advanceClockBySlightlyLessThanDelay();
         assertThat(wc.isDelayPassed()).isFalse();
         advanceClockByDelay();
-        final MutableClock mutableClock = module.getMutableClock();
-        boolean delayPassed = wc.isDelayPassed();
         ManagedTruth.assertThat(wc).isDelayPassed();
     }
 
