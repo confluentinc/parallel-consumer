@@ -261,17 +261,30 @@ public class PartitionState<K, V> {
      * lowest incomplete offset.
      */
     public long getOffsetHighestSequentialSucceeded() {
-        if (this.incompleteOffsets.isEmpty()) {
-            return this.offsetHighestSeen;
+        /*
+         * Capture the current value in case it's changed during this operation - because if more records are added to
+         * the queue, after looking at the incompleteOffsets, offsetHighestSeen could increase drastically and will be
+         * incorrect for the value of getOffsetHighestSequentialSucceeded. So this is a ~pessimistic solution - as in a
+         * race case, there may be a higher getOffsetHighestSequentialSucceeded from the incompleteOffsets collection,
+         * but it will always at lease be pessimistically correct in terms of committing offsets to the broker.
+         *
+         * See #200 for the complete correct solution.
+         */
+        long currentOffsetHighestSeen = offsetHighestSeen;
+        Long firstIncompleteOffset = incompleteOffsets.ceiling(KAFKA_OFFSET_ABSENCE);
+        boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
+
+        if (incompleteOffsetsWasEmpty) {
+            return currentOffsetHighestSeen;
         } else {
-            return this.incompleteOffsets.first() - 1;
+            return firstIncompleteOffset - 1;
         }
     }
 
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
-     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see {@link
-     * OffsetMapCodecManager#makeOffsetMetadataPayload}.
+     * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see
+     * {@link OffsetMapCodecManager#makeOffsetMetadataPayload}.
      *
      * @return if possible, the String encoded offset map
      */
