@@ -40,6 +40,7 @@ endif::[]
 
 * fixes #419 NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
+* Fixes #409: Parallel Consumer keeps committing the old offset after OFFSET_OUT_OF_RANGE in auto.offset.reset = latest (#425)
 
 
 == v0.5.2.2
