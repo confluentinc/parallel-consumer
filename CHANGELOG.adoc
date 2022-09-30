@@ -3,6 +3,10 @@
 
 = Change Log
 
+A high level summary of noteworthy changes in each version.
+
+NOTE:: Dependency version bumps are not listed here.
+
 // git log --pretty="* %s" 0.3.0.2..HEAD
 
 // only show TOC if this is the root document (not in the README)
@@ -11,6 +15,58 @@ toc::[]
 endif::[]
 
 == Next Version
+
+=== Improvements
+
+* Transactional commit mode system improvements and docs (#355)
+** Clarifies transaction system with much better documentation.
+** Fixes a potential race condition which could cause offset leaks between transactions boundaries.
+** Introduces lock acquisition timeouts.
+** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
+
+== v0.5.2.3
+
+=== Improvements
+
+- Adds a very simple Dependency Injection system modeled on Dagger (#398)
+- Various refactorings e.g. new ProducerWrap
+
+== v0.5.2.2
+
+=== Fixes
+
+- Fixes dependency scope for Mockito from compile to test (#376)
+
+== v0.5.2.1
+
+=== Fixes
+
+- Fixes regression issue with order of state truncation vs commit (#362)
+
+== v0.5.2.0
+
+=== Fixes and Improvements
+
+- fixes #184: Fix multi topic subscription with KEY order by adding topic to shard key (#315)
+- fixes #329: Committing around transaction markers causes encoder to crash (#328)
+- build: Upgrade Truth-Generator to 0.1.1 for user Subject discovery (#332)
+
+=== Build
+
+- build: Allow snapshots locally, fail in CI (#331)
+- build: OSS Index scan change to warn only and exclude Guava CVE-2020-8908 as it's WONT_FIX (#330)
+
+=== Dependencies
+
+- build(deps): bump reactor-core from 3.4.19 to 3.4.21 (#344)
+- build(deps): dependabot bump Mockito, Surefire, Reactor, AssertJ, Release (#342) (#342)
+- build(deps): dependabot bump TestContainers, Vert.x, Enforcer, Versions, JUnit, Postgress (#336)
+
+=== Linked issues
+
+- Message with null key lead to continuous failure when using KEY ordering #318
+- Subscribing to two or more topics with KEY ordering, results in messages of the same Key never being processed #184
+- Cannot have negative length BitSet error - committing transaction adjacent offsets #329
 
 == v0.5.1.0
 

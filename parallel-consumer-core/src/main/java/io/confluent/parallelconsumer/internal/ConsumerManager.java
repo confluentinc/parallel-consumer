@@ -27,7 +27,7 @@ public class ConsumerManager<K, V> {
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
     /**
-     * Since Kakfa 2.7, multi threaded access to consumer group metadata was blocked, so before and after polling, save
+     * Since Kakfa 2.7, multi-threaded access to consumer group metadata was blocked, so before and after polling, save
      * a copy of the metadata.
      *
      * @since 2.7.0
@@ -49,11 +49,11 @@ public class ConsumerManager<K, V> {
                 commitRequested = false;
             }
             pollingBroker.set(true);
-            metaCache = consumer.groupMetadata();
+            updateMetadataCache();
             log.debug("Poll starting with timeout: {}", timeoutToUse);
             records = consumer.poll(timeoutToUse);
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
-            metaCache = consumer.groupMetadata();
+            updateMetadataCache();
         } catch (WakeupException w) {
             correctPollWakeups++;
             log.debug("Awoken from broker poll");
@@ -63,6 +63,10 @@ public class ConsumerManager<K, V> {
             pollingBroker.set(false);
         }
         return records;
+    }
+
+    protected void updateMetadataCache() {
+        metaCache = consumer.groupMetadata();
     }
 
     /**

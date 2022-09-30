@@ -29,14 +29,13 @@ import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.CartesianProductTest;
 
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
@@ -44,13 +43,14 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Originally created to reproduce bug #25 https://github.com/confluentinc/parallel-consumer/issues/25 which was a known
- * issue with multithreaded use of the {@link KafkaProducer}.
+ * issue with multi-threaded use of the {@link KafkaProducer}.
  * <p>
  * After fixing multi threading issues, using Producer transactions was made optional, and this test grew to uncover
  * several issues with the new implementation of committing offsets through the {@link KafkaConsumer}.
@@ -59,6 +59,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see ConsumerOffsetCommitter
  * @see ProducerManager
  */
+@Tag("transactions")
 @Slf4j
 class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
 
@@ -111,10 +112,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
     }
 
     private void runTest(int maxPoll, CommitMode commitMode, ProcessingOrder order) {
-        //        int expectedMessageCount = 50_000;
-        int expectedMessageCount = 10_000;
-//        int expectedMessageCount = 10_000;
-//        int expectedMessageCount = 1_000;
+        int expectedMessageCount = 30_000;
         runTest(maxPoll, commitMode, order, expectedMessageCount);
     }
 
@@ -153,7 +151,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
+        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode);
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
@@ -190,15 +188,15 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         AtomicInteger producedCount = new AtomicInteger(0);
 
         pc.pollAndProduce(record -> {
-            log.debug("Polled {}", record.offset());
-            consumedKeys.add(record.key());
+                    log.debug("Polled {}", record.offset());
+                    consumedKeys.add(record.key());
                     processedCount.incrementAndGet();
                     return new ProducerRecord<>(outputName, record.key(), "data");
                 }, consumeProduceResult -> {
                     log.debug("Produced {}", consumeProduceResult.getOut());
-            producedCount.incrementAndGet();
-            producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
-            bar.step();
+                    producedCount.incrementAndGet();
+                    producedKeysAcknowledged.add(consumeProduceResult.getIn().key());
+                    bar.step();
                 }
         );
 
@@ -220,16 +218,18 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
             waitAtMost(defaultTimeout)
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                    // dynamic reason support still waiting
+                    // https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                    // https://github.com/confluentinc/parallel-consumer/issues/199
                     .failFast("PC died, check logs.",
-                            () -> pc.isClosedOrFailed() // needs fail-fast feature in 4.0.4 - https://github.com/awaitility/awaitility/pull/193
+                            () -> pc.isClosedOrFailed()
                                     || producedCount.get() > expectedMessageCount)
 //                            () -> {
 //                                if (pc.isClosedOrFailed())
 //                                    return pc.getFailureCause();
 //                                else
 //                                    return new TerminalFailureException(msg("Too many messages? processedCount.get() {} > expectedMessageCount {}",
-//                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4 // TODO link
+//                                            producedCount.get(), expectedMessageCount)); // needs fail-fast feature in 4.0.4
 //                            })
                     .alias(failureMessage)
                     .untilAsserted(() -> {
@@ -269,24 +269,6 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         // todo performance: tighten up progress check (<2)
         assertThat(progressTracker.getHighestRoundCountSeen()).isLessThan(40);
         bar.close();
-    }
-
-    @Test
-    void customRepresentationFail() {
-        List<Integer> one = IntStream.range(0, 1000).boxed().collect(Collectors.toList());
-        List<Integer> two = IntStream.range(999, 2000).boxed().collect(Collectors.toList());
-        assertThatThrownBy(() -> assertThat(one).withRepresentation(new TrimListRepresentation()).containsAll(two))
-                .hasMessageContaining("trimmed");
-    }
-
-    @Test
-    void customRepresentationPass() {
-        Assertions.useRepresentation(new TrimListRepresentation());
-        List<Integer> one = IntStream.range(0, 1000).boxed().collect(Collectors.toList());
-        List<Integer> two = IntStream.range(0, 1000).boxed().collect(Collectors.toList());
-        SoftAssertions all = new SoftAssertions();
-        all.assertThat(one).containsAll(two);
-        all.assertAll();
     }
 
 }

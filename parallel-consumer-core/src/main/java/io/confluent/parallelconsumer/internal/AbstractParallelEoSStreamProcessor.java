@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.ErrorInUserFunctionException;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -40,7 +41,6 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
-import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -53,7 +53,6 @@ import static lombok.AccessLevel.PROTECTED;
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
-    public static final String MDC_OFFSET_MARKER = "offset";
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
@@ -71,16 +70,28 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Clock clock = TimeUtils.getClock();
 
     /**
-     * Kafka's default auto commit frequency. https://docs.confluent.io/platform/current/clients/consumer.html#id1
+     * Sets the time between commits. Using a higher frequency will put more load on the brokers.
+     *
+     * @deprecated use {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval}} instead. This
+     *         will be deleted in the next major version.
      */
-    private static final int KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY = 5000;
+    // todo delete in next major version
+    @Deprecated
+    public void setTimeBetweenCommits(final Duration timeBetweenCommits) {
+        options.setCommitInterval(timeBetweenCommits);
+    }
 
     /**
-     * Time between commits. Using a higher frequency will put more load on the brokers.
+     * Gets the time between commits.
+     *
+     * @deprecated use {@link ParallelConsumerOptions#setCommitInterval} instead. This will be deleted in the next major
+     *         version.
      */
-    @Setter
-    @Getter
-    private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY);
+    // todo delete in next major version
+    @Deprecated
+    public Duration getTimeBetweenCommits() {
+        return options.getCommitInterval();
+    }
 
     private Instant lastCommitCheckTime = Instant.now();
 
@@ -90,7 +101,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
-     * The pool which is used for running the users's supplied function
+     * The pool which is used for running the users' supplied function
      */
     protected final ThreadPoolExecutor workerThreadPool;
 
@@ -200,6 +211,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see State
      */
+    @Setter
     private State state = State.unused;
 
     /**
@@ -219,21 +231,27 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
+    protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
+        this(newOptions, new PCModule<>(newOptions));
+    }
+
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
      *
      * @see ParallelConsumerOptions
      */
-    public AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
+    protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
+
+        module.setParallelEoSStreamProcessor(this);
 
         log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
 
         options = newOptions;
         options.validate();
 
-        this.dynamicExtraLoadFactor = new DynamicLoadFactor();
+        this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
         this.consumer = options.getConsumer();
 
         checkGroupIdConfigured(consumer);
@@ -242,14 +260,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
-        this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor, TimeUtils.getClock());
+        this.wm = module.workManager();
 
-        ConsumerManager<K, V> consumerMgr = new ConsumerManager<>(consumer);
-
-        this.brokerPollSubsystem = new BrokerPollSystem<>(consumerMgr, wm, this, newOptions);
+        this.brokerPollSubsystem = module.brokerPoller(this);
 
         if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(new ProducerManager<>(options.getProducer(), consumerMgr, this.wm, options));
+            this.producerManager = Optional.of(module.producerManager());
             if (options.isUsingTransactionalProducer())
                 this.committer = this.producerManager.get();
             else
@@ -297,7 +313,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Set<String> subscription = consumerToCheck.subscription();
         Set<TopicPartition> assignment = consumerToCheck.assignment();
         if (!subscription.isEmpty() || !assignment.isEmpty()) {
-            throw new IllegalStateException("Consumer subscription must be managed by this class. Use " + this.getClass().getName() + "#subcribe methods instead.");
+            throw new IllegalStateException("Consumer subscription must be managed by the Parallel Consumer. Use " + this.getClass().getName() + "#subcribe methods instead.");
         }
     }
 
@@ -336,15 +352,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
-        try {
-            wm.onPartitionsRevoked(partitions);
 
-            // can't commit for partitions already revoked, but use opportunity as a save point
+        try {
+            // commit any offsets from revoked partitions BEFORE truncation
             commitOffsetsThatAreReady();
 
-            usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
+            // truncate the revoked partitions
+            wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
             throw new InternalRuntimeError("onPartitionsRevoked event error", e);
+        }
+
+        //
+        try {
+            usersConsumerRebalanceListener.ifPresent(listener -> listener.onPartitionsRevoked(partitions));
+        } catch (Exception e) {
+            throw new ErrorInUserFunctionException("Error from rebalance listener function after #onPartitionsRevoked", e);
         }
     }
 
@@ -363,7 +386,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * Delegate to {@link WorkManager}
+     * Cannot commit any offsets for partitions that have been `lost` (as opposed to revoked). Just delegate to
+     * {@link WorkManager} for truncation.
      *
      * @see WorkManager#onPartitionsAssigned
      */
@@ -468,7 +492,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private void doClose(Duration timeout) throws TimeoutException, ExecutionException {
+    private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
@@ -485,9 +509,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 boolean terminationFinishedWithoutTimeout = workerThreadPool.awaitTermination(toSeconds(timeout), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked or otherwise stuck?", timeout);
-                    boolean shutdown = workerThreadPool.isShutdown();
-                    boolean terminated = workerThreadPool.isTerminated();
+                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
                 }
             } catch (InterruptedException e) {
                 log.error("InterruptedException", e);
@@ -497,8 +519,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Worker pool terminated.");
 
         // last check to see if after worker pool closed, has any new work arrived?
-        processWorkCompleteMailBox();
+        processWorkCompleteMailBox(Duration.ZERO);
 
+        //
         commitOffsetsThatAreReady();
 
         // only close consumer once producer has committed it's offsets (tx'l)
@@ -511,6 +534,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.debug("Close complete.");
         this.state = closed;
+
+        if (this.getFailureCause() != null) {
+            log.error("PC closed due to error: {}", getFailureCause(), null);
+        }
     }
 
     /**
@@ -566,8 +593,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     /**
      * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to inform
-     * that work is available when there was none, to make tests run faster, or to move on to shutting down the {@link
-     * BrokerPollSystem} so that less messages are downloaded and queued.
+     * that work is available when there was none, to make tests run faster, or to move on to shutting down the
+     * {@link BrokerPollSystem} so that less messages are downloaded and queued.
      */
     private void interruptControlThread() {
         if (blockableControlThread != null) {
@@ -593,15 +620,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Optional<String> myId = Optional.empty();
 
     /**
-     * Supervisor loop for the main loop.
+     * Kicks off the control loop in the executor, with supervision and returns.
      *
      * @see #supervisorLoop(Function, Consumer)
      */
     protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
         if (state != State.unused) {
-            throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
-                    "state is {})", state));
+            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
+                    "more than once (they are asynchronous) (current state is {})", state));
         } else {
             state = running;
         }
@@ -626,12 +653,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             controlThread.setName("pc-control");
             this.blockableControlThread = controlThread;
             while (state != closed) {
+                log.debug("Control loop start");
                 try {
                     controlLoop(userFunctionWrapped, callback);
+                } catch (InterruptedException e) {
+                    log.debug("Control loop interrupted, closing");
+                    doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
-                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw failureReason;
                 }
             }
@@ -652,29 +683,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Main control loop
      */
-    private <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
-                                 Consumer<R> callback) throws TimeoutException, ExecutionException {
+    protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
+                                   Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
+        maybeWakeupPoller();
 
         //
-        int newWork = handleWork(userFunction, callback);
+        final boolean shouldTryCommitNow = maybeAcquireCommitLock();
 
-        if (state == running) {
-            if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
-                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
-                        options.getTargetAmountOfRecordsInFlight());
-                brokerPollSubsystem.wakeupIfPaused();
-            }
-        }
+        // make sure all work that's been completed are arranged ready for commit
+        Duration timeToBlockFor = shouldTryCommitNow ? Duration.ZERO : getTimeToBlockFor();
+        processWorkCompleteMailBox(timeToBlockFor);
 
-        log.trace("Loop: Process mailbox");
-        processWorkCompleteMailBox();
-
-        if (isIdlingOrRunning()) {
+        //
+        if (shouldTryCommitNow) {
             // offsets will be committed when the consumer has its partitions revoked
-            log.trace("Loop: Maybe commit");
-            commitOffsetsMaybe();
+            commitOffsetsThatAreReady();
         }
+
+        // distribute more work
+        retrieveAndDistributeNewWork(userFunction, callback);
 
         // run call back
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
@@ -706,7 +733,43 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    private <R> int handleWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    /**
+     * If we don't have enough work queued, and the poller is paused for throttling,
+     * <p>
+     * todo move into {@link WorkManager} as it's specific to WM having enough work?
+     */
+    private void maybeWakeupPoller() {
+        if (state == running) {
+            if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
+                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
+                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
+                        options.getTargetAmountOfRecordsInFlight());
+                brokerPollSubsystem.wakeupIfPaused();
+            }
+        }
+    }
+
+    /**
+     * If it's time to commit, and using transactional system, tries to acquire the commit lock.
+     * <p>
+     * Call {@link ProducerManager#preAcquireOffsetsToCommit()} early, to initiate the record sending barrier for this
+     * transaction (so no more records can be sent, before collecting offsets to commit).
+     *
+     * @return true if committing should either way be attempted now
+     */
+    private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
+        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty();
+        // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
+        if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
+            // get into write lock queue, so that no new work can be started from here on
+            log.debug("Acquiring commit lock pessimistically, before we try to collect offsets for committing");
+            //noinspection OptionalGetWithoutIsPresent - options will already be verified
+            producerManager.get().preAcquireOffsetsToCommit();
+        }
+        return shouldTryCommitNow;
+    }
+
+    private <R> int retrieveAndDistributeNewWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
 
@@ -831,7 +894,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
         }
 
-        log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
+        log.debug("Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
                 target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
         return delta;
     }
@@ -910,12 +973,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Check the work queue for work to be done, potentially blocking.
      * <p>
      * Can be interrupted if something else needs doing.
+     * <p>
+     * Visible for testing.
      */
-    private void processWorkCompleteMailBox() {
+    protected void processWorkCompleteMailBox(final Duration timeToBlockFor) {
         log.trace("Processing mailbox (might block waiting for results)...");
         Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
-
-        final Duration timeToBlockFor = getTimeToBlockFor();
 
         if (timeToBlockFor.toMillis() > 0) {
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
@@ -928,7 +991,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             try {
                 var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
-                    log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
+                    log.debug("Mailbox results returned null, indicating timeToBlockFor elapsed (which was set as {})", timeToBlockFor);
                 } else {
                     log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeToBlockFor);
                     results.add(firstBlockingPoll);
@@ -979,14 +1042,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 Duration timeBetweenCommits = getTimeBetweenCommits();
                 Duration effectiveRetryDelay = lowestScheduled.toMillis() < retryDelay.toMillis() ? retryDelay : lowestScheduled;
                 Duration result = timeBetweenCommits.toMillis() < effectiveRetryDelay.toMillis() ? timeBetweenCommits : effectiveRetryDelay;
-                log.debug("Not enough work in flight, while work is waiting to be retried - so will only sleep until next retry time of {}", result);
+                log.debug("Not enough work in flight, while work is waiting to be retried - so will only sleep until next retry time of {} (lowestScheduled = {})", result, lowestScheduled);
                 return result;
             }
         }
 
         //
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
-        log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
+        log.debug("Calculated next commit time in {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
     }
 
@@ -994,21 +1057,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return state == running || state == draining || state == paused;
     }
 
-
-    /**
-     * Conditionally commit offsets to broker
-     */
-    private void commitOffsetsMaybe() {
-        if (isShouldCommitNow()) {
-            commitOffsetsThatAreReady();
-        }
+    protected boolean isTimeToCommitNow() {
         updateLastCommitCheckTime();
-    }
 
-    private boolean isShouldCommitNow() {
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
-        boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(timeBetweenCommits) > 0;
+        boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean isCommandedToCommit = isCommandedToCommit();
 
@@ -1073,8 +1127,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return Duration.between(lastCommitCheckTime, now);
     }
 
-    private void commitOffsetsThatAreReady() {
-        log.debug("Committing offsets that are ready...");
+    /**
+     * Visible for testing
+     */
+    protected void commitOffsetsThatAreReady() throws TimeoutException, InterruptedException {
+        log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");
             committer.retrieveOffsetsAndCommit();
@@ -1095,6 +1152,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                                                                         List<WorkContainer<K, V>> workContainerBatch) {
         // call the user's function
         List<R> resultsFromUserFunction;
+        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
+
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
@@ -1110,7 +1169,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 return null;
             }
 
-            PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
             resultsFromUserFunction = usersFunction.apply(context);
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
@@ -1126,24 +1184,26 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             // fail or succeed, either way we're done
             for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
             }
             log.trace("User function future registered");
 
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
+            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox. Context: {}", context, e);
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                addToMailbox(wc); // always add on error
+                addToMailbox(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
+        } finally {
+            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
         }
     }
 
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        addToMailbox(wc);
+    protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+        addToMailbox(context, wc);
     }
 
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1151,14 +1211,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
-    protected void addToMailbox(WorkContainer<K, V> wc) {
+    protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
         log.trace("Adding {} {} to mailbox...", state, wc);
         workMailBox.add(ControllerEventMessage.of(wc));
+
+        wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
     public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
-        log.debug("Adding {} to mailbox...", polledRecords);
+        log.trace("Adding {} to mailbox...", polledRecords);
         workMailBox.add(ControllerEventMessage.of(polledRecords));
     }
 
@@ -1171,7 +1233,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #blockableControlThread
      */
     public void notifySomethingToDo() {
-        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
+        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false);
         if (noTransactionInProgress) {
             log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
             interruptControlThread();
@@ -1237,7 +1299,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
-            log.info("Transitioning paarallel consumer to state running.");
+            log.info("Transitioning parallel consumer to state running.");
             this.state = State.running;
             notifySomethingToDo();
         } else {

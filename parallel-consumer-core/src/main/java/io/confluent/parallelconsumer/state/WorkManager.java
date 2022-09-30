@@ -6,10 +6,7 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -71,23 +68,24 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this(options, consumer, new DynamicLoadFactor(), TimeUtils.getClock());
+    public WorkManager(PCModule<K, V> module) {
+        this(module, new DynamicLoadFactor(), TimeUtils.getClock());
     }
 
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
-        this(options, consumer, new DynamicLoadFactor(), clock);
+    public WorkManager(PCModule<K, V> module, Clock clock) {
+        this(module, new DynamicLoadFactor(), clock);
     }
 
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
-        this.options = newOptions;
+    public WorkManager(final PCModule<K, V> module,
+                       final DynamicLoadFactor dynamicExtraLoadFactor,
+                      final Clock clock) {
+        this.options = module.options();
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionStateManager<>(consumer, sm, options, clock);
+        this.pm = new PartitionStateManager<>(module.consumer(), sm, options, clock);
     }
 
     /**
@@ -292,4 +290,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getLowestRetryTime();
     }
 
+    public boolean isDirty() {
+        return pm.isDirty();
+    }
 }

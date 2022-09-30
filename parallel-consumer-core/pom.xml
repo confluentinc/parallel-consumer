@@ -8,7 +8,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.2.0-SNAPSHOT</version>
+        <version>0.5.2.3-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -85,7 +85,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.3.5</version>
+            <version>42.4.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -96,7 +96,7 @@
         <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threeten-extra</artifactId>
-            <version>1.7.0</version>
+            <version>1.7.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -126,10 +126,13 @@
                     <releaseTarget>8</releaseTarget>
                     <classes>
                         <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
+                        <class>io.confluent.parallelconsumer.internal.ProducerManager</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>
                         <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.state.ShardKey</class>
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                     </classes>
                     <legacyClasses>
@@ -137,8 +140,10 @@
                         <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
                         <class>org.apache.kafka.clients.consumer.ConsumerRecord</class>
                         <class>org.apache.kafka.clients.consumer.ConsumerRecords</class>
+                        <class>org.apache.kafka.clients.consumer.Consumer</class>
                         <class>org.apache.kafka.clients.producer.RecordMetadata</class>
                         <class>org.apache.kafka.clients.producer.ProducerRecord</class>
+                        <class>org.apache.kafka.clients.producer.Producer</class>
                     </legacyClasses>
                     <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
                 </configuration>

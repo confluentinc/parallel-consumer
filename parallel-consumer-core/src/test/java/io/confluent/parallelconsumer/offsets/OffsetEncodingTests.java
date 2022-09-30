@@ -9,6 +9,7 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -176,8 +177,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         ConsumerRecords<String, String> testRecords = new ConsumerRecords<>(recordsMap);
 
         // write offsets
+        final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
         {
-            WorkManager<String, String> wmm = new WorkManager<>(options, consumerSpy);
+            WorkManager<String, String> wmm = new WorkManager<>(new PCModule<>(newOptions));
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
@@ -222,7 +224,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            var newWm = new WorkManager<>(options, consumerSpy);
+            var newWm = new WorkManager<>(new PCModule<>(options));
             newWm.onPartitionsAssigned(UniSets.of(tp));
             newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 
