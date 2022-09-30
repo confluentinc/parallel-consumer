@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 
 COMMITS=$(git log --oneline HEAD...parralel-test-fix^ | cut -d " " -f 1)
 
