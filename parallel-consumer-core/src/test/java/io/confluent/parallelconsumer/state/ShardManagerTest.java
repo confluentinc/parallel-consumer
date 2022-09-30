@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +24,7 @@ class ShardManagerTest {
     @Test
     void retryQueueOrdering() {
         PCModuleTestEnv module = mu.getModule();
-        ShardManager<String, String> sm = new ShardManager<>(module.options(), module.workManager());
+        ShardManager<String, String> sm = new ShardManager<>(module.options(), module.workManager(), TimeUtils.getClock());
         NavigableSet<WorkContainer<?, ?>> retryQueue = sm.getRetryQueue();
 
 
