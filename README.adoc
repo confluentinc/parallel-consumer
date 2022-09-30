@@ -1279,6 +1279,7 @@ endif::[]
 ** Fixes a potential race condition which could cause offset leaks between transactions boundaries.
 ** Introduces lock acquisition timeouts.
 ** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
+* fixes #419 NoSuchElementException during race condition in PartitionState (#422)
 
 == v0.5.2.3
 
