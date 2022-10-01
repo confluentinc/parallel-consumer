@@ -53,11 +53,10 @@ class PartitionStateTest {
     }
 
     /**
-     * test for offset gaps in partition data (i.e. compacted topics)
+     * Test for offset gaps in partition data (i.e. compacted topics)
      */
     void compactedTopic() {
         Truth.assertThat(true).isFalse();
     }
-
 
 }

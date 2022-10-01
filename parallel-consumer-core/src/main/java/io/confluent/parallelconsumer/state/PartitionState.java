@@ -81,10 +81,10 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
-    private ConcurrentSkipListSet<Long> incompleteOffsets;
+    private NavigableSet<Long> incompleteOffsets;
 
     /**
-     * Marker for the first record to be tracked. Used for some initial analysis.
+     * Marks whether any {@link WorkContainer}s have been added yet or not. Used for some initial analysis.
      */
     private boolean noWorkAddedYet = true;
 
@@ -140,11 +140,15 @@ public class PartitionState<K, V> {
      * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
      * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}. This requirement is removed in
      * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
+     *
+     * @deprecated the map structure isn't used anymore and can be replaced with the offsets tracked in
+     *         {@link #incompleteOffsets}
      */
     // todo rename - it's not a queue of things to be committed - it's a collection of incomplete offsets and their WorkContainers
     // todo delete? seems this can be replaced by #incompletes - the work container info isn't used
     @ToString.Exclude
-    private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
+    @Deprecated
+    private NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
     private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
         return Collections.unmodifiableNavigableMap(commitQueue);
@@ -230,11 +234,7 @@ public class PartitionState<K, V> {
     public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
 
-//        if (noWorkAddedYet) {
-//            noWorkAddedYet = false;
-//            long bootstrapOffset = wc.offset();
         maybeTruncateBelow(newOffset);
-//        }
 
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
@@ -246,31 +246,38 @@ public class PartitionState<K, V> {
     /**
      * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
      * Offsets between have disappeared and will never be polled again.
+     * <p>
+     * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
      */
     private void maybeTruncateBelow(long polledOffset) {
-        long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
-        boolean bootstrapRecordAboveExpected = polledOffset > nextExpectedPolledOffset;
-        if (bootstrapRecordAboveExpected) {
-            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'", polledOffset, nextExpectedPolledOffset);
-            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(polledOffset);
-            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
-            this.incompleteOffsets = wrapped;
+        if (noWorkAddedYet) {
+            noWorkAddedYet = false;
+            log.trace("Not bootstrap polled records, so not checking for truncation");
+            return;
+        }
+
+        long expectedBootstrapRecordOffset = this.getNextExpectedPolledOffset();
+
+        boolean bootstrapPolledRecordAboveExpected = polledOffset > expectedBootstrapRecordOffset;
+
+        if (bootstrapPolledRecordAboveExpected) {
+            log.debug("Truncating state - removing records lower than {}. Offsets have been removed form the partition by the broker. Bootstrap polled {} but " +
+                            "expected {} from loaded commit data- e.g. record retention expiring, with 'auto.offset.reset'",
+                    polledOffset,
+                    polledOffset,
+                    expectedBootstrapRecordOffset);
+
+            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(polledOffset, true);
+//            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
+//            this.incompleteOffsets = wrapped;
+            this.incompleteOffsets = truncatedIncompletes;
+
+
+            NavigableMap<Long, WorkContainer<K, V>> truncatedQueue = commitQueue.tailMap(polledOffset, true);
+            this.commitQueue = truncatedQueue;
         }
 
         this.nextExpectedPolledOffset = polledOffset + 1;
-    }
-
-    public void maybeTruncate(long batchStartOffset, long batchEndOffset) {
-        long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
-        boolean bootstrapRecordAboveExpected = batchStartOffset > nextExpectedPolledOffset;
-        if (bootstrapRecordAboveExpected) {
-            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'", batchStartOffset, nextExpectedPolledOffset);
-            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(batchStartOffset);
-            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
-            this.incompleteOffsets = wrapped;
-        }
-
-        this.nextExpectedPolledOffset = batchEndOffset + 1;
     }
 
     private long nextExpectedPolledOffset = KAFKA_OFFSET_ABSENCE;
