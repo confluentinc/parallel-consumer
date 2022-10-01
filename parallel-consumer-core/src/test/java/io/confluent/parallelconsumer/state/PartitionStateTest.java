@@ -25,7 +25,7 @@ class PartitionStateTest {
     /**
      * @see PartitionState#maybeTruncateBelow
      */
-    // parameter test with offsets closer together to check off by one
+    // todo parameter test with offsets closer together to check off by one
     @Test
     void bootstrapTruncation() {
         long unexpectedlyHighOffset = 20L;
