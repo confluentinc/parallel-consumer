@@ -132,15 +132,17 @@ public class PartitionState<K, V> {
     private boolean allowedMoreRecords = true;
 
     /**
-     * Map of offsets to WorkUnits.
+     * Map of offsets to {@link WorkContainer}s.
      * <p>
      * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
-     * advancing offsets, as this isn't a guarantee of kafka's.
+     * advancing offsets, as this isn't a guarantee of kafka's (see {@link #incompleteOffsets}).
      * <p>
      * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
-     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}
+     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}. This requirement is removed in
+     * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
      */
-    // todo doesn't need to be concurrent any more?
+    // todo rename - it's not a queue of things to be committed - it's a collection of incomplete offsets and their WorkContainers
+    // todo delete? seems this can be replaced by #incompletes - the work container info isn't used
     @ToString.Exclude
     private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
@@ -225,7 +227,7 @@ public class PartitionState<K, V> {
         }
     }
 
-    public void addWorkContainer(WorkContainer<K, V> wc) {
+    public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
 
 //        if (noWorkAddedYet) {
@@ -236,6 +238,8 @@ public class PartitionState<K, V> {
 
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
+
+        // idempotently add the offset to our incompletes track - if it was already there from loading our metadata on startup, there is no affect
         incompleteOffsets.add(newOffset);
     }
 

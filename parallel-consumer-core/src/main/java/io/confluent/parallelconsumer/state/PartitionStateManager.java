@@ -25,7 +25,6 @@ import java.util.stream.Collectors;
 import static io.confluent.csid.utils.JavaUtils.getFirst;
 import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
-import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -291,9 +290,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
+    // todo move to partition state
+    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
         var tp = wc.getTopicPartition();
-        getPartitionState(tp).addWorkContainer(wc);
+        getPartitionState(tp).addNewIncompleteWorkContainer(wc);
     }
 
     /**
@@ -395,7 +395,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 var work = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
 
                 sm.addWorkContainer(work);
-                addWorkContainer(work);
+                addNewIncompleteWorkContainer(work);
             }
         }
     }

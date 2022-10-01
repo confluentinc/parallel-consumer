@@ -90,7 +90,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     private void injectSucceededWorkAtOffset(long offset) {
         WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, mock(PCModuleTestEnv.class));
         Mockito.doReturn(offset).when(mockCr).offset();
-        state.addWorkContainer(workContainer);
+        state.addNewIncompleteWorkContainer(workContainer);
         state.onSuccess(workContainer); // in this case the highest seen is also the highest succeeded
     }
 

@@ -20,13 +20,14 @@ class PartitionStateTest {
 
     ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
+    TopicPartition tp = new TopicPartition("topic", 0);
+
     /**
      * @see PartitionState#maybeTruncateBelow
      */
     // parameter test with offsets closer together to check off by one
     @Test
     void bootstrapTruncation() {
-        TopicPartition tp = new TopicPartition("topic", 0);
         long unexpectedlyHighOffset = 20L;
         final long previouslyCommittedOffset = 11L;
         List<Long> incompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L);
@@ -42,7 +43,7 @@ class PartitionStateTest {
         var w20 = mu.createWorkFor(unexpectedlyHighOffset);
 
         // bootstrap the first record, triggering truncation - it's offset #unexpectedlyHighOffset, but we were expecting #previouslyCommittedOffset
-        state.addWorkContainer(w20);
+        state.addNewIncompleteWorkContainer(w20);
 
 
         Truth.assertThat(state.getNextExpectedInitialPolledOffset()).isEqualTo(unexpectedlyHighOffset);
@@ -50,5 +51,13 @@ class PartitionStateTest {
         Truth.assertThat(state.getIncompleteOffsetsBelowHighestSucceeded()).containsExactlyElementsIn(expectedTruncatedIncompletes);
 
     }
+
+    /**
+     * test for offset gaps in partition data (i.e. compacted topics)
+     */
+    void compactedTopic() {
+        Truth.assertThat(true).isFalse();
+    }
+
 
 }
