@@ -5,9 +5,11 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,9 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.JavaUtils.getFirst;
+import static io.confluent.csid.utils.JavaUtils.getLast;
+import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
@@ -30,6 +35,7 @@ import static lombok.AccessLevel.*;
  *
  * @see PartitionStateManager
  */
+// todo class becoming large - possible to extract some functionality?
 @ToString
 @Slf4j
 public class PartitionState<K, V> {
@@ -39,6 +45,14 @@ public class PartitionState<K, V> {
      * null)
      */
     public static final long KAFKA_OFFSET_ABSENCE = -1L;
+
+    /**
+     * Used for adding work to, if it's been successfully added to our tracked state
+     *
+     * @see #maybeRegisterNewRecordAsWork
+     */
+    @NonNull
+    private final ShardManager<K, V> sm;
 
     @Getter
     private final TopicPartition tp;
@@ -156,6 +170,7 @@ public class PartitionState<K, V> {
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
         this.nextExpectedPolledOffset = getNextExpectedInitialPolledOffset();
+        this.sm = null;
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -225,6 +240,72 @@ public class PartitionState<K, V> {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
             this.offsetHighestSucceeded = thisOffset;
         }
+    }
+
+
+    public void maybeRegisterNewRecordsAsWork(@NonNull EpochAndRecordsMap.RecordsAndEpoch recordsAndEpoch) {
+        // todo move to partition state from here, as epoch apparently has to be tracked in PSM
+        var recordPollBatch = recordsAndEpoch.getRecords();
+        final Optional<ConsumerRecord<K, V>> recOpt = getFirst(recordPollBatch);
+        //noinspection OptionalGetWithoutIsPresent -- already checked not empty
+        ConsumerRecord<K, V> sampleRecord = recOpt.get(); // NOSONAR
+
+        // check epoch is ok
+        // move to method
+        // todo teach PartitionState to know it's Epoch, move this into PartitionState
+        {
+            final Optional<ConsumerRecord<K, V>> recOpt = getFirst(recordPollBatch);
+            //noinspection OptionalGetWithoutIsPresent -- already checked not empty
+            ConsumerRecord<K, V> sampleRecord = recOpt.get(); // NOSONAR
+            long batchStartOffset = sampleRecord.offset();
+
+            // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
+            var currentPartitionEpoch = getPartitionsAssignmentEpoch();
+            Long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
+
+            boolean epochsDontMatch = !Objects.equals(epochOfInboundRecords, currentPartitionEpoch);
+            if (epochsDontMatch) {
+                log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
+                        epochOfInboundRecords, currentPartitionEpoch);
+                return;
+            }
+        }
+
+
+        if (isPartitionRemovedOrNeverAssigned(sampleRecord)) {
+            log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(sampleRecord), sampleRecord);
+        } else {
+            //noinspection OptionalGetWithoutIsPresent -- already checked not empty
+            long batchEndOffset = getLast(recordPollBatch).get().offset(); // NOSONAR
+
+            TopicPartition partition = new TopicPartition(sampleRecord.topic(), sampleRecord.partition());
+            partitionState.maybeTruncate(batchStartOffset, batchEndOffset);
+
+            maybeRegisterNewRecordAsWork(epochOfInboundRecords, recordPollBatch);
+        }
+    }
+
+    //    // todo move to partition state
+    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, List<ConsumerRecord<K, V>> recordPollBatch) {
+        for (var aRecord : recordPollBatch) {
+            if (isRecordPreviouslyCompleted(aRecord)) {
+                log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
+            } else {
+                //noinspection ObjectAllocationInLoop
+                var work = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
+
+                sm.addWorkContainer(work);
+                addNewIncompleteWorkContainer(work);
+            }
+        }
+    }
+
+    // todo move to partition state
+    public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
+        TopicPartition topicPartition = toTopicPartition(rec);
+        var partitionState = getPartitionState(topicPartition);
+        boolean hasNeverBeenAssigned = partitionState == null;
+        return hasNeverBeenAssigned || partitionState.isRemoved();
     }
 
     public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
@@ -428,6 +509,71 @@ public class PartitionState<K, V> {
      */
     public boolean isBlocked() {
         return !isAllowedMoreRecords();
+    }
+
+
+    /**
+     * If the record is below the highest succeeded offset, then it is or will be represented in the current offset
+     * encoding.
+     * <p>
+     * This may in fact be THE message holding up the partition - so must be retried.
+     * <p>
+     * In which case - don't want to skip it.
+     * <p>
+     * Generally speaking, completing more offsets below the highest succeeded (and thus the set represented in the
+     * encoded payload), should usually reduce the payload size requirements.
+     */
+    private boolean isBlockingProgress(WorkContainer<?, ?> workContainer) {
+        return workContainer.offset() < getOffsetHighestSucceeded();
+    }
+
+    public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
+        if (checkIfWorkIsStale(workContainer)) {
+            log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
+            return false;
+        } else if (isAllowedMoreRecords(workContainer)) {
+            return true;
+        } else if (isBlockingProgress(workContainer)) {
+            // allow record to be taken, even if partition is blocked, as this record completion may reduce payload size requirement
+            return true;
+        } else {
+            log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
+                            "record ({}) belongs to, due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
+                            "not in flight ({}), continuing on to next container in shardEntry.",
+                    workContainer.getTopicPartition(), workContainer.offset(), workContainer.isNotInFlight());
+            return false;
+        }
+    }
+
+
+    /**
+     * Have our partitions been revoked?
+     * <p>
+     * This state is rare, as shards or work get removed upon partition revocation, although under busy load it might
+     * occur we don't synchronize over PartitionState here so it's a bit racey, but is handled and eventually settles.
+     *
+     * @return true if epoch doesn't match, false if ok
+     */
+    boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
+        var topicPartitionKey = workContainer.getTopicPartition();
+
+        Long currentPartitionEpoch = getPartitionsAssignmentEpoch();
+        long workEpoch = workContainer.getEpoch();
+
+        boolean partitionNotAssigned = isPartitionRemovedOrNeverAssigned(workContainer.getCr());
+
+        boolean epochMissMatch = currentPartitionEpoch != workEpoch;
+
+        if (epochMissMatch || partitionNotAssigned) {
+            log.debug("Epoch mismatch {} vs {} for record {}. Skipping message - it's partition has already assigned to a different consumer.",
+                    workEpoch, currentPartitionEpoch, workContainer);
+            return true;
+        }
+        return false;
+    }
+
+    private Long getPartitionsAssignmentEpoch() {
+        throw new RuntimeException();
     }
 
 }
