@@ -20,13 +20,9 @@ import static java.time.Duration.ofMillis;
 @UtilityClass
 public class JavaUtils {
 
-    public static <T> Optional<T> getLast(final List<T> someList) {
-        if (someList.isEmpty()) return Optional.empty();
-        return Optional.of(someList.get(someList.size() - 1));
-    }
-
-    public static <T> Optional<T> getFirst(final List<T> someList) {
-        return someList.isEmpty() ? Optional.empty() : Optional.of(someList.get(0));
+    public static <T> Optional<T> getLast(final List<T> commitHistory) {
+        if (commitHistory.isEmpty()) return Optional.empty();
+        return Optional.of(commitHistory.get(commitHistory.size() - 1));
     }
 
     public static <T> Optional<T> getOnlyOne(final Map<String, T> stringMapMap) {

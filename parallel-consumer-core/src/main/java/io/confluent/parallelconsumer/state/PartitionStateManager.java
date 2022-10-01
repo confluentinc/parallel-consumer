@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.*;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap.RecordsAndEpoch;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.NonNull;
@@ -22,8 +21,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.JavaUtils.getFirst;
-import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 
 /**
@@ -246,7 +243,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return false;
     }
 
-    // todo move to partition state
     public boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
         var tp = toTopicPartition(rec);
         var partitionState = getPartitionState(tp);
@@ -313,7 +309,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return !isAllowedMoreRecords(topicPartition);
     }
 
-    // todo move to partition state
     public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
         TopicPartition topicPartition = toTopicPartition(rec);
         var partitionState = getPartitionState(topicPartition);
@@ -338,12 +333,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         log.debug("Incoming {} new records...", recordsMap.count());
         for (var partition : recordsMap.partitions()) {
-            RecordsAndEpoch recordsList = recordsMap.records(partition);
+            var recordsList = recordsMap.records(partition);
             long epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
-            List<ConsumerRecord<K, V>> recordPollBatch = recordsList.getRecords();
-            if (!recordPollBatch.isEmpty()) {
-                // should always not be empty, but...
-                maybeRegisterNewRecordAsWork(epochOfInboundRecords, recordsList);
+            for (var rec : recordsList.getRecords()) {
+                maybeRegisterNewRecordAsWork(epochOfInboundRecords, rec);
             }
         }
     }
@@ -351,52 +344,26 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
      */
-    // todo move into PartitionState
-    // todo too deep
-    private void maybeRegisterNewRecordAsWork(@NonNull Long epochOfInboundRecords, @NonNull RecordsAndEpoch recordsList) {
-        List<ConsumerRecord<K, V>> recordPollBatch = recordsList.getRecords();
+    private void maybeRegisterNewRecordAsWork(@NonNull Long epochOfInboundRecords, @NonNull ConsumerRecord<K, V> rec) {
+        // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
+        var currentPartitionEpoch = getEpochOfPartitionForRecord(rec);
+        if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {
 
-        if (!recordPollBatch.isEmpty()) {
-            final Optional<ConsumerRecord<K, V>> recOpt = getFirst(recordPollBatch);
-            //noinspection OptionalGetWithoutIsPresent -- already checked not empty
-            ConsumerRecord<K, V> sampleRecord = recOpt.get(); // NOSONAR
-            long batchStartOffset = sampleRecord.offset();
-
-            // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
-            var currentPartitionEpoch = getEpochOfPartitionForRecord(sampleRecord);
-            if (Objects.equals(epochOfInboundRecords, currentPartitionEpoch)) {
-
-                // todo move to partition state from here, as epoch apparently has to be tracked in PSM
-                if (isPartitionRemovedOrNeverAssigned(sampleRecord)) {
-                    log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(sampleRecord), sampleRecord);
-                } else {
-                    //noinspection OptionalGetWithoutIsPresent -- already checked not empty
-                    long batchEndOffset = getLast(recordPollBatch).get().offset(); // NOSONAR
-
-                    TopicPartition partition = new TopicPartition(sampleRecord.topic(), sampleRecord.partition());
-                    getPartitionState(partition).maybeTruncate(batchStartOffset, batchEndOffset);
-
-                    maybeRegisterNewRecordAsWork(epochOfInboundRecords, recordPollBatch);
-                }
-            } else {
-                log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
-                        epochOfInboundRecords, currentPartitionEpoch);
+            if (isPartitionRemovedOrNeverAssigned(rec)) {
+                log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(rec), rec);
             }
-        }
-    }
 
-    // todo move to partition state
-    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, List<ConsumerRecord<K, V>> recordPollBatch) {
-        for (var aRecord : recordPollBatch) {
-            if (isRecordPreviouslyCompleted(aRecord)) {
-                log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
+            if (isRecordPreviouslyCompleted(rec)) {
+                log.trace("Record previously completed, skipping. offset: {}", rec.offset());
             } else {
-                //noinspection ObjectAllocationInLoop
-                var work = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, module);
 
                 sm.addWorkContainer(work);
                 addNewIncompleteWorkContainer(work);
             }
+        } else {
+            log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
+                    epochOfInboundRecords, currentPartitionEpoch);
         }
     }
 

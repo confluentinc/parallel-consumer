@@ -233,7 +233,7 @@ public class PartitionState<K, V> {
 //        if (noWorkAddedYet) {
 //            noWorkAddedYet = false;
 //            long bootstrapOffset = wc.offset();
-//        maybeTruncateBelow(newOffset);
+        maybeTruncateBelow(newOffset);
 //        }
 
         maybeRaiseHighestSeenOffset(newOffset);
@@ -429,6 +429,5 @@ public class PartitionState<K, V> {
     public boolean isBlocked() {
         return !isAllowedMoreRecords();
     }
-
 }
 
