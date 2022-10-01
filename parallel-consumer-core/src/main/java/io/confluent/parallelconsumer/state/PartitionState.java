@@ -26,6 +26,8 @@ import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
 /**
+ * Our view of our state of the partitions that we've been assigned.
+ *
  * @see PartitionStateManager
  */
 @ToString
@@ -42,19 +44,42 @@ public class PartitionState<K, V> {
     private final TopicPartition tp;
 
     /**
-     * Offset data beyond the highest committable offset, which haven't totally succeeded.
+     * Offsets beyond the highest committable offset (see {@link #getOffsetHighestSequentialSucceeded()}) which haven't
+     * totally succeeded. Based on decoded metadata and polled records (not offset ranges).
+     * <p>
+     * <p>
+     * <h2>How does this handle gaps in the offsets in the source partitions?:</h2>
+     * <p>
+     * We track per record acknowledgement, by only storing the offsets of records <em>OF WHICH WE'VE RECEIVED</em>
+     * through {@link KafkaConsumer#poll} calls.
+     * <p>
+     * This is as explicitly opposed to looking at the lowest offset we've polled, and synthetically creating a list of
+     * EXPECTED offsets from the range from it to the highest polled. If we were to construct this offset range
+     * synthetically like this, then we would need to expect to process/receive records which might not exist, for
+     * whatever reason, usually due to compaction.
+     * <p>
+     * Instead, the offsets tracked are only determined from the records we've given to process from the broker - we
+     * make no assumptions about which offsets exist. This way we don't have to worry about gaps in the offsets. Also, a
+     * nice outcome of this is that a gap in the offsets is effectively the same as, as far as we're concerned, an
+     * offset which has succeeded - because either way we have no action to take.
      * <p>
      * This is independent of the actual queued {@link WorkContainer}s. This is because to start with, data about
      * incomplete offsets come from the encoded metadata payload that gets committed along with the highest committable
-     * offset ({@link #getOffsetHighestSequentialSucceeded()}). They are not always in sync.
+     * offset ({@link #getOffsetHighestSequentialSucceeded()}) and so we don't yet have ConsumerRecord's for those
+     * offsets until we start polling for them. And so they are not always in sync.
      * <p>
-     * TreeSet so we can always get the lowest offset.
+     * <p>
+     * <h2>Concurrency:</h2>
      * <p>
      * Needs to be concurrent because, the committer requesting the data to commit may be another thread - the broker
      * polling sub system - {@link BrokerPollSystem#maybeDoCommit}. The alternative to having this as a concurrent
      * collection, would be to have the control thread prepare possible commit data on every cycle, and park that data
      * so that the broker polling thread can grab it, if it wants to commit - i.e. the poller would not prepare/query
-     * the data for itself. See also #200 Refactor: Consider a shared nothing architecture.
+     * the data for itself. This requirement is removed in the upcoming PR #200 Refactor: Consider a shared nothing
+     * architecture.
+     *
+     * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
+     *         storage
      */
     private ConcurrentSkipListSet<Long> incompleteOffsets;
 
@@ -222,9 +247,7 @@ public class PartitionState<K, V> {
         long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
         boolean bootstrapRecordAboveExpected = polledOffset > nextExpectedPolledOffset;
         if (bootstrapRecordAboveExpected) {
-            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'",
-                    polledOffset,
-                    nextExpectedPolledOffset);
+            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'", polledOffset, nextExpectedPolledOffset);
             NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(polledOffset);
             ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
             this.incompleteOffsets = wrapped;
@@ -237,9 +260,7 @@ public class PartitionState<K, V> {
         long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
         boolean bootstrapRecordAboveExpected = batchStartOffset > nextExpectedPolledOffset;
         if (bootstrapRecordAboveExpected) {
-            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'",
-                    batchStartOffset,
-                    nextExpectedPolledOffset);
+            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'", batchStartOffset, nextExpectedPolledOffset);
             NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(batchStartOffset);
             ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
             this.incompleteOffsets = wrapped;
@@ -264,19 +285,15 @@ public class PartitionState<K, V> {
     }
 
     public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
-        if (isDirty())
-            return of(createOffsetAndMetadata());
-        else
-            return empty();
+        if (isDirty()) return of(createOffsetAndMetadata());
+        else return empty();
     }
 
     // visible for testing
     protected OffsetAndMetadata createOffsetAndMetadata() {
         Optional<String> payloadOpt = tryToEncodeOffsets();
         long nextOffset = getNextExpectedInitialPolledOffset();
-        return payloadOpt
-                .map(s -> new OffsetAndMetadata(nextOffset, s))
-                .orElseGet(() -> new OffsetAndMetadata(nextOffset));
+        return payloadOpt.map(s -> new OffsetAndMetadata(nextOffset, s)).orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
     /**
@@ -294,8 +311,7 @@ public class PartitionState<K, V> {
      */
     public Set<Long> getAllIncompleteOffsets() {
         //noinspection FuseStreamOperations - only in java 10
-        return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
-                .collect(Collectors.toSet()));
+        return Collections.unmodifiableSet(incompleteOffsets.parallelStream().collect(Collectors.toSet()));
     }
 
     /**
@@ -306,11 +322,12 @@ public class PartitionState<K, V> {
         //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
         return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
                 // todo less than or less than and equal?
-                .filter(x -> x < highestSucceeded)
-                .collect(Collectors.toSet()));
+                .filter(x -> x < highestSucceeded).collect(Collectors.toSet()));
     }
 
     /**
+     * The offset which is itself, and all before, all successfully completed (or skipped).
+     * <p>
      * Defined for our purpose (as only used in definition of what offset to poll for next), as the offset one below the
      * lowest incomplete offset.
      */
@@ -377,16 +394,11 @@ public class PartitionState<K, V> {
             // exceeded maximum API allowed, strip the payload
             mustStrip = true;
             setAllowedMoreRecords(false);
-            log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                            "Warning: messages might be replayed on rebalance. " +
-                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
-                    metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+            log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " + "Warning: messages might be replayed on rebalance. " + "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.", metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
-            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
-                            "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                    metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
+            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " + "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).", metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
             setAllowedMoreRecords(true);
