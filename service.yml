@@ -10,3 +10,4 @@ github:
     repo_name: confluentinc/parallel-consumer
 semaphore:
     enable: true
+    run_semaphore_public: true
