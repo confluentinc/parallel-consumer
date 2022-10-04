@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -20,6 +21,8 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.JavaUtils.getFirst;
+import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
@@ -260,21 +263,28 @@ public class PartitionState<K, V> {
 
         boolean bootstrapPolledRecordAboveExpected = polledOffset > expectedBootstrapRecordOffset;
 
+        boolean bootstrapPolledRecordBelowExpected = polledOffset < expectedBootstrapRecordOffset;
+
         if (bootstrapPolledRecordAboveExpected) {
+            // previously committed offset has been removed, or manual reset to higher offset detected
             log.debug("Truncating state - removing records lower than {}. Offsets have been removed form the partition by the broker. Bootstrap polled {} but " +
                             "expected {} from loaded commit data- e.g. record retention expiring, with 'auto.offset.reset'",
                     polledOffset,
                     polledOffset,
                     expectedBootstrapRecordOffset);
 
-            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(polledOffset, true);
-//            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
-//            this.incompleteOffsets = wrapped;
-            this.incompleteOffsets = truncatedIncompletes;
+            this.incompleteOffsets = incompleteOffsets.tailSet(polledOffset, true);
+            this.commitQueue = commitQueue.tailMap(polledOffset, true);
+        } else if (bootstrapPolledRecordBelowExpected) {
+            // manual reset to lower offset detected
+            log.debug("CG offset has been reset to an earlier offset ({}) - truncating state - all records inclusively above will be replayed. Expecting {} but bootstrap poll was {}.",
+                    polledOffset,
+                    expectedBootstrapRecordOffset,
+                    polledOffset
+            );
 
-
-            NavigableMap<Long, WorkContainer<K, V>> truncatedQueue = commitQueue.tailMap(polledOffset, true);
-            this.commitQueue = truncatedQueue;
+            this.incompleteOffsets = new ConcurrentSkipListSet<>();
+            this.commitQueue = new ConcurrentSkipListMap<>();
         }
 
         this.nextExpectedPolledOffset = polledOffset + 1;
@@ -436,5 +446,40 @@ public class PartitionState<K, V> {
     public boolean isBlocked() {
         return !isAllowedMoreRecords();
     }
+
+    /**
+     * Each time we poll a patch of records, check to see that as expected our tracked incomplete offsets exist in the
+     * set, otherwise they must have been removed from the underlying partition and should be removed from our tracking
+     * as we'll ever be given the record again to retry.
+     */
+    @SuppressWarnings("OptionalGetWithoutIsPresent") // checked with isEmpty
+    protected void pruneRemovedTrackedIncompleteOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
+        var records = polledRecordBatch.getRecords();
+
+        if (records.isEmpty()) {
+            log.warn("Polled an emtpy batch of records? {}", polledRecordBatch);
+            return;
+        }
+
+        var offsetLookup = records.stream()
+                .map(ConsumerRecord::offset)
+                .collect(Collectors.toSet());
+
+        var low = getFirst(records).get().offset(); // NOSONAR see #isEmpty
+        var high = getLast(records).get().offset(); // NOSONAR see #isEmpty
+
+        // for the incomplete offsets within this range of poll batch
+        var subsetFromBatchRange = incompleteOffsets.subSet(low, true, high, true);
+
+        for (long offset : subsetFromBatchRange) {
+            boolean offsetMissingFromPolledRecords = !offsetLookup.contains(offset);
+            if (offsetMissingFromPolledRecords) {
+                // offset has been removed from partition, so remove from tracking as it will never be sent to be retried
+                boolean removed = incompleteOffsets.remove(offset);
+                assert removed;
+            }
+        }
+    }
+
 }
 

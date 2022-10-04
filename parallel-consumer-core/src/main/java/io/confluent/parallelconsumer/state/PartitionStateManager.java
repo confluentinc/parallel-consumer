@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
+import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -75,6 +76,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         return partitionStates.get(tp);
+    }
+
+    private PartitionState<K, V> getPartitionState(EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsList) {
+        return getPartitionState(recordsList.getTopicPartition());
     }
 
     /**
@@ -333,9 +338,13 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         log.debug("Incoming {} new records...", recordsMap.count());
         for (var partition : recordsMap.partitions()) {
-            var recordsList = recordsMap.records(partition);
-            long epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
-            for (var rec : recordsList.getRecords()) {
+            var polledRecordBatch = recordsMap.records(partition);
+
+            var partitionState = getPartitionState(polledRecordBatch);
+            partitionState.pruneRemovedTrackedIncompleteOffsets(polledRecordBatch);
+
+            long epochOfInboundRecords = polledRecordBatch.getEpochOfPartitionAtPoll();
+            for (var rec : polledRecordBatch.getRecords()) {
                 maybeRegisterNewRecordAsWork(epochOfInboundRecords, rec);
             }
         }
