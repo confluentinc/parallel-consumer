@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-class PartitionStateTest {
+class PartitionStateCommittedOffsetTest {
 
     ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
@@ -58,5 +58,25 @@ class PartitionStateTest {
     void compactedTopic() {
         Truth.assertThat(true).isFalse();
     }
+
+    /**
+     * CG offset has been changed to a lower offset (partition rewind / replay) (metdata lost?)
+     */
+    void committedOffsetLower() {
+    }
+
+    /**
+     * CG offset has been changed to something higher than expected (offset skip) (metdata lost?)
+     */
+    void committedOffsetHigher() {
+    }
+
+    /**
+     * CG offset has disappeared - committed offset hasn't been changed, but broker gives us a bootstrap poll result
+     * with a higher offset than expected. Could be caused by retention period, or compaction.
+     */
+    void committedOffsetRemoved() {
+    }
+
 
 }
