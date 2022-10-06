@@ -5,11 +5,12 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.internal.*;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap.RecordsAndEpoch;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -18,7 +19,10 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -76,6 +80,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         return partitionStates.get(tp);
+    }
+
+    private PartitionState<K, V> getPartitionState(EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
+        return getPartitionState(recordsAndEpoch.getTopicPartition());
     }
 
     /**
@@ -191,17 +199,17 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    /**
-     * @return the current epoch of the partition this record belongs to
-     */
-    public Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
-        var tp = toTopicPartition(rec);
-        Long epoch = partitionsAssignmentEpochs.get(tp);
-        if (epoch == null) {
-            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
-        }
-        return epoch;
-    }
+//    /**
+//     * @return the current epoch of the partition this record belongs to
+//     */
+//    public Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
+//        var tp = toTopicPartition(rec);
+//        Long epoch = partitionsAssignmentEpochs.get(tp);
+//        if (epoch == null) {
+//            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
+//        }
+//        return epoch;
+//    }
 
     /**
      * @return the current epoch of the partition
@@ -262,12 +270,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 
-    // todo move to partition state
-    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
-        var tp = wc.getTopicPartition();
-        getPartitionState(tp).addNewIncompleteWorkContainer(wc);
-    }
-
     /**
      * Checks if partition is blocked with back pressure.
      * <p>
@@ -281,9 +283,9 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
-    public boolean isBlocked(final TopicPartition topicPartition) {
-        return !isAllowedMoreRecords(topicPartition);
-    }
+//    public boolean isBlocked(final TopicPartition topicPartition) {
+//        return !isAllowedMoreRecords(topicPartition);
+//    }
 
     // todo move to partition state
     public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
@@ -309,25 +311,29 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         log.debug("Incoming {} new records...", recordsMap.count());
-        for (var partition : recordsMap.partitions()) {
-            RecordsAndEpoch recordsList = recordsMap.records(partition);
-            maybeRegisterNewRecordAsWork(recordsList);
+        for (var recordsAndEpoch : recordsMap.getRecordMap().values()) {
+//        for (var partition : recordsMap.partitions()) {
+//            var recordsAndEpoch = recordsMap.records(partition);
+
+            PartitionState<K, V> partitionState = getPartitionState(recordsAndEpoch);
+            partitionState.maybeRegisterNewPollBatchAsWork(recordsAndEpoch);
         }
     }
 
-    /**
-     * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
-     */
-    // todo move into PartitionState
-    // todo too deep
-    // todo inline - shrunk
-    private void maybeRegisterNewRecordAsWork(@NonNull RecordsAndEpoch recordsAndEpoch) {
-        Long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
-        List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
 
-        if (recordPollBatch.isEmpty()) {
-            log.debug("Received empty poll results? {}", recordsAndEpoch);
-        } else {
+//    /**
+//     * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
+//     */
+//    // todo move into PartitionState
+//    // todo too deep
+//    // todo inline - shrunk
+//    private void maybeRegisterNewRecordAsWork(@NonNull RecordsAndEpoch recordsAndEpoch) {
+//        Long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
+//        List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
+
+//        if (recordPollBatch.isEmpty()) {
+//            log.debug("Received empty poll results? {}", recordsAndEpoch);
+//        } else {
 //            // check epoch is ok
 //            // todo teach PartitionState to know it's Epoch, move this into PartitionState
 //            {
@@ -346,8 +352,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 //                }
 //            }
 
-            PartitionState<K, V> partitionState = getPartitionState(partition);
-            partitionState.maybeRegisterNewRecordsAsWork(recordsAndEpoch);
+//            PartitionState<K, V> partitionState = getPartitionState(recordsAndEpoch.getTopicPartition());
+//            partitionState.maybeRegisterNewPollBatchAsWork(recordsAndEpoch);
 
 //            // todo move to partition state from here, as epoch apparently has to be tracked in PSM
 //            if (isPartitionRemovedOrNeverAssigned(sampleRecord)) {
@@ -361,8 +367,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 //
 //                maybeRegisterNewRecordAsWork(epochOfInboundRecords, recordPollBatch);
 //            }
-        }
-    }
+//        }
+//    }
 
 //    // todo move to partition state
 //    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, List<ConsumerRecord<K, V>> recordPollBatch) {
@@ -399,7 +405,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 .couldBeTakenAsWork(workContainer);
     }
 
-    private PartitionState<K, V> getPartitionState(WorkContainer<K, V> workContainer) {
+    protected PartitionState<K, V> getPartitionState(WorkContainer<K, V> workContainer) {
         TopicPartition topicPartition = workContainer.getTopicPartition();
         return getPartitionState(topicPartition);
     }

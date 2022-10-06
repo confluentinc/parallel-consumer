@@ -5,7 +5,9 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.KafkaUtils;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -54,10 +56,15 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
         return null;
     }
 
-    @Override
-    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
+//    @Override
+//    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
+//        // no-op
+//        log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
+//    }
+
+    public void maybeRegisterNewRecordsAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
         // no-op
-        log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
+        log.warn("Dropping polled record batch for partition no longer assigned. WC: {}", recordsAndEpoch);
     }
 
     /**
@@ -112,5 +119,8 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
         log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", work, work.getTopicPartition());
     }
 
-
+//    @Override
+//    public boolean isPartitionRemovedOrNeverAssigned() {
+//        return true;
+//    }
 }

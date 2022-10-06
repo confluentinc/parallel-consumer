@@ -247,7 +247,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             // check record is marked as incomplete
             var anIncompleteRecord = records.get(3);
-            Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
+            assertThat(partitionState.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
 
             // check state
             {
@@ -264,7 +264,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                     Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
 
-                    Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
+                    assertThat(partitionState.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
                 }
             }
 

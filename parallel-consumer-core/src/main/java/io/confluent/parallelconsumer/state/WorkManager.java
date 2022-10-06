@@ -207,8 +207,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    public boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
-        return pm.checkIfWorkIsStale(workContainer);
+    public boolean checkIfWorkIsStale(WorkContainer<K, V> workContainer) {
+        return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
     }
 
     public boolean shouldThrottle() {
