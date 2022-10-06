@@ -60,6 +60,11 @@ public class PartitionState<K, V> {
      * Offsets beyond the highest committable offset (see {@link #getOffsetHighestSequentialSucceeded()}) which haven't
      * totally succeeded. Based on decoded metadata and polled records (not offset ranges).
      * <p>
+     * Mapped to the corresponding {@link ConsumerRecord}, once it's been polled from the broker.
+     * <p>
+     * Initially mapped to an empty optional, until the record is polled from the broker, because we initially get only
+     * the incomplete offsets decoded from the metadata payload first, before receiving the records from poll requests.
+     * <p>
      * <p>
      * <h2>How does this handle gaps in the offsets in the source partitions?:</h2>
      * <p>
@@ -94,21 +99,7 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
-//    private ConcurrentSkipListSet<Long> incompleteOffsets;
     private final ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
-//    private final ConcurrentSkipListSet<OffsetContainerPair> incompleteOffsets;
-
-//    @Data
-//    @AllArgsConstructor
-//    protected class OffsetContainerPair implements Comparable<Long> {
-//        Long offset;
-//        Optional<ConsumerRecord<K, V>> workContainer;
-//
-//        @Override
-//        public int compareTo(@NonNull final Long o) {
-//            return offset.compareTo(o);
-//        }
-//    }
 
     /**
      * Marker for the first record to be tracked. Used for some initial analysis.
@@ -158,38 +149,18 @@ public class PartitionState<K, V> {
     @Setter(PRIVATE)
     private boolean allowedMoreRecords = true;
 
-//    /**
-//     * Map of offsets to {@link WorkContainer}s.
-//     * <p>
-//     * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
-//     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}. This requirement is removed in
-//     * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
-//     */
-//    // todo rename - it's not a queue of things to be committed - it's a collection of incomplete offsets and their WorkContainers
-//    // todo delete? seems this can be replaced by #incompletes - the work container info isn't used
-//    @ToString.Exclude
-//    private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
-
-//    private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
-//        return Collections.unmodifiableNavigableMap(commitQueue);
-//    }
-
     public PartitionState(PCModule<K, V> pcModule, TopicPartition topicPartition, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = topicPartition;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
-
-//        this.incompleteOffsets = new ConcurrentSkipListSet<>();
-//        offsetData.getIncompleteOffsets().stream()
-//                .map(offset -> new OffsetContainerPair(offset, Optional.empty()))
-//                .forEach(incompleteOffsets::add);
 
         this.incompleteOffsets = new ConcurrentSkipListMap<>();
         offsetData.getIncompleteOffsets()
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
         this.offsetHighestSucceeded = this.offsetHighestSeen;
-        this.sm = null;
+
         this.module = pcModule;
+        this.sm = pcModule.workManager().getSm();
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
