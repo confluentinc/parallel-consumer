@@ -11,7 +11,6 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -35,7 +34,6 @@ import static java.util.Optional.of;
  * must be thread safe.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ShardManager<K, V> {
 
     private final PCModule<K, V> module;
@@ -66,6 +64,12 @@ public class ShardManager<K, V> {
      * shard.
      */
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
+
+    public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
+        this.module = module;
+        this.wm = wm;
+        this.options = module.options();
+    }
 
     /**
      * The shard belonging to the given key

@@ -38,7 +38,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     public static final String NO_OP = "no-op";
 
     public RemovedPartitionState() {
-        super(null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
+        super(null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     public static PartitionState getSingleton() {
@@ -115,12 +115,12 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public void onSuccess(final WorkContainer<K, V> work) {
-        log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", work, work.getTopicPartition());
+    public void onSuccess(long offset) {
+        log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", offset, getTp());
     }
 
-//    @Override
-//    public boolean isPartitionRemovedOrNeverAssigned() {
-//        return true;
-//    }
+    @Override
+    public boolean isPartitionRemovedOrNeverAssigned() {
+        return true;
+    }
 }

@@ -39,7 +39,7 @@ class PartitionStateTest {
 
         HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(100L), new HashSet<>(incompletes)); // todo fix set/list
 
-        PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
+        PartitionState<String, String> state = new PartitionState<>(mu.getModule(), tp, offsetData);
 
 
         var w20 = mu.createWorkFor(unexpectedlyHighOffset);

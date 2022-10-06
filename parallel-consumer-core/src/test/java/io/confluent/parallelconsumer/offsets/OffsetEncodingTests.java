@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -41,6 +42,8 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
+
+    PCModuleTestEnv module = new PCModuleTestEnv();
 
     @Test
     void runLengthDeserialise() {
@@ -202,7 +205,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             {
                 // check for graceful fall back to the smallest available encoder
-                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
+                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(module);
                 OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(1, state);

@@ -112,7 +112,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         incrementPartitionAssignmentEpoch(assignedPartitions);
 
         try {
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.consumer); // todo remove throw away instance creation - #233
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(module); // todo remove throw away instance creation - #233
             var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
             this.partitionStates.putAll(partitionStates);
         } catch (Exception e) {

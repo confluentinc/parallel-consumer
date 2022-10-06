@@ -54,6 +54,8 @@ import static org.mockito.Mockito.mock;
 @ExtendWith(MockitoExtension.class)
 class WorkManagerOffsetMapCodecManagerTest {
 
+    PCModuleTestEnv module = new PCModuleTestEnv();
+
     WorkManager<String, String> wm;
 
     OffsetMapCodecManager<String, String> offsetCodecManager;
@@ -77,7 +79,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     long highestSucceeded = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
+    PartitionState<String, String> state = new PartitionState<>(module, tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
 
     @Mock
     ConsumerRecord<String, String> mockCr;
@@ -90,8 +92,8 @@ class WorkManagerOffsetMapCodecManagerTest {
     private void injectSucceededWorkAtOffset(long offset) {
         WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, mock(PCModuleTestEnv.class));
         Mockito.doReturn(offset).when(mockCr).offset();
-        state.addNewIncompleteRecord(offset);
-        state.onSuccess(workContainer); // in this case the highest seen is also the highest succeeded
+        state.addNewIncompleteRecord(mockCr);
+        state.onSuccess(offset); // in this case the highest seen is also the highest succeeded
     }
 
     /**
@@ -125,7 +127,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 .build();
         wm = new WorkManager<>(new PCModule<>(options));
         wm.onPartitionsAssigned(UniLists.of(tp));
-        offsetCodecManager = new OffsetMapCodecManager<>(mockConsumer);
+        offsetCodecManager = new OffsetMapCodecManager<>(module);
     }
 
     @BeforeAll
