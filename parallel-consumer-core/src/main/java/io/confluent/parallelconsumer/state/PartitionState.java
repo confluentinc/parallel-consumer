@@ -89,7 +89,8 @@ public class PartitionState<K, V> {
     /**
      * Marks whether any {@link WorkContainer}s have been added yet or not. Used for some initial analysis.
      */
-    private boolean noWorkAddedYet = true;
+    // todo rename
+    private boolean bootstrapPhase = true;
 
     /**
      * Cache view of the state of the partition. Is set dirty when the incomplete state of any offset changes. Is set
@@ -113,6 +114,9 @@ public class PartitionState<K, V> {
      * <p>
      * Note that this may in some conditions, there may be a gap between this and the next offset to poll - that being,
      * there may be some number of transaction marker records above it, and the next offset to poll.
+     * <p>
+     * Note that as we only encode our offset map up to the highest succeeded offset (as encoding higher has no value),
+     * upon bootstrap, this will always start off as the same as the {@link #offsetHighestSeen}.
      */
     @Getter(PUBLIC)
     private long offsetHighestSucceeded = KAFKA_OFFSET_ABSENCE;
@@ -161,7 +165,7 @@ public class PartitionState<K, V> {
         this.tp = tp;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
-        this.offsetHighestSucceeded = this.offsetHighestSeen;
+        this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
         this.nextExpectedPolledOffset = getNextExpectedInitialPolledOffset();
     }
 
@@ -253,22 +257,25 @@ public class PartitionState<K, V> {
      * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
      */
     private void maybeTruncateBelow(long polledOffset) {
-        if (noWorkAddedYet) {
-            noWorkAddedYet = false;
+        if (!bootstrapPhase) {
             log.trace("Not bootstrap polled records, so not checking for truncation");
             return;
+        } else {
+            bootstrapPhase = false;
         }
 
-        long expectedBootstrapRecordOffset = this.getNextExpectedPolledOffset();
+//        long expectedBootstrapRecordOffset = this.getNextExpectedPolledOffset();
+        long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
+
 
         boolean bootstrapPolledRecordAboveExpected = polledOffset > expectedBootstrapRecordOffset;
 
         boolean bootstrapPolledRecordBelowExpected = polledOffset < expectedBootstrapRecordOffset;
 
         if (bootstrapPolledRecordAboveExpected) {
-            // previously committed offset has been removed, or manual reset to higher offset detected
-            log.debug("Truncating state - removing records lower than {}. Offsets have been removed form the partition by the broker. Bootstrap polled {} but " +
-                            "expected {} from loaded commit data- e.g. record retention expiring, with 'auto.offset.reset'",
+            // previously committed offset record has been removed, or manual reset to higher offset detected
+            log.warn("Truncating state - removing records lower than {}. Offsets have been removed form the partition by the broker. Bootstrap polled {} but " +
+                            "expected {} from loaded commit data. Could be caused by record retention or compaction.",
                     polledOffset,
                     polledOffset,
                     expectedBootstrapRecordOffset);
@@ -277,7 +284,7 @@ public class PartitionState<K, V> {
             this.commitQueue = commitQueue.tailMap(polledOffset, true);
         } else if (bootstrapPolledRecordBelowExpected) {
             // manual reset to lower offset detected
-            log.debug("CG offset has been reset to an earlier offset ({}) - truncating state - all records inclusively above will be replayed. Expecting {} but bootstrap poll was {}.",
+            log.warn("CG offset has been reset to an earlier offset ({}) - truncating state - all records inclusively above will be replayed. Expecting {} but bootstrap poll was {}.",
                     polledOffset,
                     expectedBootstrapRecordOffset,
                     polledOffset
@@ -323,7 +330,8 @@ public class PartitionState<K, V> {
      * Defines as the offset one below the highest sequentially succeeded offset.
      */
     // visible for testing
-    protected long getNextExpectedInitialPolledOffset() {
+    // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
+    public long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -338,6 +346,7 @@ public class PartitionState<K, V> {
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
+    // todo change from Set to List (order)
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
@@ -474,9 +483,14 @@ public class PartitionState<K, V> {
         for (long offset : subsetFromBatchRange) {
             boolean offsetMissingFromPolledRecords = !offsetLookup.contains(offset);
             if (offsetMissingFromPolledRecords) {
-                // offset has been removed from partition, so remove from tracking as it will never be sent to be retried
-                boolean removed = incompleteOffsets.remove(offset);
-                assert removed;
+                log.warn("Offset {} has been removed from partition {} (as it's not been returned from a poll within a bounding batch), so it must be removed from tracking state, as it will never be sent again to be retried.",
+                        offset,
+                        getTp()
+                );
+                boolean removed1 = incompleteOffsets.remove(offset);
+                assert removed1;
+                boolean removed2 = commitQueue.remove(offset) != null;
+                assert removed2;
             }
         }
     }

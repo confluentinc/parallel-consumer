@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.state;
 
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.Range;
-import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -20,6 +19,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+
 class PartitionStateCommittedOffsetTest {
 
     AdminClient ac;
@@ -30,15 +31,20 @@ class PartitionStateCommittedOffsetTest {
 
     long unexpectedlyHighOffset = 20L;
 
-    final long previouslyCommittedOffset = 11L;
+    long previouslyCommittedOffset = 11L;
 
-    List<Long> incompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L);
+    final long highestSeenOffset = 101L;
+
+    /**
+     * @see PartitionState#offsetHighestSucceeded
+     */
+    long highestSucceeded = highestSeenOffset;
+
+    List<Long> incompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L, 95L, 96L, 97L, 98L, 100L);
 
     List<Long> expectedTruncatedIncompletes = incompletes.stream()
             .filter(offset -> offset >= unexpectedlyHighOffset)
             .collect(Collectors.toList());
-
-    final long highestSeenOffset = 100L;
 
     HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>(incompletes));
 
@@ -47,15 +53,13 @@ class PartitionStateCommittedOffsetTest {
      */
     // todo parameter test with offsets closer together to check off by one
     @Test
-    void bootstrapTruncation() {
+    void bootstrapPollOffsetHigherDueToRentention() {
         PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
 
-        var w20 = mu.createWorkFor(unexpectedlyHighOffset);
-
         // bootstrap the first record, triggering truncation - it's offset #unexpectedlyHighOffset, but we were expecting #previouslyCommittedOffset
-        state.addNewIncompleteWorkContainer(w20);
+        addPollToState(state, new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset));
 
-
+        //
         Truth.assertThat(state.getNextExpectedInitialPolledOffset()).isEqualTo(unexpectedlyHighOffset);
 
         Truth.assertThat(state.getIncompleteOffsetsBelowHighestSucceeded()).containsExactlyElementsIn(expectedTruncatedIncompletes);
@@ -77,73 +81,79 @@ class PartitionStateCommittedOffsetTest {
     void committedOffsetLower() {
         PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
 
-        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, highestSeenOffset);
+        long unexpectedLowerOffset = previouslyCommittedOffset - 5L;
+
+        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedLowerOffset, highestSeenOffset);
 
         //
 //        var psm = new PartitionStateManager<String, String>(mu.getModule(), mock(ShardManager.class));
 //        psm.onass
 //        psm.maybeRegisterNewRecordAsWork(polledTestBatch.polledRecordBatch);
 
-        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-        state.pruneRemovedTrackedIncompleteOffsets(polledTestBatch.polledRecordBatch.records(tp));
-        for (var wc : polledTestBatch.polledBatchWCs) {
-            state.addNewIncompleteWorkContainer(wc);
-        }
+        addPollToState(state, polledTestBatch);
 
         //
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
-        ManagedTruth.assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
+        assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
         state.getAllIncompleteOffsets().containsAll(Range.range(highestSeenOffset).list());
     }
 
+    private void addPollToState(PartitionState<String, String> state, PolledTestBatch polledTestBatch) {
+        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
+        state.pruneRemovedTrackedIncompleteOffsets(polledTestBatch.polledRecordBatch.records(tp));
+        for (var wc : polledTestBatch.polledBatchWCs) {
+            // todo when PSM and PartitionState are refactored, this conditional should not be needed
+            if (!state.isRecordPreviouslyCompleted(wc.getCr())) {
+                state.addNewIncompleteWorkContainer(wc);
+            }
+        }
+    }
+
     /**
-     * CG offset has been changed to something higher than expected (offset skip) (metdata lost?)
+     * CG offset has been changed to something higher than expected (offset skip) (metadata lost?)
      */
     @Test
-    void bootstrapPollOffsetHigher() {
+    void bootstrapPollOffsetHigherViaManualCGRset() {
         // committed state
         PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
 
         // bootstrap poll
-        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, highestSeenOffset);
+        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset);
 
         // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-        state.pruneRemovedTrackedIncompleteOffsets(polledTestBatch.polledRecordBatch.records(tp));
-        for (var wc : polledTestBatch.polledBatchWCs) {
-            state.addNewIncompleteWorkContainer(wc);
-        }
+        addPollToState(state, polledTestBatch);
 
         //
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
-        ManagedTruth.assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
+        assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
         state.getAllIncompleteOffsets().containsAll(Range.range(highestSeenOffset).list());
     }
 
     /**
      * CG offset has disappeared - committed offset hasn't been changed, but broker gives us a bootstrap poll result
      * with a higher offset than expected. Could be caused by retention period, or compaction.
+     *
+     * @implSpec issue #409: Committing old offset after OFFSET_OUT_OF_RANGE
      */
     @Test
-    void committedOffsetRemoved() {
+    void bootstrapPollOffsetHigherDueToRetentionOrCompaction() {
         // committed state
         PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
 
         // bootstrap poll
-        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, highestSeenOffset);
+        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset);
 
         // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-        state.pruneRemovedTrackedIncompleteOffsets(polledTestBatch.polledRecordBatch.records(tp));
-        for (var wc : polledTestBatch.polledBatchWCs) {
-            state.addNewIncompleteWorkContainer(wc);
-        }
+        addPollToState(state, polledTestBatch);
 
         //
+        assertThat(state).getNextExpectedInitialPolledOffset().isEqualTo(unexpectedlyHighOffset);
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
-        ManagedTruth.assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
-        state.getAllIncompleteOffsets().containsAll(Range.range(highestSeenOffset).list());
+        assertThat(offsetAndMetadata).getOffset().isEqualTo(unexpectedlyHighOffset);
+        assertThat(state).getAllIncompleteOffsets().containsExactlyElementsIn(expectedTruncatedIncompletes);
     }
 
 

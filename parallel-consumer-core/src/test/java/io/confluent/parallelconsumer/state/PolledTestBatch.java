@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
-import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import one.util.streamex.LongStreamEx;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
@@ -32,18 +32,18 @@ public class PolledTestBatch {
 
     EpochAndRecordsMap<String, String> polledRecordBatch;
 
-    public PolledTestBatch(ModelUtils mu, TopicPartition tp, long toOffset) {
+    public PolledTestBatch(ModelUtils mu, TopicPartition tp, long fromOffset, long toOffset) {
         this.mu = mu;
         this.tp = tp;
         this.highestSeenOffset = toOffset;
 
-        create(tp, toOffset);
+        create(tp, fromOffset, toOffset);
     }
 
-    void create(TopicPartition tp, long highestSeenOffset) {
-        this.polledBatchWCs = Range.range(highestSeenOffset).toStream().boxed()
-                .map(offset -> mu.createWorkFor(offset))
-                .collect(Collectors.toList());
+    void create(TopicPartition tp, long fromOffset, long highestSeenOffset) {
+        this.polledBatchWCs = LongStreamEx.range(fromOffset, highestSeenOffset + 1).boxed()
+                .map(mu::createWorkFor)
+                .toList();
         this.polledBatch = polledBatchWCs.stream()
                 .map(WorkContainer::getCr)
                 .collect(Collectors.toList());
