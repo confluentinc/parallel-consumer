@@ -15,7 +15,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
@@ -25,8 +24,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-
-import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -84,6 +81,11 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private PartitionState<K, V> getPartitionState(EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
         return getPartitionState(recordsAndEpoch.getTopicPartition());
+    }
+
+    protected PartitionState<K, V> getPartitionState(WorkContainer<K, V> workContainer) {
+        TopicPartition topicPartition = workContainer.getTopicPartition();
+        return getPartitionState(topicPartition);
     }
 
     /**
@@ -199,18 +201,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-//    /**
-//     * @return the current epoch of the partition this record belongs to
-//     */
-//    public Long getEpochOfPartitionForRecord(final ConsumerRecord<K, V> rec) {
-//        var tp = toTopicPartition(rec);
-//        Long epoch = partitionsAssignmentEpochs.get(tp);
-//        if (epoch == null) {
-//            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
-//        }
-//        return epoch;
-//    }
-
     /**
      * @return the current epoch of the partition
      */
@@ -225,15 +215,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             partitionsAssignmentEpochs.put(partition, epoch);
         }
     }
-
-//    // todo move to partition state
-//    public boolean isRecordPreviouslyCompleted(ConsumerRecord<K, V> rec) {
-//        var tp = toTopicPartition(rec);
-//        var partitionState = getPartitionState(tp);
-//        boolean previouslyCompleted = partitionState.isRecordPreviouslyCompleted(rec);
-//        log.trace("Record {} previously completed? {}", rec.offset(), previouslyCompleted);
-//        return previouslyCompleted;
-//    }
 
     /**
      * Check we have capacity in offset storage to process more messages
@@ -270,31 +251,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 
-    /**
-     * Checks if partition is blocked with back pressure.
-     * <p>
-     * If false, more messages are allowed to process for this partition.
-     * <p>
-     * If true, we have calculated that we can't record any more offsets for this partition, as our best performing
-     * encoder requires nearly as much space is available for this partitions allocation of the maximum offset metadata
-     * size.
-     * <p>
-     * Default (missing elements) is true - more messages can be processed.
-     *
-     * @see OffsetMapCodecManager#DefaultMaxMetadataSize
-     */
-//    public boolean isBlocked(final TopicPartition topicPartition) {
-//        return !isAllowedMoreRecords(topicPartition);
-//    }
-
-    // todo move to partition state
-    public boolean isPartitionRemovedOrNeverAssigned(ConsumerRecord<?, ?> rec) {
-        TopicPartition topicPartition = toTopicPartition(rec);
-        var partitionState = getPartitionState(topicPartition);
-        boolean hasNeverBeenAssigned = partitionState == null;
-        return hasNeverBeenAssigned || partitionState.isRemoved();
-    }
-
     public void onSuccess(WorkContainer<K, V> wc) {
         PartitionState<K, V> partitionState = getPartitionState(wc.getTopicPartition());
         partitionState.onSuccess(wc);
@@ -312,83 +268,16 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         log.debug("Incoming {} new records...", recordsMap.count());
         for (var recordsAndEpoch : recordsMap.getRecordMap().values()) {
-//        for (var partition : recordsMap.partitions()) {
-//            var recordsAndEpoch = recordsMap.records(partition);
-
             PartitionState<K, V> partitionState = getPartitionState(recordsAndEpoch);
             partitionState.maybeRegisterNewPollBatchAsWork(recordsAndEpoch);
         }
     }
 
-
-//    /**
-//     * @see #maybeRegisterNewRecordAsWork(EpochAndRecordsMap)
-//     */
-//    // todo move into PartitionState
-//    // todo too deep
-//    // todo inline - shrunk
-//    private void maybeRegisterNewRecordAsWork(@NonNull RecordsAndEpoch recordsAndEpoch) {
-//        Long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
-//        List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
-
-//        if (recordPollBatch.isEmpty()) {
-//            log.debug("Received empty poll results? {}", recordsAndEpoch);
-//        } else {
-//            // check epoch is ok
-//            // todo teach PartitionState to know it's Epoch, move this into PartitionState
-//            {
-//                final Optional<ConsumerRecord<K, V>> recOpt = getFirst(recordPollBatch);
-//                //noinspection OptionalGetWithoutIsPresent -- already checked not empty
-//                ConsumerRecord<K, V> sampleRecord = recOpt.get(); // NOSONAR
-//                long batchStartOffset = sampleRecord.offset();
-//
-//                // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
-//                var currentPartitionEpoch = getEpochOfPartitionForRecord(sampleRecord);
-//                boolean epochsDontMatch = !Objects.equals(epochOfInboundRecords, currentPartitionEpoch);
-//                if (epochsDontMatch) {
-//                    log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
-//                            epochOfInboundRecords, currentPartitionEpoch);
-//                    return;
-//                }
-//            }
-
-//            PartitionState<K, V> partitionState = getPartitionState(recordsAndEpoch.getTopicPartition());
-//            partitionState.maybeRegisterNewPollBatchAsWork(recordsAndEpoch);
-
-//            // todo move to partition state from here, as epoch apparently has to be tracked in PSM
-//            if (isPartitionRemovedOrNeverAssigned(sampleRecord)) {
-//                log.debug("Record in buffer for a partition no longer assigned. Dropping. TP: {} rec: {}", toTopicPartition(sampleRecord), sampleRecord);
-//            } else {
-//                //noinspection OptionalGetWithoutIsPresent -- already checked not empty
-//                long batchEndOffset = getLast(recordPollBatch).get().offset(); // NOSONAR
-//
-//                TopicPartition partition = new TopicPartition(sampleRecord.topic(), sampleRecord.partition());
-//                partitionState.maybeTruncate(batchStartOffset, batchEndOffset);
-//
-//                maybeRegisterNewRecordAsWork(epochOfInboundRecords, recordPollBatch);
-//            }
-//        }
-//    }
-
-//    // todo move to partition state
-//    private void maybeRegisterNewRecordAsWork(Long epochOfInboundRecords, List<ConsumerRecord<K, V>> recordPollBatch) {
-//        for (var aRecord : recordPollBatch) {
-//            if (isRecordPreviouslyCompleted(aRecord)) {
-//                log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
-//            } else {
-//                //noinspection ObjectAllocationInLoop
-//                var work = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
-//
-//                sm.addWorkContainer(work);
-//                addNewIncompleteWorkContainer(work);
-//            }
-//        }
-//    }
-
     public Map<TopicPartition, OffsetAndMetadata> collectDirtyCommitData() {
         var dirties = new HashMap<TopicPartition, OffsetAndMetadata>();
         for (var state : getAssignedPartitions().values()) {
             var offsetAndMetadata = state.getCommitDataIfDirty();
+            //noinspection ObjectAllocationInLoop
             offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTp(), andMetadata));
         }
         return dirties;
@@ -404,12 +293,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return getPartitionState(workContainer)
                 .couldBeTakenAsWork(workContainer);
     }
-
-    protected PartitionState<K, V> getPartitionState(WorkContainer<K, V> workContainer) {
-        TopicPartition topicPartition = workContainer.getTopicPartition();
-        return getPartitionState(topicPartition);
-    }
-
 
     public boolean isDirty() {
         return this.partitionStates.values().stream()

@@ -137,7 +137,7 @@ public class PartitionState<K, V> {
      * <p>
      * Default (missing elements) is true - more messages can be processed.
      * <p>
-     * AKA high water mark (which is a deprecated description).
+     * AKA high watermark (which is a deprecated description).
      *
      * @see OffsetMapCodecManager#DefaultMaxMetadataSize
      */
@@ -169,8 +169,8 @@ public class PartitionState<K, V> {
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen;
-        this.nextExpectedPolledOffset = getNextExpectedInitialPolledOffset();
         this.sm = null;
+        this.module = pcModule;
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -197,12 +197,12 @@ public class PartitionState<K, V> {
     // todo add support for this to TruthGen
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         long recOffset = rec.offset();
-        if (!incompleteOffsets.contains(recOffset)) {
-            // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
-            return recOffset <= offsetHighestSeen;
-        } else {
+        if (incompleteOffsets.contains(recOffset)) {
             // we haven't recorded this far up, so must not have been processed yet
             return false;
+        } else {
+            // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
+            return recOffset <= offsetHighestSeen;
         }
     }
 
@@ -252,7 +252,6 @@ public class PartitionState<K, V> {
         return !Objects.equals(epochOfInboundRecords, currentPartitionEpoch);
     }
 
-    //    // todo move to partition state
     public void maybeRegisterNewPollBatchAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
         if (epochIsStale(recordsAndEpoch)) {
             log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
@@ -261,7 +260,7 @@ public class PartitionState<K, V> {
         }
 
         //
-        Long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
+        long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
         List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
         for (var aRecord : recordPollBatch) {
             if (isRecordPreviouslyCompleted(aRecord)) {
@@ -277,66 +276,18 @@ public class PartitionState<K, V> {
 
     }
 
-    // todo move to partition state
     public boolean isPartitionRemovedOrNeverAssigned() {
-//        TopicPartition topicPartition = toTopicPartition(rec);
-//        var partitionState = getPartitionState(topicPartition);
-//        boolean hasNeverBeenAssigned = partitionState == null;
-//        return hasNeverBeenAssigned || partitionState.isRemoved();
         return false;
     }
 
-    // todo make private and update tests
     public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
-
-//        if (noWorkAddedYet) {
-//            noWorkAddedYet = false;
-//            long bootstrapOffset = wc.offset();
-//        maybeTruncateBelow(newOffset);
-//        }
 
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
 
         // idempotently add the offset to our incompletes track - if it was already there from loading our metadata on startup, there is no affect
         incompleteOffsets.add(newOffset);
-    }
-
-    /**
-     * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
-     * Offsets between have disappeared and will never be polled again.
-     */
-    private void maybeTruncateBelow(long polledOffset) {
-        long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
-        boolean bootstrapRecordAboveExpected = polledOffset > nextExpectedPolledOffset;
-        if (bootstrapRecordAboveExpected) {
-            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'", polledOffset, nextExpectedPolledOffset);
-            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(polledOffset);
-            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
-            this.incompleteOffsets = wrapped;
-        }
-
-        this.nextExpectedPolledOffset = polledOffset + 1;
-    }
-
-    public void maybeTruncate(long batchStartOffset, long batchEndOffset) {
-        long nextExpectedPolledOffset = this.getNextExpectedPolledOffset();
-        boolean bootstrapRecordAboveExpected = batchStartOffset > nextExpectedPolledOffset;
-        if (bootstrapRecordAboveExpected) {
-            log.debug("Truncating state - offsets have been removed form the partition by the broker. Polled {} but expected {} - e.g. record retention expiring, with 'auto.offset.reset'", batchStartOffset, nextExpectedPolledOffset);
-            NavigableSet<Long> truncatedIncompletes = incompleteOffsets.tailSet(batchStartOffset);
-            ConcurrentSkipListSet<Long> wrapped = new ConcurrentSkipListSet<>(truncatedIncompletes);
-            this.incompleteOffsets = wrapped;
-        }
-
-        this.nextExpectedPolledOffset = batchEndOffset + 1;
-    }
-
-    private long nextExpectedPolledOffset = KAFKA_OFFSET_ABSENCE;
-
-    private long getNextExpectedPolledOffset() {
-        return nextExpectedPolledOffset;
     }
 
     /**
@@ -506,6 +457,9 @@ public class PartitionState<K, V> {
         return workContainer.offset() < getOffsetHighestSucceeded();
     }
 
+    /**
+     * TODO docs
+     */
     public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
         if (checkIfWorkIsStale(workContainer)) {
             log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
@@ -523,7 +477,6 @@ public class PartitionState<K, V> {
             return false;
         }
     }
-
 
     /**
      * Have our partitions been revoked?
@@ -549,6 +502,9 @@ public class PartitionState<K, V> {
         return false;
     }
 
+    /**
+     * todo docs
+     */
     private Long getPartitionsAssignmentEpoch() {
         // todo teach PartitionState to know it's Epoch, move this into PartitionState
         throw new RuntimeException();
