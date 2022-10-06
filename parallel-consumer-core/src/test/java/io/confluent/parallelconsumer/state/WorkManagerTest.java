@@ -633,7 +633,7 @@ public class WorkManagerTest {
 
         //
         assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).as("Partition commit queues are now empty").isZero();
+        assertThat(wm.getNumberOfIncompleteOffsets()).as("Partition commit queues are now empty").isZero();
 
         // drain commit queue
         var completedFutureOffsets = wm.collectCommitDataForDirtyPartitions();

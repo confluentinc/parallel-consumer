@@ -231,18 +231,18 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return isAllowedMoreRecords(wc.getTopicPartition());
     }
 
-    public boolean hasWorkInCommitQueues() {
+    public boolean hasIncompleteOffsets() {
         for (var partition : getAssignedPartitions().values()) {
-            if (partition.hasWorkInCommitQueue())
+            if (partition.hasIncompleteOffsets())
                 return true;
         }
         return false;
     }
 
-    public long getNumberOfEntriesInPartitionQueues() {
+    public long getNumberOfIncompleteOffsets() {
         Collection<PartitionState<K, V>> values = getAssignedPartitions().values();
         return values.stream()
-                .mapToLong(PartitionState::getCommitQueueSize)
+                .mapToLong(PartitionState::getNumberOfIncompleteOffsets)
                 .reduce(Long::sum)
                 .orElse(0);
     }
@@ -253,7 +253,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     public void onSuccess(WorkContainer<K, V> wc) {
         PartitionState<K, V> partitionState = getPartitionState(wc.getTopicPartition());
-        partitionState.onSuccess(wc);
+        partitionState.onSuccess(wc.offset());
     }
 
     public void onFailure(WorkContainer<K, V> wc) {

@@ -20,7 +20,6 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
@@ -95,7 +94,21 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
-    private ConcurrentSkipListSet<Long> incompleteOffsets;
+//    private ConcurrentSkipListSet<Long> incompleteOffsets;
+    private final ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
+//    private final ConcurrentSkipListSet<OffsetContainerPair> incompleteOffsets;
+
+//    @Data
+//    @AllArgsConstructor
+//    protected class OffsetContainerPair implements Comparable<Long> {
+//        Long offset;
+//        Optional<ConsumerRecord<K, V>> workContainer;
+//
+//        @Override
+//        public int compareTo(@NonNull final Long o) {
+//            return offset.compareTo(o);
+//        }
+//    }
 
     /**
      * Marker for the first record to be tracked. Used for some initial analysis.
@@ -145,29 +158,35 @@ public class PartitionState<K, V> {
     @Setter(PRIVATE)
     private boolean allowedMoreRecords = true;
 
-    /**
-     * Map of offsets to {@link WorkContainer}s.
-     * <p>
-     * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
-     * advancing offsets, as this isn't a guarantee of kafka's (see {@link #incompleteOffsets}).
-     * <p>
-     * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
-     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}. This requirement is removed in
-     * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
-     */
-    // todo rename - it's not a queue of things to be committed - it's a collection of incomplete offsets and their WorkContainers
-    // todo delete? seems this can be replaced by #incompletes - the work container info isn't used
-    @ToString.Exclude
-    private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
+//    /**
+//     * Map of offsets to {@link WorkContainer}s.
+//     * <p>
+//     * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
+//     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}. This requirement is removed in
+//     * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
+//     */
+//    // todo rename - it's not a queue of things to be committed - it's a collection of incomplete offsets and their WorkContainers
+//    // todo delete? seems this can be replaced by #incompletes - the work container info isn't used
+//    @ToString.Exclude
+//    private final NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
 
-    private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
-        return Collections.unmodifiableNavigableMap(commitQueue);
-    }
+//    private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
+//        return Collections.unmodifiableNavigableMap(commitQueue);
+//    }
 
-    public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
-        this.tp = tp;
+    public PartitionState(PCModule<K, V> pcModule, TopicPartition topicPartition, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+        this.tp = topicPartition;
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
-        this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
+
+//        this.incompleteOffsets = new ConcurrentSkipListSet<>();
+//        offsetData.getIncompleteOffsets().stream()
+//                .map(offset -> new OffsetContainerPair(offset, Optional.empty()))
+//                .forEach(incompleteOffsets::add);
+
+        this.incompleteOffsets = new ConcurrentSkipListMap<>();
+        offsetData.getIncompleteOffsets()
+                .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
+
         this.offsetHighestSucceeded = this.offsetHighestSeen;
         this.sm = null;
         this.module = pcModule;
@@ -197,7 +216,7 @@ public class PartitionState<K, V> {
     // todo add support for this to TruthGen
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         long recOffset = rec.offset();
-        if (incompleteOffsets.contains(recOffset)) {
+        if (incompleteOffsets.containsKey(recOffset)) {
             // we haven't recorded this far up, so must not have been processed yet
             return false;
         } else {
@@ -206,24 +225,20 @@ public class PartitionState<K, V> {
         }
     }
 
-    public boolean hasWorkInCommitQueue() {
-        return !commitQueue.isEmpty();
+    public boolean hasIncompleteOffsets() {
+        return !incompleteOffsets.isEmpty();
     }
 
-    public int getCommitQueueSize() {
-        return commitQueue.size();
+    public int getNumberOfIncompleteOffsets() {
+        return incompleteOffsets.size();
     }
 
-    public void onSuccess(WorkContainer<K, V> work) {
-        long offset = work.offset();
-
-        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(offset);
-        assert (removedFromQueue != null);
-
-        boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
+    public void onSuccess(long offset) {
+        //noinspection OptionalAssignedToNull - null check to see if key existed
+        boolean removedFromIncompletes = this.incompleteOffsets.remove(offset) != null; // NOSONAR
         assert (removedFromIncompletes);
 
-        updateHighestSucceededOffsetSoFar(work);
+        updateHighestSucceededOffsetSoFar(offset);
 
         setDirty();
     }
@@ -235,9 +250,8 @@ public class PartitionState<K, V> {
     /**
      * Update highest Succeeded seen so far
      */
-    private void updateHighestSucceededOffsetSoFar(WorkContainer<K, V> work) {
+    private void updateHighestSucceededOffsetSoFar(long thisOffset) {
         long highestSucceeded = getOffsetHighestSucceeded();
-        long thisOffset = work.offset();
         if (thisOffset > highestSucceeded) {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
             this.offsetHighestSucceeded = thisOffset;
@@ -266,11 +280,8 @@ public class PartitionState<K, V> {
             if (isRecordPreviouslyCompleted(aRecord)) {
                 log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
             } else {
-                //noinspection ObjectAllocationInLoop
-                var work = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
-
-                sm.addWorkContainer(work);
-                addNewIncompleteWorkContainer(work);
+                sm.addWorkContainer(epochOfInboundRecords, aRecord);
+                addNewIncompleteRecord(aRecord);
             }
         }
 
@@ -280,14 +291,12 @@ public class PartitionState<K, V> {
         return false;
     }
 
-    public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
-        long newOffset = wc.offset();
-
-        maybeRaiseHighestSeenOffset(newOffset);
-        commitQueue.put(newOffset, wc);
+    public void addNewIncompleteRecord(ConsumerRecord<K, V> record) {
+        long offset = record.offset();
+        maybeRaiseHighestSeenOffset(offset);
 
         // idempotently add the offset to our incompletes track - if it was already there from loading our metadata on startup, there is no affect
-        incompleteOffsets.add(newOffset);
+        incompleteOffsets.put(offset, Optional.of(record));
     }
 
     /**
@@ -324,18 +333,20 @@ public class PartitionState<K, V> {
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
      */
+    // todo change to list
     public Set<Long> getAllIncompleteOffsets() {
         //noinspection FuseStreamOperations - only in java 10
-        return Collections.unmodifiableSet(incompleteOffsets.parallelStream().collect(Collectors.toSet()));
+        return Collections.unmodifiableSet(incompleteOffsets.keySet().parallelStream().collect(Collectors.toSet()));
     }
 
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
+    // todo change to list
     public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
-        return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
+        return Collections.unmodifiableSet(incompleteOffsets.keySet().parallelStream()
                 // todo less than or less than and equal?
                 .filter(x -> x < highestSucceeded).collect(Collectors.toSet()));
     }
@@ -357,7 +368,7 @@ public class PartitionState<K, V> {
          * See #200 for the complete correct solution.
          */
         long currentOffsetHighestSeen = offsetHighestSeen;
-        Long firstIncompleteOffset = incompleteOffsets.ceiling(KAFKA_OFFSET_ABSENCE);
+        Long firstIncompleteOffset = incompleteOffsets.keySet().ceiling(KAFKA_OFFSET_ABSENCE);
         boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
 
         if (incompleteOffsetsWasEmpty) {
@@ -428,7 +439,7 @@ public class PartitionState<K, V> {
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
-        sm.removeAnyShardsReferencedBy(getCommitQueue());
+        sm.removeAnyShardEntriesReferencedFrom(incompleteOffsets.values());
     }
 
     /**

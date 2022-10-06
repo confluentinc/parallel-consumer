@@ -105,12 +105,12 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public boolean hasWorkInCommitQueue() {
+    public boolean hasIncompleteOffsets() {
         return false;
     }
 
     @Override
-    public int getCommitQueueSize() {
+    public int getNumberOfIncompleteOffsets() {
         return 0;
     }
 
