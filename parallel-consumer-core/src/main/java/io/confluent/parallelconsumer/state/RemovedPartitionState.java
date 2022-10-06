@@ -11,8 +11,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
+import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 /**
@@ -32,7 +36,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
     private static final NavigableMap READ_ONLY_EMPTY_MAP = Collections.unmodifiableNavigableMap(new ConcurrentSkipListMap<>());
-    private static final Set READ_ONLY_EMPTY_SET = Collections.unmodifiableSet(new HashSet<>());
+    private static final List READ_ONLY_EMPTY_LIST = Collections.unmodifiableList(UniLists.of());
 
     private static final PartitionState singleton = new RemovedPartitionState();
     public static final String NO_OP = "no-op";
@@ -80,10 +84,10 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    public List<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         log.debug(NO_OP);
         //noinspection unchecked - by using unsave generics, we are able to share one static instance
-        return READ_ONLY_EMPTY_SET;
+        return READ_ONLY_EMPTY_LIST;
     }
 
     @Override

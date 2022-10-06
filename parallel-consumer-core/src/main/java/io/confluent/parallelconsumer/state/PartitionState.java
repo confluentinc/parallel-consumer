@@ -18,7 +18,10 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
@@ -304,22 +307,20 @@ public class PartitionState<K, V> {
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
      */
-    // todo change to list
-    public Set<Long> getAllIncompleteOffsets() {
+    public List<Long> getAllIncompleteOffsets() {
         //noinspection FuseStreamOperations - only in java 10
-        return Collections.unmodifiableSet(incompleteOffsets.keySet().parallelStream().collect(Collectors.toSet()));
+        return Collections.unmodifiableList(incompleteOffsets.keySet().parallelStream().collect(Collectors.toList()));
     }
 
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
-    // todo change to list
-    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    public List<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
-        return Collections.unmodifiableSet(incompleteOffsets.keySet().parallelStream()
+        return Collections.unmodifiableList(incompleteOffsets.keySet().parallelStream()
                 // todo less than or less than and equal?
-                .filter(x -> x < highestSucceeded).collect(Collectors.toSet()));
+                .filter(x -> x < highestSucceeded).collect(Collectors.toList()));
     }
 
     /**
