@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
+import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_ABSENCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.not;
@@ -226,17 +227,19 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             var newWm = new WorkManager<>(new PCModule<>(options));
             newWm.onPartitionsAssigned(UniSets.of(tp));
-            newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
+            newWm.registerWork(new EpochAndRecordsMap<>(testRecords, newWm.getPm()));
 
             var pm = newWm.getPm();
             var partitionState = pm.getPartitionState(tp);
 
             if (assumeWorkingCodec(encoding, encodingsThatFail)) {
-                long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
-                assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
+//                long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
+//                assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
+                assertTruth(partitionState).getOffsetHighestSequentialSucceeded().isEqualTo(KAFKA_OFFSET_ABSENCE);
 
-                long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-                assertThat(offsetHighestSucceeded).isEqualTo(highest);
+//                long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
+//                assertThat(offsetHighestSucceeded).isEqualTo(highest);
+                assertTruth(partitionState).getOffsetHighestSucceeded().isEqualTo(highest);
 
                 long offsetHighestSeen = partitionState.getOffsetHighestSeen();
                 assertThat(offsetHighestSeen).isEqualTo(highest);
