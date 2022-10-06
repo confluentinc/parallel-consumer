@@ -1,7 +1,9 @@
 package io.confluent.parallelconsumer.state;
 
+import io.confluent.csid.utils.JavaUtils;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import one.util.streamex.LongStreamEx;
+import one.util.streamex.StreamEx;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
@@ -37,11 +39,27 @@ public class PolledTestBatch {
         this.tp = tp;
         this.highestSeenOffset = toOffset;
 
-        create(tp, fromOffset, toOffset);
+        create(fromOffset, toOffset);
     }
 
-    void create(TopicPartition tp, long fromOffset, long highestSeenOffset) {
-        this.polledBatchWCs = LongStreamEx.range(fromOffset, highestSeenOffset + 1).boxed()
+    public PolledTestBatch(ModelUtils mu, TopicPartition tp, List<Long> polledOffsetsWithCompactedRemoved) {
+        this.mu = mu;
+        this.tp = tp;
+        //noinspection OptionalGetWithoutIsPresent
+        this.highestSeenOffset = JavaUtils.getLast(polledOffsetsWithCompactedRemoved).get();
+
+        create(polledOffsetsWithCompactedRemoved);
+
+    }
+
+    void create(long fromOffset, long highestSeenOffset) {
+        List<Long> offsets = LongStreamEx.range(fromOffset, highestSeenOffset + 1).boxed().toList();
+        create(offsets);
+    }
+
+    void create(List<Long> offsets) {
+        var offsetStream = StreamEx.of(offsets);
+        this.polledBatchWCs = offsetStream
                 .map(mu::createWorkFor)
                 .toList();
         this.polledBatch = polledBatchWCs.stream()

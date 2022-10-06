@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -163,6 +164,11 @@ public class PartitionState<K, V> {
 
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
+
+        initState(offsetData);
+    }
+
+    private void initState(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
@@ -241,7 +247,7 @@ public class PartitionState<K, V> {
     public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
 
-        maybeTruncateBelow(newOffset);
+//        maybeTruncateBelowOrAbove(newOffset);
 
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
@@ -256,12 +262,12 @@ public class PartitionState<K, V> {
      * <p>
      * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
      */
-    private void maybeTruncateBelow(long polledOffset) {
-        if (!bootstrapPhase) {
-            log.trace("Not bootstrap polled records, so not checking for truncation");
-            return;
-        } else {
+    private void maybeTruncateBelowOrAbove(long polledOffset) {
+        if (bootstrapPhase) {
             bootstrapPhase = false;
+        } else {
+            // Not bootstrap phase anymore, so not checking for truncation
+            return;
         }
 
 //        long expectedBootstrapRecordOffset = this.getNextExpectedPolledOffset();
@@ -284,19 +290,22 @@ public class PartitionState<K, V> {
             this.commitQueue = commitQueue.tailMap(polledOffset, true);
         } else if (bootstrapPolledRecordBelowExpected) {
             // manual reset to lower offset detected
-            log.warn("CG offset has been reset to an earlier offset ({}) - truncating state - all records inclusively above will be replayed. Expecting {} but bootstrap poll was {}.",
+            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records above including this will be replayed. Was expecting {} but bootstrap poll was {}.",
                     polledOffset,
                     expectedBootstrapRecordOffset,
                     polledOffset
             );
-
-            this.incompleteOffsets = new ConcurrentSkipListSet<>();
-            this.commitQueue = new ConcurrentSkipListMap<>();
+            // reset state to the polled offset
+            // todo option to save incompletes data and only replay offsets between polled through to expected? (just replay the offsets of which we've moved backwards by)
+            initState(new OffsetMapCodecManager.HighestOffsetAndIncompletes(Optional.of(polledOffset - 1), UniSets.of()));
+//            this.incompleteOffsets = new ConcurrentSkipListSet<>();
+//            this.commitQueue = new ConcurrentSkipListMap<>();
         }
 
         this.nextExpectedPolledOffset = polledOffset + 1;
     }
 
+    // todo delete
     private long nextExpectedPolledOffset = KAFKA_OFFSET_ABSENCE;
 
     private long getNextExpectedPolledOffset() {
@@ -470,27 +479,34 @@ public class PartitionState<K, V> {
             return;
         }
 
-        var offsetLookup = records.stream()
+        var low = getFirst(records).get().offset(); // NOSONAR see #isEmpty
+
+        maybeTruncateBelowOrAbove(low);
+
+        // build the hash set once, so we can do random access checks of our tracked incompletes
+        var polledOffsetLookup = records.stream()
                 .map(ConsumerRecord::offset)
                 .collect(Collectors.toSet());
 
-        var low = getFirst(records).get().offset(); // NOSONAR see #isEmpty
         var high = getLast(records).get().offset(); // NOSONAR see #isEmpty
 
         // for the incomplete offsets within this range of poll batch
         var subsetFromBatchRange = incompleteOffsets.subSet(low, true, high, true);
 
         for (long offset : subsetFromBatchRange) {
-            boolean offsetMissingFromPolledRecords = !offsetLookup.contains(offset);
+            boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(offset);
             if (offsetMissingFromPolledRecords) {
-                log.warn("Offset {} has been removed from partition {} (as it's not been returned from a poll within a bounding batch), so it must be removed from tracking state, as it will never be sent again to be retried.",
+                log.warn("Offset {} has been removed from partition {} (as it has not been returned within a polled batch which should have contained it - batch offset range is {} to {}), so it must be removed from tracking state, as it will never be sent again to be retried. This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed base offset, after initial load and before a rebalance.",
                         offset,
-                        getTp()
+                        getTp(),
+                        low,
+                        high
                 );
                 boolean removed1 = incompleteOffsets.remove(offset);
                 assert removed1;
-                boolean removed2 = commitQueue.remove(offset) != null;
-                assert removed2;
+                // can't remove it from a collection wit would have never been added to
+//                boolean removed2 = commitQueue.remove(offset) != null;
+//                assert removed2;
             }
         }
     }
