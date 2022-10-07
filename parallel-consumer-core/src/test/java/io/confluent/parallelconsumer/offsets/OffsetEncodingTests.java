@@ -82,9 +82,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     })
     @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void largeIncompleteOffsetValues(long nextExpectedOffset) {
-        var incompletes = new HashSet<Long>();
         long lowWaterMark = 123L;
-        incompletes.addAll(UniSets.of(lowWaterMark, 2345L, 8765L));
+        var incompletes = new TreeSet<>(UniSets.of(lowWaterMark, 2345L, 8765L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
         OffsetSimultaneousEncoder.compressionForced = true;
@@ -319,7 +318,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     void ensureEncodingGracefullyWorksWhenOffsetsArentSequentialTwo() {
         long nextExpectedOffset = 101;
         long lowWaterMark = 0;
-        var incompletes = new HashSet<>(UniSets.of(1L, 4L, 5L, 100L));
+        var incompletes = new TreeSet<>(UniSets.of(1L, 4L, 5L, 100L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
         OffsetSimultaneousEncoder.compressionForced = true;

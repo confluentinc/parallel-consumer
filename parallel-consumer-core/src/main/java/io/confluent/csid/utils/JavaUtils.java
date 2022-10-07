@@ -8,11 +8,9 @@ import io.confluent.parallelconsumer.internal.InternalRuntimeError;
 import lombok.experimental.UtilityClass;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import static java.time.Duration.ofMillis;
@@ -60,4 +58,7 @@ public class JavaUtils {
                 ));
     }
 
+    public static <T> Collector<T, ?, TreeSet<T>> toTreeSet() {
+        return Collectors.toCollection(TreeSet::new);
+    }
 }

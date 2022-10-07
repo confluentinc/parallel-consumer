@@ -18,13 +18,11 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.JavaUtils.toTreeSet;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
@@ -315,12 +313,11 @@ public class PartitionState<K, V> {
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
-    public List<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
-        //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
-        return Collections.unmodifiableList(incompleteOffsets.keySet().parallelStream()
-                // todo less than or less than and equal?
-                .filter(x -> x < highestSucceeded).collect(Collectors.toList()));
+        return incompleteOffsets.keySet().parallelStream()
+                .filter(x -> x < highestSucceeded)
+                .collect(toTreeSet());
     }
 
     /**

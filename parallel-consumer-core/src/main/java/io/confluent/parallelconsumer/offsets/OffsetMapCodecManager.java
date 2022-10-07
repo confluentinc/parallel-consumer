@@ -196,7 +196,7 @@ public class OffsetMapCodecManager<K, V> {
             log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
                     partitionState.getTp(),
                     highestSucceeded,
-                    partitionState.getIncompleteOffsetsBelowHighestSucceeded());
+                    incompleteOffsets);
         }
         OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
 

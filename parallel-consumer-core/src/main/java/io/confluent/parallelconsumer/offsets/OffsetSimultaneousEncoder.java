@@ -85,9 +85,9 @@ public class OffsetSimultaneousEncoder {
      */
     private final Set<OffsetEncoder> encoders;
 
-    public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, List<Long> incompleteOffsets) {
+    public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, SortedSet<Long> incompleteOffsets) {
         this.lowWaterMark = baseOffsetToCommit;
-        this.incompleteOffsets = new TreeSet<>(incompleteOffsets);
+        this.incompleteOffsets = incompleteOffsets;
 
         //
         if (highestSucceededOffset == -1) { // nothing succeeded yet

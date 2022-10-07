@@ -336,9 +336,9 @@ class WorkManagerOffsetMapCodecManagerTest {
         for (var inputString : inputsToCompress) {
             int inputLength = inputString.length();
 
-            Set<Long> longs = bitmapStringToIncomplete(finalOffsetForPartition, inputString);
+            var offsets = bitmapStringToIncomplete(finalOffsetForPartition, inputString);
 
-            OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, longs).invoke();
+            OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, offsets).invoke();
             byte[] byteByte = simultaneousEncoder.getEncodingMap().get(ByteArray);
             byte[] bitsBytes = simultaneousEncoder.getEncodingMap().get(BitSet);
 
@@ -360,7 +360,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         long highestSucceeded = input.length() - 1;
 
         int nextExpectedOffset = 0;
-        Set<Long> incompletes = bitmapStringToIncomplete(nextExpectedOffset, input);
+        var incompletes = bitmapStringToIncomplete(nextExpectedOffset, input);
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(nextExpectedOffset, highestSucceeded, incompletes);
         encoder.invoke();
         byte[] pack = encoder.packSmallest();
@@ -405,7 +405,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         //
         log.debug("Testing round - size: {} input: '{}'", input.length(), input);
-        Set<Long> inputIncompletes = bitmapStringToIncomplete(finalOffsetForPartition, input);
+        var inputIncompletes = bitmapStringToIncomplete(finalOffsetForPartition, input);
         String sanityEncoding = incompletesToBitmapString(finalOffsetForPartition, highestSeen + 1, inputIncompletes);
         Truth.assertThat(sanityEncoding).isEqualTo(input);
 

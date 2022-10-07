@@ -11,13 +11,10 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniLists;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.NavigableMap;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * No op version of {@link PartitionState} used for when partition assignments are removed, to avoid managing null
@@ -35,10 +32,10 @@ import java.util.concurrent.ConcurrentSkipListMap;
 @Slf4j
 public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
-    private static final NavigableMap READ_ONLY_EMPTY_MAP = Collections.unmodifiableNavigableMap(new ConcurrentSkipListMap<>());
-    private static final List READ_ONLY_EMPTY_LIST = Collections.unmodifiableList(UniLists.of());
+    private static final SortedSet<Long> READ_ONLY_EMPTY_SET = new TreeSet<>();
 
-    private static final PartitionState singleton = new RemovedPartitionState();
+    private static final PartitionState singleton = new RemovedPartitionState<>();
+
     public static final String NO_OP = "no-op";
 
     public RemovedPartitionState() {
@@ -84,10 +81,10 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public List<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         log.debug(NO_OP);
         //noinspection unchecked - by using unsave generics, we are able to share one static instance
-        return READ_ONLY_EMPTY_LIST;
+        return READ_ONLY_EMPTY_SET;
     }
 
     @Override
