@@ -10,6 +10,7 @@ package io.confluent.parallelconsumer.integrationTests;
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -21,6 +22,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import static org.apache.commons.lang3.RandomUtils.nextInt;
@@ -80,7 +82,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         kcu.close();
     }
 
-    void setupTopic() {
+    protected void setupTopic() {
         String name = LoadTest.class.getSimpleName();
         setupTopic(name);
     }
@@ -106,6 +108,11 @@ public abstract class BrokerIntegrationTest<K, V> {
             throw new RuntimeException(e);
         }
         return topics;
+    }
+
+    @SneakyThrows
+    protected List<String> produceMessages(int quantity) {
+        return getKcu().produceMessages(getTopic(), quantity);
     }
 
 }

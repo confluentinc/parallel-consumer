@@ -30,7 +30,7 @@ import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
 
 /**
- * Our view of our state of the partitions that we've been assigned.
+ * Our view of the state of the partitions that we've been assigned.
  *
  * @see PartitionStateManager
  */
@@ -329,7 +329,7 @@ public class PartitionState<K, V> {
      */
     // visible for testing
     // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
-    public long getNextExpectedInitialPolledOffset() {
+    protected long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -423,13 +423,15 @@ public class PartitionState<K, V> {
             mustStrip = true;
             setAllowedMoreRecords(false);
             log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                    "Warning: messages might be replayed on rebalance. " +
-                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.", metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+                            "Warning: messages might be replayed on rebalance. " +
+                            "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
+                    metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
             log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
-                    "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).", metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
+                            "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
+                    metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
             setAllowedMoreRecords(true);

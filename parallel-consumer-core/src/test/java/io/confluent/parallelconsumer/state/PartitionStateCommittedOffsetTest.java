@@ -30,6 +30,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
  * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
  * @see PartitionState#maybeTruncateBelow
  * @see PartitionState#maybeTruncateOrPruneTrackedOffsets
+ * @see io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT
  */
 class PartitionStateCommittedOffsetTest {
 
@@ -125,27 +126,6 @@ class PartitionStateCommittedOffsetTest {
             }
         }
     }
-//
-//    /**
-//     *
-//     */
-//    @Test
-//    void bootstrapPollOffsetHigherViaManualCGRset() {
-//        // committed state
-//        PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
-//
-//        // bootstrap poll
-//        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset);
-//
-//        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-//        addPollToState(state, polledTestBatch);
-//
-//        //
-//        OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
-//
-//        assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
-//        state.getAllIncompleteOffsets().containsAll(Range.range(highestSeenOffset).list());
-//    }
 
     /**
      * CG offset has disappeared - committed offset hasn't been changed, but broker gives us a bootstrap poll result

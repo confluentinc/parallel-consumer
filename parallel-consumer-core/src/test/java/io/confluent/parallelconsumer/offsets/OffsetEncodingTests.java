@@ -258,12 +258,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             //
             if (assumeWorkingCodec(encoding, encodingsThatFail)) {
-//                long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
-//                assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
                 assertTruth(partitionState).getOffsetHighestSequentialSucceeded().isEqualTo(FIRST_SUCCEEDED_OFFSET);
 
-//                long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-//                assertThat(offsetHighestSucceeded).isEqualTo(highestSucceeded);
                 assertTruth(partitionState).getOffsetHighestSucceeded().isEqualTo(highestSucceeded);
 
                 long offsetHighestSeen = partitionState.getOffsetHighestSeen();

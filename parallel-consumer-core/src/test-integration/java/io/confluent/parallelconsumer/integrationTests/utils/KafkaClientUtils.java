@@ -72,6 +72,7 @@ public class KafkaClientUtils {
 
     @Getter
     private AdminClient admin;
+
     private String groupId = GROUP_ID_PREFIX + nextInt();
 
     /**
@@ -290,9 +291,14 @@ public class KafkaClientUtils {
     }
 
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll) {
+        return buildPc(order, commitMode, maxPoll, GroupOption.REUSE_GROUP);
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll, GroupOption groupOption) {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
-        KafkaConsumer<String, String> newConsumer = createNewConsumer(false, consumerProps);
+        boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);
+        KafkaConsumer<String, String> newConsumer = createNewConsumer(newConsumerGroup, consumerProps);
         lastConsumerConstructed = newConsumer;
 
         var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
@@ -306,6 +312,10 @@ public class KafkaClientUtils {
 
         // sanity
         return pc;
+    }
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key, GroupOption groupOption) {
+        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500, groupOption);
     }
 
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key) {

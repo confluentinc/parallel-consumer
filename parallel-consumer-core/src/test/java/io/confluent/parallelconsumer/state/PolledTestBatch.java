@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.JavaUtils;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import one.util.streamex.LongStreamEx;
 import one.util.streamex.StreamEx;
@@ -20,15 +19,13 @@ import java.util.stream.Collectors;
 import static org.mockito.Mockito.mock;
 
 /**
- * todo docs
+ * Utility data class for creating test data around polled records from broker.
  *
  * @author Antony Stubbs
  */
 public class PolledTestBatch {
 
     final ModelUtils mu;
-
-    private final long highestSeenOffset;
 
     private final TopicPartition tp;
 
@@ -41,7 +38,6 @@ public class PolledTestBatch {
     public PolledTestBatch(ModelUtils mu, TopicPartition tp, long fromOffset, long toOffset) {
         this.mu = mu;
         this.tp = tp;
-        this.highestSeenOffset = toOffset;
 
         create(fromOffset, toOffset);
     }
@@ -49,8 +45,6 @@ public class PolledTestBatch {
     public PolledTestBatch(ModelUtils mu, TopicPartition tp, List<Long> polledOffsetsWithCompactedRemoved) {
         this.mu = mu;
         this.tp = tp;
-        //noinspection OptionalGetWithoutIsPresent
-        this.highestSeenOffset = JavaUtils.getLast(polledOffsetsWithCompactedRemoved).get();
 
         create(polledOffsetsWithCompactedRemoved);
 
