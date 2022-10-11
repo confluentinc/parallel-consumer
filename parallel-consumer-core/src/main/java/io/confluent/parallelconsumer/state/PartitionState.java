@@ -272,7 +272,7 @@ public class PartitionState<K, V> {
 
         if (pollAboveExpected) {
             // previously committed offset record has been removed, or manual reset to higher offset detected
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker. Bootstrap polled {} but " +
+            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker or committed offset has been raised. Bootstrap polled {} but " +
                             "expected {} from loaded commit data. Could be caused by record retention or compaction.",
                     polledOffset,
                     polledOffset,

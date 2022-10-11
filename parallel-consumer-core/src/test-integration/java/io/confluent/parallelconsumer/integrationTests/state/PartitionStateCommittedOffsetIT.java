@@ -6,16 +6,21 @@ package io.confluent.parallelconsumer.integrationTests.state;
 
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.clients.admin.ConfigEntry;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -30,8 +35,11 @@ import org.testcontainers.shaded.org.awaitility.Awaitility;
 import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -41,7 +49,7 @@ import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.testcontainers.shaded.org.hamcrest.Matchers.equalTo;
+import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -77,18 +85,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @Test
     void compactedTopic() {
-        // setup our extra special compacting broker
-        KafkaContainer compactingBroker = null;
-        {
-            compactingBroker = BrokerIntegrationTest.createKafkaContainer("40000");
-            compactingBroker.start();
-            kcu = new KafkaClientUtils(compactingBroker);
-            kcu.open();
-
-            setup();
-        }
-
-        setupCompacted();
+        KafkaContainer compactingBroker = setupCompactingKafkaBroker();
 
         var TO_PRODUCE = this.TO_PRODUCE / 10;
 
@@ -168,6 +165,26 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                 .containsNoneIn(tombstoneTargetOffsetsFromFirstRun);
 
         compactingBroker.close();
+    }
+
+    /**
+     * Setup our extra special compacting broker
+     */
+    @NonNull
+    private KafkaContainer setupCompactingKafkaBroker() {
+        KafkaContainer compactingBroker = null;
+        {
+            compactingBroker = BrokerIntegrationTest.createKafkaContainer("40000");
+            compactingBroker.start();
+            kcu = new KafkaClientUtils(compactingBroker);
+            kcu.open();
+
+            setup();
+        }
+
+        setupCompacted();
+
+        return compactingBroker;
     }
 
     private ArrayList<PollContext<String, String>> runPcUntilOffset(int offset) {
@@ -278,7 +295,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             }
         });
 
-        Awaitility.await().untilAtomic(highest, equalTo(checkUpTo - 1));
+        Awaitility.await().untilAtomic(highest, greaterThanOrEqualTo(checkUpTo - 1));
 
         pc.close();
 
@@ -312,7 +329,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         this.pc = super.getKcu().buildPc(UNORDERED, newGroup);
 
         SortedSet<PollContext<String, String>> seenOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
-        AtomicLong succeededUpTo = new AtomicLong();
+        SortedSet<PollContext<String, String>> succeededOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
         pc.subscribe(of(getTopic()));
         pc.poll(pollContext -> {
             seenOffsets.add(pollContext);
@@ -323,8 +340,8 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                 log.debug("Failing on {}", thisOffset);
                 throw new RuntimeException("Failing on " + thisOffset);
             } else {
-                succeededUpTo.set(thisOffset);
                 log.debug("Succeeded {}: {}", thisOffset, pollContext.getSingleRecord());
+                succeededOffsets.add(pollContext);
             }
         });
 
@@ -332,7 +349,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             assertThat(seenOffsets).isNotEmpty();
             assertThat(seenOffsets.last().offset()).isGreaterThan(expectedProcessToOffset - 2);
         });
-        log.debug("Consumed up to {}", seenOffsets.last().offset());
+        log.debug("Succeeded up to: {} Consumed up to {}", succeededOffsets.last().offset(), seenOffsets.last().offset());
 
         pc.close();
 
@@ -373,23 +390,75 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @Test
     void committedOffsetRemoved() {
-        produceMessages(TO_PRODUCE);
+        try (KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker()) {
+//            KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker();
+            log.debug("Compacting broker started {}", compactingKafkaBroker);
 
-        final int END_OFFSET = 50;
-        runPcUntilOffset(END_OFFSET);
+            var producedCount = produceMessages(TO_PRODUCE).size();
 
-        closePC();
+            final int END_OFFSET = 50;
+            groupId = getKcu().getGroupId();
+            runPcUntilOffset(END_OFFSET);
 
-        causeCommittedOffsetToBeRemoved(END_OFFSET);
+            closePC();
 
-        produceMessages(TO_PRODUCE);
+            final String compactedKey = "key-50";
 
-        final int TOTAL = TO_PRODUCE * 2;
-        runPcCheckStartIs(END_OFFSET + 1, TOTAL);
+            // before compaction
+            checkHowManyRecordsWithKeyPresent(compactedKey, 1, TO_PRODUCE);
+
+            causeCommittedOffsetToBeRemoved(END_OFFSET);
+
+            // after compaction
+            checkHowManyRecordsWithKeyPresent(compactedKey, 1, TO_PRODUCE + 2);
+
+            producedCount = producedCount + produceMessages(TO_PRODUCE).size();
+
+            final int TOTAL = TO_PRODUCE * 2;
+
+            getKcu().setGroupId(groupId);
+            final int EXPECTED_RESET_OFFSET = 0;
+            runPcCheckStartIs(EXPECTED_RESET_OFFSET, producedCount);
+        }
     }
 
+    private void checkHowManyRecordsWithKeyPresent(String keyToSearchFor, int expectedQuantityToFind, long upToOffset) {
+        log.debug("Looking for {} records with key {} up to offset {}", expectedQuantityToFind, keyToSearchFor, upToOffset);
+
+        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(GroupOption.NEW_GROUP);
+        newConsumer.subscribe(of(getTopic()));
+        newConsumer.seekToBeginning(UniSets.of());
+        final List<ConsumerRecord<String, String>> records = new ArrayList<>();
+        long highest = -1;
+        while (highest < upToOffset - 1) {
+            ConsumerRecords<String, String> poll = newConsumer.poll(Duration.ofSeconds(1));
+            records.addAll(poll.records(tp));
+            var lastOpt = getLast(records);
+            if (lastOpt.isPresent()) {
+                highest = lastOpt.get().offset();
+            }
+        }
+
+        var collect = records.stream().filter(value -> value.key().equals(keyToSearchFor)).collect(Collectors.toList());
+        ManagedTruth.assertThat(collect).hasSize(expectedQuantityToFind);
+    }
+
+    @SneakyThrows
     private void causeCommittedOffsetToBeRemoved(long offset) {
-        throw new RuntimeException();
+        sendCompactionKeyForOffset(offset);
+        sendCompactionKeyForOffset(offset + 1);
+
+        checkHowManyRecordsWithKeyPresent("key-" + offset, 2, TO_PRODUCE + 2);
+
+        triggerTombStoneProcessing();
+    }
+
+    private void sendCompactionKeyForOffset(long offset) throws InterruptedException, ExecutionException, TimeoutException {
+        String key = "key-" + offset;
+        ProducerRecord<String, String> compactingRecord = new ProducerRecord<>(getTopic(), 0, key, "compactor");
+        getKcu().getProducer()
+                .send(compactingRecord)
+                .get(1, SECONDS);
     }
 
     @Test

@@ -25,6 +25,7 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,7 +53,7 @@ public abstract class BrokerIntegrationTest<K, V> {
      */
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
-    public static KafkaContainer createKafkaContainer(String logSgmentSize) {
+    public static KafkaContainer createKafkaContainer(String logSegmentSize) {
         KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
@@ -63,8 +64,8 @@ public abstract class BrokerIntegrationTest<K, V> {
                 .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
                 .withReuse(true);
 
-        if (StringUtils.isNotBlank(logSgmentSize)) {
-            base = base.withEnv("KAFKA_LOG_SEGMENT_BYTES", logSgmentSize);
+        if (StringUtils.isNotBlank(logSegmentSize)) {
+            base = base.withEnv("KAFKA_LOG_SEGMENT_BYTES", logSegmentSize);
         }
 
         return base;
@@ -114,7 +115,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
-            Void all = topics.all().get();
+            Void all = topics.all().get(1, TimeUnit.SECONDS);
         } catch (ExecutionException e) {
             // fine
         } catch (Exception e) {
