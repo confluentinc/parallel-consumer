@@ -272,7 +272,7 @@ public class PartitionState<K, V> {
 
         if (pollAboveExpected) {
             // previously committed offset record has been removed, or manual reset to higher offset detected
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed form the partition by the broker. Bootstrap polled {} but " +
+            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker. Bootstrap polled {} but " +
                             "expected {} from loaded commit data. Could be caused by record retention or compaction.",
                     polledOffset,
                     polledOffset,
@@ -472,7 +472,7 @@ public class PartitionState<K, V> {
         var records = polledRecordBatch.getRecords();
 
         if (records.isEmpty()) {
-            log.warn("Polled an emtpy batch of records? {}", polledRecordBatch);
+            log.warn("Polled an empty batch of records? {}", polledRecordBatch);
             return;
         }
 
@@ -489,25 +489,30 @@ public class PartitionState<K, V> {
 
         // for the incomplete offsets within this range of poll batch
         var incompletesWithinPolledBatch = incompleteOffsets.subSet(low, true, high, true);
-
+        var offsetsToRemoveFromTracking = new ArrayList<Long>();
         for (long incompleteOffset : incompletesWithinPolledBatch) {
             boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(incompleteOffset);
+
             if (offsetMissingFromPolledRecords) {
-                log.warn("Offset {} has been removed from partition {} (as it has not been returned within a polled batch " +
-                                "which should have contained it - batch offset range is {} to {}), so it must be removed " +
-                                "from tracking state, as it will never be sent again to be retried. " +
-                                "This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed " +
-                                "base offset, after initial load and before a rebalance.",
-                        incompleteOffset,
-                        getTp(),
-                        low,
-                        high
-                );
-                boolean removedCheck = incompleteOffsets.remove(incompleteOffset);
-                assert removedCheck;
+                offsetsToRemoveFromTracking.add(incompleteOffset);
                 // don't need to remove it from the #commitQueue, as it would never have been added
             }
         }
+        if (!offsetsToRemoveFromTracking.isEmpty()) {
+            log.warn("Offsets {} have been removed from partition {} (as they were not been returned within a polled batch " +
+                            "which should have contained them - batch offset range is {} to {}), so they be removed " +
+                            "from tracking state, as they will never be sent again to be retried. " +
+                            "This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed " +
+                            "base offset, after initial load and before a rebalance.",
+                    offsetsToRemoveFromTracking,
+                    getTp(),
+                    low,
+                    high
+            );
+            boolean removedCheck = incompleteOffsets.removeAll(offsetsToRemoveFromTracking);
+            assert removedCheck;
+        }
+
     }
 
 }

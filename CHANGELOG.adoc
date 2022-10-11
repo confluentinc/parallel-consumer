@@ -18,7 +18,8 @@ endif::[]
 
 === Fixes
 
-* fixes #409: Truncate state when bootstrap polled offset higher or lower than committed and prune missing records (#425)
+* fixes #409: Fixes support for compacted topics and when commit offset is reset
+** Truncate state when bootstrap polled offset higher or lower than committed and prune missing records (#425)
 
 == 0.5.2.3
 

@@ -73,6 +73,7 @@ public class KafkaClientUtils {
     @Getter
     private AdminClient admin;
 
+    @Getter
     private String groupId = GROUP_ID_PREFIX + nextInt();
 
     /**

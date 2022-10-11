@@ -246,7 +246,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         module.setParallelEoSStreamProcessor(this);
 
-        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
+        log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
+                newOptions.getConsumer().groupMetadata().groupId(),
+                newOptions);
 
         options = newOptions;
         options.validate();
