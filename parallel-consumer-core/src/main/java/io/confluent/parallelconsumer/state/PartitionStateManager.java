@@ -341,7 +341,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             var polledRecordBatch = recordsMap.records(partition);
 
             var partitionState = getPartitionState(polledRecordBatch);
-            partitionState.pruneRemovedTrackedIncompleteOffsets(polledRecordBatch);
+            partitionState.maybeTruncateOrPruneTrackedOffsets(polledRecordBatch);
 
             long epochOfInboundRecords = polledRecordBatch.getEpochOfPartitionAtPoll();
             for (var rec : polledRecordBatch.getRecords()) {

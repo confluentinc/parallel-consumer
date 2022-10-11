@@ -25,7 +25,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 /**
  * @author Antony Stubbs
  * @see PartitionState#maybeTruncateBelow
- * @see PartitionState#pruneRemovedTrackedIncompleteOffsets
+ * @see PartitionState#maybeTruncateOrPruneTrackedOffsets
  */
 class PartitionStateCommittedOffsetTest {
 
@@ -111,7 +111,7 @@ class PartitionStateCommittedOffsetTest {
 
     private void addPollToState(PartitionState<String, String> state, PolledTestBatch polledTestBatch) {
         // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-        state.pruneRemovedTrackedIncompleteOffsets(polledTestBatch.polledRecordBatch.records(tp));
+        state.maybeTruncateOrPruneTrackedOffsets(polledTestBatch.polledRecordBatch.records(tp));
         for (var wc : polledTestBatch.polledBatchWCs) {
             // todo when PSM and PartitionState are refactored, this conditional should not be needed
             var offset = wc.offset();

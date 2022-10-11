@@ -32,7 +32,7 @@ import static java.time.Duration.ofMillis;
 @Builder(toBuilder = true)
 @ToString
 @FieldNameConstants
-@InterfaceStability.Stable
+@InterfaceStability.Evolving
 public class ParallelConsumerOptions<K, V> {
 
     /**

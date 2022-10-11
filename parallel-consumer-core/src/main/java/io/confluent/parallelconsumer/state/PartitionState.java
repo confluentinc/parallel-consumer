@@ -88,9 +88,8 @@ public class PartitionState<K, V> {
     private NavigableSet<Long> incompleteOffsets;
 
     /**
-     * Marks whether any {@link WorkContainer}s have been added yet or not. Used for some initial analysis.
+     * Marks whether any {@link WorkContainer}s have been added yet or not. Used for some initial poll analysis.
      */
-    // todo rename
     private boolean bootstrapPhase = true;
 
     /**
@@ -150,10 +149,8 @@ public class PartitionState<K, V> {
      * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
      *
      * @deprecated the map structure isn't used anymore and can be replaced with the offsets tracked in
-     *         {@link #incompleteOffsets}
+     *         {@link #incompleteOffsets} - refactored future PR
      */
-    // todo rename - it's not a queue of things to be committed - it's a collection of incomplete offsets and their WorkContainers
-    // todo delete? seems this can be replaced by #incompletes - the work container info isn't used
     @ToString.Exclude
     @Deprecated
     private NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
@@ -165,14 +162,13 @@ public class PartitionState<K, V> {
     public PartitionState(TopicPartition tp, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.tp = tp;
 
-        initState(offsetData);
+        initStateFromOffsetData(offsetData);
     }
 
-    private void initState(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+    private void initStateFromOffsetData(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
         this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
-        this.nextExpectedPolledOffset = getNextExpectedInitialPolledOffset();
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -247,8 +243,6 @@ public class PartitionState<K, V> {
     public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
         long newOffset = wc.offset();
 
-//        maybeTruncateBelowOrAbove(newOffset);
-
         maybeRaiseHighestSeenOffset(newOffset);
         commitQueue.put(newOffset, wc);
 
@@ -270,15 +264,13 @@ public class PartitionState<K, V> {
             return;
         }
 
-//        long expectedBootstrapRecordOffset = this.getNextExpectedPolledOffset();
         long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
 
+        boolean pollAboveExpected = polledOffset > expectedBootstrapRecordOffset;
 
-        boolean bootstrapPolledRecordAboveExpected = polledOffset > expectedBootstrapRecordOffset;
+        boolean pollBelowExpected = polledOffset < expectedBootstrapRecordOffset;
 
-        boolean bootstrapPolledRecordBelowExpected = polledOffset < expectedBootstrapRecordOffset;
-
-        if (bootstrapPolledRecordAboveExpected) {
+        if (pollAboveExpected) {
             // previously committed offset record has been removed, or manual reset to higher offset detected
             log.warn("Truncating state - removing records lower than {}. Offsets have been removed form the partition by the broker. Bootstrap polled {} but " +
                             "expected {} from loaded commit data. Could be caused by record retention or compaction.",
@@ -286,30 +278,24 @@ public class PartitionState<K, V> {
                     polledOffset,
                     expectedBootstrapRecordOffset);
 
+            // truncate
             this.incompleteOffsets = incompleteOffsets.tailSet(polledOffset, true);
             this.commitQueue = commitQueue.tailMap(polledOffset, true);
-        } else if (bootstrapPolledRecordBelowExpected) {
+        } else if (pollBelowExpected) {
             // manual reset to lower offset detected
-            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records above including this will be replayed. Was expecting {} but bootstrap poll was {}.",
+            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
+                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}.",
                     polledOffset,
                     expectedBootstrapRecordOffset,
                     polledOffset
             );
-            // reset state to the polled offset
-            // todo option to save incompletes data and only replay offsets between polled through to expected? (just replay the offsets of which we've moved backwards by)
-            initState(new OffsetMapCodecManager.HighestOffsetAndIncompletes(Optional.of(polledOffset - 1), UniSets.of()));
-//            this.incompleteOffsets = new ConcurrentSkipListSet<>();
-//            this.commitQueue = new ConcurrentSkipListMap<>();
+
+            // reset
+            var resetHighestSeenOffset = Optional.<Long>empty();
+            var resetIncompletesMap = UniSets.<Long>of();
+            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
+            initStateFromOffsetData(offsetData);
         }
-
-        this.nextExpectedPolledOffset = polledOffset + 1;
-    }
-
-    // todo delete
-    private long nextExpectedPolledOffset = KAFKA_OFFSET_ABSENCE;
-
-    private long getNextExpectedPolledOffset() {
-        return nextExpectedPolledOffset;
     }
 
     /**
@@ -322,15 +308,18 @@ public class PartitionState<K, V> {
     }
 
     public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
-        if (isDirty()) return of(createOffsetAndMetadata());
-        else return empty();
+        return isDirty() ?
+                of(createOffsetAndMetadata()) :
+                empty();
     }
 
     // visible for testing
     protected OffsetAndMetadata createOffsetAndMetadata() {
         Optional<String> payloadOpt = tryToEncodeOffsets();
         long nextOffset = getNextExpectedInitialPolledOffset();
-        return payloadOpt.map(s -> new OffsetAndMetadata(nextOffset, s)).orElseGet(() -> new OffsetAndMetadata(nextOffset));
+        return payloadOpt
+                .map(encodedOffsets -> new OffsetAndMetadata(nextOffset, encodedOffsets))
+                .orElseGet(() -> new OffsetAndMetadata(nextOffset));
     }
 
     /**
@@ -360,8 +349,8 @@ public class PartitionState<K, V> {
         long highestSucceeded = getOffsetHighestSucceeded();
         //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
         return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
-                // todo less than or less than and equal?
-                .filter(x -> x < highestSucceeded).collect(Collectors.toSet()));
+                .filter(x -> x < highestSucceeded)
+                .collect(Collectors.toSet()));
     }
 
     /**
@@ -433,11 +422,14 @@ public class PartitionState<K, V> {
             // exceeded maximum API allowed, strip the payload
             mustStrip = true;
             setAllowedMoreRecords(false);
-            log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " + "Warning: messages might be replayed on rebalance. " + "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.", metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+            log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
+                    "Warning: messages might be replayed on rebalance. " +
+                    "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.", metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
-            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " + "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).", metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
+            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
+                    "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).", metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
             setAllowedMoreRecords(true);
@@ -469,9 +461,12 @@ public class PartitionState<K, V> {
      * Each time we poll a patch of records, check to see that as expected our tracked incomplete offsets exist in the
      * set, otherwise they must have been removed from the underlying partition and should be removed from our tracking
      * as we'll ever be given the record again to retry.
+     * <p>
+     * <p>
+     * Also, does {@link #maybeTruncateBelowOrAbove}.
      */
     @SuppressWarnings("OptionalGetWithoutIsPresent") // checked with isEmpty
-    protected void pruneRemovedTrackedIncompleteOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
+    protected void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
         var records = polledRecordBatch.getRecords();
 
         if (records.isEmpty()) {
@@ -491,22 +486,24 @@ public class PartitionState<K, V> {
         var high = getLast(records).get().offset(); // NOSONAR see #isEmpty
 
         // for the incomplete offsets within this range of poll batch
-        var subsetFromBatchRange = incompleteOffsets.subSet(low, true, high, true);
+        var incompletesWithinPolledBatch = incompleteOffsets.subSet(low, true, high, true);
 
-        for (long offset : subsetFromBatchRange) {
-            boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(offset);
+        for (long incompleteOffset : incompletesWithinPolledBatch) {
+            boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(incompleteOffset);
             if (offsetMissingFromPolledRecords) {
-                log.warn("Offset {} has been removed from partition {} (as it has not been returned within a polled batch which should have contained it - batch offset range is {} to {}), so it must be removed from tracking state, as it will never be sent again to be retried. This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed base offset, after initial load and before a rebalance.",
-                        offset,
+                log.warn("Offset {} has been removed from partition {} (as it has not been returned within a polled batch " +
+                                "which should have contained it - batch offset range is {} to {}), so it must be removed " +
+                                "from tracking state, as it will never be sent again to be retried. " +
+                                "This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed " +
+                                "base offset, after initial load and before a rebalance.",
+                        incompleteOffset,
                         getTp(),
                         low,
                         high
                 );
-                boolean removed1 = incompleteOffsets.remove(offset);
-                assert removed1;
-                // can't remove it from a collection wit would have never been added to
-//                boolean removed2 = commitQueue.remove(offset) != null;
-//                assert removed2;
+                boolean removedCheck = incompleteOffsets.remove(incompleteOffset);
+                assert removedCheck;
+                // don't need to remove it from the #commitQueue, as it would never have been added
             }
         }
     }
