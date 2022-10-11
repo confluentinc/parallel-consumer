@@ -8,6 +8,11 @@ import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.common.TopicPartition;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
 class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, String> {
 
     AdminClient ac;

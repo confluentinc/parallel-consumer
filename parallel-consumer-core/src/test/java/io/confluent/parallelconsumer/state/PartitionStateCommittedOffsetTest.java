@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import io.confluent.parallelconsumer.offsets.OffsetEncodingTests;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import one.util.streamex.LongStreamEx;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -23,7 +24,10 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 
 /**
+ * todo docs
+ *
  * @author Antony Stubbs
+ * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
  * @see PartitionState#maybeTruncateBelow
  * @see PartitionState#maybeTruncateOrPruneTrackedOffsets
  */
@@ -152,6 +156,7 @@ class PartitionStateCommittedOffsetTest {
      *
      * @implSpec issue #409: Committing old offset after OFFSET_OUT_OF_RANGE
      * @see PartitionState#maybeTruncateBelow
+     * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
      */
     @Test
     void bootstrapPollOffsetHigherDueToRetentionOrCompaction() {
