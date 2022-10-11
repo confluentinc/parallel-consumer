@@ -9,6 +9,7 @@ import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
+import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
@@ -60,7 +62,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
     TopicPartition tp;
 
-    final int TO_PRODUCE = 20;
+    int TO_PRODUCE = 200;
 
     @BeforeEach
     void setup() {
@@ -75,7 +77,20 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @Test
     void compactedTopic() {
+        // setup our extra special compacting broker
+        KafkaContainer compactingBroker = null;
+        {
+            KafkaContainer compactingBroker = BrokerIntegrationTest.createKafkaContainer("40000");
+            compactingBroker.start();
+            kcu = new KafkaClientUtils(compactingBroker);
+            kcu.open();
+
+            setup();
+        }
+
         setupCompacted();
+
+        var TO_PRODUCE = this.TO_PRODUCE / 10;
 
         List<String> keys = produceMessages(TO_PRODUCE);
 
@@ -142,6 +157,8 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         assertWithMessage("The offsets of the tombstone targets should not be read in second run")
                 .that(offsetsFromSecond)
                 .containsNoneIn(tombstoneTargetOffsetsFromFirstRun);
+
+        compactingBroker.close();
     }
 
     private ArrayList<PollContext<String, String>> runPcUntilOffset(int offset) {
@@ -175,7 +192,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         // send a lot of messages to fill up segments
         List<String> keys = produceMessages(TO_PRODUCE * 2, "log-compaction-trigger-");
         // or wait?
-        ThreadUtils.sleepSecondsLog(20);
+        ThreadUtils.sleepSecondsLog(10);
     }
 
     @SneakyThrows

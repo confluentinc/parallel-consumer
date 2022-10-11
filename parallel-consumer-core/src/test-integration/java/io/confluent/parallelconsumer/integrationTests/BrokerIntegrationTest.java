@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.junit.jupiter.api.AfterEach;
@@ -49,16 +50,25 @@ public abstract class BrokerIntegrationTest<K, V> {
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
-    public static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
-            .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
-            .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
-            .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
-            //todo need to customise this for this test
-            // default produce batch size is - must be at least higher than it: 16KB
-            .withEnv("KAFKA_LOG_SEGMENT_BYTES", "40000")
-            // try to speed up initial consumer group formation
-            .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
-            .withReuse(true);
+    public static KafkaContainer kafkaContainer = createKafkaContainer(null);
+
+    public static KafkaContainer createKafkaContainer(String logSgmentSize) {
+        KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
+                .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
+                .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
+                .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
+                //todo need to customise this for this test
+                // default produce batch size is - must be at least higher than it: 16KB
+                // try to speed up initial consumer group formation
+                .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
+                .withReuse(true);
+
+        if (StringUtils.isNotBlank(logSgmentSize)) {
+            base = base.withEnv("KAFKA_LOG_SEGMENT_BYTES", logSgmentSize);
+        }
+
+        return base;
+    }
 
     static {
         kafkaContainer.start();
