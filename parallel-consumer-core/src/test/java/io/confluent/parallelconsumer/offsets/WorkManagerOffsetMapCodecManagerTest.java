@@ -322,9 +322,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void largeOffsetMap() {
         injectSucceededWorkAtOffset(200); // force system to have seen a high offset
-        byte[] bytes = offsetCodecManager.encodeOffsetsCompressed(0L, state);
+        byte[] encoded = offsetCodecManager.encodeOffsetsCompressed(0L, state);
         int smallestCompressionObserved = 10;
-        assertThat(bytes).as("very small")
+        assertThat(encoded).as("very small")
                 .hasSizeLessThan(smallestCompressionObserved); // arbitrary size expectation based on past observations - expect around 7
     }
 

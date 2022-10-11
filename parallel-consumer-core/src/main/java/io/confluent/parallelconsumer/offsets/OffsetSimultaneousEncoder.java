@@ -32,7 +32,12 @@ public class OffsetSimultaneousEncoder {
      * Size threshold in bytes after which compressing the encodings will be compared, as it seems to be typically worth
      * the extra compression step when beyond this size in the source array.
      */
-    public static final int LARGE_INPUT_MAP_SIZE_THRESHOLD = 200;
+    public static final int LARGE_ENCODED_SIZE_THRESHOLD_BYTES = 200;
+
+    /**
+     * Size threshold to notice particularly large input maps.
+     */
+    public static final int LARGE_INPUT_MAP_SIZE = 2_000;
 
     /**
      * The offsets which have not yet been fully completed and can't have their offset committed
@@ -47,10 +52,8 @@ public class OffsetSimultaneousEncoder {
 
     /**
      * The difference between the base offset (the offset to be committed) and the highest seen offset.
-     * <p>
-     * {@link BitSet} only supports {@link Integer#MAX_VALUE) bits
      */
-    private final int length;
+    private final long lengthBetweenBaseAndHighOffset;
 
     /**
      * Map of different encoding types for the same offset data, used for retrieving the data for the encoding type
@@ -102,9 +105,9 @@ public class OffsetSimultaneousEncoder {
         }
 
         // BitSet only support Integer.MAX_VALUE bits
-        length = (int) bitsetLengthL;
+        lengthBetweenBaseAndHighOffset = (int) bitsetLengthL;
         // sanity
-        if (bitsetLengthL != length) throw new IllegalArgumentException("Integer overflow");
+        if (bitsetLengthL != lengthBetweenBaseAndHighOffset) throw new IllegalArgumentException("Integer overflow");
 
         this.encoders = initEncoders();
     }
@@ -140,18 +143,18 @@ public class OffsetSimultaneousEncoder {
 
     private Set<OffsetEncoder> initEncoders() {
         var newEncoders = new HashSet<OffsetEncoder>();
-        if (length > LARGE_INPUT_MAP_SIZE_THRESHOLD) {
-            log.debug("~Large input map size: {} (start: {} end: {})", length, lowWaterMark, lowWaterMark + length);
+        if (lengthBetweenBaseAndHighOffset > LARGE_INPUT_MAP_SIZE) {
+            log.trace("Relatively large input map size: {} (start: {} end: {})", lengthBetweenBaseAndHighOffset, lowWaterMark, getEndOffsetExclusive());
         }
 
         try {
-            newEncoders.add(new BitSetEncoder(length, this, v1));
+            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, v1));
         } catch (BitSetEncodingNotSupportedException a) {
             log.debug("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
 
         try {
-            newEncoders.add(new BitSetEncoder(length, this, v2));
+            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, v2));
         } catch (BitSetEncodingNotSupportedException a) {
             log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
         }
@@ -163,12 +166,19 @@ public class OffsetSimultaneousEncoder {
     }
 
     /**
+     * The end offset (exclusive)
+     */
+    private long getEndOffsetExclusive() {
+        return lowWaterMark + lengthBetweenBaseAndHighOffset;
+    }
+
+    /**
      * Not enabled as byte buffer seems to always be beaten by BitSet, which makes sense
      * <p>
      * Visible for testing
      */
     void addByteBufferEncoder() {
-        encoders.add(new ByteBufferEncoder(length, this));
+        encoders.add(new ByteBufferEncoder(lengthBetweenBaseAndHighOffset, this));
     }
 
     /**
@@ -197,18 +207,18 @@ public class OffsetSimultaneousEncoder {
      *  TODO VERY large offests ranges are slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
      */
     public OffsetSimultaneousEncoder invoke() {
-        log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, lowWaterMark + length);
+        log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, getEndOffsetExclusive());
         log.trace("Incompletes are: {}", this.incompleteOffsets);
 
         //
-        log.debug("Encode loop offset start,end: [{},{}] length: {}", this.lowWaterMark, lowWaterMark + length, length);
+        log.debug("Encode loop offset start,end: [{},{}] length: {}", this.lowWaterMark, getEndOffsetExclusive(), lengthBetweenBaseAndHighOffset);
         /*
          * todo refactor this loop into the encoders (or sequential vs non sequential encoders) as RunLength doesn't need
          *  to look at every offset in the range, only the ones that change from 0 to 1. BitSet however needs to iterate
          *  the entire range. So when BitSet can't be used, the encoding would be potentially a lot faster as RunLength
          *  didn't need the whole loop.
          */
-        range(length).forEach(rangeIndex -> {
+        range(lengthBetweenBaseAndHighOffset).forEach(rangeIndex -> {
             final long offset = this.lowWaterMark + rangeIndex;
             List<OffsetEncoder> removeToBeRemoved = new ArrayList<>();
             if (this.incompleteOffsets.contains(offset)) {

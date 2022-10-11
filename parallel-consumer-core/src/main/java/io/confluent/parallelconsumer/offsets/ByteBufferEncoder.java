@@ -13,7 +13,7 @@ public class ByteBufferEncoder extends OffsetEncoder {
 
     private final ByteBuffer bytesBuffer;
 
-    public ByteBufferEncoder(final int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
+    public ByteBufferEncoder(long length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
         super(offsetSimultaneousEncoder);
         this.bytesBuffer = ByteBuffer.allocate(1 + length);
     }
