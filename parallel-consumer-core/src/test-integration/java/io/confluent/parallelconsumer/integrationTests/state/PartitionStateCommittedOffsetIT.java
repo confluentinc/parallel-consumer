@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.integrationTests.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import com.google.common.truth.Truth;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -27,14 +26,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import pl.tlinkowski.unij.api.UniMaps;
+import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
+import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.equalTo;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -57,7 +60,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
     TopicPartition tp;
 
-    final int TO_PRODUCE = 200;
+    final int TO_PRODUCE = 20;
 
     @BeforeEach
     void setup() {
@@ -76,12 +79,18 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
         List<String> keys = produceMessages(TO_PRODUCE);
 
-        final int UNTIL_OFFSET = 50;
-        var processedOnFirstRun = runPcUntilOffset(UNTIL_OFFSET);
+        final int UNTIL_OFFSET = TO_PRODUCE / 2;
+        var processedOnFirstRun = runPcUntilOffset(UNTIL_OFFSET, TO_PRODUCE, UniSets.of(TO_PRODUCE - 3L));
+        assertWithMessage("Last processed should be at least half of the total sent, so that there is incomplete data to track")
+                .that(getLast(processedOnFirstRun).get().offset())
+                .isGreaterThan(TO_PRODUCE / 2);
 
+        // commit offset
         closePC();
 
-        Set<String> tombStonedKeys = new HashSet<>(sendRandomTombstones(keys, UNTIL_OFFSET, TO_PRODUCE));
+        //
+        ArrayList<String> tombStonedKeysRaw = sendRandomTombstones(keys, TO_PRODUCE);
+        Set<String> tombStonedKeys = new HashSet<>(tombStonedKeysRaw);
 
         var processedOnFirstRunWithTombstoneTargetsRemoved = processedOnFirstRun.stream()
                 .filter(context -> !tombStonedKeys.contains(context.key()))
@@ -91,6 +100,11 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         var firstRunPartitioned = processedOnFirstRun.stream().collect(Collectors.partitioningBy(context -> tombStonedKeys.contains(context.key())));
         var saved = firstRunPartitioned.get(Boolean.FALSE);
         var tombstoned = firstRunPartitioned.get(Boolean.TRUE);
+        log.debug("kept offsets: {}", saved.stream().mapToLong(PollContext::offset).boxed().collect(Collectors.toList()));
+        log.debug("kept keys: {}", saved.stream().map(PollContext::key).collect(Collectors.toList()));
+        log.debug("tombstoned offsets: {}", tombstoned.stream().map(PollContext::key).collect(Collectors.toList()));
+        log.debug("tombstoned keys: {}", tombstoned.stream().mapToLong(PollContext::offset).boxed().collect(Collectors.toList()));
+
 
         var tombstoneTargetOffsetsFromFirstRun = tombstoned.stream()
                 .filter(context -> tombStonedKeys.contains(context.key()))
@@ -101,29 +115,37 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                 .map(PartitionStateCommittedOffsetIT::getOffsetFromKey).collect(Collectors.toList());
         log.debug("First run produced, with tombstone targets removed: {}", processedOnFirstRunWithTombstoneTargetsRemoved);
 
+        //
         triggerTombStoneProcessing();
 
         // The offsets of the tombstone targets should not be read in second run
         final int expectedTotalNumberRecordsProduced = TO_PRODUCE + tombStonedOffsetsFromKey.size();
         final int expectedOffsetProcessedToSecondRun = TO_PRODUCE + tombStonedKeys.size();
-        var processedOnSecondRun = runPcUntilOffset(expectedOffsetProcessedToSecondRun);
+        var processedOnSecondRun = runPcUntilOffset(expectedOffsetProcessedToSecondRun).stream()
+                .filter(recordContexts -> !recordContexts.key().contains("compaction-trigger"))
+                .collect(Collectors.toList());
 
-        final List<String> offsetsFromSecondRunFromKey = processedOnSecondRun.stream()
+        //
+        List<String> offsetsFromSecondRunFromKey = processedOnSecondRun.stream()
                 .map(PollContext::key)
                 .collect(Collectors.toList());
 
-        final List<Long> offsetsFromSecond = processedOnSecondRun.stream()
+        assertWithMessage("All keys should still exist")
+                .that(offsetsFromSecondRunFromKey)
+                .containsAtLeastElementsIn(processedOnFirstRun.stream().map(PollContext::key).collect(Collectors.toList()));
+
+        //
+        List<Long> offsetsFromSecond = processedOnSecondRun.stream()
                 .map(PollContext::offset)
                 .collect(Collectors.toList());
 
-        Truth.assertWithMessage("The offsets of the tombstone targets should not be read in second run")
+        assertWithMessage("The offsets of the tombstone targets should not be read in second run")
                 .that(offsetsFromSecond)
                 .containsNoneIn(tombstoneTargetOffsetsFromFirstRun);
+    }
 
-        final int expectedNumberOfRecordsProcessedSecondRun = TO_PRODUCE - tombStonedOffsetsFromKey.size();
-        Truth.assertWithMessage("Processed on second run should be original sent, minus number of tombstones sent")
-                .that(processedOnSecondRun)
-                .hasSize(expectedNumberOfRecordsProcessedSecondRun);
+    private ArrayList<PollContext<String, String>> runPcUntilOffset(int offset) {
+        return runPcUntilOffset(offset, offset, UniSets.of());
     }
 
     private static long getOffsetFromKey(String key) {
@@ -150,13 +172,15 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
     @SneakyThrows
     private void triggerTombStoneProcessing() {
-        ThreadUtils.sleepSecondsLog(30);
+        // send a lot of messages to fill up segments
+        List<String> keys = produceMessages(TO_PRODUCE * 2, "log-compaction-trigger-");
+        // or wait?
+        ThreadUtils.sleepSecondsLog(20);
     }
 
     @SneakyThrows
-    private ArrayList<String> sendRandomTombstones(List<String> keys, int from, int to) {
+    private ArrayList<String> sendRandomTombstones(List<String> keys, int howMany) {
         var tombstoneKeys = new ArrayList<String>();
-        var howMany = (to - from) / 3;
         // fix randomness
         List<Future<RecordMetadata>> futures = JavaUtils.getRandom(keys, howMany).stream()
                 .map((String key) -> {
@@ -172,7 +196,12 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             tombstoneOffsets.add(recordMetadata.offset());
         }
 
-        log.debug("Generated tombstones: {}", tombstoneOffsets);
+        tombstoneKeys.sort(Comparator.comparingLong(PartitionStateCommittedOffsetIT::getOffsetFromKey));
+
+        log.debug("Keys to tombstone: {}\n" +
+                        "Offsets of the generated tombstone: {}",
+                tombstoneKeys,
+                tombstoneOffsets);
         return tombstoneKeys;
     }
 
@@ -221,7 +250,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
         pc.close();
 
-        Truth.assertWithMessage("Offset started as").that(lowest.get()).isEqualTo(targetStartOffset);
+        assertWithMessage("Offset started as").that(lowest.get()).isEqualTo(targetStartOffset);
     }
 
     @SneakyThrows
@@ -237,27 +266,36 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         pc.close();
     }
 
-    private ArrayList<PollContext<String, String>> runPcUntilOffset(long targetOffset) {
-        this.pc = super.getKcu().buildPc(PARTITION, GroupOption.NEW_GROUP);
+    private ArrayList<PollContext<String, String>> runPcUntilOffset(long succeedUpToOffset, long expectedProcessToOffset, Set<Long> exceptionsToSucceed) {
+        log.debug("Running PC until offset {}", succeedUpToOffset);
+        this.pc = super.getKcu().buildPc(UNORDERED, GroupOption.NEW_GROUP);
 
-        Queue<PollContext<String, String>> concurrentList = new ConcurrentLinkedQueue<>();
-        AtomicLong current = new AtomicLong();
+        SortedSet<PollContext<String, String>> seenOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
+        AtomicLong succeededUpTo = new AtomicLong();
         pc.subscribe(of(getTopic()));
         pc.poll(pollContext -> {
+            seenOffsets.add(pollContext);
             long thisOffset = pollContext.offset();
-            if (thisOffset >= targetOffset) {
+            if (exceptionsToSucceed.contains(thisOffset)) {
+                log.debug("Exceptional offset {} succeeded", thisOffset);
+            } else if (thisOffset >= succeedUpToOffset) {
                 log.debug("Failing on {}", thisOffset);
+                throw new RuntimeException("Failing on " + thisOffset);
             } else {
-                log.debug("Processed {}", thisOffset);
-                current.set(thisOffset);
+                succeededUpTo.set(thisOffset);
+                log.debug("Succeeded {}", thisOffset);
             }
-            concurrentList.add(pollContext);
         });
 
-        Awaitility.await().untilAtomic(current, equalTo(targetOffset - 1));
-        log.debug("Consumed up to {}", targetOffset);
+        Awaitility.await().untilAsserted(() -> {
+            assertThat(seenOffsets).isNotEmpty();
+            assertThat(seenOffsets.last().offset()).isGreaterThan(expectedProcessToOffset - 2);
+        });
+        log.debug("Consumed up to {}", succeedUpToOffset);
 
-        var sorted = new ArrayList<>(concurrentList);
+        pc.close();
+
+        var sorted = new ArrayList<>(seenOffsets);
         Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
         return sorted;
     }

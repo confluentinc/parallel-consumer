@@ -260,13 +260,17 @@ public class KafkaClientUtils {
     }
 
     public List<String> produceMessages(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
+        return produceMessages(topicName, numberToSend, "");
+    }
+
+    public List<String> produceMessages(String topicName, long numberToSend, String prefix) throws InterruptedException, ExecutionException {
         log.info("Producing {} messages to {}", numberToSend, topicName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
 
             var mu = new ModelUtils(new PCModuleTestEnv());
-            List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend);
+            List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend, prefix);
 
             for (var record : recs) {
                 Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {

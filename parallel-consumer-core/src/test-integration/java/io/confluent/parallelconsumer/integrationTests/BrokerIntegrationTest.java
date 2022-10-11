@@ -53,6 +53,9 @@ public abstract class BrokerIntegrationTest<K, V> {
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
+            //todo need to customise this for this test
+            // default produce batch size is - must be at least higher than it: 16KB
+            .withEnv("KAFKA_LOG_SEGMENT_BYTES", "40000")
             // try to speed up initial consumer group formation
             .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
             .withReuse(true);
@@ -110,9 +113,13 @@ public abstract class BrokerIntegrationTest<K, V> {
         return topics;
     }
 
-    @SneakyThrows
     protected List<String> produceMessages(int quantity) {
-        return getKcu().produceMessages(getTopic(), quantity);
+        return produceMessages(quantity, "");
+    }
+
+    @SneakyThrows
+    protected List<String> produceMessages(int quantity, String prefix) {
+        return getKcu().produceMessages(getTopic(), quantity, prefix);
     }
 
 }
