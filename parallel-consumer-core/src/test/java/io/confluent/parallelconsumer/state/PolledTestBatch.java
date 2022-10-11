@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.state;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import one.util.streamex.LongStreamEx;
