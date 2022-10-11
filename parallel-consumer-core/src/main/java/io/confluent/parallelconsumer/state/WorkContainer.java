@@ -126,7 +126,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
             return lastFailedAt.get().plus(retryDelay);
         } else {
             // never failed, so no try again delay
-            return Instant.now();
+            return Instant.MIN; // use a constant for stable comparison
         }
     }
 

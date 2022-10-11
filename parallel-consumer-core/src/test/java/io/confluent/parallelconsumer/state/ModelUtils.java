@@ -27,6 +27,10 @@ public class ModelUtils {
     @Getter
     private final PCModuleTestEnv module;
 
+    public ModelUtils() {
+        this(new PCModuleTestEnv());
+    }
+
     public WorkContainer<String, String> createWorkFor(long offset) {
         ConsumerRecord<String, String> mockCr = Mockito.mock(ConsumerRecord.class);
         WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, module);

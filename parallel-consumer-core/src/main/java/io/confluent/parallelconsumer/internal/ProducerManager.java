@@ -125,7 +125,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         Callback callback = (RecordMetadata metadata, Exception exception) -> {
             if (exception != null) {
                 log.error("Error producing result message", exception);
-                throw new InternalRuntimeError("Error producing result message", exception);
+                throw new InternalRuntimeException("Error producing result message", exception);
             }
         };
 
@@ -178,7 +178,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         try {
             lockAcquired = readLock.tryLock(produceLockTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            throw new InternalRuntimeError("Interrupted while waiting to get produce lock (timeout was set to {})", e, produceLockTimeout);
+            throw new InternalRuntimeException("Interrupted while waiting to get produce lock (timeout was set to {})", e, produceLockTimeout);
         }
 
         if (lockAcquired) {
@@ -244,7 +244,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         } catch (ProducerFencedException e) {
             // todo consider wrapping all client calls with a catch and new exception in the ProducerWrapper, so can get stack traces
             //  see APIException#fillInStackTrace
-            throw new InternalRuntimeError(e);
+            throw new InternalRuntimeException(e);
         }
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry
@@ -256,7 +256,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
             if (retryCount > arbitrarilyChosenLimitForArbitraryErrorSituation) {
                 String msg = msg("Retired too many times ({} > limit of {}), giving up. See error above.", retryCount, arbitrarilyChosenLimitForArbitraryErrorSituation);
                 log.error(msg, lastErrorSavedForRethrow);
-                throw new InternalRuntimeError(msg, lastErrorSavedForRethrow);
+                throw new InternalRuntimeException(msg, lastErrorSavedForRethrow);
             }
             try {
                 if (producerWrapper.isMockProducer()) {
@@ -438,7 +438,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     private void ensureProduceStarted() {
         if (options.isUsingTransactionCommitMode() && producerTransactionLock.getReadHoldCount() < 1) {
-            throw new InternalRuntimeError("Need to call #beginProducing first");
+            throw new InternalRuntimeException("Need to call #beginProducing first");
         }
     }
 

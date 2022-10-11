@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -119,7 +119,7 @@ public class OffsetMapCodecManager<K, V> {
             }
             attempts++;
             if (attempts > 10) // shouldn't need more than 1 ever
-                throw new InternalRuntimeError("Failed to get partition assignment - continuously woken up.", lastWakeupException);
+                throw new InternalRuntimeException("Failed to get partition assignment - continuously woken up.", lastWakeupException);
         }
 
         var partitionStates = new HashMap<TopicPartition, PartitionState<K, V>>();
@@ -196,7 +196,15 @@ public class OffsetMapCodecManager<K, V> {
                     highestSucceeded,
                     partitionState.getIncompleteOffsetsBelowHighestSucceeded());
         }
-        OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets).invoke();
+
+
+        OffsetSimultaneousEncoder simultaneousEncoder = null;
+        try {
+            simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
+            simultaneousEncoder.invoke();
+        } catch (Exception e) {
+            throw new InternalRuntimeException("Error encoding offsets", e);
+        }
 
         //
         if (forcedCodec.isPresent()) {
