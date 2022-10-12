@@ -8,10 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -36,8 +33,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final PCModule<K, V> module;
 
-    private final Consumer<K, V> consumer;
-
     private final ShardManager<K, V> sm;
 
     /**
@@ -56,10 +51,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
-    private final PCModule<K, V> module;
-
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
-        this.consumer = module.consumer();
         this.sm = sm;
         this.module = module;
     }
