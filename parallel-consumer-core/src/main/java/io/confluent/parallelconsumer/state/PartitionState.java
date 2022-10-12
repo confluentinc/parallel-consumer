@@ -329,7 +329,7 @@ public class PartitionState<K, V> {
      */
     // visible for testing
     // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
-    protected long getNextExpectedInitialPolledOffset() {
+    public long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
