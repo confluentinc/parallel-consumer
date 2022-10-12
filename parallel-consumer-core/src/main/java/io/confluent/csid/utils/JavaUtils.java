@@ -10,6 +10,7 @@ import lombok.experimental.UtilityClass;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -73,4 +74,9 @@ public class JavaUtils {
         final Random random = new Random();
         return Stream.generate(() -> random.nextInt(range));
     }
+
+    public static <T> Collector<T, ?, TreeSet<T>> toTreeSet() {
+        return Collectors.toCollection(TreeSet::new);
+    }
+
 }

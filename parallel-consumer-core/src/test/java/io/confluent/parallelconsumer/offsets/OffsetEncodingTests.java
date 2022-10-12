@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
@@ -42,6 +43,8 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
+
+    PCModuleTestEnv module = new PCModuleTestEnv();
 
     @Test
     void runLengthDeserialise() {
@@ -80,9 +83,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     })
     @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void largeIncompleteOffsetValues(long nextExpectedOffset) {
-        var incompletes = new HashSet<Long>();
         long lowWaterMark = 123L;
-        incompletes.addAll(UniSets.of(lowWaterMark, 2345L, 8765L));
+        var incompletes = new TreeSet<>(UniSets.of(lowWaterMark, 2345L, 8765L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
         OffsetSimultaneousEncoder.compressionForced = true;
@@ -184,7 +186,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
         final long FIRST_COMMITTED_OFFSET = 1L;
         {
-            WorkManager<String, String> wmm = new WorkManager<>(new PCModule<>(newOptions));
+            final PCModule<String, String> moduleTwo = new PCModule<>(newOptions);
+            WorkManager<String, String> wmm = moduleTwo.workManager();
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
@@ -207,7 +210,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             {
                 // check for graceful fall back to the smallest available encoder
-                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
+                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(module);
                 OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(FIRST_COMMITTED_OFFSET, state);
@@ -229,7 +232,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            var newWm = new WorkManager<>(new PCModule<>(options));
+            final PCModule<String, String> moduleThree = new PCModule<>(options);
+            var newWm = moduleThree.workManager();
             newWm.onPartitionsAssigned(UniSets.of(tp));
 
             //
@@ -271,7 +275,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             // check record is marked as incomplete
             var anIncompleteRecord = records.get(3);
-            Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
+            assertThat(partitionState.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
 
             // check state
             {
@@ -288,7 +292,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                     Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
 
-                    Truth.assertThat(pm.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
+                    assertThat(partitionState.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
                 }
             }
 
@@ -340,7 +344,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     void ensureEncodingGracefullyWorksWhenOffsetsArentSequentialTwo() {
         long nextExpectedOffset = 101;
         long lowWaterMark = 0;
-        var incompletes = new HashSet<>(UniSets.of(1L, 4L, 5L, 100L));
+        var incompletes = new TreeSet<>(UniSets.of(1L, 4L, 5L, 100L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
         OffsetSimultaneousEncoder.compressionForced = true;
