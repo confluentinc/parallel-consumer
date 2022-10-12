@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.state;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
@@ -345,7 +345,7 @@ public class WorkManagerTest {
     void containerDelay() {
         var wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class), module);
         assertThat(wc.isDelayPassed()).isTrue(); // when new, there's no delay
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
+        wc.onUserFunctionFailure(new FakeRuntimeException(""));
         assertThat(wc.isDelayPassed()).isFalse();
         advanceClockBySlightlyLessThanDelay();
         assertThat(wc.isDelayPassed()).isFalse();

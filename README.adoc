@@ -1287,7 +1287,13 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
-== Next Version
+== 0.5.2.4
+
+=== Fixes
+
+* fixes #409: Truncate state when bootstrap polled offset higher or lower than committed and prune missing records (#425)
+
+== 0.5.2.3
 
 === Improvements
 
@@ -1308,11 +1314,13 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
+
 === Fixes
 
-* fixes #419 NoSuchElementException during race condition in PartitionState (#422)
+* fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
-* Fixes #409: Parallel Consumer keeps committing the old offset after OFFSET_OUT_OF_RANGE in auto.offset.reset = latest (#425)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
 
 == v0.5.2.2
 

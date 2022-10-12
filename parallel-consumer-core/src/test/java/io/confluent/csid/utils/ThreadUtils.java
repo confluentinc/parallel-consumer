@@ -29,4 +29,8 @@ public class ThreadUtils {
     public static void sleepQuietly(long ms) {
         sleepQuietly((int) ms);
     }
+
+    public static void sleepSecondsLog(int seconds) {
+        sleepLog(seconds * 1000);
+    }
 }

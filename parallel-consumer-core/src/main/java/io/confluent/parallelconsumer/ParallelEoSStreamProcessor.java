@@ -6,7 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
@@ -133,7 +133,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                 return null; // return from timer function
             });
         } catch (Exception e) {
-            throw new InternalRuntimeError("Error while waiting for produce results", e);
+            throw new InternalRuntimeException("Error while waiting for produce results", e);
         }
         return results;
     }
