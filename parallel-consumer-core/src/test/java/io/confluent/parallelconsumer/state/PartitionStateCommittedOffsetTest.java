@@ -4,11 +4,11 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.offsets.OffsetEncodingTests;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import one.util.streamex.LongStreamEx;
-import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
@@ -34,8 +34,6 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
  * @see io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT
  */
 class PartitionStateCommittedOffsetTest {
-
-    AdminClient ac;
 
     ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
@@ -146,7 +144,7 @@ class PartitionStateCommittedOffsetTest {
         addPollToState(state, polledTestBatch);
 
         //
-        assertThat(state).getNextExpectedInitialPolledOffset().isEqualTo(unexpectedlyHighOffset);
+        Truth.assertThat(state.getNextExpectedInitialPolledOffset()).isEqualTo(unexpectedlyHighOffset);
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
         assertThat(offsetAndMetadata).getOffset().isEqualTo(unexpectedlyHighOffset);

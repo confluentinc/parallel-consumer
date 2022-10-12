@@ -163,7 +163,6 @@ public class PartitionState<K, V> {
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
-
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -282,6 +281,55 @@ public class PartitionState<K, V> {
         incompleteOffsets.put(offset, Optional.of(record));
     }
 
+
+    /**
+     * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
+     * Offsets between have disappeared and will never be polled again.
+     * <p>
+     * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
+     */
+    private void maybeTruncateBelowOrAbove(long polledOffset) {
+        if (bootstrapPhase) {
+            bootstrapPhase = false;
+        } else {
+            // Not bootstrap phase anymore, so not checking for truncation
+            return;
+        }
+
+        long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
+
+        boolean pollAboveExpected = polledOffset > expectedBootstrapRecordOffset;
+
+        boolean pollBelowExpected = polledOffset < expectedBootstrapRecordOffset;
+
+        if (pollAboveExpected) {
+            // previously committed offset record has been removed, or manual reset to higher offset detected
+            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker or committed offset has been raised. Bootstrap polled {} but " +
+                            "expected {} from loaded commit data. Could be caused by record retention or compaction.",
+                    polledOffset,
+                    polledOffset,
+                    expectedBootstrapRecordOffset);
+
+            // truncate
+            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, true);
+            incompletesToPrune.forEach(incompleteOffsets::remove);
+        } else if (pollBelowExpected) {
+            // manual reset to lower offset detected
+            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
+                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}.",
+                    polledOffset,
+                    expectedBootstrapRecordOffset,
+                    polledOffset
+            );
+
+            // reset
+            var resetHighestSeenOffset = Optional.<Long>empty();
+            var resetIncompletesMap = UniSets.<Long>of();
+            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
+            initStateFromOffsetData(offsetData);
+        }
+    }
+
     /**
      * Has this partition been removed? No.
      *
@@ -312,8 +360,7 @@ public class PartitionState<K, V> {
      * Defines as the offset one below the highest sequentially succeeded offset.
      */
     // visible for testing
-    // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
-    public long getNextExpectedInitialPolledOffset() {
+    protected long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -493,54 +540,6 @@ public class PartitionState<K, V> {
                     high
             );
             offsetsToRemoveFromTracking.forEach(incompleteOffsets::remove);
-        }
-    }
-
-    /**
-     * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
-     * Offsets between have disappeared and will never be polled again.
-     * <p>
-     * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
-     */
-    private void maybeTruncateBelowOrAbove(long polledOffset) {
-        if (bootstrapPhase) {
-            bootstrapPhase = false;
-        } else {
-            // Not bootstrap phase anymore, so not checking for truncation
-            return;
-        }
-
-        long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
-
-        boolean pollAboveExpected = polledOffset > expectedBootstrapRecordOffset;
-
-        boolean pollBelowExpected = polledOffset < expectedBootstrapRecordOffset;
-
-        if (pollAboveExpected) {
-            // previously committed offset record has been removed, or manual reset to higher offset detected
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker or committed offset has been raised. Bootstrap polled {} but " +
-                            "expected {} from loaded commit data. Could be caused by record retention or compaction.",
-                    polledOffset,
-                    polledOffset,
-                    expectedBootstrapRecordOffset);
-
-            // truncate
-            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, true);
-            incompletesToPrune.forEach(incompleteOffsets::remove);
-        } else if (pollBelowExpected) {
-            // manual reset to lower offset detected
-            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
-                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}.",
-                    polledOffset,
-                    expectedBootstrapRecordOffset,
-                    polledOffset
-            );
-
-            // reset
-            var resetHighestSeenOffset = Optional.<Long>empty();
-            var resetIncompletesMap = UniSets.<Long>of();
-            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
-            initStateFromOffsetData(offsetData);
         }
     }
 

@@ -59,9 +59,6 @@ public class JavaUtils {
                 ));
     }
 
-    public static <T> Collector<T, ?, TreeSet<T>> toTreeSet() {
-        return Collectors.toCollection(TreeSet::new);
-    }
     public static List<String> getRandom(List<String> list, int quantity) {
         if (list.size() < quantity) {
             throw new IllegalArgumentException("List size is less than quantity");
@@ -77,4 +74,9 @@ public class JavaUtils {
         final Random random = new Random();
         return Stream.generate(() -> random.nextInt(range));
     }
+
+    public static <T> Collector<T, ?, TreeSet<T>> toTreeSet() {
+        return Collectors.toCollection(TreeSet::new);
+    }
+
 }
