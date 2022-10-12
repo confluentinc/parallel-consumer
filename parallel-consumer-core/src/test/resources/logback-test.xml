@@ -28,7 +28,7 @@
 
 
     <!-- current -->
-    <logger name="io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT" level="debug"/>
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT" level="debug"/>-->
 
 
     <!-- primary -->

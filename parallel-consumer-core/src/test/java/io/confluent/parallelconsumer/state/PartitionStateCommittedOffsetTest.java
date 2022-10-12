@@ -24,7 +24,8 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 
 /**
- * todo docs
+ * Unit test for PartitionState behaviour when committed offsets are changed and random records are removed (compaction)
+ * which already are tracked in the offset map.
  *
  * @author Antony Stubbs
  * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
@@ -45,11 +46,6 @@ class PartitionStateCommittedOffsetTest {
     long previouslyCommittedOffset = 11L;
 
     final long highestSeenOffset = 101L;
-
-    /**
-     * @see PartitionState#offsetHighestSucceeded
-     */
-    long highestSucceeded = highestSeenOffset;
 
     List<Long> incompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L, 95L, 96L, 97L, 98L, 100L);
 

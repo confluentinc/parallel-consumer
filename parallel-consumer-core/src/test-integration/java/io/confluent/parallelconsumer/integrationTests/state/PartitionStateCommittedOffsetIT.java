@@ -146,22 +146,13 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                 .map(PollContext::key)
                 .collect(Collectors.toList());
 
-//        assertWithMessage("All keys should still exist")
-//                .that(offsetsFromSecondRunFromKey)
-//                .containsAtLeastElementsIn(processedOnFirstRun.stream().map(PollContext::key).collect(Collectors.toList()));
-
         //
         List<Long> offsetsFromSecond = processedOnSecondRun.stream()
                 .map(PollContext::offset)
                 .collect(Collectors.toList());
 
-//        assertWithMessage("The offsets of the tombstone targets should not be read in second run")
-//                .that(offsetsFromSecond)
-//                .containsNoneIn(tombstoneTargetOffsetsFromFirstRun);
-
         assertWithMessage("Finish reading rest of records from %s to %s",
-                UNTIL_OFFSET,
-                TO_PRODUCE)
+                UNTIL_OFFSET, TO_PRODUCE)
                 .that(processedOnSecondRun.size()).isGreaterThan(TO_PRODUCE - UNTIL_OFFSET);
 
         assertWithMessage("Off the offsets read on the second run, offsets that were compacted (below the initial produce target) should now be removed, as they were replaced with newer ones.")
