@@ -15,9 +15,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Clock;
-import java.util.Set;
-
-import java.time.Clock;
+import java.util.SortedSet;
 
 /**
  * Minimum dependency injection system, modled on how Dagger works.
@@ -115,7 +113,7 @@ public class PCModule<K, V> {
 
     public PartitionStateManager<K, V> partitionStateManager(WorkManager<K, V> workManager) {
         if (partitionStateManager == null) {
-            partitionStateManager = new PartitionStateManager<>(this, consumer(), shardManager(workManager), options(), clock());
+            partitionStateManager = new PartitionStateManager<>(this, shardManager(workManager));
         }
         return partitionStateManager;
     }
@@ -124,12 +122,12 @@ public class PCModule<K, V> {
 
     public ShardManager<K, V> shardManager(WorkManager<K, V> workManager) {
         if (shardManager == null) {
-            shardManager = new ShardManager<>(options(), workManager, clock());
+            shardManager = new ShardManager<>(this, workManager);
         }
         return shardManager;
     }
 
-    private Clock clock() {
+    public Clock clock() {
         return TimeUtils.getClock();
     }
 
@@ -150,7 +148,7 @@ public class PCModule<K, V> {
         return removedPartitionStateSingleton;
     }
 
-    public OffsetSimultaneousEncoder createOffsetSimultaneousEncoder(long baseOffsetForPartition, long highestSucceeded, Set<Long> incompleteOffsets) {
+    public OffsetSimultaneousEncoder createOffsetSimultaneousEncoder(long baseOffsetForPartition, long highestSucceeded, SortedSet<Long> incompleteOffsets) {
         return new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
     }
 

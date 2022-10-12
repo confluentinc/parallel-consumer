@@ -5,16 +5,17 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.KafkaUtils;
+import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Optional;
-import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * No op version of {@link PartitionState} used for when partition assignments are removed, to avoid managing null
@@ -32,12 +33,14 @@ import java.util.Set;
 @Slf4j
 public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
-    private static final Set<Long> READ_ONLY_EMPTY_SET = Collections.unmodifiableSet(new HashSet<>());
+    private static final SortedSet<Long> READ_ONLY_EMPTY_SET = new TreeSet<>();
 
     public static final String NO_OP = "no-op";
 
+    public static final int NO_EPOCH = -1;
+
     public RemovedPartitionState(PCModule<K, V> module) {
-        super(module, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
+        super(NO_EPOCH, module, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     @Override
@@ -52,9 +55,9 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
+    public void maybeRegisterNewPollBatchAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
         // no-op
-        log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
+        log.warn("Dropping polled record batch for partition no longer assigned. WC: {}", recordsAndEpoch);
     }
 
     /**
@@ -70,9 +73,8 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         log.debug(NO_OP);
-        //noinspection unchecked - by using unsave generics, we are able to share one static instance
         return READ_ONLY_EMPTY_SET;
     }
 
@@ -95,19 +97,22 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public boolean hasWorkInCommitQueue() {
+    public boolean hasIncompleteOffsets() {
         return false;
     }
 
     @Override
-    public int getCommitQueueSize() {
+    public int getNumberOfIncompleteOffsets() {
         return 0;
     }
 
     @Override
-    public void onSuccess(final WorkContainer<K, V> work) {
-        log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", work, work.getTopicPartition());
+    public void onSuccess(long offset) {
+        log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", offset, getTopicPartition());
     }
 
-
+    @Override
+    public boolean isPartitionRemovedOrNeverAssigned() {
+        return true;
+    }
 }

@@ -5,8 +5,8 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -21,12 +21,9 @@ import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.JavaUtils.getFirst;
-import static io.confluent.csid.utils.JavaUtils.getLast;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
+import static io.confluent.csid.utils.JavaUtils.*;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
@@ -36,6 +33,7 @@ import static lombok.AccessLevel.*;
  *
  * @see PartitionStateManager
  */
+// todo class becoming large - possible to extract some functionality?
 @ToString
 @Slf4j
 public class PartitionState<K, V> {
@@ -49,12 +47,18 @@ public class PartitionState<K, V> {
      */
     public static final long KAFKA_OFFSET_ABSENCE = -1L;
 
+    @NonNull
     @Getter
     private final TopicPartition topicPartition;
 
     /**
      * Offsets beyond the highest committable offset (see {@link #getOffsetHighestSequentialSucceeded()}) which haven't
      * totally succeeded. Based on decoded metadata and polled records (not offset ranges).
+     * <p>
+     * Mapped to the corresponding {@link ConsumerRecord}, once it's been polled from the broker.
+     * <p>
+     * Initially mapped to an empty optional, until the record is polled from the broker, because we initially get only
+     * the incomplete offsets decoded from the metadata payload first, before receiving the records from poll requests.
      * <p>
      * <p>
      * <h2>How does this handle gaps in the offsets in the source partitions?:</h2>
@@ -90,7 +94,8 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
-    private NavigableSet<Long> incompleteOffsets;
+    @NonNull
+    private ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
 
     /**
      * Marks whether any {@link WorkContainer}s have been added yet or not. Used for some initial poll analysis.
@@ -135,7 +140,7 @@ public class PartitionState<K, V> {
      * <p>
      * Default (missing elements) is true - more messages can be processed.
      * <p>
-     * AKA high water mark (which is a deprecated description).
+     * AKA high watermark (which is a deprecated description).
      *
      * @see OffsetMapCodecManager#KAFKA_MAX_METADATA_SIZE_DEFAULT
      */
@@ -144,36 +149,31 @@ public class PartitionState<K, V> {
     private boolean allowedMoreRecords = true;
 
     /**
-     * Map of offsets to {@link WorkContainer}s.
+     * The Epoch of the generation of partition assignment, for fencing off invalid work.
      * <p>
-     * Need to record globally consumed records, to ensure correct offset order committal. Cannot rely on incrementally
-     * advancing offsets, as this isn't a guarantee of kafka's (see {@link #incompleteOffsets}).
-     * <p>
-     * Concurrent because either the broker poller thread or the control thread may be requesting offset to commit
-     * ({@link #getCommitDataIfDirty()}), or reading upon {@link #onPartitionsRemoved}. This requirement is removed in
-     * the upcoming PR #200 Refactor: Consider a shared nothing * architecture.
-     *
-     * @deprecated the map structure isn't used anymore and can be replaced with the offsets tracked in
-     *         {@link #incompleteOffsets} - refactored future PR
+     * Will unified actor partition assignment messages, epochs may no longer be needed.
      */
-    @ToString.Exclude
-    @Deprecated
-    private NavigableMap<Long, WorkContainer<K, V>> commitQueue = new ConcurrentSkipListMap<>();
+    @Getter
+    private final long partitionsAssignmentEpoch;
 
-    private NavigableMap<Long, WorkContainer<K, V>> getCommitQueue() {
-        return Collections.unmodifiableNavigableMap(commitQueue);
-    }
-
-    public PartitionState(@NonNull PCModule<K, V> module, TopicPartition topicPartition, @NonNull OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
-        this.module = module;
+    public PartitionState(long newEpoch,
+                          PCModule<K, V> pcModule,
+                          TopicPartition topicPartition,
+                          OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+        this.module = pcModule;
         this.topicPartition = topicPartition;
+        this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
     }
 
     private void initStateFromOffsetData(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.offsetHighestSeen = offsetData.getHighestSeenOffset().orElse(KAFKA_OFFSET_ABSENCE);
-        this.incompleteOffsets = new ConcurrentSkipListSet<>(offsetData.getIncompleteOffsets());
+
+        this.incompleteOffsets = new ConcurrentSkipListMap<>();
+        offsetData.getIncompleteOffsets()
+                .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
+
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
     }
 
@@ -197,35 +197,33 @@ public class PartitionState<K, V> {
         setDirty(true);
     }
 
+    // todo rename isRecordComplete()
+    // todo add support for this to TruthGen
     public boolean isRecordPreviouslyCompleted(final ConsumerRecord<K, V> rec) {
         long recOffset = rec.offset();
-        if (!incompleteOffsets.contains(recOffset)) {
-            // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
-            return recOffset <= offsetHighestSeen;
-        } else {
+        if (incompleteOffsets.containsKey(recOffset)) {
             // we haven't recorded this far up, so must not have been processed yet
             return false;
+        } else {
+            // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
+            return recOffset <= offsetHighestSeen;
         }
     }
 
-    public boolean hasWorkInCommitQueue() {
-        return !commitQueue.isEmpty();
+    public boolean hasIncompleteOffsets() {
+        return !incompleteOffsets.isEmpty();
     }
 
-    public int getCommitQueueSize() {
-        return commitQueue.size();
+    public int getNumberOfIncompleteOffsets() {
+        return incompleteOffsets.size();
     }
 
-    public void onSuccess(WorkContainer<K, V> work) {
-        long offset = work.offset();
-
-        WorkContainer<K, V> removedFromQueue = this.commitQueue.remove(offset);
-        assert (removedFromQueue != null);
-
-        boolean removedFromIncompletes = this.incompleteOffsets.remove(offset);
+    public void onSuccess(long offset) {
+        //noinspection OptionalAssignedToNull - null check to see if key existed
+        boolean removedFromIncompletes = this.incompleteOffsets.remove(offset) != null; // NOSONAR
         assert (removedFromIncompletes);
 
-        updateHighestSucceededOffsetSoFar(work);
+        updateHighestSucceededOffsetSoFar(offset);
 
         setDirty();
     }
@@ -237,24 +235,68 @@ public class PartitionState<K, V> {
     /**
      * Update highest Succeeded seen so far
      */
-    private void updateHighestSucceededOffsetSoFar(WorkContainer<K, V> work) {
+    private void updateHighestSucceededOffsetSoFar(long thisOffset) {
         long highestSucceeded = getOffsetHighestSucceeded();
-        long thisOffset = work.offset();
         if (thisOffset > highestSucceeded) {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
             this.offsetHighestSucceeded = thisOffset;
         }
     }
 
-    public void addNewIncompleteWorkContainer(WorkContainer<K, V> wc) {
-        long newOffset = wc.offset();
+    private boolean epochIsStale(EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
+        // do epochs still match? do a proactive check, but the epoch will be checked again at work completion as well
+        var currentPartitionEpoch = getPartitionsAssignmentEpoch();
+        Long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
 
-        maybeRaiseHighestSeenOffset(newOffset);
-        commitQueue.put(newOffset, wc);
+        return !Objects.equals(epochOfInboundRecords, currentPartitionEpoch);
+    }
+
+    public void maybeRegisterNewPollBatchAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
+        if (epochIsStale(recordsAndEpoch)) {
+            log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
+                    recordsAndEpoch.getEpochOfPartitionAtPoll(), getPartitionsAssignmentEpoch());
+            return;
+        }
+
+        //
+        maybeTruncateOrPruneTrackedOffsets(recordsAndEpoch);
+
+        //
+        long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
+        List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
+        for (var aRecord : recordPollBatch) {
+            if (isRecordPreviouslyCompleted(aRecord)) {
+                log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
+            } else {
+                getShardManager().addWorkContainer(epochOfInboundRecords, aRecord);
+                addNewIncompleteRecord(aRecord);
+            }
+        }
+
+    }
+
+    /**
+     * Used for adding work to, if it's been successfully added to our tracked state
+     *
+     * @see #maybeRegisterNewPollBatchAsWork
+     */
+    private ShardManager<K, V> getShardManager() {
+        return module.workManager().getSm();
+    }
+
+    public boolean isPartitionRemovedOrNeverAssigned() {
+        return false;
+    }
+
+    // visible for legacy testing
+    public void addNewIncompleteRecord(ConsumerRecord<K, V> record) {
+        long offset = record.offset();
+        maybeRaiseHighestSeenOffset(offset);
 
         // idempotently add the offset to our incompletes track - if it was already there from loading our metadata on startup, there is no affect
-        incompleteOffsets.add(newOffset);
+        incompleteOffsets.put(offset, Optional.of(record));
     }
+
 
     /**
      * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
@@ -285,8 +327,8 @@ public class PartitionState<K, V> {
                     expectedBootstrapRecordOffset);
 
             // truncate
-            this.incompleteOffsets = incompleteOffsets.tailSet(polledOffset, true);
-            this.commitQueue = commitQueue.tailMap(polledOffset, true);
+            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, false);
+            incompletesToPrune.forEach(incompleteOffsets::remove);
         } else if (pollBelowExpected) {
             // manual reset to lower offset detected
             log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
@@ -341,21 +383,20 @@ public class PartitionState<K, V> {
     /**
      * @return all incomplete offsets of buffered work in this shard, even if higher than the highest succeeded
      */
-    public Set<Long> getAllIncompleteOffsets() {
+    public List<Long> getAllIncompleteOffsets() {
         //noinspection FuseStreamOperations - only in java 10
-        return Collections.unmodifiableSet(incompleteOffsets.parallelStream().collect(Collectors.toSet()));
+        return Collections.unmodifiableList(incompleteOffsets.keySet().parallelStream().collect(Collectors.toList()));
     }
 
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
     // todo change from Set to List (order)
-    public Set<Long> getIncompleteOffsetsBelowHighestSucceeded() {
+    public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
-        //noinspection FuseStreamOperations Collectors.toUnmodifiableSet since v10
-        return Collections.unmodifiableSet(incompleteOffsets.parallelStream()
+        return incompleteOffsets.keySet().parallelStream()
                 .filter(x -> x < highestSucceeded)
-                .collect(Collectors.toSet()));
+                .collect(toTreeSet());
     }
 
     /**
@@ -375,7 +416,7 @@ public class PartitionState<K, V> {
          * See #200 for the complete correct solution.
          */
         long currentOffsetHighestSeen = offsetHighestSeen;
-        Long firstIncompleteOffset = incompleteOffsets.ceiling(KAFKA_OFFSET_ABSENCE);
+        Long firstIncompleteOffset = incompleteOffsets.keySet().ceiling(KAFKA_OFFSET_ABSENCE);
         boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
 
         if (incompleteOffsetsWasEmpty) {
@@ -453,7 +494,7 @@ public class PartitionState<K, V> {
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
-        sm.removeAnyShardsReferencedBy(getCommitQueue());
+        sm.removeAnyShardEntriesReferencedFrom(incompleteOffsets.values());
     }
 
     /**
@@ -475,7 +516,7 @@ public class PartitionState<K, V> {
      * Also, does {@link #maybeTruncateBelowOrAbove}.
      */
     @SuppressWarnings("OptionalGetWithoutIsPresent") // checked with isEmpty
-    protected void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
+    private void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
         var records = polledRecordBatch.getRecords();
 
         if (records.isEmpty()) {
@@ -495,7 +536,7 @@ public class PartitionState<K, V> {
         var high = getLast(records).get().offset(); // NOSONAR see #isEmpty
 
         // for the incomplete offsets within this range of poll batch
-        var incompletesWithinPolledBatch = incompleteOffsets.subSet(low, true, high, true);
+        var incompletesWithinPolledBatch = incompleteOffsets.keySet().subSet(low, true, high, true);
         var offsetsToRemoveFromTracking = new ArrayList<Long>();
         for (long incompleteOffset : incompletesWithinPolledBatch) {
             boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(incompleteOffset);
@@ -512,14 +553,77 @@ public class PartitionState<K, V> {
                             "This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed " +
                             "base offset, after initial load and before a rebalance.",
                     offsetsToRemoveFromTracking,
-                    getTp(),
+                    getTopicPartition(),
                     low,
                     high
             );
-            boolean removedCheck = incompleteOffsets.removeAll(offsetsToRemoveFromTracking);
-            assert removedCheck;
+            offsetsToRemoveFromTracking.forEach(incompleteOffsets::remove);
         }
+    }
 
+    /**
+     * If the record is below the highest succeeded offset, then it is or will be represented in the current offset
+     * encoding.
+     * <p>
+     * This may in fact be THE message holding up the partition - so must be retried.
+     * <p>
+     * In which case - don't want to skip it.
+     * <p>
+     * Generally speaking, completing more offsets below the highest succeeded (and thus the set represented in the
+     * encoded payload), should usually reduce the payload size requirements.
+     */
+    private boolean isBlockingProgress(WorkContainer<?, ?> workContainer) {
+        return workContainer.offset() < getOffsetHighestSucceeded();
+    }
+
+    /**
+     * Checks if this record be taken from its partition as work.
+     * <p>
+     * It checks that the work is not stale, and that the partition ok to allow more records to be processed, or if the
+     * record is actually blocking our progress.
+     *
+     * @return true if this record be taken from its partition as work.
+     */
+    public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
+        if (checkIfWorkIsStale(workContainer)) {
+            log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
+            return false;
+        } else if (isAllowedMoreRecords()) {
+            return true;
+        } else if (isBlockingProgress(workContainer)) {
+            // allow record to be taken, even if partition is blocked, as this record completion may reduce payload size requirement
+            return true;
+        } else {
+            log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
+                            "record ({}) belongs to, due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
+                            "not in flight ({}), continuing on to next container in shardEntry.",
+                    workContainer.getTopicPartition(), workContainer.offset(), workContainer.isNotInFlight());
+            return false;
+        }
+    }
+
+    /**
+     * Have our partitions been revoked?
+     * <p>
+     * This state is rare, as shards or work get removed upon partition revocation, although under busy load it might
+     * occur we don't synchronize over PartitionState here so it's a bit racey, but is handled and eventually settles.
+     *
+     * @return true if epoch doesn't match, false if ok
+     */
+    boolean checkIfWorkIsStale(final WorkContainer<?, ?> workContainer) {
+        Long currentPartitionEpoch = getPartitionsAssignmentEpoch();
+        long workEpoch = workContainer.getEpoch();
+
+        boolean partitionNotAssigned = isPartitionRemovedOrNeverAssigned();
+
+        boolean epochMissMatch = currentPartitionEpoch != workEpoch;
+
+        if (epochMissMatch || partitionNotAssigned) {
+            log.debug("Epoch mismatch {} vs {} for record {}. Skipping message - it's partition has already assigned to a different consumer.",
+                    workEpoch, currentPartitionEpoch, workContainer);
+            return true;
+        }
+        return false;
     }
 
 }
