@@ -23,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.nio.ByteBuffer;
@@ -115,6 +116,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     }
 
     /**
+     * Test for offset encoding when there is a very large range of offsets, and where the offsets aren't sequential.
+     * <p>
      * There's no guarantee that offsets are always sequential. The most obvious case is with a compacted topic - there
      * will always be offsets missing.
      *
@@ -137,7 +140,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         OffsetSimultaneousEncoder.compressionForced = true;
 
         var records = new ArrayList<ConsumerRecord<String, String>>();
-        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 0, "akey", "avalue")); // will complete
+        final int FIRST_SUCCEEDED_OFFSET = 0;
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, FIRST_SUCCEEDED_OFFSET, "akey", "avalue")); // will complete
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 1, "akey", "avalue"));
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 4, "akey", "avalue"));
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 5, "akey", "avalue"));
@@ -152,15 +156,15 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000, "akey", "avalue")); // higher than Short.MAX_VALUE
         int avoidOffByOne = 2;
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, 40_000 + Short.MAX_VALUE + avoidOffByOne, "akey", "avalue")); // runlength higher than Short.MAX_VALUE
-        int highest = 40_000 + Short.MAX_VALUE + avoidOffByOne + 1;
-        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, highest, "akey", "avalue")); // will complete to force whole encoding
+        int highestSucceeded = 40_000 + Short.MAX_VALUE + avoidOffByOne + 1;
+        records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, highestSucceeded, "akey", "avalue")); // will complete to force whole encoding
 
 
         var incompleteRecords = new ArrayList<>(records);
-        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 0).findFirst().get());
+        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == FIRST_SUCCEEDED_OFFSET).findFirst().get());
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 69).findFirst().get());
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 25_000).findFirst().get());
-        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highest).findFirst().get());
+        incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highestSucceeded).findFirst().get());
 
         List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
                 .sorted()
@@ -178,6 +182,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // write offsets
         final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
+        final long FIRST_COMMITTED_OFFSET = 1L;
         {
             WorkManager<String, String> wmm = new WorkManager<>(new PCModule<>(newOptions));
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
@@ -186,18 +191,18 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
 
-            KafkaTestUtils.completeWork(wmm, work, 0);
+            KafkaTestUtils.completeWork(wmm, work, FIRST_SUCCEEDED_OFFSET);
 
             KafkaTestUtils.completeWork(wmm, work, 69);
 
             KafkaTestUtils.completeWork(wmm, work, 25_000);
 
-            KafkaTestUtils.completeWork(wmm, work, highest);
+            KafkaTestUtils.completeWork(wmm, work, highestSucceeded);
 
 
             // make the commit
             var completedEligibleOffsets = wmm.collectCommitDataForDirtyPartitions();
-            assertThat(completedEligibleOffsets.get(tp).offset()).isEqualTo(1L);
+            assertThat(completedEligibleOffsets.get(tp).offset()).isEqualTo(FIRST_COMMITTED_OFFSET);
             consumerSpy.commitSync(completedEligibleOffsets);
 
             {
@@ -205,7 +210,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(consumerSpy);
                 OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
                 var state = wmm.getPm().getPartitionState(tp);
-                String bestPayload = om.makeOffsetMetadataPayload(1, state);
+                String bestPayload = om.makeOffsetMetadataPayload(FIRST_COMMITTED_OFFSET, state);
                 assertThat(bestPayload).isNotEmpty();
             }
         }
@@ -213,7 +218,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         // check
         {
             var committed = consumerSpy.committed(UniSets.of(tp)).get(tp);
-            assertThat(committed.offset()).isEqualTo(1L);
+            assertThat(committed.offset()).isEqualTo(FIRST_COMMITTED_OFFSET);
 
             if (assumeWorkingCodec(encoding, encodingsThatFail)) {
                 assertThat(committed.metadata()).isNotBlank();
@@ -226,20 +231,39 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             var newWm = new WorkManager<>(new PCModule<>(options));
             newWm.onPartitionsAssigned(UniSets.of(tp));
-            newWm.registerWork(new EpochAndRecordsMap(testRecords, newWm.getPm()));
 
+            //
             var pm = newWm.getPm();
             var partitionState = pm.getPartitionState(tp);
 
             if (assumeWorkingCodec(encoding, encodingsThatFail)) {
-                long offsetHighestSequentialSucceeded = partitionState.getOffsetHighestSequentialSucceeded();
-                assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
+                // check state reloaded ok from consumer
+                assertTruth(partitionState).getOffsetHighestSucceeded().isEqualTo(highestSucceeded);
+            }
 
-                long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-                assertThat(offsetHighestSucceeded).isEqualTo(highest);
+            //
+            ConsumerRecords<String, String> testRecordsWithBaseCommittedRecordRemoved = new ConsumerRecords<>(UniMaps.of(tp,
+                    testRecords.records(tp)
+                            .stream()
+                            .filter(x ->
+                                    x.offset() >= FIRST_COMMITTED_OFFSET)
+                            .collect(Collectors.toList())));
+            EpochAndRecordsMap<String, String> epochAndRecordsMap = new EpochAndRecordsMap<>(testRecordsWithBaseCommittedRecordRemoved, newWm.getPm());
+            newWm.registerWork(epochAndRecordsMap);
+
+            if (assumeWorkingCodec(encoding, encodingsThatFail)) {
+                // check state reloaded ok from consumer
+                assertTruth(partitionState).getOffsetHighestSucceeded().isEqualTo(highestSucceeded);
+            }
+
+            //
+            if (assumeWorkingCodec(encoding, encodingsThatFail)) {
+                assertTruth(partitionState).getOffsetHighestSequentialSucceeded().isEqualTo(FIRST_SUCCEEDED_OFFSET);
+
+                assertTruth(partitionState).getOffsetHighestSucceeded().isEqualTo(highestSucceeded);
 
                 long offsetHighestSeen = partitionState.getOffsetHighestSeen();
-                assertThat(offsetHighestSeen).isEqualTo(highest);
+                assertThat(offsetHighestSeen).isEqualTo(highestSucceeded);
 
                 var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                 Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
@@ -256,10 +280,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     assertThat(offsetHighestSequentialSucceeded).isEqualTo(0);
 
                     long offsetHighestSucceeded = partitionState.getOffsetHighestSucceeded();
-                    assertThat(offsetHighestSucceeded).isEqualTo(highest);
+                    assertThat(offsetHighestSucceeded).isEqualTo(highestSucceeded);
 
                     long offsetHighestSeen = partitionState.getOffsetHighestSeen();
-                    assertThat(offsetHighestSeen).isEqualTo(highest);
+                    assertThat(offsetHighestSeen).isEqualTo(highestSucceeded);
 
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
                     Truth.assertThat(incompletes).containsExactlyElementsIn(expected);

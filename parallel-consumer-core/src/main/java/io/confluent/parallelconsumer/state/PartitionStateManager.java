@@ -78,6 +78,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return partitionStates.get(tp);
     }
 
+    private PartitionState<K, V> getPartitionState(EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsList) {
+        return getPartitionState(recordsList.getTopicPartition());
+    }
+
     /**
      * Load offset map for assigned assignedPartitions
      */
@@ -287,9 +291,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
+    // todo move to partition state
+    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
         var tp = wc.getTopicPartition();
-        getPartitionState(tp).addWorkContainer(wc);
+        getPartitionState(tp).addNewIncompleteWorkContainer(wc);
     }
 
     /**
@@ -333,9 +338,13 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         log.debug("Incoming {} new records...", recordsMap.count());
         for (var partition : recordsMap.partitions()) {
-            var recordsList = recordsMap.records(partition);
-            var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
-            for (var rec : recordsList.getRecords()) {
+            var polledRecordBatch = recordsMap.records(partition);
+
+            var partitionState = getPartitionState(polledRecordBatch);
+            partitionState.maybeTruncateOrPruneTrackedOffsets(polledRecordBatch);
+
+            long epochOfInboundRecords = polledRecordBatch.getEpochOfPartitionAtPoll();
+            for (var rec : polledRecordBatch.getRecords()) {
                 maybeRegisterNewRecordAsWork(epochOfInboundRecords, rec);
             }
         }
@@ -359,7 +368,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 var work = new WorkContainer<>(epochOfInboundRecords, rec, module);
 
                 sm.addWorkContainer(work);
-                addWorkContainer(work);
+                addNewIncompleteWorkContainer(work);
             }
         } else {
             log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",
