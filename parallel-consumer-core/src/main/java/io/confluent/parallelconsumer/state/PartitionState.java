@@ -46,9 +46,16 @@ public class PartitionState<K, V> {
      */
     public static final long KAFKA_OFFSET_ABSENCE = -1L;
 
-    private final PCModule<K, V> module;
+    private PCModule<K, V> module;
 
+    /**
+     * Used for adding work to, if it's been successfully added to our tracked state
+     *
+     * @see #maybeRegisterNewPollBatchAsWork
+     */
     @NonNull
+    private final ShardManager<K, V> sm;
+
     @Getter
     private final TopicPartition tp;
 
@@ -95,7 +102,6 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
-    @NonNull
     private ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
 
     /**
@@ -152,6 +158,7 @@ public class PartitionState<K, V> {
     public PartitionState(PCModule<K, V> pcModule, TopicPartition topicPartition, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.module = pcModule;
         this.tp = topicPartition;
+        this.sm = pcModule.workManager().getSm();
 
         initStateFromOffsetData(offsetData);
     }
@@ -255,20 +262,11 @@ public class PartitionState<K, V> {
             if (isRecordPreviouslyCompleted(aRecord)) {
                 log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
             } else {
-                getShardManager().addWorkContainer(epochOfInboundRecords, aRecord);
+                sm.addWorkContainer(epochOfInboundRecords, aRecord);
                 addNewIncompleteRecord(aRecord);
             }
         }
 
-    }
-
-    /**
-     * Used for adding work to, if it's been successfully added to our tracked state
-     *
-     * @see #maybeRegisterNewPollBatchAsWork
-     */
-    private ShardManager<K, V> getShardManager() {
-        return module.workManager().getSm();
     }
 
     public boolean isPartitionRemovedOrNeverAssigned() {
