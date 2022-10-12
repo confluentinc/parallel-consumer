@@ -59,7 +59,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 public class WorkManagerTest {
 
     public static final String INPUT_TOPIC = "input";
-    public static final String OUTPUT_TOPIC = "output";
+    // todo delete? public static final String OUTPUT_TOPIC = "output";
 
     WorkManager<String, String> wm;
 

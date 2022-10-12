@@ -18,7 +18,7 @@ public class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStrea
     }
 
     protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
+        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions, module);
         super.parentParallelConsumer = parallelConsumer;
         return parallelConsumer;
     }
