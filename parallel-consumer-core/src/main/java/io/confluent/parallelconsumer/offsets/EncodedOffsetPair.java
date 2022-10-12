@@ -23,7 +23,8 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
 import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
 
 /**
- * todo docs
+ * Encapsulates the encoding type, and the actual encoded data, when creating an offset map encoding. Central place for
+ * decoding  the data.
  *
  * @author Antony Stubbs
  * @see #unwrap
@@ -113,7 +114,8 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrapToIncompletes(BitSetV2, baseOffset, decompressZstd(data));
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
-            default -> throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
+            default ->
+                    throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };
         return binaryArrayString;
     }

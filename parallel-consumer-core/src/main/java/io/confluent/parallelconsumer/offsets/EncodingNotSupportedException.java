@@ -8,7 +8,7 @@ import io.confluent.parallelconsumer.internal.InternalException;
 import lombok.experimental.StandardException;
 
 /**
- * todo docs
+ * Parent of the exceptions for when the {@link OffsetEncoder} cannot encode the given data.
  *
  * @author Antony Stubbs
  */

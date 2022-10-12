@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
- * todo docs
+ * Methods for encoding and decoding the run-lengths.
  *
  * @author Antony Stubbs
  */

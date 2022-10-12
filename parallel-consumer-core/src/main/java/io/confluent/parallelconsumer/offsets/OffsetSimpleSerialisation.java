@@ -23,7 +23,7 @@ import java.util.zip.GZIPOutputStream;
 import static io.confluent.csid.utils.BackportUtils.readFully;
 
 /**
- * todo docs
+ * Methods for compressing, decompressing and encoding / encoding data.
  *
  * @author Antony Stubbs
  */
