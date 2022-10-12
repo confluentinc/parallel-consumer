@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.state;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
@@ -24,9 +23,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.JavaUtils.getFirst;
-import static io.confluent.csid.utils.JavaUtils.getLast;
-import static io.confluent.csid.utils.JavaUtils.toTreeSet;
+import static io.confluent.csid.utils.JavaUtils.*;
 import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
@@ -104,7 +101,7 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
-    private final ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
+    private ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
 
     /**
      * Marks whether any {@link WorkContainer}s have been added yet or not. Used for some initial poll analysis.
@@ -314,7 +311,7 @@ public class PartitionState<K, V> {
      */
     // visible for testing
     // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
-    protected long getNextExpectedInitialPolledOffset() {
+    public long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -472,7 +469,7 @@ public class PartitionState<K, V> {
         var high = getLast(records).get().offset(); // NOSONAR see #isEmpty
 
         // for the incomplete offsets within this range of poll batch
-        var incompletesWithinPolledBatch = incompleteOffsets.subSet(low, true, high, true);
+        var incompletesWithinPolledBatch = incompleteOffsets.keySet().subSet(low, true, high, true);
         var offsetsToRemoveFromTracking = new ArrayList<Long>();
         for (long incompleteOffset : incompletesWithinPolledBatch) {
             boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(incompleteOffset);
@@ -493,8 +490,7 @@ public class PartitionState<K, V> {
                     low,
                     high
             );
-            boolean removedCheck = incompleteOffsets.removeAll(offsetsToRemoveFromTracking);
-            assert removedCheck;
+            offsetsToRemoveFromTracking.forEach(incompleteOffsets::remove);
         }
     }
 
@@ -527,8 +523,8 @@ public class PartitionState<K, V> {
                     expectedBootstrapRecordOffset);
 
             // truncate
-            this.incompleteOffsets = incompleteOffsets.tailSet(polledOffset, true);
-            this.commitQueue = commitQueue.tailMap(polledOffset, true);
+            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, true);
+            incompletesToPrune.forEach(incompleteOffsets::remove);
         } else if (pollBelowExpected) {
             // manual reset to lower offset detected
             log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
