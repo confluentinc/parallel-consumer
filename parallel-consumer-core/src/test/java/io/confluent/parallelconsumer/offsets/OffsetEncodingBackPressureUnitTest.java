@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -29,6 +28,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static java.time.Duration.ofMillis;
+import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
 /**
  * UnitTest version of {@link OffsetEncodingBackPressureTest}.
@@ -139,10 +139,6 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                 List<Long> workIfAvailable1 = StreamEx.of(wm.getWorkIfAvailable()).map(WorkContainer::offset).toList();
                 assertTruth(workIfAvailable1).doesNotContain(0L);
             }
-
-            // more aggressive retry
-            Duration aggressiveDelay = ofMillis(100);
-            WorkContainer.setDefaultRetryDelay(aggressiveDelay);
 
             // release message that was blocking partition progression
 

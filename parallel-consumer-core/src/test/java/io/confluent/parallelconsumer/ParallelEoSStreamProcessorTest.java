@@ -367,7 +367,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // cause a control loop error
         parallelConsumer.addLoopEndCallBack(() -> {
-            throw new FakeRuntimeError("My fake control loop error");
+            throw new FakeRuntimeException("My fake control loop error");
         });
 
         //

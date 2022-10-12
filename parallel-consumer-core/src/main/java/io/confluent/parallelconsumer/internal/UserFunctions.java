@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ErrorInUserFunctionException;
+import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
 import lombok.experimental.UtilityClass;
 
 import java.util.function.BiFunction;
@@ -33,7 +33,7 @@ public class UserFunctions {
         try {
             return wrappedFunction.apply(userFuncParamOne, userFuncParamTwo);
         } catch (Throwable e) {
-            throw new ErrorInUserFunctionException(MSG, e);
+            throw new ExceptionInUserFunctionException(MSG, e);
         }
     }
 
@@ -47,7 +47,7 @@ public class UserFunctions {
         try {
             return wrappedFunction.apply(userFuncParam);
         } catch (Throwable e) {
-            throw new ErrorInUserFunctionException(MSG, e);
+            throw new ExceptionInUserFunctionException(MSG, e);
         }
     }
 
@@ -60,7 +60,7 @@ public class UserFunctions {
         try {
             wrappedFunction.accept(userFuncParam);
         } catch (Throwable e) {
-            throw new ErrorInUserFunctionException(MSG, e);
+            throw new ExceptionInUserFunctionException(MSG, e);
         }
     }
 

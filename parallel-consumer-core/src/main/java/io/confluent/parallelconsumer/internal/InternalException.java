@@ -8,7 +8,10 @@ import lombok.experimental.StandardException;
 
 /**
  * Generic Parallel Consumer parent exception.
+ *
+ * @author Antony Stubbs
+ * @see InternalRuntimeException RuntimeException version
  */
 @StandardException
-public class ParallelConsumerInternalException extends Exception {
+public class InternalException extends Exception {
 }

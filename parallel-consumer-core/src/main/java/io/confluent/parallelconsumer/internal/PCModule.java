@@ -17,6 +17,8 @@ import org.apache.kafka.clients.producer.Producer;
 import java.time.Clock;
 import java.util.Set;
 
+import java.time.Clock;
+
 /**
  * Minimum dependency injection system, modled on how Dagger works.
  * <p>
@@ -77,6 +79,7 @@ public class PCModule<K, V> {
         return consumerManager;
     }
 
+    @Setter
     private WorkManager<K, V> workManager;
 
     public WorkManager<K, V> workManager() {

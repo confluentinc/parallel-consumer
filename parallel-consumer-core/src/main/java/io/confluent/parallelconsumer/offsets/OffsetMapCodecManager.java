@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.NonNull;
@@ -68,6 +68,7 @@ public class OffsetMapCodecManager<K, V> {
         /**
          * Of the offsets encoded, the incomplete ones.
          */
+        // todo change to List as Sets have no order
         Set<Long> incompleteOffsets;
 
         public static HighestOffsetAndIncompletes of(long highestSeenOffset) {
@@ -110,7 +111,7 @@ public class OffsetMapCodecManager<K, V> {
             }
             attempts++;
             if (attempts > 10) // shouldn't need more than 1 ever
-                throw new InternalRuntimeError("Failed to get partition assignment - continuously woken up.", lastWakeupException);
+                throw new InternalRuntimeException("Failed to get partition assignment - continuously woken up.", lastWakeupException);
         }
 
         var partitionStates = new HashMap<TopicPartition, PartitionState<K, V>>();
@@ -156,7 +157,7 @@ public class OffsetMapCodecManager<K, V> {
     PartitionState<K, V> decodePartitionState(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
-        return new PartitionState<>(module, tp, incompletes);
+        return new PartitionState<K, V>(tp, incompletes);
     }
 
     public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
@@ -192,6 +193,15 @@ public class OffsetMapCodecManager<K, V> {
                     partitionState.getTopicPartition(),
                     highestSucceeded,
                     partitionState.getIncompleteOffsetsBelowHighestSucceeded());
+        }
+
+
+        OffsetSimultaneousEncoder simultaneousEncoder = null;
+        try {
+            simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
+            simultaneousEncoder.invoke();
+        } catch (Exception e) {
+            throw new InternalRuntimeException("Error encoding offsets", e);
         }
 
         return module.createOffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);

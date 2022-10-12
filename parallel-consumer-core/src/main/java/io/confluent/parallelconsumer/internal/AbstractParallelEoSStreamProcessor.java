@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.ErrorInUserFunctionException;
+import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -244,19 +244,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
-        module.setParallelEoSStreamProcessor(this);
-
-        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
-
         options = newOptions;
-        options.validate();
-
-        this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
         this.consumer = options.getConsumer();
 
-        checkGroupIdConfigured(consumer);
-        checkNotSubscribed(consumer);
-        checkAutoCommitIsDisabled(consumer);
+        validateConfiguration();
+
+        module.setParallelEoSStreamProcessor(this);
+
+        log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
+                newOptions.getConsumer().groupMetadata().groupId(),
+                newOptions);
+
+
+        this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
@@ -274,6 +274,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+    }
+
+    private void validateConfiguration() {
+        options.validate();
+
+        checkGroupIdConfigured(consumer);
+        checkNotSubscribed(consumer);
+        checkAutoCommitIsDisabled(consumer);
     }
 
     private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
@@ -360,14 +368,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // truncate the revoked partitions
             wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
-            throw new InternalRuntimeError("onPartitionsRevoked event error", e);
+            throw new InternalRuntimeException("onPartitionsRevoked event error", e);
         }
 
         //
         try {
             usersConsumerRebalanceListener.ifPresent(listener -> listener.onPartitionsRevoked(partitions));
         } catch (Exception e) {
-            throw new ErrorInUserFunctionException("Error from rebalance listener function after #onPartitionsRevoked", e);
+            throw new ExceptionInUserFunctionException("Error from rebalance listener function after #onPartitionsRevoked", e);
         }
     }
 

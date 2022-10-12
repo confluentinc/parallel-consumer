@@ -10,7 +10,7 @@
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-parent</artifactId>
     <name>Confluent Parallel Consumer</name>
-    <version>0.5.2.3-SNAPSHOT</version>
+    <version>0.5.2.4-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
     <url>http://confluent.io</url>
@@ -55,7 +55,7 @@
         <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
         <url>https://github.com/confluentinc/parallel-consumer.git</url>
-        <tag>0.5.2.2</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <distributionManagement>
@@ -99,7 +99,7 @@
 
         <!-- core -->
         <slf4j.version>1.7.36</slf4j.version>
-        <kafka.version>3.1.0</kafka.version>
+        <kafka.version>3.3.0</kafka.version>
         <version.unij>0.1.3</version.unij>
 
         <!-- tests -->
@@ -449,7 +449,7 @@
             <dependency>
                 <groupId>me.tongfei</groupId>
                 <artifactId>progressbar</artifactId>
-                <version>0.9.3</version>
+                <version>0.9.4</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
@@ -506,7 +506,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-help-plugin</artifactId>
-                <version>3.2.0</version>
+                <version>3.3.0</version>
                 <executions>
                     <execution>
                         <id>show-profiles</id>
@@ -774,7 +774,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.2.2</version>
+                <version>3.3.0</version>
                 <executions>
                     <execution>
                         <goals>
@@ -905,7 +905,7 @@
                 <!-- for use in idea -->
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
-                <version>2.11.0</version>
+                <version>2.12.0</version>
             </plugin>
         </plugins>
 

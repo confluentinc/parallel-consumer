@@ -16,6 +16,9 @@ import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.mockito.Mockito;
+import org.threeten.extra.MutableClock;
+
+import java.time.Clock;
 
 import java.util.Optional;
 import java.util.Set;
@@ -82,6 +85,15 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
         return consumerManager;
     }
+
+    @Getter
+    private final MutableClock mutableClock = MutableClock.epochUTC();
+
+    @Override
+    public Clock clock() {
+        return mutableClock;
+    }
+
 
     @Setter
     private int maxMetadataSize = 4096;

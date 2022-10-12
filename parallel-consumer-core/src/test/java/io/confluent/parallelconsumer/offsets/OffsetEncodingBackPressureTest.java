@@ -6,12 +6,17 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import com.google.common.truth.Truth8;
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.ShardManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.state.PartitionState;
+import io.confluent.parallelconsumer.state.PartitionStateManager;
+import io.confluent.parallelconsumer.state.ShardManager;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -20,7 +25,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +40,7 @@ import static io.confluent.csid.utils.ThreadUtils.sleepQuietly;
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static java.time.Duration.ofMillis;
+import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,7 +104,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     int timeout = 120;
                     awaitLatch(finalMsgLock, timeout);
                     log.debug("Very slow message awoken, throwing exception");
-                    throw new FakeRuntimeError("Fake error");
+                    throw new FakeRuntimeException("Fake error");
                 } else {
                     log.debug("Second attempt, waiting for msgLockTwo countdown");
                     awaitLatch(msgLockTwo, 60);
@@ -233,16 +238,13 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
             log.debug("Test that failed messages can retry, causing partition to un-block");
             {
-                Duration aggressiveDelay = ofMillis(100);
-                WorkContainer.setDefaultRetryDelay(aggressiveDelay); // more aggressive retry
-
                 // release message that was blocking partition progression
                 // fail the message
                 finalMsgLock.countDown();
 
                 // wait for the retry
                 awaitForOneLoopCycle();
-                sleepQuietly(aggressiveDelay.toMillis());
+                sleepQuietly(ParallelConsumerOptions.DEFAULT_STATIC_RETRY_DELAY.toMillis());
                 await().until(() -> attempts.get() >= 2);
 
                 // assert partition still blocked

@@ -14,7 +14,15 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
-== Next Version
+== 0.5.2.4
+
+=== Fixes
+
+* fixes #409: Adds support for compacted topics and commit offset resetting (#425)
+** Truncate the offset state when bootstrap polled offset higher or lower than committed
+** Prune missing records from the tracked incomplete offset state, when they're missing from polled batches
+
+== 0.5.2.3
 
 === Improvements
 
@@ -23,13 +31,25 @@ endif::[]
 ** Fixes a potential race condition which could cause offset leaks between transactions boundaries.
 ** Introduces lock acquisition timeouts.
 ** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
+* Adds a very simple Dependency Injection system modeled on Dagger (#398)
+* Various refactorings e.g. new ProducerWrap
 
-== v0.5.2.3
+* Dependencies
+** build(deps): prod: zstd, reactor, dev: podam, progressbar, postgresql maven-plugins: versions, help (#420)
+** build(deps-dev): bump postgresql from 42.4.1 to 42.5.0
+** bump podam, progressbar, zstd, reactor
+** build(deps): bump versions-maven-plugin from 2.11.0 to 2.12.0
+** build(deps): bump maven-help-plugin from 3.2.0 to 3.3.0
+** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
+** build(deps): Upgrade to AK 3.3.0 (#309)
 
-=== Improvements
 
-- Adds a very simple Dependency Injection system modeled on Dagger (#398)
-- Various refactorings e.g. new ProducerWrap
+=== Fixes
+
+* fixes #419: NoSuchElementException during race condition in PartitionState (#422)
+* Fixes #412: ClassCastException with retryDelayProvider (#417)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
 
 == v0.5.2.2
 

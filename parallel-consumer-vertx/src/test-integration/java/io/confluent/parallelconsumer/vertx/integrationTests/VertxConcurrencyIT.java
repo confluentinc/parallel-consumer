@@ -146,7 +146,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
-        try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
+        try (Producer<String, String> kafkaProducer = getKcu().createNewProducer(false)) {
             for (int i = 0; i < expectedMessageCount; i++) {
                 String key = "key-" + i;
                 Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
@@ -168,10 +168,10 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
+        KafkaProducer<String, String> newProducer = getKcu().createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         Properties consumerProps = new Properties();
-        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(true, consumerProps);
+        KafkaConsumer<String, String> newConsumer = getKcu().createNewConsumer(true, consumerProps);
 
         var pc = new VertxParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)

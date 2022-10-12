@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -13,6 +12,7 @@ import lombok.experimental.FieldNameConstants;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -32,6 +32,7 @@ import static java.time.Duration.ofMillis;
 @Builder(toBuilder = true)
 @ToString
 @FieldNameConstants
+@InterfaceStability.Evolving
 public class ParallelConsumerOptions<K, V> {
 
     /**
@@ -178,7 +179,7 @@ public class ParallelConsumerOptions<K, V> {
 
         /**
          * Periodically synchronous commits with the Consumer. Much faster than
-         * {@link #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially less duplicates than
+         * {@link #PERIODIC_TRANSACTIONAL_PRODUCER}. Slower but potentially fewer duplicates than
          * {@link #PERIODIC_CONSUMER_ASYNCHRONOUS} upon replay.
          */
         PERIODIC_CONSUMER_SYNC,
@@ -287,15 +288,21 @@ public class ParallelConsumerOptions<K, V> {
 
     public static final int DEFAULT_MAX_CONCURRENCY = 16;
 
+    public static final Duration DEFAULT_STATIC_RETRY_DELAY = Duration.ofSeconds(1);
+
     /**
      * When a message fails, how long the system should wait before trying that message again. Note that this will not
      * be exact, and is just a target.
+     *
+     * @deprecated will be renamed to static retry delay
      */
+    @Deprecated
     @Builder.Default
-    private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
+    private final Duration defaultMessageRetryDelay = DEFAULT_STATIC_RETRY_DELAY;
 
     /**
-     * When present, use this to generate the retry delay, instead of {@link #getDefaultMessageRetryDelay()}.
+     * When present, use this to generate a dynamic retry delay, instead of a static one with
+     * {@link #getDefaultMessageRetryDelay()}.
      * <p>
      * Overrides {@link #defaultMessageRetryDelay}, even if it's set.
      */
@@ -375,9 +382,6 @@ public class ParallelConsumerOptions<K, V> {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
         transactionsValidation();
-
-        //
-        WorkContainer.setDefaultRetryDelay(getDefaultMessageRetryDelay());
     }
 
     private void transactionsValidation() {

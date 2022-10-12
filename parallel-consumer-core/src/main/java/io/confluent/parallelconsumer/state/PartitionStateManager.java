@@ -4,12 +4,12 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -17,7 +17,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -33,7 +32,6 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * @see PartitionState
  */
 @Slf4j
-@RequiredArgsConstructor
 public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final PCModule<K, V> module;
@@ -41,8 +39,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     private final Consumer<K, V> consumer;
 
     private final ShardManager<K, V> sm;
-
-    private final ParallelConsumerOptions<K, V> options;
 
     /**
      * Hold the tracking state for each of our managed partitions.
@@ -60,10 +56,20 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
-    private final Clock clock;
+    private final PCModule<K, V> module;
+
+    public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
+        this.consumer = module.consumer();
+        this.sm = sm;
+        this.module = module;
+    }
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
         return partitionStates.get(tp);
+    }
+
+    private PartitionState<K, V> getPartitionState(EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsList) {
+        return getPartitionState(recordsList.getTopicPartition());
     }
 
     /**
@@ -186,7 +192,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         var tp = toTopicPartition(rec);
         Long epoch = partitionsAssignmentEpochs.get(tp);
         if (epoch == null) {
-            throw new InternalRuntimeError(msg("Received message for a partition which is not assigned: {}", rec));
+            throw new InternalRuntimeException(msg("Received message for a partition which is not assigned: {}", rec));
         }
         return epoch;
     }
@@ -275,9 +281,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return getPartitionState(tp).getOffsetHighestSeen();
     }
 
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
+    // todo move to partition state
+    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
         var tp = wc.getTopicPartition();
-        getPartitionState(tp).addWorkContainer(wc);
+        getPartitionState(tp).addNewIncompleteWorkContainer(wc);
     }
 
     /**
@@ -321,9 +328,13 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     void maybeRegisterNewRecordAsWork(final EpochAndRecordsMap<K, V> recordsMap) {
         log.debug("Incoming {} new records...", recordsMap.count());
         for (var partition : recordsMap.partitions()) {
-            var recordsList = recordsMap.records(partition);
-            var epochOfInboundRecords = recordsList.getEpochOfPartitionAtPoll();
-            for (var rec : recordsList.getRecords()) {
+            var polledRecordBatch = recordsMap.records(partition);
+
+            var partitionState = getPartitionState(polledRecordBatch);
+            partitionState.maybeTruncateOrPruneTrackedOffsets(polledRecordBatch);
+
+            long epochOfInboundRecords = polledRecordBatch.getEpochOfPartitionAtPoll();
+            for (var rec : polledRecordBatch.getRecords()) {
                 maybeRegisterNewRecordAsWork(epochOfInboundRecords, rec);
             }
         }
@@ -344,10 +355,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             if (isRecordPreviouslyCompleted(rec)) {
                 log.trace("Record previously completed, skipping. offset: {}", rec.offset());
             } else {
-                var work = new WorkContainer<>(epochOfInboundRecords, rec, options.getRetryDelayProvider(), clock);
+                var work = new WorkContainer<>(epochOfInboundRecords, rec, module);
 
                 sm.addWorkContainer(work);
-                addWorkContainer(work);
+                addNewIncompleteWorkContainer(work);
             }
         } else {
             log.debug("Inbound record of work has epoch ({}) not matching currently assigned epoch for the applicable partition ({}), skipping",

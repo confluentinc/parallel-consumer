@@ -8,7 +8,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.2.3-SNAPSHOT</version>
+        <version>0.5.2.4-SNAPSHOT</version>
     </parent>
 
     <artifactId>parallel-consumer-vertx</artifactId>
@@ -17,7 +17,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <properties>
-        <vertx.version>4.3.3</vertx.version>
+        <vertx.version>4.3.4</vertx.version>
     </properties>
 
     <dependencies>

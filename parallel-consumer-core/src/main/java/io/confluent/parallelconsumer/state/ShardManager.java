@@ -9,20 +9,20 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 
-import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Shards are local queues of work to be processed.
@@ -42,9 +42,6 @@ public class ShardManager<K, V> {
 
     private final WorkManager<K, V> wm;
 
-    @Getter(PRIVATE)
-    private final Clock clock;
-
     /**
      * Map of Object keys to Shard
      * <p>
@@ -59,7 +56,30 @@ public class ShardManager<K, V> {
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
     private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(Comparator.comparing(WorkContainer::getRetryDueAt));
+    /**
+     * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
+     * {@link TopicPartition} and offset after comparing the retry due time.
+     * <p>
+     * I.e. two instances of WC are not equal, just because their retry due time its.
+     * <p>
+     * Also - our primary comparison - {@link WorkContainer#getRetryDueAt()} must return a consistant value, regardless
+     * of WHEN it's queried - so must not use shortcuts like {@link Instant#now()}
+     */
+    @Getter(AccessLevel.PACKAGE) // visible for testing
+    private final Comparator<WorkContainer<?, ?>> retryQueueWorkContainerComparator = Comparator
+            .comparing((WorkContainer<?, ?> workContainer) -> workContainer.getRetryDueAt())
+            .thenComparing(workContainer -> {
+                // TopicPartition does not implement comparable
+                TopicPartition tp = workContainer.getTopicPartition();
+                return tp.topic() + tp.partition();
+            })
+            .thenComparing(WorkContainer::offset);
+
+    /**
+     * Read optimised view of {@link WorkContainer}s that need retrying.
+     */
+    @Getter(AccessLevel.PACKAGE) // visible for testing
+    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
