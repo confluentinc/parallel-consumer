@@ -49,7 +49,6 @@ public class OffsetMapCodecManager<K, V> {
      *         href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
      * @see "kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize"
      */
-    // todo refactored to constant in the remove statics branch
     public static final int KAFKA_MAX_METADATA_SIZE_DEFAULT = 4096;
 
     public static final Charset CHARSET_TO_USE = UTF_8;

@@ -19,7 +19,6 @@ import org.mockito.Mockito;
 import org.threeten.extra.MutableClock;
 
 import java.time.Clock;
-
 import java.util.Optional;
 import java.util.Set;
 
@@ -94,9 +93,8 @@ public class PCModuleTestEnv extends PCModule<String, String> {
         return mutableClock;
     }
 
-
     @Setter
-    private int maxMetadataSize = 4096;
+    private int maxMetadataSize = OffsetMapCodecManager.KAFKA_MAX_METADATA_SIZE_DEFAULT;
 
     @Override
     public int getMaxMetadataSize() {

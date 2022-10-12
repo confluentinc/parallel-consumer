@@ -27,8 +27,6 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
-import static java.time.Duration.ofMillis;
-import static io.confluent.parallelconsumer.state.PartitionStateManager.USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
 /**
  * UnitTest version of {@link OffsetEncodingBackPressureTest}.
@@ -66,7 +64,6 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         List<WorkContainer<String, String>> toSucceed = workIfAvailable.stream().filter(x -> !blockedOffsets.contains(x.offset())).collect(Collectors.toList());
         toSucceed.forEach(wm::onSuccessResult);
 
-//        try {
 
         // # assert commit ok - nothing blocked
         {

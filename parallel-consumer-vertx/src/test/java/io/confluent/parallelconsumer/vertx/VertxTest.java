@@ -42,7 +42,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-//@Isolated
 @Slf4j
 @ExtendWith(VertxExtension.class)
 class VertxTest extends VertxBaseUnitTest {

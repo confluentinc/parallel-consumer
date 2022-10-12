@@ -63,7 +63,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Testcontainers
 @Slf4j
-//@Isolated
 class VertxConcurrencyIT extends BrokerIntegrationTest {
 
     private static final com.google.common.flogger.FluentLogger flog = com.google.common.flogger.FluentLogger.forEnclosingClass();

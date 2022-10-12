@@ -88,10 +88,6 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
         var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
         assumeFalse(skip.contains(encoding));
 
-        // todo test removal - not even relevant to this test?
-//        module.compressionForced = true;
-//        module.setForcedCodec(Optional.of(encoding));
-
         // 2 partition topic
         try {
             ensureTopic(rebalanceTopic, 1);
