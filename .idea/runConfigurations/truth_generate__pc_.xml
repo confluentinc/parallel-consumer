@@ -11,6 +11,7 @@
           <option name="goals">
             <list>
               <option value="truth:generate" />
+              <option value="-e" />
             </list>
           </option>
           <option name="pomFileName" value="pom.xml" />

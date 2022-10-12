@@ -66,18 +66,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    /**
-     * Use a private {@link DynamicLoadFactor}, useful for testing.
-     */
-    public WorkManager(PCModule<K, V> module) {
-        this(module, new DynamicLoadFactor());
-    }
-
     public WorkManager(PCModule<K, V> module,
                        DynamicLoadFactor dynamicExtraLoadFactor) {
         this.options = module.options();
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
-        this.sm = new ShardManager<>(options, this);
+        this.sm = new ShardManager<>(module, this);
         this.pm = new PartitionStateManager<>(module, sm);
     }
 
@@ -143,7 +136,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 work.size(),
                 requestedMaxWorkToRetrieve,
                 getNumberRecordsOutForProcessing(),
-                getNumberOfEntriesInPartitionQueues());
+                getNumberOfIncompleteOffsets());
         numberRecordsOutForProcessing += work.size();
 
         return work;
@@ -181,8 +174,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         numberRecordsOutForProcessing--;
     }
 
-    public long getNumberOfEntriesInPartitionQueues() {
-        return pm.getNumberOfEntriesInPartitionQueues();
+    public long getNumberOfIncompleteOffsets() {
+        return pm.getNumberOfIncompleteOffsets();
     }
 
     public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
@@ -207,8 +200,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    public boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
-        return pm.checkIfWorkIsStale(workContainer);
+    public boolean checkIfWorkIsStale(WorkContainer<K, V> workContainer) {
+        return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
     }
 
     public boolean shouldThrottle() {
@@ -243,18 +236,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
 
-    public boolean hasWorkInCommitQueues() {
-        return pm.hasWorkInCommitQueues();
+    public boolean hasIncompleteOffsets() {
+        return pm.hasIncompleteOffsets();
     }
 
     public boolean isRecordsAwaitingProcessing() {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
-    }
-
-    public boolean isRecordsAwaitingToBeCommitted() {
-        // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
-        var partitionWorkRemainingCount = getNumberOfEntriesInPartitionQueues();
-        return partitionWorkRemainingCount > 0;
     }
 
     public void handleFutureResult(WorkContainer<K, V> wc) {

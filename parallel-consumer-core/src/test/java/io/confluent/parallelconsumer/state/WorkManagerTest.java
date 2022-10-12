@@ -87,7 +87,7 @@ public class WorkManagerTest {
 
         module = new PCModuleTestEnv(optsOverride);
 
-        wm = new WorkManager<>(module);
+        wm = module.workManager();
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
@@ -633,7 +633,7 @@ public class WorkManagerTest {
 
         //
         assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).as("Partition commit queues are now empty").isZero();
+        assertThat(wm.getNumberOfIncompleteOffsets()).as("Partition commit queues are now empty").isZero();
 
         // drain commit queue
         var completedFutureOffsets = wm.collectCommitDataForDirtyPartitions();
