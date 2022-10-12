@@ -328,8 +328,7 @@ public class PartitionState<K, V> {
      * Defines as the offset one below the highest sequentially succeeded offset.
      */
     // visible for testing
-    // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
-    public long getNextExpectedInitialPolledOffset() {
+    protected long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
