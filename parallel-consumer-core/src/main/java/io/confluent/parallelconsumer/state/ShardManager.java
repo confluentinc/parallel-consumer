@@ -34,6 +34,8 @@ import static java.util.Optional.of;
  * This state is shared between the {@link BrokerPollSystem} thread (write - adding and removing shards and work)  and
  * the {@link AbstractParallelEoSStreamProcessor} Controller thread (read - how many records are in the shards?), so
  * must be thread safe.
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public class ShardManager<K, V> {

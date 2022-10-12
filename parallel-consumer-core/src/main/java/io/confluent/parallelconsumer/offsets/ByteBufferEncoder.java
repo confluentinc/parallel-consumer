@@ -9,6 +9,12 @@ import java.nio.ByteBuffer;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArray;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.ByteArrayCompressed;
 
+/**
+ * Encodes offsets into a {@link ByteBuffer}. Doesn't have any advantage over  the {@link BitSetEncoder} and
+ * {@link RunLengthEncoder}, but can be useful for testing and comparison.
+ *
+ * @author Antony Stubbs
+ */
 public class ByteBufferEncoder extends OffsetEncoder {
 
     private final ByteBuffer bytesBuffer;
