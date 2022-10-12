@@ -69,7 +69,7 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
         var count = new AtomicLong();
 
         //
-        kcu.produceMessages(topic, numberOfRecordsToProduce);
+        getKcu().produceMessages(topic, numberOfRecordsToProduce);
 
         // effectively disable commit
         pc.setTimeBetweenCommits(INFINITE);
@@ -85,7 +85,7 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
         // cause rebalance
         final Duration newPollTimeout = Duration.ofSeconds(5);
         log.debug("Creating new consumer in same group and subscribing to same topic set with a no record timeout of {}, expect this phase to take entire timeout...", newPollTimeout);
-        var newConsumer = kcu.createNewConsumer(REUSE_GROUP);
+        var newConsumer = getKcu().createNewConsumer(REUSE_GROUP);
         newConsumer.subscribe(UniLists.of(topic));
         log.debug("Polling with new group member for records with timeout {}...", newPollTimeout);
         ConsumerRecords<Object, Object> newConsumersPollResult = newConsumer.poll(newPollTimeout);

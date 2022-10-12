@@ -47,7 +47,7 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, St
         List<Long> producedOffsets = new ArrayList<>();
         List<Long> consumedOffsets = new ArrayList<>();
 
-        KafkaProducer<String, String> kafkaProducer = kcu.createNewProducer(false);
+        KafkaProducer<String, String> kafkaProducer = getKcu().createNewProducer(false);
 
         // offset 0
         sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", true);
@@ -70,7 +70,7 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, St
         List<Long> producedOffsets = new ArrayList<>();
         List<Long> consumedOffsets = new ArrayList<>();
 
-        KafkaProducer<String, String> kafkaProducer = kcu.createNewProducer(NOT_TRANSACTIONAL);
+        KafkaProducer<String, String> kafkaProducer = getKcu().createNewProducer(NOT_TRANSACTIONAL);
 
         // offset 0
         sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", CheckMode.CHECK_CONSUMED);
@@ -118,7 +118,7 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, St
         producedOffsets.add(offset);
 
         //
-        var newConsumer = kcu.createNewConsumer(false);
+        var newConsumer = getKcu().createNewConsumer(false);
         var pc = createParallelConsumer(topic, newConsumer);
 
         //
@@ -146,7 +146,7 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, St
      */
     private void assertCommittedOffset(String topicNameForTest, long expectedOffset) {
         // assert committed offset
-        var newConsumer = kcu.createNewConsumer(false);
+        var newConsumer = getKcu().createNewConsumer(false);
         newConsumer.subscribe(UniSets.of(topicNameForTest));
         // increased poll timeout to allow for delay under load during parallel test execution
         newConsumer.poll(ofSeconds(5));
