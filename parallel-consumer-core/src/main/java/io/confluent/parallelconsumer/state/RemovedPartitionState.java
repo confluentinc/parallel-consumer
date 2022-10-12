@@ -55,7 +55,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public void addWorkContainer(final WorkContainer<K, V> wc) {
+    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
         // no-op
         log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
     }

@@ -129,7 +129,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         List<String> expectedKeys = new ArrayList<>();
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
-        try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
+        try (Producer<String, String> kafkaProducer = getKcu().createNewProducer(false)) {
             for (int i = 0; i < expectedMessageCount; i++) {
                 String key = "key-" + i;
                 Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
@@ -151,11 +151,11 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = kcu.createNewProducer(commitMode);
+        KafkaProducer<String, String> newProducer = getKcu().createNewProducer(commitMode);
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
-        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(true, consumerProps);
+        KafkaConsumer<String, String> newConsumer = getKcu().createNewConsumer(true, consumerProps);
 
         // increased PC concurrency - improves test stability and performance.
         int numThreads = 64;

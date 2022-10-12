@@ -72,6 +72,7 @@ public class OffsetMapCodecManager<K, V> {
         /**
          * Of the offsets encoded, the incomplete ones.
          */
+        // todo change to List as Sets have no order
         Set<Long> incompleteOffsets;
 
         public static HighestOffsetAndIncompletes of(long highestSeenOffset) {
@@ -164,7 +165,7 @@ public class OffsetMapCodecManager<K, V> {
     PartitionState<K, V> decodePartitionState(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
-        return new PartitionState<K, V>(tp, incompletes);
+        return new PartitionState<>(tp, incompletes);
     }
 
     public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {

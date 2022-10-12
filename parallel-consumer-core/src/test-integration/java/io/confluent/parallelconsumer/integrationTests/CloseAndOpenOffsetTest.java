@@ -105,8 +105,8 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
         }
 
         //
-        KafkaConsumer<String, String> newConsumerOne = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+        KafkaConsumer<String, String> newConsumerOne = getKcu().createNewConsumer();
+        KafkaProducer<String, String> producerOne = getKcu().createNewProducer(true);
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
@@ -183,8 +183,8 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
         // second client
         {
             //
-            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
-            KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+            KafkaConsumer<String, String> newConsumerThree = getKcu().createNewConsumer(customClientId("THREE-my-client"));
+            KafkaProducer<String, String> producerThree = getKcu().createNewProducer(true);
             var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
             try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
                 asyncThree.subscribe(UniLists.of(rebalanceTopic));
@@ -216,7 +216,7 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
     }
 
     private void send(String topic, int partition, Integer value) throws InterruptedException, ExecutionException {
-        RecordMetadata recordMetadata = kcu.getProducer().send(new ProducerRecord<>(topic, partition, value.toString(), value.toString())).get();
+        RecordMetadata recordMetadata = getKcu().getProducer().send(new ProducerRecord<>(topic, partition, value.toString(), value.toString())).get();
     }
 
     private void send(int quantity, String topic, int partition) throws InterruptedException, ExecutionException {
@@ -224,7 +224,7 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
         var futures = new ArrayList<Future<RecordMetadata>>();
         // async
         for (Integer index : Range.range(quantity)) {
-            Future<RecordMetadata> send = kcu.getProducer().send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
+            Future<RecordMetadata> send = getKcu().getProducer().send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
             futures.add(send);
         }
         // block until finished
@@ -245,10 +245,10 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
 
         // send a single message
         String expectedPayload = "0";
-        kcu.getProducer().send(new ProducerRecord<>(topic, expectedPayload, expectedPayload));
+        getKcu().getProducer().send(new ProducerRecord<>(topic, expectedPayload, expectedPayload));
 
-        KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+        KafkaConsumer<String, String> consumer = getKcu().createNewConsumer();
+        KafkaProducer<String, String> producerOne = getKcu().createNewProducer(true);
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
                 .consumer(consumer)
@@ -277,8 +277,8 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
 
         //
         log.debug("Starting up new client");
-        KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
-        KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+        KafkaConsumer<String, String> newConsumerThree = getKcu().createNewConsumer(customClientId("THREE-my-client"));
+        KafkaProducer<String, String> producerThree = getKcu().createNewProducer(true);
         ParallelConsumerOptions<String, String> optionsThree = options.toBuilder()
                 .consumer(newConsumerThree)
                 .producer(producerThree)
@@ -330,8 +330,8 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
 
         // step 1
         {
-            KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
-            KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+            KafkaConsumer<String, String> consumer = getKcu().createNewConsumer();
+            KafkaProducer<String, String> producerOne = getKcu().createNewProducer(true);
             var options = baseOptions.toBuilder()
                     .consumer(consumer)
                     .producer(producerOne)
@@ -364,8 +364,8 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
         // step 2
         {
             //
-            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
-            KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+            KafkaConsumer<String, String> newConsumerThree = getKcu().createNewConsumer(customClientId("THREE-my-client"));
+            KafkaProducer<String, String> producerThree = getKcu().createNewProducer(true);
             var optionsThree = baseOptions.toBuilder()
                     .consumer(newConsumerThree)
                     .producer(producerThree)
