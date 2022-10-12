@@ -37,6 +37,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * @see PartitionState#incompleteOffsets
  * @see RunLengthEncoder
  * @see OffsetBitSet
+ * @author Antony Stubbs
  */
 @Slf4j
 public class BitSetEncoder extends OffsetEncoder {

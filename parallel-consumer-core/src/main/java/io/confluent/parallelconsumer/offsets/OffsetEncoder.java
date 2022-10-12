@@ -11,7 +11,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * Base OffsetEncoder
+ * Base OffsetEncoder, defining the contract for encoding offset data.
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public abstract class OffsetEncoder {

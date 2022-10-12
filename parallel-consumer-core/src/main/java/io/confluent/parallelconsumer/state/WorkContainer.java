@@ -24,7 +24,9 @@ import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
 
 /**
- * Model object for metadata around processing state of {@link ConsumerRecord}s.
+ * Context object for a given {@link ConsumerRecord}, carrying completion status, various time stamps, retry data etc..
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 @EqualsAndHashCode

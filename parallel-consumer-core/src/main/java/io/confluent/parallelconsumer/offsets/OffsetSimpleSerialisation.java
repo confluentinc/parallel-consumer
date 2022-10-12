@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 import com.github.luben.zstd.ZstdInputStream;
 import com.github.luben.zstd.ZstdOutputStream;
@@ -22,6 +22,11 @@ import java.util.zip.GZIPOutputStream;
 
 import static io.confluent.csid.utils.BackportUtils.readFully;
 
+/**
+ * Methods for compressing, decompressing and encoding / encoding data.
+ *
+ * @author Antony Stubbs
+ */
 @UtilityClass
 @Slf4j
 public class OffsetSimpleSerialisation {

@@ -35,7 +35,6 @@ import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
@@ -43,6 +42,7 @@ import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUt
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Utilities for creating and manipulating clients
@@ -85,7 +85,6 @@ public class KafkaClientUtils implements AutoCloseable {
      * todo docs
      */
     private KafkaConsumer<String, String> lastConsumerConstructed;
-
 
     public KafkaClientUtils(KafkaContainer kafkaContainer) {
         kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
@@ -337,4 +336,5 @@ public class KafkaClientUtils implements AutoCloseable {
     public KafkaConsumer<String, String> getLastConsumerConstructed() {
         return lastConsumerConstructed;
     }
+
 }

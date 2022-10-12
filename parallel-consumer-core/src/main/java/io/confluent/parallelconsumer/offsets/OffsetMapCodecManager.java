@@ -34,6 +34,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * <li>byte2-3: Short: bitset size
  * <li>byte4-n: serialised {@link BitSet}
  * </ul>
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public class OffsetMapCodecManager<K, V> {

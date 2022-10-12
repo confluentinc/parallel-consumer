@@ -5,12 +5,13 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.parallelconsumer.internal.InternalException;
+import lombok.experimental.StandardException;
 
-/*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+/**
+ * Parent of the exceptions for when the {@link OffsetEncoder} cannot encode the given data.
+ *
+ * @author Antony Stubbs
  */
+@StandardException
 public class EncodingNotSupportedException extends InternalException {
-    public EncodingNotSupportedException(final String message) {
-        super(message);
-    }
 }
