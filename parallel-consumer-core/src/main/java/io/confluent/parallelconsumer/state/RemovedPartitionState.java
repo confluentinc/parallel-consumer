@@ -29,6 +29,8 @@ import java.util.TreeSet;
  * leak as the collection will forever expand. However, even massive partition counts to a single consumer would be in
  * the hundreds of thousands, this would only result in hundreds of thousands of {@link TopicPartition} object keys all
  * pointing to the same instance of {@link RemovedPartitionState}.
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public class RemovedPartitionState<K, V> extends PartitionState<K, V> {

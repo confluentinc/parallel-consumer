@@ -5,14 +5,15 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.parallelconsumer.internal.InternalException;
+import lombok.experimental.StandardException;
 
 /*-
  * Error decoding offsets
  *
  * TODO should extend java.lang.Error ?
+ *
+ * @author Antony Stubbs
  */
+@StandardException
 public class OffsetDecodingError extends InternalException {
-    public OffsetDecodingError(final String s, final IllegalArgumentException a) {
-        super(s, a);
-    }
 }

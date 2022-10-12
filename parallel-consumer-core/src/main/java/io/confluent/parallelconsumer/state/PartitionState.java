@@ -31,6 +31,7 @@ import static lombok.AccessLevel.*;
 /**
  * Our view of the state of the partitions that we've been assigned.
  *
+ * @author Antony Stubbs
  * @see PartitionStateManager
  */
 // todo class becoming large - possible to extract some functionality?
