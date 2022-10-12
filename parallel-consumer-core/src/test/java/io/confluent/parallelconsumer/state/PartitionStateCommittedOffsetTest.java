@@ -53,7 +53,7 @@ class PartitionStateCommittedOffsetTest {
 
     HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>(incompletes));
 
-    PartitionState<String, String> state = new PartitionState<>(mu.getModule(), tp, offsetData);
+    PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
 
     /**
      * Test for offset gaps in partition data (i.e. compacted topics)
@@ -109,16 +109,7 @@ class PartitionStateCommittedOffsetTest {
     }
 
     private void addPollToState(PartitionState<String, String> state, PolledTestBatch polledTestBatch) {
-        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-        state.maybeTruncateOrPruneTrackedOffsets(polledTestBatch.polledRecordBatch.records(tp));
-        for (var wc : polledTestBatch.polledBatchWCs) {
-            // todo when PSM and PartitionState are refactored, this conditional should not be needed
-            var offset = wc.offset();
-            final boolean notPreviouslyCompleted = !state.isRecordPreviouslyCompleted(wc.getCr());
-            if (notPreviouslyCompleted) {
-                state.addNewIncompleteRecord(wc.getCr());
-            }
-        }
+        state.maybeRegisterNewPollBatchAsWork(polledTestBatch.polledRecordBatch.records(state.getTp()));
     }
 
     /**
@@ -134,13 +125,10 @@ class PartitionStateCommittedOffsetTest {
      */
     @Test
     void bootstrapPollOffsetHigherDueToRetentionOrCompaction() {
-        // committed state
-        PartitionState<String, String> state = new PartitionState<>(mu.getModule(), tp, offsetData);
-
         // bootstrap poll
         PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset);
 
-        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
+        //
         addPollToState(state, polledTestBatch);
 
         //

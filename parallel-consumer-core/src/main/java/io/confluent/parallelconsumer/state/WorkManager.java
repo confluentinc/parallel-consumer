@@ -66,13 +66,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    /**
-     * Use a private {@link DynamicLoadFactor}, useful for testing.
-     */
-    public WorkManager(PCModule<K, V> module) {
-        this(module, new DynamicLoadFactor());
-    }
-
     public WorkManager(PCModule<K, V> module,
                        DynamicLoadFactor dynamicExtraLoadFactor) {
         this.options = module.options();

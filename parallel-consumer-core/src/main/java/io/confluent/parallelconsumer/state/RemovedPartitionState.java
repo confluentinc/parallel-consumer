@@ -37,9 +37,10 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     private static final PartitionState singleton = new RemovedPartitionState<>();
 
     public static final String NO_OP = "no-op";
+    public static final int NO_EPOCH = -1;
 
     public RemovedPartitionState() {
-        super(null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
+        super(NO_EPOCH, null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     public static PartitionState getSingleton() {

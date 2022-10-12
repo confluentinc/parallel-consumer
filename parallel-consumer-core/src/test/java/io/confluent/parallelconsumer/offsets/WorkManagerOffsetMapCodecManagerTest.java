@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -54,7 +53,7 @@ import static org.mockito.Mockito.mock;
 @ExtendWith(MockitoExtension.class)
 class WorkManagerOffsetMapCodecManagerTest {
 
-    PCModuleTestEnv module = new PCModuleTestEnv();
+    PCModuleTestEnv module;
 
     WorkManager<String, String> wm;
 
@@ -79,7 +78,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     long highestSucceeded = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(module, tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
+    PartitionState<String, String> state = new PartitionState<>(0, module, tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
 
     @Mock
     ConsumerRecord<String, String> mockCr;
@@ -92,6 +91,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     private void injectSucceededWorkAtOffset(long offset) {
         WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, mock(PCModuleTestEnv.class));
         Mockito.doReturn(offset).when(mockCr).offset();
+//        state.
         state.addNewIncompleteRecord(mockCr);
         state.onSuccess(offset); // in this case the highest seen is also the highest succeeded
     }
@@ -125,7 +125,8 @@ class WorkManagerOffsetMapCodecManagerTest {
         var options = ParallelConsumerOptions.<String, String>builder()
                 .consumer(mockConsumer)
                 .build();
-        wm = new WorkManager<>(new PCModule<>(options));
+        module = new PCModuleTestEnv(options);
+        wm = module.workManager();
         wm.onPartitionsAssigned(UniLists.of(tp));
         offsetCodecManager = new OffsetMapCodecManager<>(module);
     }

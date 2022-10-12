@@ -148,9 +148,19 @@ public class PartitionState<K, V> {
     @Setter(PRIVATE)
     private boolean allowedMoreRecords = true;
 
-    public PartitionState(PCModule<K, V> pcModule, TopicPartition topicPartition, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+    /**
+     * The Epoch of the generation of partition assignment, for fencing off invalid work.
+     */
+    @Getter
+    private final long partitionsAssignmentEpoch;
+
+    public PartitionState(long newEpoch,
+                          PCModule<K, V> pcModule,
+                          TopicPartition topicPartition,
+                          OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.module = pcModule;
         this.tp = topicPartition;
+        this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
     }
@@ -247,6 +257,9 @@ public class PartitionState<K, V> {
         }
 
         //
+        maybeTruncateOrPruneTrackedOffsets(recordsAndEpoch);
+
+        //
         long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
         List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
         for (var aRecord : recordPollBatch) {
@@ -273,6 +286,7 @@ public class PartitionState<K, V> {
         return false;
     }
 
+    // visible for legacy testing
     public void addNewIncompleteRecord(ConsumerRecord<K, V> record) {
         long offset = record.offset();
         maybeRaiseHighestSeenOffset(offset);
@@ -311,7 +325,7 @@ public class PartitionState<K, V> {
                     expectedBootstrapRecordOffset);
 
             // truncate
-            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, true);
+            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, false);
             incompletesToPrune.forEach(incompleteOffsets::remove);
         } else if (pollBelowExpected) {
             // manual reset to lower offset detected
@@ -498,7 +512,7 @@ public class PartitionState<K, V> {
      * Also, does {@link #maybeTruncateBelowOrAbove}.
      */
     @SuppressWarnings("OptionalGetWithoutIsPresent") // checked with isEmpty
-    protected void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
+    private void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
         var records = polledRecordBatch.getRecords();
 
         if (records.isEmpty()) {
@@ -601,14 +615,6 @@ public class PartitionState<K, V> {
             return true;
         }
         return false;
-    }
-
-    /**
-     * todo docs
-     */
-    private Long getPartitionsAssignmentEpoch() {
-        // todo teach PartitionState to know it's Epoch, move this into PartitionState
-        throw new RuntimeException();
     }
 
 }

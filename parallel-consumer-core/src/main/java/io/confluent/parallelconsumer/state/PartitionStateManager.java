@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -47,8 +46,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     // todo remove static
     private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
-    private final Consumer<K, V> consumer;
-
     private final ShardManager<K, V> sm;
 
     /**
@@ -70,7 +67,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     private final PCModule<K, V> module;
 
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
-        this.consumer = module.consumer();
         this.sm = sm;
         this.module = module;
     }

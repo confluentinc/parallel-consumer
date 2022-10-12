@@ -143,7 +143,9 @@ public class OffsetMapCodecManager<K, V> {
         assignment.stream()
                 .filter(topicPartition -> !partitionStates.containsKey(topicPartition))
                 .forEach(topicPartition -> {
-                    PartitionState<K, V> defaultEntry = new PartitionState<>(module, topicPartition, HighestOffsetAndIncompletes.of());
+                    var psm = module.workManager().getPm();
+                    var epoch = psm.getEpochOfPartition(topicPartition);
+                    PartitionState<K, V> defaultEntry = new PartitionState<>(epoch, module, topicPartition, HighestOffsetAndIncompletes.of());
                     partitionStates.put(topicPartition, defaultEntry);
                 });
 
@@ -167,7 +169,8 @@ public class OffsetMapCodecManager<K, V> {
     PartitionState<K, V> decodePartitionState(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
-        return new PartitionState<>(module, tp, incompletes);
+        var epoch = module.workManager().getPm().getEpochOfPartition(tp);
+        return new PartitionState<>(epoch, module, tp, incompletes);
     }
 
     public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
