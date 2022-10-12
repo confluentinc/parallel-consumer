@@ -180,7 +180,11 @@ public class OffsetSimultaneousEncoder {
      * Visible for testing
      */
     void addByteBufferEncoder() {
-        encoders.add(new ByteBufferEncoder(lengthBetweenBaseAndHighOffset, this));
+        try {
+            encoders.add(new ByteBufferEncoder(lengthBetweenBaseAndHighOffset, this));
+        } catch (ArithmeticException a) {
+            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
+        }
     }
 
     /**

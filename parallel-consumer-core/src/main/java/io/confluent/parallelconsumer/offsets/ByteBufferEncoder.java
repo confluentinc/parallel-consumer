@@ -20,7 +20,9 @@ public class ByteBufferEncoder extends OffsetEncoder {
 
     public ByteBufferEncoder(long length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
         super(offsetSimultaneousEncoder);
-        this.bytesBuffer = ByteBuffer.allocate(1 + length);
+        // safe cast the length to an int, as we're not expecting to have more than 2^31 offsets
+        final int safeCast = Math.toIntExact(length);
+        this.bytesBuffer = ByteBuffer.allocate(1 + safeCast);
     }
 
     @Override
