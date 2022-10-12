@@ -168,5 +168,21 @@ public class LoopingResumingIteratorTest {
         Truth.assertThat(entries.hasNext()).isFalse();
         Truth.assertThat(entries.hasNext()).isFalse();
     }
+    
+        @Test
+    void emptyKeyIterator(){
+        LinkedHashMap<Integer, String> map = new LinkedHashMap<>();
+        map.put(0, "a");
+        map.put(1, "b");
+        map.put(2, "c");
+        map.put(3, "d");
+        var entries = LoopingResumingIterator.build(null, map);
+        ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
+        for (var x : entries) {
+            results.add(x);
+        }
+        Map.Entry<Integer, String> next = entries.next();
+        assertThat(next).isNull();
+    }
 
 }
