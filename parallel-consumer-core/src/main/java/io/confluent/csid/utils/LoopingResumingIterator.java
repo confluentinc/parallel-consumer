@@ -146,7 +146,7 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
         if (hasLoopedAroundBackToBeginning) {
             toReturn = getNext();
 
-            if (toReturn.getKey() == startingPointObject) {
+            if (null != toReturn && toReturn.getKey() == startingPointObject) {
                 // back at the beginning
                 throw new NoSuchElementException("#hasNext() returned true, but there are no more entries that haven't been iterated.");
             }
@@ -171,12 +171,16 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
     }
 
     private Map.Entry<KEY, VALUE> getNext() {
+        Map.Entry<KEY, VALUE> toReturn = null;
         if (indexOfNextElementToRetrieve == this.map.size() - 1) {
             indexOfNextElementToRetrieve = 0;
         } else {
             indexOfNextElementToRetrieve++;
         }
-        return iterator.next();
+        if(iterator.hasNext()){
+            toReturn = iterator.next();
+        }
+        return toReturn;
     }
 
     @Override
