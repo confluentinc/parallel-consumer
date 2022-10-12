@@ -8,7 +8,6 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ManagedTruth;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -17,7 +16,6 @@ import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.clients.admin.ConfigEntry;
 import org.apache.kafka.clients.consumer.*;
@@ -64,11 +62,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, String> {
 
     public static final OffsetResetStrategy DEFAULT_OFFSET_RESET_POLICY = OffsetResetStrategy.EARLIEST;
-    AdminClient ac;
-
-    String groupId;
-
-    ParallelEoSStreamProcessor<String, String> pc;
 
     TopicPartition tp;
 
@@ -80,8 +73,6 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     void setup() {
         setupTopic();
         tp = new TopicPartition(getTopic(), 0);
-        groupId = getKcu().getConsumer().groupMetadata().groupId();
-        this.ac = getKcu().getAdmin();
     }
 
     /**
@@ -89,90 +80,80 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @Test
     void compactedTopic() {
-        KafkaContainer compactingBroker = setupCompactingKafkaBroker();
+        try (KafkaContainer compactingBroker = setupCompactingKafkaBroker();) {
 
-        var TO_PRODUCE = this.TO_PRODUCE / 10;
+            var TO_PRODUCE = this.TO_PRODUCE / 10; // local override, produce less
 
-        List<String> keys = produceMessages(TO_PRODUCE);
+            List<String> keys = produceMessages(TO_PRODUCE);
 
-        final int UNTIL_OFFSET = TO_PRODUCE / 2;
-        var processedOnFirstRun = runPcUntilOffset(UNTIL_OFFSET, TO_PRODUCE, UniSets.of(TO_PRODUCE - 3L));
-        assertWithMessage("Last processed should be at least half of the total sent, so that there is incomplete data to track")
-                .that(getLast(processedOnFirstRun).get().offset())
-                .isGreaterThan(TO_PRODUCE / 2);
+            final int UNTIL_OFFSET = TO_PRODUCE / 2;
+            var processedOnFirstRun = runPcUntilOffset(UNTIL_OFFSET, TO_PRODUCE, UniSets.of(TO_PRODUCE - 3L));
+            assertWithMessage("Last processed should be at least half of the total sent, so that there is incomplete data to track")
+                    .that(getLast(processedOnFirstRun).get().offset())
+                    .isGreaterThan(TO_PRODUCE / 2);
 
-        // commit offset
-        closePC();
+            //
+            ArrayList<String> compactionKeysRaw = sendRandomCompactionRecords(keys, TO_PRODUCE);
+            Set<String> compactedKeys = new HashSet<>(compactionKeysRaw);
 
-        //
-        ArrayList<String> compactionKeysRaw = sendRandomCompactionRecords(keys, TO_PRODUCE);
-        Set<String> compactedKeys = new HashSet<>(compactionKeysRaw);
+            var processedOnFirstRunWithTombstoneTargetsRemoved = processedOnFirstRun.stream()
+                    .filter(context -> !compactedKeys.contains(context.key()))
+                    .map(PollContext::key)
+                    .collect(Collectors.toList());
 
-        var processedOnFirstRunWithTombstoneTargetsRemoved = processedOnFirstRun.stream()
-                .filter(context -> !compactedKeys.contains(context.key()))
-                .map(PollContext::key)
-                .collect(Collectors.toList());
-
-        var firstRunPartitioned = processedOnFirstRun.stream().collect(Collectors.partitioningBy(context -> compactedKeys.contains(context.key())));
-        var saved = firstRunPartitioned.get(Boolean.FALSE);
-        var compacted = firstRunPartitioned.get(Boolean.TRUE);
-        log.debug("kept offsets: {}", saved.stream().mapToLong(PollContext::offset).boxed().collect(Collectors.toList()));
-        log.debug("kept keys: {}", saved.stream().map(PollContext::key).collect(Collectors.toList()));
-        log.debug("compacted offsets: {}", compacted.stream().map(PollContext::key).collect(Collectors.toList()));
-        log.debug("compacted keys: {}", compacted.stream().mapToLong(PollContext::offset).boxed().collect(Collectors.toList()));
+            var firstRunPartitioned = processedOnFirstRun.stream().collect(Collectors.partitioningBy(context -> compactedKeys.contains(context.key())));
+            var saved = firstRunPartitioned.get(Boolean.FALSE);
+            var compacted = firstRunPartitioned.get(Boolean.TRUE);
+            log.debug("kept offsets: {}", saved.stream().mapToLong(PollContext::offset).boxed().collect(Collectors.toList()));
+            log.debug("kept keys: {}", saved.stream().map(PollContext::key).collect(Collectors.toList()));
+            log.debug("compacted offsets: {}", compacted.stream().map(PollContext::key).collect(Collectors.toList()));
+            log.debug("compacted keys: {}", compacted.stream().mapToLong(PollContext::offset).boxed().collect(Collectors.toList()));
 
 
-        var tombstoneTargetOffsetsFromFirstRun = compacted.stream()
-                .filter(context -> compactedKeys.contains(context.key()))
-                .map(PollContext::offset)
-                .collect(Collectors.toList());
+            var tombstoneTargetOffsetsFromFirstRun = compacted.stream()
+                    .filter(context -> compactedKeys.contains(context.key()))
+                    .map(PollContext::offset)
+                    .collect(Collectors.toList());
 
-        var tombStonedOffsetsFromKey = compactedKeys.stream()
-                .map(PartitionStateCommittedOffsetIT::getOffsetFromKey).collect(Collectors.toList());
-        log.debug("First run produced, with compaction targets removed: {}", processedOnFirstRunWithTombstoneTargetsRemoved);
+            var tombStonedOffsetsFromKey = compactedKeys.stream()
+                    .map(PartitionStateCommittedOffsetIT::getOffsetFromKey).collect(Collectors.toList());
+            log.debug("First run produced, with compaction targets removed: {}", processedOnFirstRunWithTombstoneTargetsRemoved);
 
-        //
-        triggerTombStoneProcessing();
+            //
+            triggerTombStoneProcessing();
 
-        // The offsets of the tombstone targets should not be read in second run
-        final int expectedTotalNumberRecordsProduced = TO_PRODUCE + tombStonedOffsetsFromKey.size();
-        final int expectedOffsetProcessedToSecondRun = TO_PRODUCE + compactedKeys.size();
-        var processedOnSecondRun = runPcUntilOffset(expectedOffsetProcessedToSecondRun, GroupOption.REUSE_GROUP).stream()
-                .filter(recordContexts -> !recordContexts.key().contains("compaction-trigger"))
-                .collect(Collectors.toList());
+            // The offsets of the tombstone targets should not be read in second run
+            final int expectedOffsetProcessedToSecondRun = TO_PRODUCE + compactedKeys.size();
+            var processedOnSecondRun = runPcUntilOffset(expectedOffsetProcessedToSecondRun, GroupOption.REUSE_GROUP).stream()
+                    .filter(recordContexts -> !recordContexts.key().contains("compaction-trigger"))
+                    .collect(Collectors.toList());
 
-        //
-        List<String> offsetsFromSecondRunFromKey = processedOnSecondRun.stream()
-                .map(PollContext::key)
-                .collect(Collectors.toList());
+            //
+            List<Long> offsetsFromSecond = processedOnSecondRun.stream()
+                    .map(PollContext::offset)
+                    .collect(Collectors.toList());
 
-        //
-        List<Long> offsetsFromSecond = processedOnSecondRun.stream()
-                .map(PollContext::offset)
-                .collect(Collectors.toList());
+            assertWithMessage("Finish reading rest of records from %s to %s",
+                    UNTIL_OFFSET, TO_PRODUCE)
+                    .that(processedOnSecondRun.size()).isGreaterThan(TO_PRODUCE - UNTIL_OFFSET);
 
-        assertWithMessage("Finish reading rest of records from %s to %s",
-                UNTIL_OFFSET, TO_PRODUCE)
-                .that(processedOnSecondRun.size()).isGreaterThan(TO_PRODUCE - UNTIL_OFFSET);
+            assertWithMessage("Off the offsets read on the second run, offsets that were compacted (below the initial produce target) should now be removed, as they were replaced with newer ones.")
+                    .that(offsetsFromSecond)
+                    .containsNoneIn(tombstoneTargetOffsetsFromFirstRun);
 
-        assertWithMessage("Off the offsets read on the second run, offsets that were compacted (below the initial produce target) should now be removed, as they were replaced with newer ones.")
-                .that(offsetsFromSecond)
-                .containsNoneIn(tombstoneTargetOffsetsFromFirstRun);
-
-        compactingBroker.close();
+        }
     }
 
     /**
-     * Setup our extra special compacting broker
+     * Set up our extra special compacting broker
      */
     @NonNull
     private KafkaContainer setupCompactingKafkaBroker() {
         KafkaContainer compactingBroker = null;
         {
+            // set up new broker
             compactingBroker = BrokerIntegrationTest.createKafkaContainer("40000");
             compactingBroker.start();
-            kcu = new KafkaClientUtils(compactingBroker);
-            kcu.open();
 
             setup();
         }
@@ -210,7 +191,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, "0"), AlterConfigOp.OpType.SET));
 
         var configs = UniMaps.of(topicConfig, alterConfigOps);
-        KafkaFuture<Void> all = ac.incrementalAlterConfigs(configs).all();
+        KafkaFuture<Void> all = getKcu().getAdmin().incrementalAlterConfigs(configs).all();
         all.get(5, SECONDS);
 
         log.debug("Compaction setup complete");
@@ -264,11 +245,9 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
         runPcUntilOffset(50);
 
-        closePC();
-
         final int moveToOffset = 25;
 
-        moveCommittedOffset(kcu.getGroupId(), moveToOffset);
+        moveCommittedOffset(getKcu().getGroupId(), moveToOffset);
 
         runPcCheckStartIs(moveToOffset, TO_PRODUCE);
     }
@@ -281,122 +260,125 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @SneakyThrows
     private void runPcCheckStartIs(long targetStartOffset, long checkUpTo, GroupOption groupOption) {
-        this.pc = super.getKcu().buildPc(PARTITION, groupOption);
-        pc.subscribe(of(getTopic()));
+        try (var tempPc = super.getKcu().buildPc(PARTITION, groupOption);) {
+            tempPc.subscribe(of(getTopic()));
 
-        AtomicLong lowest = new AtomicLong(Long.MAX_VALUE);
-        AtomicLong highest = new AtomicLong();
+            AtomicLong lowest = new AtomicLong(Long.MAX_VALUE);
+            AtomicLong highest = new AtomicLong();
 
-        pc.poll(recordContexts -> {
-            long thisOffset = recordContexts.offset();
-            if (thisOffset < lowest.get()) {
-                log.debug("Found lowest offset {}", thisOffset);
-                lowest.set(thisOffset);
-            } else if (thisOffset > highest.get()) {
-                highest.set(thisOffset);
-            }
-        });
+            tempPc.poll(recordContexts -> {
+                long thisOffset = recordContexts.offset();
+                if (thisOffset < lowest.get()) {
+                    log.debug("Found lowest offset {}", thisOffset);
+                    lowest.set(thisOffset);
+                } else if (thisOffset > highest.get()) {
+                    highest.set(thisOffset);
+                }
+            });
 
-        //
-        AtomicLong bumpersSent = new AtomicLong();
-        Awaitility.await().untilAsserted(() -> {
-            // in case we're at the end of the topic, add some messages to make sure we get a poll response
-            getKcu().produceMessages(getTopic(), 1, "poll-bumper");
-            bumpersSent.incrementAndGet();
+            //
+            AtomicLong bumpersSent = new AtomicLong();
+            Awaitility.await().untilAsserted(() -> {
+                // in case we're at the end of the topic, add some messages to make sure we get a poll response
+                getKcu().produceMessages(getTopic(), 1, "poll-bumper");
+                bumpersSent.incrementAndGet();
 
-            assertWithMessage("Highest seen offset")
-                    .that(highest.get())
-                    .isAtLeast(checkUpTo - 1);
-        });
+                assertWithMessage("Highest seen offset")
+                        .that(highest.get())
+                        .isAtLeast(checkUpTo - 1);
+            });
 
-        pc.close();
-
-        var adjustExpected = switch (offsetResetStrategy) {
-            case EARLIEST -> targetStartOffset;
-            case LATEST -> targetStartOffset + 1;
-            case NONE -> throw new IllegalStateException("NONE not supported");
-        };
-        assertWithMessage("Offset started as").that(lowest.get()).isEqualTo(adjustExpected);
-    }
-
-    private void moveCommittedOffset(int moveToOffset) {
-        moveCommittedOffset(groupId, moveToOffset);
+            var adjustExpected = switch (offsetResetStrategy) {
+                case EARLIEST -> targetStartOffset;
+                case LATEST -> targetStartOffset + 1;
+                case NONE -> throw new IllegalStateException("NONE not supported");
+            };
+            assertWithMessage("Offset started as").that(lowest.get()).isEqualTo(adjustExpected);
+        }
     }
 
     @SneakyThrows
     private void moveCommittedOffset(String groupId, long offset) {
         log.debug("Moving offset of {} to {}", groupId, offset);
         var data = UniMaps.of(tp, new OffsetAndMetadata(offset));
-        var result = ac.alterConsumerGroupOffsets(groupId, data);
+        var result = getKcu().getAdmin().alterConsumerGroupOffsets(groupId, data);
         result.all().get(5, SECONDS);
         log.debug("Moved offset to {}", offset);
     }
-
-    private void closePC() {
-        pc.close();
-    }
-
 
     private List<PollContext<String, String>> runPcUntilOffset(long succeedUpToOffset, long expectedProcessToOffset, Set<Long> exceptionsToSucceed) {
         return runPcUntilOffset(DEFAULT_OFFSET_RESET_POLICY, succeedUpToOffset, expectedProcessToOffset, exceptionsToSucceed, GroupOption.NEW_GROUP);
     }
 
     @SneakyThrows
-    private List<PollContext<String, String>> runPcUntilOffset(OffsetResetStrategy offsetResetPolicy, long succeedUpToOffset, long expectedProcessToOffset, Set<Long> exceptionsToSucceed, GroupOption newGroup) {
+    private List<PollContext<String, String>> runPcUntilOffset(OffsetResetStrategy offsetResetPolicy,
+                                                               long succeedUpToOffset,
+                                                               long expectedProcessToOffset,
+                                                               Set<Long> exceptionsToSucceed,
+                                                               GroupOption newGroup) {
         log.debug("Running PC until at least offset {}", succeedUpToOffset);
-        this.pc = super.getKcu().buildPc(UNORDERED, newGroup);
+        super.getKcu().setOffsetResetPolicy(offsetResetPolicy);
+        var tempPc = super.getKcu().buildPc(UNORDERED, newGroup);
+        try { // can't use auto closeable because close is complicated as it's expected to crash and close rethrows error
 
-        SortedSet<PollContext<String, String>> seenOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
-        SortedSet<PollContext<String, String>> succeededOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
+            SortedSet<PollContext<String, String>> seenOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
+            SortedSet<PollContext<String, String>> succeededOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
 
-        pc.subscribe(of(getTopic()));
+            tempPc.subscribe(of(getTopic()));
 
-        pc.poll(pollContext -> {
-            seenOffsets.add(pollContext);
-            long thisOffset = pollContext.offset();
-            if (exceptionsToSucceed.contains(thisOffset)) {
-                log.debug("Exceptional offset {} succeeded", thisOffset);
-            } else if (thisOffset >= succeedUpToOffset) {
-                log.debug("Failing on {}", thisOffset);
-                throw new RuntimeException("Failing on " + thisOffset);
-            } else {
-                log.debug("Succeeded {}: {}", thisOffset, pollContext.getSingleRecord());
-                succeededOffsets.add(pollContext);
-            }
-        });
-
-        // give first poll a chance to run
-        ThreadUtils.sleepSecondsLog(1);
-
-        getKcu().produceMessages(getTopic(), 1, "poll-bumper");
-
-        if (offsetResetPolicy.equals(OffsetResetStrategy.NONE)) {
-            Awaitility.await().untilAsserted(() -> {
-                assertWithMessage("PC crashed / failed fast").that(pc.isClosedOrFailed()).isTrue();
-                assertThat(pc.getFailureCause()).hasCauseThat().hasMessageThat().contains("Error in BrokerPollSystem system");
-                var stackTrace = ExceptionUtils.getStackTrace(pc.getFailureCause());
-                Truth.assertThat(stackTrace).contains("Undefined offset with no reset policy for partitions");
+            tempPc.poll(pollContext -> {
+                seenOffsets.add(pollContext);
+                long thisOffset = pollContext.offset();
+                if (exceptionsToSucceed.contains(thisOffset)) {
+                    log.debug("Exceptional offset {} succeeded", thisOffset);
+                } else if (thisOffset >= succeedUpToOffset) {
+                    log.debug("Failing on {}", thisOffset);
+                    throw new RuntimeException("Failing on " + thisOffset);
+                } else {
+                    log.debug("Succeeded {}: {}", thisOffset, pollContext.getSingleRecord());
+                    succeededOffsets.add(pollContext);
+                }
             });
-            return UniLists.of();
-        } else {
 
-            Awaitility.await()
-                    .failFast(pc::isClosedOrFailed)
-                    .untilAsserted(() -> {
-                        assertThat(seenOffsets).isNotEmpty();
-                        assertThat(seenOffsets.last().offset()).isGreaterThan(expectedProcessToOffset - 2);
-                    });
+            // give first poll a chance to run
+            ThreadUtils.sleepSecondsLog(1);
 
-            if (!succeededOffsets.isEmpty()) {
-                log.debug("Succeeded up to: {}", succeededOffsets.last().offset());
+            getKcu().produceMessages(getTopic(), 1, "poll-bumper");
+
+            if (offsetResetPolicy.equals(OffsetResetStrategy.NONE)) {
+                Awaitility.await().untilAsserted(() -> {
+                    assertWithMessage("PC crashed / failed fast").that(tempPc.isClosedOrFailed()).isTrue();
+                    assertThat(tempPc.getFailureCause()).hasCauseThat().hasMessageThat().contains("Error in BrokerPollSystem system");
+                    var stackTrace = ExceptionUtils.getStackTrace(tempPc.getFailureCause());
+                    Truth.assertThat(stackTrace).contains("Undefined offset with no reset policy for partitions");
+                });
+                return UniLists.of();
+            } else {
+
+                Awaitility.await()
+                        .failFast(tempPc::isClosedOrFailed)
+                        .untilAsserted(() -> {
+                            assertThat(seenOffsets).isNotEmpty();
+                            assertThat(seenOffsets.last().offset()).isGreaterThan(expectedProcessToOffset - 2);
+                        });
+
+                if (!succeededOffsets.isEmpty()) {
+                    log.debug("Succeeded up to: {}", succeededOffsets.last().offset());
+                }
+                log.debug("Consumed up to {}", seenOffsets.last().offset());
+
+                var sorted = new ArrayList<>(seenOffsets);
+                Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
+
+
+                return sorted;
             }
-            log.debug("Consumed up to {}", seenOffsets.last().offset());
-
-            pc.close();
-
-            var sorted = new ArrayList<>(seenOffsets);
-            Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
-            return sorted;
+        } finally {
+            try {
+                tempPc.close(); // close manually in this branch only, as in other branch it crashes
+            } catch (Exception e) {
+                log.debug("Cause will get rethrown close on the NONE parameter branch", e);
+            }
         }
     }
 
@@ -410,15 +392,13 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
         runPcUntilOffset(50);
 
-        closePC();
-
         final int moveToOffset = 75;
 
         // reslolve groupId mess
-        moveCommittedOffset(kcu.getGroupId(), moveToOffset);
+        moveCommittedOffset(getKcu().getGroupId(), moveToOffset);
 
         runPcCheckStartIs(moveToOffset, quantity);
-        var gkcu5 = kcu.getConsumer().groupMetadata().groupId();
+        var gkcu5 = getKcu().getConsumer().groupMetadata().groupId();
 
     }
 
@@ -434,17 +414,19 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     @ParameterizedTest
     void committedOffsetRemoved(OffsetResetStrategy offsetResetPolicy) {
         this.offsetResetStrategy = offsetResetPolicy;
-        try (KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker()) {
+        try (
+                KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker();
+                KafkaClientUtils clientUtils = new KafkaClientUtils(compactingKafkaBroker);
+        ) {
             log.debug("Compacting broker started {}", compactingKafkaBroker.getBootstrapServers());
 
-            kcu = new KafkaClientUtils(compactingKafkaBroker);
-            kcu.setOffsetResetPolicy(offsetResetPolicy);
-            kcu.open();
+            clientUtils.setOffsetResetPolicy(offsetResetPolicy);
+            clientUtils.open();
 
             var producedCount = produceMessages(TO_PRODUCE).size();
 
             final int END_OFFSET = 50;
-            groupId = getKcu().getGroupId();
+            var groupId = clientUtils.getGroupId();
             runPcUntilOffset(offsetResetPolicy, END_OFFSET);
 
             //
@@ -452,9 +434,6 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                 // test finished
                 return;
             }
-
-            //
-            closePC();
 
             final String compactedKey = "key-50";
 
@@ -473,7 +452,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                 case LATEST -> producedCount + 4;
                 case NONE -> -1; // will crash / fail fast
             };
-            getKcu().setGroupId(groupId);
+            clientUtils.setGroupId(groupId);
             runPcCheckStartIs(EXPECTED_RESET_OFFSET, producedCount);
         }
     }
@@ -481,24 +460,25 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     private void checkHowManyRecordsWithKeyPresent(String keyToSearchFor, int expectedQuantityToFind, long upToOffset) {
         log.debug("Looking for {} records with key {} up to offset {}", expectedQuantityToFind, keyToSearchFor, upToOffset);
 
-        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(GroupOption.NEW_GROUP);
-        newConsumer.assign(of(tp));
-        newConsumer.seekToBeginning(UniSets.of(tp));
-        long positionAfter = newConsumer.position(tp); // trigger eager seek
-        assertThat(positionAfter).isEqualTo(0);
-        final List<ConsumerRecord<String, String>> records = new ArrayList<>();
-        long highest = -1;
-        while (highest < upToOffset - 1) {
-            ConsumerRecords<String, String> poll = newConsumer.poll(Duration.ofSeconds(1));
-            records.addAll(poll.records(tp));
-            var lastOpt = getLast(records);
-            if (lastOpt.isPresent()) {
-                highest = lastOpt.get().offset();
+        try (KafkaConsumer<String, String> newConsumer = getKcu().createNewConsumer(GroupOption.NEW_GROUP);) {
+            newConsumer.assign(of(tp));
+            newConsumer.seekToBeginning(UniSets.of(tp));
+            long positionAfter = newConsumer.position(tp); // trigger eager seek
+            assertThat(positionAfter).isEqualTo(0);
+            final List<ConsumerRecord<String, String>> records = new ArrayList<>();
+            long highest = -1;
+            while (highest < upToOffset - 1) {
+                ConsumerRecords<String, String> poll = newConsumer.poll(Duration.ofSeconds(1));
+                records.addAll(poll.records(tp));
+                var lastOpt = getLast(records);
+                if (lastOpt.isPresent()) {
+                    highest = lastOpt.get().offset();
+                }
             }
-        }
 
-        var collect = records.stream().filter(value -> value.key().equals(keyToSearchFor)).collect(Collectors.toList());
-        ManagedTruth.assertThat(collect).hasSize(expectedQuantityToFind);
+            var collect = records.stream().filter(value -> value.key().equals(keyToSearchFor)).collect(Collectors.toList());
+            ManagedTruth.assertThat(collect).hasSize(expectedQuantityToFind);
+        }
     }
 
     @SneakyThrows

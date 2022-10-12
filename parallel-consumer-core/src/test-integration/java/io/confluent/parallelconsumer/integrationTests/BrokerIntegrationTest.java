@@ -9,6 +9,7 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -75,8 +76,8 @@ public abstract class BrokerIntegrationTest<K, V> {
         kafkaContainer.start();
     }
 
-    @Getter
-    protected KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
+    @Getter(AccessLevel.PROTECTED)
+    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
     @BeforeAll
     static void followKafkaLogs() {
