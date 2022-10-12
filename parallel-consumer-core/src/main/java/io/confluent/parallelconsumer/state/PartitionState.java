@@ -150,6 +150,8 @@ public class PartitionState<K, V> {
 
     /**
      * The Epoch of the generation of partition assignment, for fencing off invalid work.
+     * <p>
+     * Will unified actor partition assignment messages, epochs may no longer be needed.
      */
     @Getter
     private final long partitionsAssignmentEpoch;
@@ -573,7 +575,12 @@ public class PartitionState<K, V> {
     }
 
     /**
-     * TODO docs
+     * Checks if this record be taken from its partition as work.
+     * <p>
+     * It checks that the work is not stale, and that the partition ok to allow more records to be processed, or if the
+     * record is actually blocking our progress.
+     *
+     * @return true if this record be taken from its partition as work.
      */
     public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
         if (checkIfWorkIsStale(workContainer)) {
