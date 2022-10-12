@@ -53,7 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Antony Stubbs
  */
 @Slf4j
-public class KafkaClientUtils {
+public class KafkaClientUtils implements AutoCloseable {
 
     public static final int MAX_POLL_RECORDS = 10_000;
     public static final String GROUP_ID_PREFIX = "group-1-";

@@ -9,12 +9,10 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
-import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -25,9 +23,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-
-import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
-import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
  * In charge of managing {@link PartitionState}s.
@@ -52,8 +47,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     // todo remove static
     private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
 
-    private final Consumer<K, V> consumer;
-
     private final ShardManager<K, V> sm;
 
     /**
@@ -75,7 +68,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     private final PCModule<K, V> module;
 
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
-        this.consumer = module.consumer();
         this.sm = sm;
         this.module = module;
     }
@@ -294,6 +286,9 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
     }
 
+    /**
+     * @return true if this record be taken from its partition as work.
+     */
     public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
         return getPartitionState(workContainer)
                 .couldBeTakenAsWork(workContainer);

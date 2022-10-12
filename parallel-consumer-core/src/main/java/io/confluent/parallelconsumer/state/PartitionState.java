@@ -46,16 +46,9 @@ public class PartitionState<K, V> {
      */
     public static final long KAFKA_OFFSET_ABSENCE = -1L;
 
-    private PCModule<K, V> module;
+    private final PCModule<K, V> module;
 
-    /**
-     * Used for adding work to, if it's been successfully added to our tracked state
-     *
-     * @see #maybeRegisterNewPollBatchAsWork
-     */
     @NonNull
-    private final ShardManager<K, V> sm;
-
     @Getter
     private final TopicPartition tp;
 
@@ -102,6 +95,7 @@ public class PartitionState<K, V> {
      * @see io.confluent.parallelconsumer.offsets.BitSetEncoder for disucssion on how this is impacts per record ack
      *         storage
      */
+    @NonNull
     private ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
 
     /**
@@ -155,10 +149,21 @@ public class PartitionState<K, V> {
     @Setter(PRIVATE)
     private boolean allowedMoreRecords = true;
 
-    public PartitionState(PCModule<K, V> pcModule, TopicPartition topicPartition, OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
+    /**
+     * The Epoch of the generation of partition assignment, for fencing off invalid work.
+     * <p>
+     * Will unified actor partition assignment messages, epochs may no longer be needed.
+     */
+    @Getter
+    private final long partitionsAssignmentEpoch;
+
+    public PartitionState(long newEpoch,
+                          PCModule<K, V> pcModule,
+                          TopicPartition topicPartition,
+                          OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.module = pcModule;
         this.tp = topicPartition;
-        this.sm = pcModule.workManager().getSm();
+        this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
     }
@@ -171,7 +176,6 @@ public class PartitionState<K, V> {
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
-
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -256,29 +260,91 @@ public class PartitionState<K, V> {
         }
 
         //
+        maybeTruncateOrPruneTrackedOffsets(recordsAndEpoch);
+
+        //
         long epochOfInboundRecords = recordsAndEpoch.getEpochOfPartitionAtPoll();
         List<ConsumerRecord<K, V>> recordPollBatch = recordsAndEpoch.getRecords();
         for (var aRecord : recordPollBatch) {
             if (isRecordPreviouslyCompleted(aRecord)) {
                 log.trace("Record previously completed, skipping. offset: {}", aRecord.offset());
             } else {
-                sm.addWorkContainer(epochOfInboundRecords, aRecord);
+                getShardManager().addWorkContainer(epochOfInboundRecords, aRecord);
                 addNewIncompleteRecord(aRecord);
             }
         }
 
     }
 
+    /**
+     * Used for adding work to, if it's been successfully added to our tracked state
+     *
+     * @see #maybeRegisterNewPollBatchAsWork
+     */
+    private ShardManager<K, V> getShardManager() {
+        return module.workManager().getSm();
+    }
+
     public boolean isPartitionRemovedOrNeverAssigned() {
         return false;
     }
 
+    // visible for legacy testing
     public void addNewIncompleteRecord(ConsumerRecord<K, V> record) {
         long offset = record.offset();
         maybeRaiseHighestSeenOffset(offset);
 
         // idempotently add the offset to our incompletes track - if it was already there from loading our metadata on startup, there is no affect
         incompleteOffsets.put(offset, Optional.of(record));
+    }
+
+
+    /**
+     * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
+     * Offsets between have disappeared and will never be polled again.
+     * <p>
+     * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
+     */
+    private void maybeTruncateBelowOrAbove(long polledOffset) {
+        if (bootstrapPhase) {
+            bootstrapPhase = false;
+        } else {
+            // Not bootstrap phase anymore, so not checking for truncation
+            return;
+        }
+
+        long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
+
+        boolean pollAboveExpected = polledOffset > expectedBootstrapRecordOffset;
+
+        boolean pollBelowExpected = polledOffset < expectedBootstrapRecordOffset;
+
+        if (pollAboveExpected) {
+            // previously committed offset record has been removed, or manual reset to higher offset detected
+            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker or committed offset has been raised. Bootstrap polled {} but " +
+                            "expected {} from loaded commit data. Could be caused by record retention or compaction.",
+                    polledOffset,
+                    polledOffset,
+                    expectedBootstrapRecordOffset);
+
+            // truncate
+            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, false);
+            incompletesToPrune.forEach(incompleteOffsets::remove);
+        } else if (pollBelowExpected) {
+            // manual reset to lower offset detected
+            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
+                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}.",
+                    polledOffset,
+                    expectedBootstrapRecordOffset,
+                    polledOffset
+            );
+
+            // reset
+            var resetHighestSeenOffset = Optional.<Long>empty();
+            var resetIncompletesMap = UniSets.<Long>of();
+            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
+            initStateFromOffsetData(offsetData);
+        }
     }
 
     /**
@@ -311,8 +377,7 @@ public class PartitionState<K, V> {
      * Defines as the offset one below the highest sequentially succeeded offset.
      */
     // visible for testing
-    // todo change back to protected? and enable protected level managed truth (seems to be limited to public)
-    public long getNextExpectedInitialPolledOffset() {
+    protected long getNextExpectedInitialPolledOffset() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -450,7 +515,7 @@ public class PartitionState<K, V> {
      * Also, does {@link #maybeTruncateBelowOrAbove}.
      */
     @SuppressWarnings("OptionalGetWithoutIsPresent") // checked with isEmpty
-    protected void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
+    private void maybeTruncateOrPruneTrackedOffsets(EpochAndRecordsMap<?, ?>.RecordsAndEpoch polledRecordBatch) {
         var records = polledRecordBatch.getRecords();
 
         if (records.isEmpty()) {
@@ -496,54 +561,6 @@ public class PartitionState<K, V> {
     }
 
     /**
-     * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
-     * Offsets between have disappeared and will never be polled again.
-     * <p>
-     * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
-     */
-    private void maybeTruncateBelowOrAbove(long polledOffset) {
-        if (bootstrapPhase) {
-            bootstrapPhase = false;
-        } else {
-            // Not bootstrap phase anymore, so not checking for truncation
-            return;
-        }
-
-        long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
-
-        boolean pollAboveExpected = polledOffset > expectedBootstrapRecordOffset;
-
-        boolean pollBelowExpected = polledOffset < expectedBootstrapRecordOffset;
-
-        if (pollAboveExpected) {
-            // previously committed offset record has been removed, or manual reset to higher offset detected
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker or committed offset has been raised. Bootstrap polled {} but " +
-                            "expected {} from loaded commit data. Could be caused by record retention or compaction.",
-                    polledOffset,
-                    polledOffset,
-                    expectedBootstrapRecordOffset);
-
-            // truncate
-            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, true);
-            incompletesToPrune.forEach(incompleteOffsets::remove);
-        } else if (pollBelowExpected) {
-            // manual reset to lower offset detected
-            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
-                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}.",
-                    polledOffset,
-                    expectedBootstrapRecordOffset,
-                    polledOffset
-            );
-
-            // reset
-            var resetHighestSeenOffset = Optional.<Long>empty();
-            var resetIncompletesMap = UniSets.<Long>of();
-            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
-            initStateFromOffsetData(offsetData);
-        }
-    }
-
-    /**
      * If the record is below the highest succeeded offset, then it is or will be represented in the current offset
      * encoding.
      * <p>
@@ -559,7 +576,12 @@ public class PartitionState<K, V> {
     }
 
     /**
-     * TODO docs
+     * Checks if this record be taken from its partition as work.
+     * <p>
+     * It checks that the work is not stale, and that the partition ok to allow more records to be processed, or if the
+     * record is actually blocking our progress.
+     *
+     * @return true if this record be taken from its partition as work.
      */
     public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
         if (checkIfWorkIsStale(workContainer)) {
@@ -601,14 +623,6 @@ public class PartitionState<K, V> {
             return true;
         }
         return false;
-    }
-
-    /**
-     * todo docs
-     */
-    private Long getPartitionsAssignmentEpoch() {
-        // todo teach PartitionState to know it's Epoch, move this into PartitionState
-        throw new RuntimeException();
     }
 
 }

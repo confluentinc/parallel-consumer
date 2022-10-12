@@ -39,9 +39,10 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     private static final PartitionState singleton = new RemovedPartitionState<>();
 
     public static final String NO_OP = "no-op";
+    public static final int NO_EPOCH = -1;
 
     public RemovedPartitionState() {
-        super(null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
+        super(NO_EPOCH, null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     public static PartitionState getSingleton() {
@@ -59,13 +60,8 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
         return null;
     }
 
-//    @Override
-//    public void addNewIncompleteWorkContainer(final WorkContainer<K, V> wc) {
-//        // no-op
-//        log.warn("Dropping new work container for partition no longer assigned. WC: {}", wc);
-//    }
-
-    public void maybeRegisterNewRecordsAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
+    @Override
+    public void maybeRegisterNewPollBatchAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
         // no-op
         log.warn("Dropping polled record batch for partition no longer assigned. WC: {}", recordsAndEpoch);
     }
@@ -85,7 +81,6 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     @Override
     public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         log.debug(NO_OP);
-        //noinspection unchecked - by using unsave generics, we are able to share one static instance
         return READ_ONLY_EMPTY_SET;
     }
 

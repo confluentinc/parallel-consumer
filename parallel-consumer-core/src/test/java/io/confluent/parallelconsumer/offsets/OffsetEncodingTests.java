@@ -186,7 +186,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
         final long FIRST_COMMITTED_OFFSET = 1L;
         {
-            WorkManager<String, String> wmm = new WorkManager<>(new PCModule<>(newOptions));
+            final PCModule<String, String> moduleTwo = new PCModule<>(newOptions);
+            WorkManager<String, String> wmm = moduleTwo.workManager();
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
@@ -231,7 +232,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            var newWm = new WorkManager<>(new PCModule<>(options));
+            final PCModule<String, String> moduleThree = new PCModule<>(options);
+            var newWm = moduleThree.workManager();
             newWm.onPartitionsAssigned(UniSets.of(tp));
 
             //

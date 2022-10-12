@@ -68,7 +68,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         pc = new ParallelEoSStreamProcessor<>(module.options(), module);
 
-        kcu.produceMessages(getTopic(), NUMBER_TO_SEND);
+        getKcu().produceMessages(getTopic(), NUMBER_TO_SEND);
 
         pc.subscribe(of(getTopic()));
 
@@ -79,8 +79,8 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
     private ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> createOptions() {
         return ParallelConsumerOptions.<String, String>builder()
-                .consumer(kcu.createNewConsumer())
-                .producer(kcu.createNewProducer(CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER))
+                .consumer(getKcu().createNewConsumer())
+                .producer(getKcu().createNewProducer(CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER))
                 .commitMode(CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER)
                 .commitLockAcquisitionTimeout(ofSeconds(1))
                 .defaultMessageRetryDelay(ofMillis(100))
@@ -162,7 +162,7 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         // check what was committed at shutdown to the input topic, re-using same group id as PC, to access what was committed at shutdown commit attempt
         // 2nd commit attempt during shutdown will have succeeded
-        var newConsumer = kcu.createNewConsumer(originalGroupId);
+        var newConsumer = getKcu().createNewConsumer(originalGroupId);
         var assertCommittedToPartition = assertThat(newConsumer).hasCommittedToPartition(getTopic(), partitionNumber);
 
         assertCommittedToPartition.offset(offsetToGoVerySlow);
