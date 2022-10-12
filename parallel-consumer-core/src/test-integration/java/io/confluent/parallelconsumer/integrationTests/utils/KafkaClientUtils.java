@@ -68,6 +68,9 @@ public class KafkaClientUtils {
     @Getter
     private KafkaConsumer<String, String> consumer;
 
+    @Setter
+    private OffsetResetStrategy offsetResetPolicy = OffsetResetStrategy.EARLIEST;
+
     @Getter
     private KafkaProducer<String, String> producer;
 
@@ -118,9 +121,7 @@ public class KafkaClientUtils {
         consumerProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.toString().toLowerCase(Locale.ROOT));
 
         // Reset
-        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.EARLIEST.name().toLowerCase());
-//        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.LATEST.name().toLowerCase());
-//        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.NONE.name().toLowerCase());
+        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetResetPolicy.name().toLowerCase());
 
         //
         //    consumerProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10);
