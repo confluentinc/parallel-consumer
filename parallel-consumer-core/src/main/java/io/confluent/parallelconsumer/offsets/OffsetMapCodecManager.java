@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +21,8 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
- * Uses multiple encodings to compare, when decided, can refactor other options out for analysis only - {@link
- * #encodeOffsetsCompressed}
+ * Uses multiple encodings to compare, when decided, can refactor other options out for analysis only -
+ * {@link #encodeOffsetsCompressed}
  * <p>
  * TODO: consider IO exception management - question sneaky throws usage?
  * <p>
@@ -33,6 +34,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * <li>byte2-3: Short: bitset size
  * <li>byte4-n: serialised {@link BitSet}
  * </ul>
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public class OffsetMapCodecManager<K, V> {
@@ -48,15 +51,16 @@ public class OffsetMapCodecManager<K, V> {
     /**
      * Maximum size of the commit offset metadata
      *
-     * @see <a href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
+     * @see <a
+     *         href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
      * @see "kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize"
      */
+    // todo refactored to constant in the remove statics branch
     public static int DefaultMaxMetadataSize = 4096;
 
     public static final Charset CHARSET_TO_USE = UTF_8;
 
-    // todo OffsetMapCodecManager needs refactoring - consumer presence here smells bad #233
-    org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
+    private final PCModule module;
 
     /**
      * Decoding result for encoded offsets
@@ -94,8 +98,8 @@ public class OffsetMapCodecManager<K, V> {
     public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
 
     // todo remove consumer #233
-    public OffsetMapCodecManager(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this.consumer = consumer;
+    public OffsetMapCodecManager(PCModule<K, V> module) {
+        this.module = module;
     }
 
     /**
@@ -112,7 +116,7 @@ public class OffsetMapCodecManager<K, V> {
         while (partitionLastCommittedOffsets == null) {
             WakeupException lastWakeupException = null;
             try {
-                partitionLastCommittedOffsets = consumer.committed(new HashSet<>(assignment));
+                partitionLastCommittedOffsets = module.consumer().committed(new HashSet<>(assignment));
             } catch (WakeupException exception) {
                 log.debug("Woken up trying to get assignment", exception);
                 lastWakeupException = exception;
@@ -141,7 +145,9 @@ public class OffsetMapCodecManager<K, V> {
         assignment.stream()
                 .filter(topicPartition -> !partitionStates.containsKey(topicPartition))
                 .forEach(topicPartition -> {
-                    PartitionState<K, V> defaultEntry = new PartitionState<>(topicPartition, HighestOffsetAndIncompletes.of());
+                    var psm = module.workManager().getPm();
+                    var epoch = psm.getEpochOfPartition(topicPartition);
+                    PartitionState<K, V> defaultEntry = new PartitionState<>(epoch, module, topicPartition, HighestOffsetAndIncompletes.of());
                     partitionStates.put(topicPartition, defaultEntry);
                 });
 
@@ -165,7 +171,8 @@ public class OffsetMapCodecManager<K, V> {
     PartitionState<K, V> decodePartitionState(TopicPartition tp, OffsetAndMetadata offsetData) throws OffsetDecodingError {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
-        return new PartitionState<>(tp, incompletes);
+        var epoch = module.workManager().getPm().getEpochOfPartition(tp);
+        return new PartitionState<>(epoch, module, tp, incompletes);
     }
 
     public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
@@ -194,7 +201,7 @@ public class OffsetMapCodecManager<K, V> {
             log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
                     partitionState.getTp(),
                     highestSucceeded,
-                    partitionState.getIncompleteOffsetsBelowHighestSucceeded());
+                    incompleteOffsets);
         }
 
 

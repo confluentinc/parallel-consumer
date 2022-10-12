@@ -20,6 +20,8 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * <p>
  * One such nature is that gaps between completed offsets get encoded as succeeded offsets. This doesn't matter because
  * they don't exist and we'll neve see them (they no longer exist in the source partition).
+ *
+ * @author Antony Stubbs
  */
 public class RunLengthEncoder extends OffsetEncoder {
 

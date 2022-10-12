@@ -25,6 +25,7 @@ import static java.time.Duration.ofMillis;
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
  *
+ * @author Antony Stubbs
  * @see #builder()
  * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder
  */

@@ -11,6 +11,8 @@ import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedSubject;
 import lombok.ToString;
+import io.stubbs.truth.generator.SubjectFactoryMethod;
+import io.stubbs.truth.generator.UserManagedSubject;
 
 import java.util.Arrays;
 import java.util.Optional;

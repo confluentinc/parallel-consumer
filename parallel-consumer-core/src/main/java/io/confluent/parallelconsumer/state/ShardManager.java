@@ -9,16 +9,18 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
+import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
@@ -32,13 +34,16 @@ import static java.util.Optional.of;
  * This state is shared between the {@link BrokerPollSystem} thread (write - adding and removing shards and work)  and
  * the {@link AbstractParallelEoSStreamProcessor} Controller thread (read - how many records are in the shards?), so
  * must be thread safe.
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ShardManager<K, V> {
 
+    private final PCModule<K, V> module;
+
     @Getter
-    private final ParallelConsumerOptions options;
+    private final ParallelConsumerOptions<?, ?> options;
 
     private final WorkManager<K, V> wm;
 
@@ -87,6 +92,12 @@ public class ShardManager<K, V> {
      */
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
+    public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
+        this.module = module;
+        this.wm = wm;
+        this.options = module.options();
+    }
+
     /**
      * The shard belonging to the given key
      *
@@ -101,6 +112,10 @@ public class ShardManager<K, V> {
     }
 
     ShardKey computeShardKey(WorkContainer<?, ?> wc) {
+        return ShardKey.of(wc, options.getOrdering());
+    }
+
+    ShardKey computeShardKey(ConsumerRecord<?, ?> wc) {
         return ShardKey.of(wc, options.getOrdering());
     }
 
@@ -122,30 +137,33 @@ public class ShardManager<K, V> {
     /**
      * Remove only the work shards which are referenced from work from revoked partitions
      *
-     * @param workFromRemovedPartition collection of work to scan to get keys of shards to remove
+     * @param recordsFromRemovedPartition collection of work to scan to get keys of shards to remove
      */
-    void removeAnyShardsReferencedBy(NavigableMap<Long, WorkContainer<K, V>> workFromRemovedPartition) {
-        for (WorkContainer<K, V> work : workFromRemovedPartition.values()) {
+    void removeAnyShardEntriesReferencedFrom(Collection<Optional<ConsumerRecord<K, V>>> recordsFromRemovedPartition) {
+        for (ConsumerRecord<K, V> work : recordsFromRemovedPartition.stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList())) {
             removeShardFor(work);
         }
     }
 
-    private void removeShardFor(final WorkContainer<K, V> work) {
-        ShardKey shardKey = computeShardKey(work);
+    private void removeShardFor(ConsumerRecord<K, V> consumerRecord) {
+        ShardKey shardKey = computeShardKey(consumerRecord);
 
         if (processingShards.containsKey(shardKey)) {
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
-            shard.remove(work.offset());
+            WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
             removeShardIfEmpty(shardKey);
+            // remove if in retry queue
+            this.retryQueue.remove(removedWC);
         } else {
-            log.trace("Shard referenced by WC: {} with shard key: {} already removed", work, shardKey);
+            log.trace("Shard referenced by WC: {} with shard key: {} already removed", consumerRecord, shardKey);
         }
-
-        //
-        this.retryQueue.remove(work);
     }
 
-    public void addWorkContainer(WorkContainer<K, V> wc) {
+    public void addWorkContainer(long epochOfInboundRecords, ConsumerRecord<K, V> aRecord) {
+        var wc = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
         ShardKey shardKey = computeShardKey(wc);
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));

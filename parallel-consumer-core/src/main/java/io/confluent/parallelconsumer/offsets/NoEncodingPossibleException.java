@@ -5,10 +5,13 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import io.confluent.parallelconsumer.internal.InternalException;
+import lombok.experimental.StandardException;
 
+/**
+ * todo docs
+ *
+ * @author Antony Stubbs
+ */
+@StandardException
 public class NoEncodingPossibleException extends InternalException {
-
-    public NoEncodingPossibleException(String msg) {
-        super(msg);
-    }
 }

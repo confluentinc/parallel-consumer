@@ -4,10 +4,11 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import io.confluent.parallelconsumer.offsets.OffsetEncodingTests;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import one.util.streamex.LongStreamEx;
-import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
@@ -23,13 +24,16 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 
 /**
+ * Unit test for PartitionState behaviour when committed offsets are changed and random records are removed (compaction)
+ * which already are tracked in the offset map.
+ *
  * @author Antony Stubbs
+ * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
  * @see PartitionState#maybeTruncateBelow
  * @see PartitionState#maybeTruncateOrPruneTrackedOffsets
+ * @see io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT
  */
 class PartitionStateCommittedOffsetTest {
-
-    AdminClient ac;
 
     ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
@@ -41,11 +45,6 @@ class PartitionStateCommittedOffsetTest {
 
     final long highestSeenOffset = 101L;
 
-    /**
-     * @see PartitionState#offsetHighestSucceeded
-     */
-    long highestSucceeded = highestSeenOffset;
-
     List<Long> incompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L, 95L, 96L, 97L, 98L, 100L);
 
     List<Long> expectedTruncatedIncompletes = incompletes.stream()
@@ -54,7 +53,7 @@ class PartitionStateCommittedOffsetTest {
 
     HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>(incompletes));
 
-    PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
+    PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
 
     /**
      * Test for offset gaps in partition data (i.e. compacted topics)
@@ -110,38 +109,8 @@ class PartitionStateCommittedOffsetTest {
     }
 
     private void addPollToState(PartitionState<String, String> state, PolledTestBatch polledTestBatch) {
-        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-        state.maybeTruncateOrPruneTrackedOffsets(polledTestBatch.polledRecordBatch.records(tp));
-        for (var wc : polledTestBatch.polledBatchWCs) {
-            // todo when PSM and PartitionState are refactored, this conditional should not be needed
-            var offset = wc.offset();
-            final boolean notPreviouslyCompleted = !state.isRecordPreviouslyCompleted(wc.getCr());
-            if (notPreviouslyCompleted) {
-                state.addNewIncompleteWorkContainer(wc);
-            }
-        }
+        state.maybeRegisterNewPollBatchAsWork(polledTestBatch.polledRecordBatch.records(state.getTp()));
     }
-//
-//    /**
-//     *
-//     */
-//    @Test
-//    void bootstrapPollOffsetHigherViaManualCGRset() {
-//        // committed state
-//        PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
-//
-//        // bootstrap poll
-//        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset);
-//
-//        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
-//        addPollToState(state, polledTestBatch);
-//
-//        //
-//        OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
-//
-//        assertThat(offsetAndMetadata).getOffset().isEqualTo(0L);
-//        state.getAllIncompleteOffsets().containsAll(Range.range(highestSeenOffset).list());
-//    }
 
     /**
      * CG offset has disappeared - committed offset hasn't been changed, but broker gives us a bootstrap poll result
@@ -152,20 +121,18 @@ class PartitionStateCommittedOffsetTest {
      *
      * @implSpec issue #409: Committing old offset after OFFSET_OUT_OF_RANGE
      * @see PartitionState#maybeTruncateBelow
+     * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
      */
     @Test
     void bootstrapPollOffsetHigherDueToRetentionOrCompaction() {
-        // committed state
-        PartitionState<String, String> state = new PartitionState<>(tp, offsetData);
-
         // bootstrap poll
         PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, unexpectedlyHighOffset, highestSeenOffset);
 
-        // todo when PSM and PartitionState are refactored, these two calls in PS should be a single call
+        //
         addPollToState(state, polledTestBatch);
 
         //
-        assertThat(state).getNextExpectedInitialPolledOffset().isEqualTo(unexpectedlyHighOffset);
+        Truth.assertThat(state.getNextExpectedInitialPolledOffset()).isEqualTo(unexpectedlyHighOffset);
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
         assertThat(offsetAndMetadata).getOffset().isEqualTo(unexpectedlyHighOffset);
