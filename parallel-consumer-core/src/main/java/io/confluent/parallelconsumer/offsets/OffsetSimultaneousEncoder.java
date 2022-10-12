@@ -36,10 +36,11 @@ public class OffsetSimultaneousEncoder {
     public static final int LARGE_INPUT_MAP_SIZE_THRESHOLD = 200;
 
     /**
-     * The offsets which have not yet been fully completed and can't have their offset committed
+     * The offsets which have not yet been fully completed and can't have their offset committed - only used to test
+     * with {@link Set#contains} (no order requirement, but {@link SortedSet} just in case).
      */
     @Getter
-    private final Set<Long> incompleteOffsets;
+    private final SortedSet<Long> incompleteOffsets;
 
     /**
      * The lowest committable offset
@@ -85,7 +86,7 @@ public class OffsetSimultaneousEncoder {
      */
     private final Set<OffsetEncoder> encoders;
 
-    public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, Set<Long> incompleteOffsets) {
+    public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, SortedSet<Long> incompleteOffsets) {
         this.lowWaterMark = baseOffsetToCommit;
         this.incompleteOffsets = incompleteOffsets;
 

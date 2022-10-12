@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.utils.Time;
 import org.slf4j.MDC;
 
 import javax.naming.InitialContext;
@@ -244,19 +243,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
-        module.setParallelEoSStreamProcessor(this);
-
-        log.info("Confluent Parallel Consumer initialise... Options: {}", newOptions);
-
         options = newOptions;
-        options.validate();
-
-        this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
         this.consumer = options.getConsumer();
 
-        checkGroupIdConfigured(consumer);
-        checkNotSubscribed(consumer);
-        checkAutoCommitIsDisabled(consumer);
+        validateConfiguration();
+
+        module.setParallelEoSStreamProcessor(this);
+
+        log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
+                newOptions.getConsumer().groupMetadata().groupId(),
+                newOptions);
+
+
+        this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
@@ -274,6 +273,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+    }
+
+    private void validateConfiguration() {
+        options.validate();
+
+        checkGroupIdConfigured(consumer);
+        checkNotSubscribed(consumer);
+        checkAutoCommitIsDisabled(consumer);
     }
 
     private void checkGroupIdConfigured(final org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
@@ -554,30 +561,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return (committer instanceof ProducerManager);
     }
 
-    /**
-     * Block the calling thread until no more messages are being processed.
-     * <p>
-     * Used for testing.
-     *
-     * @deprecated no longer used, will be removed in next version
-     */
-    // TODO delete
-    @Deprecated
-    @SneakyThrows
-    public void waitForProcessedNotCommitted(Duration timeout) {
-        log.debug("Waiting processed but not committed...");
-        var timer = Time.SYSTEM.timer(timeout);
-        while (wm.isRecordsAwaitingToBeCommitted()) {
-            log.trace("Waiting for no in processing...");
-            Thread.sleep(100);
-            timer.update();
-            if (timer.isExpired()) {
-                throw new TimeoutException("Waiting for no more records in processing");
-            }
-        }
-        log.debug("No longer anything in flight.");
-    }
-
     private boolean isRecordsAwaitingProcessing() {
         boolean isRecordsAwaitingProcessing = wm.isRecordsAwaitingProcessing();
         boolean threadsDone = areMyThreadsDone();
@@ -730,7 +713,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     /**
@@ -1099,10 +1082,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         boolean workInFlight = wm.hasWorkInFlight();
         // work mailbox is empty
         boolean workWaitingInMailbox = !workMailBox.isEmpty();
-        boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
-        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};",
-                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
-        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
+        boolean workWaitingToProcess = wm.hasIncompleteOffsets();
+        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
+                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
+        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
 
         // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
@@ -1244,7 +1227,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public long workRemaining() {
-        return wm.getNumberOfEntriesInPartitionQueues();
+        return wm.getNumberOfIncompleteOffsets();
     }
 
     /**

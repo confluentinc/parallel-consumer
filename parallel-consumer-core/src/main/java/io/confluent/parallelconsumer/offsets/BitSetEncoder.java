@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
+import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,12 +28,13 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * Sequential or not. Because as records are always in commit order, if we've seen a range of offsets, we know we've
  * seen all that exist (within said range). So if offset 8 is missing from the partition, we will encode it as having
  * been completed (when in fact it doesn't exist), because we only compare against known incompletes, and assume all
- * others are complete.
+ * others are complete. See {@link PartitionState#incompleteOffsets} for more discussion on this.
  * <p>
  * So, when we deserialize, the INCOMPLETES collection is then restored, and that's what's used to compare to see if a
  * record should be skipped or not. So if record 8 is recorded as completed, it will be absent from the restored
  * INCOMPLETES list, and we are assured we will never see record 8.
  *
+ * @see PartitionState#incompleteOffsets
  * @see RunLengthEncoder
  * @see OffsetBitSet
  * @author Antony Stubbs
