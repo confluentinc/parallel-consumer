@@ -34,6 +34,9 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     @Setter
     private boolean useTransactionalProducer = false;
 
+    @Setter
+    private boolean useNormalClock;
+
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
 
@@ -93,7 +96,11 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     @Override
     public Clock clock() {
-        return mutableClock;
+        if (useNormalClock) {
+            return Clock.systemUTC();
+        } else {
+            return mutableClock;
+        }
     }
 
     @Setter

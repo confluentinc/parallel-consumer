@@ -48,8 +48,8 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void load(CommitMode commitMode) {
-        setupClients();
-        setupParallelConsumerInstance(ParallelConsumerOptions.builder()
+        setupKafkaClients();
+        setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
                 .commitMode(commitMode)
                 .build());
@@ -141,7 +141,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         var quantityOfMessagesToProduce = 10_00;
         var defaultNumKeys = 20;
 
-        ParallelConsumerOptions<?, ?> baseOptions = ParallelConsumerOptions.builder()
+        ParallelConsumerOptions<String, String> baseOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
                 .commitMode(commitMode)
                 .build();

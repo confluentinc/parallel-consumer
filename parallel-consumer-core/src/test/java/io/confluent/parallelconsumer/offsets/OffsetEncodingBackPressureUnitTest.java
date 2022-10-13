@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
@@ -38,10 +39,11 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 @Slf4j
 class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestBase {
 
-    protected PCModuleTestEnv module = new PCModuleTestEnv(getOptions());
+    protected PCModuleTestEnv module;
 
     @Override
-    protected PCModuleTestEnv getModule() {
+    protected PCModuleTestEnv createModule(ParallelConsumerOptions options) {
+        module = new PCModuleTestEnv(getOptionsWithClients());
         return module;
     }
 

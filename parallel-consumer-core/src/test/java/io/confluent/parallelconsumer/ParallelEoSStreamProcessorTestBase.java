@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
+import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -14,12 +14,12 @@ public abstract class ParallelEoSStreamProcessorTestBase extends AbstractParalle
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        return initPollingAsyncConsumer(parallelConsumerOptions);
+    protected AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        return initPolling(parallelConsumerOptions);
     }
 
-    protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        PCModuleTestEnv module = getModule();
+    protected ParallelEoSStreamProcessor<String, String> initPolling(ParallelConsumerOptions parallelConsumerOptions) {
+        PCModule module = createModule(parallelConsumerOptions);
         parallelConsumer = module == null ?
                 new ParallelEoSStreamProcessor<>(parallelConsumerOptions) :
                 new ParallelEoSStreamProcessor<>(parallelConsumerOptions, module);
@@ -27,7 +27,7 @@ public abstract class ParallelEoSStreamProcessorTestBase extends AbstractParalle
         return parallelConsumer;
     }
 
-    protected PCModuleTestEnv getModule() {
+    protected PCModule<String, String> createModule(final ParallelConsumerOptions parallelConsumerOptions) {
         return null;
     }
 

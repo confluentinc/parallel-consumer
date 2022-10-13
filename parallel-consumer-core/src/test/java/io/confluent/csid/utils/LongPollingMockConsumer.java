@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -41,6 +42,12 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
     }
 
     private final AtomicBoolean statePretendingToLongPoll = new AtomicBoolean(false);
+
+    /**
+     * with common default
+     */
+    @Getter
+    private int numberOfPartitionsToWorkWith = 2;
 
     @Override
     public synchronized ConsumerRecords<K, V> poll(Duration timeout) {
@@ -171,7 +178,29 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         return consumerRebalanceListener;
     }
 
-    public void subscribeWithRebalanceAndAssignment(final List<String> topics, int partitions) {
+    @Override
+    public synchronized void subscribe(final Collection<String> topics, final ConsumerRebalanceListener listener) {
+        super.subscribe(topics, listener);
+        subscribeWithRebalanceAndAssignment(topics, getNumberOfPartitionsToWorkWith());
+    }
+
+    @Override
+    public synchronized void subscribe(final Collection<String> topics) {
+        super.subscribe(topics);
+        subscribeWithRebalanceAndAssignment(topics, getNumberOfPartitionsToWorkWith());
+    }
+
+    @Override
+    public synchronized void subscribe(final Pattern pattern, final ConsumerRebalanceListener listener) {
+        throw new IllegalStateException(); // cannot determine what a pattern would correlate to
+    }
+
+    @Override
+    public synchronized void subscribe(final Pattern pattern) {
+        throw new IllegalStateException(); // cannot determine what a pattern would correlate to
+    }
+
+    public void subscribeWithRebalanceAndAssignment(Collection<String> topics, int partitions) {
         List<TopicPartition> topicPartitions = topics.stream()
                 .flatMap(y -> Range.rangeStream(partitions).boxed()
                         .map(x -> new TopicPartition(y, x)))
@@ -188,7 +217,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
     @SneakyThrows
     @Override
-    public synchronized void rebalance(final Collection<TopicPartition> newAssignment) {
+    public synchronized void rebalance(Collection<TopicPartition> newAssignment) {
         super.rebalance(newAssignment);
         ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
         if (rebalanceListeners != null) {

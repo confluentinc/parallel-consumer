@@ -155,6 +155,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         List<Long> incompleteOffsets = toOffsetsCRs(incompleteRecords);
 
         //
+        assertTruth(consumerSpy).isSameInstanceAs(parallelConsumer.getConsumer());
         ktu.send(consumerSpy, records);
 
         //

@@ -9,6 +9,7 @@ import com.google.common.truth.Truth8;
 import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -49,12 +50,35 @@ import static org.awaitility.Awaitility.waitAtMost;
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
-    protected PCModuleTestEnv module = new PCModuleTestEnv(getOptions());
+    protected PCModuleTestEnv module;
+//    protected PCModule module;
 
     @Override
-    protected PCModuleTestEnv getModule() {
+    protected PCModule<String, String> createModule(ParallelConsumerOptions options) {
+        module = new PCModuleTestEnv(getOptionsWithClients());
+        module.setUseNormalClock(true);
         return module;
     }
+
+    //
+//    protected PCModuleTestEnv module;
+//
+//    @BeforeEach
+//    void setup() {
+//        module = new PCModuleTestEnv(getOptions());
+//    }
+//
+//    @Override
+//    protected PCModule getModule() {
+//        return module;
+//    }
+//
+//    @Override
+//    protected ParallelConsumerOptions<String, String> getOptions() {
+//        var options = super.getOptions().toBuilder();
+//        options.consumer(super.consumerSpy);
+//        return options.build();
+//    }
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
@@ -69,7 +93,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         final int numberOfRecordsToPrimeWith = 1_00;
         parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
-        // override to simulate sitation
+        // override to simulate situation of not being able to fit offset data into the meta payload size
         module.setMaxMetadataSize(40); // reduce available to make testing easier
         module.setForcedCodec(Optional.of(OffsetEncoding.BitSetV2)); // force one that takes a predictable / deterministic large amount of space
 
@@ -83,7 +107,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         CountDownLatch finalMsgLock = new CountDownLatch(1);
         CountDownLatch msgLockTwo = new CountDownLatch(1);
         CountDownLatch msgLockThree = new CountDownLatch(1);
-        AtomicInteger attempts = new AtomicInteger(0);
+        AtomicInteger processingAttemptsForBlockedOffset = new AtomicInteger(0);
         long offsetToBlock = 0;
         List<Long> blockedOffsets = UniLists.of(0L, 2L);
         final int numberOfBlockedMessages = blockedOffsets.size();
@@ -100,7 +124,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // block the partition to create bigger and bigger offset encoding blocks
             // don't let offset 0 finish
             if (recordContext.offset() == offsetToBlock) {
-                int attemptNumber = attempts.incrementAndGet();
+                int attemptNumber = processingAttemptsForBlockedOffset.incrementAndGet();
                 if (attemptNumber == 1) {
                     log.debug("Force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark. Waiting for msgLock countdown.");
                     int timeout = 120;
@@ -124,8 +148,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         ShardManager<String, String> sm = wm.getSm();
 
 
-        // wait for all pre-produced messages to be processed and produced
-        waitAtMost(ofSeconds(120))
+        log.debug("// wait for all pre-produced messages to be processed and produced");
+        waitAtMost(ofSeconds(30))
                 // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
                 .failFast("PC died - check logs", parallelConsumer::isClosedOrFailed)
                 //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
@@ -134,7 +158,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                     assertThat(userFuncFinishedCount.get()).isEqualTo(numberOfRecordsToPrimeWith - numberOfBlockedMessages);
                 });
 
-        // # assert commit ok - nothing blocked
+        log.debug("// # assert commit ok - nothing blocked");
         {
             //
             awaitForSomeLoopCycles(1);
@@ -162,7 +186,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         }
 
 
-        // partition not blocked
+        log.debug("// partition not blocked");
         assertTruth(partitionState).isAllowedMoreRecords();
 
         //
@@ -208,7 +232,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             );
         }
 
-        // recreates the situation where the payload size is too large and must be dropped
+        log.debug("// recreates the situation where the payload size is too large and must be dropped");
         log.debug("// test max payload exceeded, payload dropped");
         {
             log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
@@ -247,7 +271,9 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // wait for the retry
             awaitForOneLoopCycle();
             sleepQuietly(ParallelConsumerOptions.DEFAULT_STATIC_RETRY_DELAY.toMillis());
-            await().until(() -> attempts.get() >= 2);
+            await().timeout(ofSeconds(60))
+                    .untilAsserted(() -> Truth.assertWithMessage("Processing attempts")
+                            .that(processingAttemptsForBlockedOffset.get()).isAtLeast(2));
 
             // assert partition still blocked
             awaitForOneLoopCycle();
