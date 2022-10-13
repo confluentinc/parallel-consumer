@@ -10,8 +10,6 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -35,17 +33,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
-    public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
-
-    /**
-     * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
-     * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
-     * have to drop the offset payload entirely.
-     */
-    @Getter
-    @Setter
-    // todo remove static
-    private static double USED_PAYLOAD_THRESHOLD_MULTIPLIER = USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+    private final PCModule<K, V> module;
 
     private final ShardManager<K, V> sm;
 
@@ -64,8 +52,6 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * NOTE: Must be concurrent because it can be set by one thread, but read by another.
      */
     private final Map<TopicPartition, Long> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
-
-    private final PCModule<K, V> module;
 
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
         this.sm = sm;
@@ -191,7 +177,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             // by replacing with a no op implementation, we protect for stale messages still in queues which reference it
             // however it means the map will only grow, but only it's key set
             var partition = this.partitionStates.get(removedPartition);
-            partitionStates.put(removedPartition, RemovedPartitionState.getSingleton());
+            partitionStates.put(removedPartition, module.removedPartitionStateSingleton());
 
             //
             partition.onPartitionsRemoved(sm);
@@ -275,7 +261,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         for (var state : getAssignedPartitions().values()) {
             var offsetAndMetadata = state.getCommitDataIfDirty();
             //noinspection ObjectAllocationInLoop
-            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTp(), andMetadata));
+            offsetAndMetadata.ifPresent(andMetadata -> dirties.put(state.getTopicPartition(), andMetadata));
         }
         return dirties;
     }
