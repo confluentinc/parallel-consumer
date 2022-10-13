@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.csid.utils.KafkaUtils;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -36,17 +37,12 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
     private static final SortedSet<Long> READ_ONLY_EMPTY_SET = new TreeSet<>();
 
-    private static final PartitionState singleton = new RemovedPartitionState<>();
-
     public static final String NO_OP = "no-op";
+
     public static final int NO_EPOCH = -1;
 
-    public RemovedPartitionState() {
-        super(NO_EPOCH, null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
-    }
-
-    public static PartitionState getSingleton() {
-        return RemovedPartitionState.singleton;
+    public RemovedPartitionState(PCModule<K, V> module) {
+        super(NO_EPOCH, module, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     @Override
@@ -56,7 +52,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     }
 
     @Override
-    public TopicPartition getTp() {
+    public TopicPartition getTopicPartition() {
         return null;
     }
 
@@ -114,7 +110,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
     @Override
     public void onSuccess(long offset) {
-        log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", offset, getTp());
+        log.debug("Dropping completed work container for partition no longer assigned. WC: {}, partition: {}", offset, getTopicPartition());
     }
 
     @Override

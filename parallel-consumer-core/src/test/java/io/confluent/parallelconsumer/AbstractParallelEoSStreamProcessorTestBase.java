@@ -55,6 +55,8 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
+//    protected PCModuleTestEnv module = new PCModuleTestEnv();
+
     public String INPUT_TOPIC;
     public String OUTPUT_TOPIC;
     public String CONSUMER_GROUP_ID;
@@ -126,7 +128,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         setupTopicNames();
 
         ParallelConsumerOptions<Object, Object> options = getOptions();
-        setupParallelConsumerInstance(options);
+            setupParallelConsumerInstance(options);
     }
 
     protected ParallelConsumerOptions<Object, Object> getOptions() {

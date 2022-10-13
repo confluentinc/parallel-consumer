@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -37,8 +36,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assume.assumeThat;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
-import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ_WRITE;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
@@ -81,13 +78,12 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             100_000_0L,
 //            100_000_000L, // very~ slow
     })
-    @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void largeIncompleteOffsetValues(long nextExpectedOffset) {
         long lowWaterMark = 123L;
         var incompletes = new TreeSet<>(UniSets.of(lowWaterMark, 2345L, 8765L));
 
+        module.compressionForced = true;
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
-        OffsetSimultaneousEncoder.compressionForced = true;
 
         //
         encoder.invoke();
@@ -113,8 +109,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 log.info("Encoding not performed: " + encodingToUse);
             }
         }
-
-        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
     /**
@@ -128,18 +122,14 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @SneakyThrows
     @ParameterizedTest
     @EnumSource(OffsetEncoding.class)
-    // needed due to static accessors in parallel tests
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
-    // depends on OffsetMapCodecManager#DefaultMaxMetadataSize
-    @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) {
         assumeThat("Codec skipped, not applicable", encoding,
                 not(in(of(ByteArray, ByteArrayCompressed)))); // byte array not currently used
         var encodingsThatFail = UniLists.of(BitSet, BitSetCompressed, BitSetV2, RunLength, RunLengthCompressed);
 
-        // todo don't use static public accessors to change things - makes parallel testing harder and is smelly
-        OffsetMapCodecManager.forcedCodec = Optional.of(encoding);
-        OffsetSimultaneousEncoder.compressionForced = true;
+        // override defaults
+        module.compressionForced = true;
+        module.setForcedCodec(Optional.of(encoding));
 
         var records = new ArrayList<ConsumerRecord<String, String>>();
         final int FIRST_SUCCEEDED_OFFSET = 0;
@@ -211,7 +201,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             {
                 // check for graceful fall back to the smallest available encoder
                 OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(module);
-                OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
+                module.setForcedCodec(Optional.empty());  // turn off forced
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(FIRST_COMMITTED_OFFSET, state);
                 assertThat(bestPayload).isNotEmpty();
@@ -317,8 +307,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 }
             }
         }
-
-        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
     /**
@@ -340,14 +328,13 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
      */
     @SneakyThrows
     @Test
-    @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void ensureEncodingGracefullyWorksWhenOffsetsArentSequentialTwo() {
         long nextExpectedOffset = 101;
         long lowWaterMark = 0;
         var incompletes = new TreeSet<>(UniSets.of(1L, 4L, 5L, 100L));
 
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
-        OffsetSimultaneousEncoder.compressionForced = true;
+        module.compressionForced = true;
 
         //
         encoder.invoke();
@@ -378,8 +365,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 log.info("Encoding not performed: " + encodingToUse);
             }
         }
-
-        OffsetSimultaneousEncoder.compressionForced = false;
     }
 
 }
