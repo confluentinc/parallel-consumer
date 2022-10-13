@@ -28,7 +28,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
  * which already are tracked in the offset map.
  *
  * @author Antony Stubbs
- * @see OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
+ * @see io.confluent.parallelconsumer.offsets.OffsetEncodingTests#ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential
  * @see PartitionState#maybeTruncateBelow
  * @see PartitionState#maybeTruncateOrPruneTrackedOffsets
  * @see io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT
@@ -109,7 +109,7 @@ class PartitionStateCommittedOffsetTest {
     }
 
     private void addPollToState(PartitionState<String, String> state, PolledTestBatch polledTestBatch) {
-        state.maybeRegisterNewPollBatchAsWork(polledTestBatch.polledRecordBatch.records(state.getTp()));
+        state.maybeRegisterNewPollBatchAsWork(polledTestBatch.polledRecordBatch.records(state.getTopicPartition()));
     }
 
     /**
