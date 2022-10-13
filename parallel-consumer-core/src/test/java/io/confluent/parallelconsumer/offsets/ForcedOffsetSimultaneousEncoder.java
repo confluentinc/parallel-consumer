@@ -21,6 +21,8 @@ import static io.confluent.csid.utils.StringUtils.msg;
  */
 @Slf4j
 public class ForcedOffsetSimultaneousEncoder extends OffsetSimultaneousEncoder {
+
+    // todo store the forced settings locally instead of in module?
     private final PCModuleTestEnv pcModuleTestEnv;
 
     public ForcedOffsetSimultaneousEncoder(PCModuleTestEnv pcModuleTestEnv, long baseOffsetForPartition, long highestSucceeded, SortedSet<Long> incompleteOffsets) {

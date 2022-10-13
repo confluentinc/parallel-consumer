@@ -9,7 +9,6 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -41,7 +40,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
-    PCModuleTestEnv module = new PCModuleTestEnv();
+//    PCModuleTestEnv module = new PCModuleTestEnv();
 
     @Test
     void runLengthDeserialise() {
@@ -82,6 +81,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         long lowWaterMark = 123L;
         var incompletes = new TreeSet<>(UniSets.of(lowWaterMark, 2345L, 8765L));
 
+        PCModuleTestEnv module = new PCModuleTestEnv();
         module.compressionForced = true;
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
 
@@ -127,10 +127,6 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 not(in(of(ByteArray, ByteArrayCompressed)))); // byte array not currently used
         var encodingsThatFail = UniLists.of(BitSet, BitSetCompressed, BitSetV2, RunLength, RunLengthCompressed);
 
-        // override defaults
-        module.compressionForced = true;
-        module.setForcedCodec(Optional.of(encoding));
-
         var records = new ArrayList<ConsumerRecord<String, String>>();
         final int FIRST_SUCCEEDED_OFFSET = 0;
         records.add(new ConsumerRecord<>(INPUT_TOPIC, 0, FIRST_SUCCEEDED_OFFSET, "akey", "avalue")); // will complete
@@ -174,7 +170,11 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
         final long FIRST_COMMITTED_OFFSET = 1L;
         {
-            final PCModule<String, String> moduleTwo = new PCModule<>(newOptions);
+            var moduleTwo = new PCModuleTestEnv(newOptions);
+            // override defaults
+            moduleTwo.compressionForced = true;
+            moduleTwo.setForcedCodec(Optional.of(encoding));
+
             WorkManager<String, String> wmm = moduleTwo.workManager();
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
@@ -198,8 +198,10 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             {
                 // check for graceful fall back to the smallest available encoder
-                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(module);
-                module.setForcedCodec(Optional.empty());  // turn off forced
+                var checkFallbackModule = new PCModuleTestEnv(newOptions);
+                // override defaults
+                checkFallbackModule.compressionForced = true;
+                OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(checkFallbackModule);
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(FIRST_COMMITTED_OFFSET, state);
                 assertThat(bestPayload).isNotEmpty();
@@ -220,7 +222,11 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            final PCModule<String, String> moduleThree = new PCModule<>(options);
+            var moduleThree = new PCModuleTestEnv(newOptions);
+            // override defaults
+            moduleThree.compressionForced = true;
+            moduleThree.setForcedCodec(Optional.of(encoding));
+
             var newWm = moduleThree.workManager();
             newWm.onPartitionsAssigned(UniSets.of(tp));
 
@@ -289,6 +295,8 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             var workRetrievedOffsets = toOffsetsWCs(workRetrieved);
             assertTruth(workRetrieved).isNotEmpty();
 
+            // encodings that work, will be able to serialise and deserialize their incompletes state correctly
+            // ones that don't work, will not serialise anything, and upon reload, will not have any incompletes tracked (as serialization failed)
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
                         BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
@@ -343,8 +351,9 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         long lowWaterMark = 0;
         var incompletes = new TreeSet<>(UniSets.of(1L, 4L, 5L, 100L));
 
-        OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(lowWaterMark, nextExpectedOffset, incompletes);
+        PCModuleTestEnv module = new PCModuleTestEnv();
         module.compressionForced = true;
+        OffsetSimultaneousEncoder encoder = new ForcedOffsetSimultaneousEncoder(module, lowWaterMark, nextExpectedOffset, incompletes);
 
         //
         encoder.invoke();

@@ -441,7 +441,6 @@ public class PartitionState<K, V> {
         }
 
         try {
-            // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             long offsetOfNextExpectedMessage = getNextExpectedInitialPolledOffset();
             OffsetMapCodecManager<K, V> om = module.createOffsetMapCodecManager();
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
