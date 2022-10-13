@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -18,7 +18,7 @@ public class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStrea
     }
 
     protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
+        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions, module);
         super.parentParallelConsumer = parallelConsumer;
         return parallelConsumer;
     }

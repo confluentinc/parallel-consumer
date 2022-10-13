@@ -47,7 +47,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private final ParallelConsumerOptions<K, V> options;
 
     /**
-     * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transactionally. We must
+     * The {@link KafkaProducer} isn't actually completely thread safe, at least when using it transitionally. We must
      * be careful not to send messages to the producer, while we are committing a transaction - "Cannot call send in
      * state COMMITTING_TRANSACTION".
      * <p>
