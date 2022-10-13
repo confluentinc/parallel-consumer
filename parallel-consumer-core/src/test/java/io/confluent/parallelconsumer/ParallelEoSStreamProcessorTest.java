@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.JavaUtils;
+import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -61,7 +62,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
     @BeforeEach()
     public void setupData() {
-        primeFirstRecord();
+        sendOneRecord();
     }
 
     @ParameterizedTest()
@@ -93,9 +94,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .ordering(UNORDERED)
                 .build();
         setupParallelConsumerInstance(options);
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
+
         parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
-        primeFirstRecord();
+        sendOneRecord();
         sendSecondRecord(consumerSpy);
 
         // sanity
@@ -152,7 +155,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     private void setupParallelConsumerInstance(final CommitMode commitMode) {
         setupParallelConsumerInstance(getBaseOptions(commitMode));
         // created a new client above, so have to send the prime record again
-        primeFirstRecord();
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
+        sendOneRecord();
     }
 
     private ParallelConsumerOptions getBaseOptions(final CommitMode commitMode) {
@@ -276,7 +280,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         setupParallelConsumerInstance(getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)
                 .build());
-        primeFirstRecord();
+        sendOneRecord();
 
         sendSecondRecord(consumerSpy);
 
@@ -361,7 +365,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     void controlFlowException(CommitMode commitMode) {
         // setup again manually to use subscribe instead of assign (for revoke testing)
         instantiateConsumerProducer();
-        parentParallelConsumer = initPollingAsyncConsumer(getBaseOptions(commitMode));
+        parentParallelConsumer = initPollingParallelConsumer(getBaseOptions(commitMode));
         subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
         setupData();
 
@@ -386,6 +390,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @SneakyThrows
     void testVoidPollMethod(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
+//        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
+
 
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
@@ -451,12 +457,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @SneakyThrows
     @Disabled
     public void processInKeyOrder(CommitMode commitMode) {
-        setupParallelConsumerInstance(ParallelConsumerOptions.builder()
+        setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()
                 .commitMode(commitMode)
                 .ordering(KEY)
                 .build());
         // created a new client above, so have to send the prime record again
-        primeFirstRecord();
+        sendOneRecord();
 
         // sanity check
         assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(KEY);
@@ -610,7 +616,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .ordering(KEY)
                 .build();
         setupParallelConsumerInstance(options);
-        primeFirstRecord();
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
+
+        sendOneRecord();
 
         sendSecondRecord(consumerSpy);
 
@@ -699,6 +707,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void closeAfterSingleMessageShouldBeEventBasedFast(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
+
         Duration timeBetweenCommits = parallelConsumer.getTimeBetweenCommits();
 
         var msgCompleteBarrier = new CountDownLatch(1);
@@ -751,7 +760,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void consumeFlowDoesntRequireProducer(CommitMode commitMode) {
-        setupClients();
+        setupKafkaClients();
 
         var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumerSpy)
@@ -759,11 +768,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .build();
 
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
-            assertThatThrownBy(() -> parallelConsumer = initPollingAsyncConsumer(optionsWithClients))
+            assertThatThrownBy(() -> parallelConsumer = initPollingParallelConsumer(optionsWithClients))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContainingAll("Producer", "Transaction");
         } else {
-            parallelConsumer = initPollingAsyncConsumer(optionsWithClients);
+            parallelConsumer = initPollingParallelConsumer(optionsWithClients);
             attachLoopCounter(parallelConsumer);
 
             subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
@@ -786,14 +795,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
     @Test
     void optionsProduceMessageFlowRequiresProducer() {
-        setupClients();
+        setupKafkaClients();
 
         var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumerSpy)
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
                 .build();
 
-        assertThatThrownBy(() -> parallelConsumer = initPollingAsyncConsumer(optionsWithClients))
+        assertThatThrownBy(() -> parallelConsumer = initPollingParallelConsumer(optionsWithClients))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContainingAll("Producer", "Transaction");
     }
@@ -813,7 +822,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .build();
 
         // fail
-        assertThatThrownBy(() -> parallelConsumer = initPollingAsyncConsumer(optionsWithClients))
+        assertThatThrownBy(() -> parallelConsumer = initPollingParallelConsumer(optionsWithClients))
                 .as("Should error on missing group id")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContainingAll("Consumer", "GroupId");
@@ -821,7 +830,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // add missing group id, now auto commit should fail
         properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "dummy-group");
         optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
-        assertThat(catchThrowable(() -> parallelConsumer = initPollingAsyncConsumer(optionsBuilder.build())))
+        assertThat(catchThrowable(() -> parallelConsumer = initPollingParallelConsumer(optionsBuilder.build())))
                 .as("Should error on auto commit enabled by default")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContainingAll("auto", "commit", "disabled");
@@ -829,7 +838,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // fail auto commit disabled
         properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
         optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
-        assertThat(catchThrowable(() -> parallelConsumer = initPollingAsyncConsumer(optionsBuilder.build())))
+        assertThat(catchThrowable(() -> parallelConsumer = initPollingParallelConsumer(optionsBuilder.build())))
                 .as("Should error on auto commit enabled")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContainingAll("auto", "commit", "disabled");
@@ -837,13 +846,13 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // set missing auto commit
         properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
         optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
-        assertThatNoException().isThrownBy(() -> parallelConsumer = initPollingAsyncConsumer(optionsBuilder.build()));
+        assertThatNoException().isThrownBy(() -> parallelConsumer = initPollingParallelConsumer(optionsBuilder.build()));
     }
 
 
     @Test
     void cantUseProduceFlowWithWrongOptions() throws InterruptedException {
-        setupClients();
+        setupKafkaClients();
 
         // forget to supply producer
         var optionsWithClients = ParallelConsumerOptions.<String, String>builder()
@@ -857,7 +866,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         setupData();
 
-        var parallel = initPollingAsyncConsumer(optionsWithClients);
+        var parallel = initPollingParallelConsumer(optionsWithClients);
 
         assertThatThrownBy(() -> parallel.pollAndProduce((record) ->
                 new ProducerRecord<>(INPUT_TOPIC, "hi there")))
@@ -869,6 +878,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @EnumSource(CommitMode.class)
     void produceMessageFlow(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
+//        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
+
 
         parallelConsumer.pollAndProduce((ignore) -> new ProducerRecord<>("Hello", "there"));
 

@@ -31,11 +31,11 @@ class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
     @BeforeEach
     public void setupData() {
-        super.primeFirstRecord();
+        super.sendOneRecord();
     }
 
     @Override
-    protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions options) {
+    protected ParallelEoSStreamProcessor initParallelConsumer(ParallelConsumerOptions options) {
         streaming = new JStreamParallelEoSStreamProcessor<>(options);
 
         return streaming;

@@ -81,8 +81,6 @@ class ProducerManagerTest {
     private void setup(ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> optionsBuilder) {
         opts = optionsBuilder.build();
 
-        buildModule(opts);
-
         module = buildModule(opts);
 
         mu = new ModelUtils(module);
@@ -91,7 +89,7 @@ class ProducerManagerTest {
     }
 
     private PCModuleTestEnv buildModule(ParallelConsumerOptions<String, String> opts) {
-        return new PCModuleTestEnv(opts) {
+        final PCModuleTestEnv pcModuleTestEnv = new PCModuleTestEnv(opts) {
             @Override
             protected AbstractParallelEoSStreamProcessor<String, String> pc() {
                 if (parallelEoSStreamProcessor == null) {
@@ -112,6 +110,8 @@ class ProducerManagerTest {
                 return parallelEoSStreamProcessor;
             }
         };
+        pcModuleTestEnv.setUseTransactionalProducer(true);
+        return pcModuleTestEnv;
     }
 
 

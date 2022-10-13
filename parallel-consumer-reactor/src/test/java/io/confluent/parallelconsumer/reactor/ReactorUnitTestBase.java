@@ -22,7 +22,7 @@ public class ReactorUnitTestBase extends ParallelEoSStreamProcessorTestBase {
     protected static final int MAX_CONCURRENCY = 1000;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected AbstractParallelEoSStreamProcessor initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         var build = parallelConsumerOptions.toBuilder()
                 .commitMode(PERIODIC_CONSUMER_SYNC)
                 .maxConcurrency(MAX_CONCURRENCY)

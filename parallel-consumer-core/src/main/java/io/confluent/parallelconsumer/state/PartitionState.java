@@ -24,7 +24,6 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.JavaUtils.*;
-import static io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.DefaultMaxMetadataSize;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static lombok.AccessLevel.*;
@@ -40,17 +39,18 @@ import static lombok.AccessLevel.*;
 @Slf4j
 public class PartitionState<K, V> {
 
+    @NonNull
+    private final PCModule<K, V> module;
+
     /**
      * Symbolic value for a parameter which is initialised as having an offset absent (instead of using Optional or
      * null)
      */
     public static final long KAFKA_OFFSET_ABSENCE = -1L;
 
-    private final PCModule<K, V> module;
-
     @NonNull
     @Getter
-    private final TopicPartition tp;
+    private final TopicPartition topicPartition;
 
     /**
      * Offsets beyond the highest committable offset (see {@link #getOffsetHighestSequentialSucceeded()}) which haven't
@@ -143,7 +143,7 @@ public class PartitionState<K, V> {
      * <p>
      * AKA high watermark (which is a deprecated description).
      *
-     * @see OffsetMapCodecManager#DefaultMaxMetadataSize
+     * @see OffsetMapCodecManager#KAFKA_MAX_METADATA_SIZE_DEFAULT
      */
     @Getter(PACKAGE)
     @Setter(PRIVATE)
@@ -162,7 +162,7 @@ public class PartitionState<K, V> {
                           TopicPartition topicPartition,
                           OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.module = pcModule;
-        this.tp = topicPartition;
+        this.topicPartition = topicPartition;
         this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
@@ -441,9 +441,8 @@ public class PartitionState<K, V> {
         }
 
         try {
-            // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
             long offsetOfNextExpectedMessage = getNextExpectedInitialPolledOffset();
+            OffsetMapCodecManager<K, V> om = module.createOffsetMapCodecManager();
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
@@ -465,20 +464,22 @@ public class PartitionState<K, V> {
         int metaPayloadLength = offsetMapPayload.length();
         boolean mustStrip = false;
 
-        if (metaPayloadLength > DefaultMaxMetadataSize) {
+        if (metaPayloadLength > module.getMaxMetadataSize()) {
             // exceeded maximum API allowed, strip the payload
             mustStrip = true;
             setAllowedMoreRecords(false);
             log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
                             "Warning: messages might be replayed on rebalance. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
-                    metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+                    metaPayloadLength, module.getMaxMetadataSize(), OffsetMapCodecManager.KAFKA_MAX_METADATA_SIZE_DEFAULT);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
             log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
                             "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                    metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
+                    metaPayloadLength,
+                    getPressureThresholdValue(),
+                    module.getMaxMetadataSize());
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
             setAllowedMoreRecords(true);
@@ -489,7 +490,7 @@ public class PartitionState<K, V> {
     }
 
     private double getPressureThresholdValue() {
-        return DefaultMaxMetadataSize * PartitionStateManager.getUSED_PAYLOAD_THRESHOLD_MULTIPLIER();
+        return module.getMaxMetadataSize() * module.getPayloadThresholdMultiplier();
     }
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
@@ -552,7 +553,7 @@ public class PartitionState<K, V> {
                             "This can be caused by PC rebalancing across a partition which has been compacted on offsets above the committed " +
                             "base offset, after initial load and before a rebalance.",
                     offsetsToRemoveFromTracking,
-                    getTp(),
+                    getTopicPartition(),
                     low,
                     high
             );

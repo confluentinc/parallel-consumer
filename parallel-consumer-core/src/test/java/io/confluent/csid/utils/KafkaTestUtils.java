@@ -39,7 +39,7 @@ public class KafkaTestUtils {
     @Getter
     private final LongPollingMockConsumer consumerSpy;
 
-    int offset = 0;
+    long offset = 0;
 
     // todo not used anymore - delete?
     public void assignConsumerToTopic(final MockConsumer mc) {
