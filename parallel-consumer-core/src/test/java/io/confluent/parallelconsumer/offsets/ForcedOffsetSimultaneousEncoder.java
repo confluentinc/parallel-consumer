@@ -20,8 +20,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * @author Antony Stubbs
  */
 @Slf4j
-public
-class ForcedOffsetSimultaneousEncoder extends OffsetSimultaneousEncoder {
+public class ForcedOffsetSimultaneousEncoder extends OffsetSimultaneousEncoder {
     private final PCModuleTestEnv pcModuleTestEnv;
 
     public ForcedOffsetSimultaneousEncoder(PCModuleTestEnv pcModuleTestEnv, long baseOffsetForPartition, long highestSucceeded, SortedSet<Long> incompleteOffsets) {

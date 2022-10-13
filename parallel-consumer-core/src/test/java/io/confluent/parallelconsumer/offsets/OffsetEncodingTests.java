@@ -39,8 +39,7 @@ import static org.junit.Assume.assumeThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
-public
-class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
+public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
     PCModuleTestEnv module = new PCModuleTestEnv();
 
