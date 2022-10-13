@@ -1,26 +1,34 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStreamProcessorTestBase {
+public abstract class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStreamProcessorTestBase {
 
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        return initPollingAsyncConsumer(parallelConsumerOptions);
+    protected AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+        return initPolling(parallelConsumerOptions);
     }
 
-    protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
+    protected ParallelEoSStreamProcessor<String, String> initPolling(ParallelConsumerOptions parallelConsumerOptions) {
+        PCModule module = createModule(parallelConsumerOptions);
+        parallelConsumer = module == null ?
+                new ParallelEoSStreamProcessor<>(parallelConsumerOptions) :
+                new ParallelEoSStreamProcessor<>(parallelConsumerOptions, module);
         super.parentParallelConsumer = parallelConsumer;
         return parallelConsumer;
+    }
+
+    protected PCModule<String, String> createModule(final ParallelConsumerOptions parallelConsumerOptions) {
+        return null;
     }
 
 }

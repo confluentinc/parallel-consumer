@@ -7,12 +7,15 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
+import io.confluent.parallelconsumer.state.*;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 
 import java.time.Clock;
+import java.util.SortedSet;
 
 /**
  * Minimum dependency injection system, modled on how Dagger works.
@@ -25,6 +28,9 @@ public class PCModule<K, V> {
 
     protected ParallelConsumerOptions<K, V> optionsInstance;
 
+    /**
+     * Settable for reverse injection in bootstrap/inverted situations
+     */
     @Setter
     protected AbstractParallelEoSStreamProcessor<K, V> parallelEoSStreamProcessor;
 
@@ -49,7 +55,8 @@ public class PCModule<K, V> {
 
     protected ProducerManager<K, V> producerManager() {
         if (producerManager == null) {
-            this.producerManager = new ProducerManager<>(producerWrap(), consumerManager(), workManager(), options());
+            final ProducerWrapper<K, V> kvProducerWrapper = producerWrap();
+            this.producerManager = new ProducerManager<>(kvProducerWrapper, consumerManager(), workManager(), options());
         }
         return producerManager;
     }
@@ -103,7 +110,61 @@ public class PCModule<K, V> {
         return brokerPollSystem;
     }
 
+    private PartitionStateManager<K, V> partitionStateManager;
+
+    public PartitionStateManager<K, V> partitionStateManager(WorkManager<K, V> workManager) {
+        if (partitionStateManager == null) {
+            partitionStateManager = new PartitionStateManager<>(this, shardManager(workManager));
+        }
+        return partitionStateManager;
+    }
+
+    private ShardManager<K, V> shardManager;
+
+    public ShardManager<K, V> shardManager(WorkManager<K, V> workManager) {
+        if (shardManager == null) {
+            shardManager = new ShardManager<>(this, workManager);
+        }
+        return shardManager;
+    }
+
     public Clock clock() {
         return TimeUtils.getClock();
     }
+
+    public OffsetMapCodecManager<K, V> createOffsetMapCodecManager() {
+        return new OffsetMapCodecManager<>(this);
+    }
+
+    public int getMaxMetadataSize() {
+        return OffsetMapCodecManager.KAFKA_MAX_METADATA_SIZE_DEFAULT;
+    }
+
+    private RemovedPartitionState<K, V> removedPartitionStateSingleton;
+
+    public PartitionState<K, V> removedPartitionStateSingleton() {
+        if (removedPartitionStateSingleton == null) {
+            removedPartitionStateSingleton = new RemovedPartitionState<>(this);
+        }
+        return removedPartitionStateSingleton;
+    }
+
+    public OffsetSimultaneousEncoder createOffsetSimultaneousEncoder(long baseOffsetForPartition, long highestSucceeded, SortedSet<Long> incompleteOffsets) {
+        return new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
+    }
+
+    /**
+     * @see #getPayloadThresholdMultiplier()
+     */
+    public static final double PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
+
+    /**
+     * Best efforts attempt to prevent usage of offset payload beyond X% - as encoding size test is currently only done
+     * per batch, we need to leave some buffer for the required space to overrun before hitting the hard limit where we
+     * have to drop the offset payload entirely.
+     */
+    public double getPayloadThresholdMultiplier() {
+        return PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT;
+    }
+
 }

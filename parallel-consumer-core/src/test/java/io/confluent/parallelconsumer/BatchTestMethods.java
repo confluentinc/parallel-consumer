@@ -43,7 +43,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
     protected void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
         //
-        ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
+        ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
                 .batchSize(targetBatchSize)
                 .ordering(ordering)
                 .maxConcurrency(maxConcurrency)

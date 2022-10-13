@@ -62,6 +62,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions options;
 
+    @Getter
+    private final PCModule<K, V> module;
+
     /**
      * Injectable clock for testing
      */
@@ -97,6 +100,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
+    @Getter
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -243,6 +247,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
+        this.module = module;
         options = newOptions;
         this.consumer = options.getConsumer();
 

@@ -254,4 +254,7 @@ public class ShardManager<K, V> {
         }
     }
 
+    public int getNumberOfShards() {
+        return this.processingShards.size();
+    }
 }
