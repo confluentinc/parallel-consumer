@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -12,8 +11,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.OffsetMetadataTooLarge;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
@@ -65,15 +62,12 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
      * Test our understanding of the offset metadata payload system - is the DefaultMaxMetadataSize available for each
      * partition, or to the total of all partitions in the commit?
      */
-    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = ResourceAccessMode.READ)
-    // depends on OffsetMapCodecManager#DefaultMaxMetadataSize
-    // todo remove static dependencies
     @Test
     void offsetMetadataSpaceAvailable() {
         numPartitions = 5;
         setupTopic();
 
-        int maxCapacity = OffsetMapCodecManager.DefaultMaxMetadataSize;
+        int maxCapacity = module.getMaxMetadataSize();
         assertThat(maxCapacity)
                 .as("approximate sanity - ensure start state settings (shared static state :`( )")
                 .isGreaterThan(3000);
