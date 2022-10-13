@@ -158,9 +158,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == 25_000).findFirst().get());
         incompleteRecords.remove(incompleteRecords.stream().filter(x -> x.offset() == highestSucceeded).findFirst().get());
 
-        List<Long> expected = incompleteRecords.stream().map(ConsumerRecord::offset)
-                .sorted()
-                .collect(Collectors.toList());
+        List<Long> incompleteOffsets = toOffsetsCRs(incompleteRecords);
 
         //
         ktu.send(consumerSpy, records);
@@ -260,7 +258,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 assertThat(offsetHighestSeen).isEqualTo(highestSucceeded);
 
                 var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
-                Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
+                Truth.assertThat(incompletes).containsExactlyElementsIn(incompleteOffsets);
             }
 
             // check record is marked as incomplete
@@ -280,7 +278,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                     assertThat(offsetHighestSeen).isEqualTo(highestSucceeded);
 
                     var incompletes = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
-                    Truth.assertThat(incompletes).containsExactlyElementsIn(expected);
+                    Truth.assertThat(incompletes).containsExactlyElementsIn(incompleteOffsets);
 
                     assertThat(partitionState.isRecordPreviouslyCompleted(anIncompleteRecord)).isFalse();
                 }
@@ -288,25 +286,37 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
 
             var workRetrieved = newWm.getWorkIfAvailable();
-            var workRetrievedOffsets = workRetrieved.stream().map(WorkContainer::offset).collect(Collectors.toList());
+            var workRetrievedOffsets = toOffsetsWCs(workRetrieved);
             assertTruth(workRetrieved).isNotEmpty();
 
             switch (encoding) {
                 case BitSet, BitSetCompressed, // BitSetV1 both get a short overflow due to the length being too long
                         BitSetV2, // BitSetv2 uncompressed is too large to fit in metadata payload
-                        RunLength, RunLengthCompressed // RunLength V1 max runlength is Short.MAX_VALUE
+                        RunLength, RunLengthCompressed // RunLength V1 max run-length is Short.MAX_VALUE
                         -> {
+
+                    // what is significance of the number 2500? (magic) Is it supposed to be 25_000? a succeeded offset?
+                    // is it just an arbitrarily chosen completed offset that shouldn't be in the incompletes?
                     assertThat(workRetrievedOffsets).doesNotContain(2500L);
-                    assertThat(workRetrievedOffsets).doesNotContainSequence(expected);
+
+                    assertThat(workRetrievedOffsets).doesNotContainSequence(incompleteOffsets);
                 }
                 default -> {
                     Truth.assertWithMessage("Contains only incomplete records")
                             .that(workRetrievedOffsets)
-                            .containsExactlyElementsIn(expected)
+                            .containsExactlyElementsIn(incompleteOffsets)
                             .inOrder();
                 }
             }
         }
+    }
+
+    private List<Long> toOffsetsWCs(List<WorkContainer<String, String>> work) {
+        return work.stream().map(WorkContainer::offset).collect(Collectors.toList());
+    }
+
+    private static List<Long> toOffsetsCRs(ArrayList<ConsumerRecord<String, String>> crs) {
+        return crs.stream().map(ConsumerRecord::offset).sorted().collect(Collectors.toList());
     }
 
     /**
