@@ -218,8 +218,8 @@ class VertxTest extends VertxBaseUnitTest {
     @SneakyThrows
     @Test
     void genericVertxFuture(Vertx vertx, VertxTestContext tc) {
-        primeFirstRecord();
-        primeFirstRecord();
+        sendOneRecord();
+        sendOneRecord();
 
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);

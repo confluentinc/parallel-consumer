@@ -88,7 +88,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
-    public static int defaultTimeoutSeconds = 30;
+    public static int defaultTimeoutSeconds = 10;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
@@ -171,7 +171,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         });
     }
 
-    protected void primeFirstRecord() {
+    protected void sendOneRecord() {
         firstRecord = ktu.makeRecord("key-0", "v0-first-primed-record");
         consumerSpy.addRecord(firstRecord);
     }

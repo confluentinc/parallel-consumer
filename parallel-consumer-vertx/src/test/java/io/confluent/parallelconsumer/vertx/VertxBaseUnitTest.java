@@ -31,7 +31,7 @@ public abstract class VertxBaseUnitTest extends ParallelEoSStreamProcessorTestBa
 
     @BeforeEach
     public void setupData() {
-        super.primeFirstRecord();
+        super.sendOneRecord();
     }
 
 }

@@ -31,7 +31,7 @@ class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
     @BeforeEach
     public void setupData() {
-        super.primeFirstRecord();
+        super.sendOneRecord();
     }
 
     @Override
