@@ -31,6 +31,9 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
     protected ModelUtils mu = new ModelUtils(this);
 
+    @Setter
+    private boolean useTransactionalProducer = false;
+
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
 
@@ -70,7 +73,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     @NonNull
     private ProducerWrapper mockProducerWrapTransactional() {
         if (mockProduceWrap == null) {
-            mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), false, producer()));
+            mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), useTransactionalProducer, producer()));
         }
         return mockProduceWrap;
     }
