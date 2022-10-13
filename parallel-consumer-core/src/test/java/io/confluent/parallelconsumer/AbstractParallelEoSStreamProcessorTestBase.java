@@ -55,8 +55,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
-//    protected PCModuleTestEnv module = new PCModuleTestEnv();
-
     public String INPUT_TOPIC;
     public String OUTPUT_TOPIC;
     public String CONSUMER_GROUP_ID;
@@ -127,18 +125,17 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     public void setupAsyncConsumerTestBase() {
         setupTopicNames();
 
-        ParallelConsumerOptions<Object, Object> options = getOptions();
-            setupParallelConsumerInstance(options);
+        var options = getOptions();
+        setupParallelConsumerInstance(options);
     }
 
-    protected ParallelConsumerOptions<Object, Object> getOptions() {
-        ParallelConsumerOptions<Object, Object> options = getDefaultOptions()
-                .build();
+    protected ParallelConsumerOptions<String, String> getOptions() {
+        ParallelConsumerOptions<String, String> options = getDefaultOptions().build();
         return options;
     }
 
-    protected ParallelConsumerOptions.ParallelConsumerOptionsBuilder<Object, Object> getDefaultOptions() {
-        return ParallelConsumerOptions.builder()
+    protected ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> getDefaultOptions() {
+        return ParallelConsumerOptions.<String, String>builder()
                 .commitMode(PERIODIC_CONSUMER_SYNC)
                 .ordering(UNORDERED);
     }

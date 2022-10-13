@@ -291,7 +291,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                         RunLength, RunLengthCompressed // RunLength V1 max run-length is Short.MAX_VALUE
                         -> {
 
-                    // what is significance of the number 2500? (magic) Is it supposed to be 25_000? a succeeded offset?
+                    // what is significance of the number 2500? (magic)
                     // is it just an arbitrarily chosen completed offset that shouldn't be in the incompletes?
                     assertThat(workRetrievedOffsets).doesNotContain(2500L);
 

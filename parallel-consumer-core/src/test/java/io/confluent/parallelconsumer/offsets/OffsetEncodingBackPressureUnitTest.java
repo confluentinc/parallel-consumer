@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import one.util.streamex.LongStreamEx;
 import one.util.streamex.StreamEx;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -30,14 +29,21 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 
 /**
- * UnitTest version of {@link OffsetEncodingBackPressureTest}.
+ * Tests back pressure directly against {@link PartitionState}.
+ * <p>
+ * Faster, more direct version of {@link OffsetEncodingBackPressureTest}.
  *
  * @see OffsetEncodingBackPressureTest
  */
 @Slf4j
 class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestBase {
 
-    protected PCModuleTestEnv module = new PCModuleTestEnv();
+    protected PCModuleTestEnv module = new PCModuleTestEnv(getOptions());
+
+    @Override
+    protected PCModuleTestEnv getModule() {
+        return module;
+    }
 
     @SneakyThrows
     @Test
@@ -59,10 +65,12 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         var samplingOfShouldBeCompleteOffsets = UniLists.of(1L, 50L, 99L, (long) numberOfRecords - numberOfBlockedMessages);
         var blockedOffsets = UniLists.of(0L, 2L);
 
-        var completes = LongStreamEx.of(numberOfRecords).filter(x -> !blockedOffsets.contains(x)).boxed().toList();
+        assertTruth(wm.getSm()).getNumberOfWorkQueuedInShardsAwaitingSelection().isEqualTo(numberOfRecords);
+//        assertTruth(wm.getSm()).getNumberOfShards().isEqualTo(numberOfRecords);
 
         List<WorkContainer<String, String>> workIfAvailable = wm.getWorkIfAvailable();
-        assertTruth(workIfAvailable).hasSize(numberOfRecords);
+        Truth.assertWithMessage("Should initially get all records")
+                .that(workIfAvailable).hasSize(numberOfRecords);
 
         List<WorkContainer<String, String>> toSucceed = workIfAvailable.stream().filter(x -> !blockedOffsets.contains(x.offset())).collect(Collectors.toList());
         toSucceed.forEach(wm::onSuccessResult);

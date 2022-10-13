@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -27,8 +28,8 @@ public class ConsumerManager<K, V> {
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
     /**
-     * Since Kakfa 2.7, multi-threaded access to consumer group metadata was blocked, so before and after polling, save
-     * a copy of the metadata.
+     * Since Kafka 2.7, multithreaded access to consumer group metadata was blocked, so before and after polling, save a
+     * copy of the metadata.
      *
      * @since 2.7.0
      */

@@ -42,12 +42,19 @@ import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.waitAtMost;
 
 /**
+ * Tests back pressure system against the {@link io.confluent.parallelconsumer.ParallelConsumer} system.
+ *
  * @see OffsetEncodingBackPressureUnitTest
  */
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
-    protected PCModuleTestEnv module = new PCModuleTestEnv();
+    protected PCModuleTestEnv module = new PCModuleTestEnv(getOptions());
+
+    @Override
+    protected PCModuleTestEnv getModule() {
+        return module;
+    }
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
@@ -117,96 +124,96 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         ShardManager<String, String> sm = wm.getSm();
 
 
-            // wait for all pre-produced messages to be processed and produced
-            waitAtMost(ofSeconds(120))
-                    // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
-                    .failFast("PC died - check logs", parallelConsumer::isClosedOrFailed)
-                    //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
-                    .pollInterval(1, SECONDS)
-                    .untilAsserted(() -> {
-                        assertThat(userFuncFinishedCount.get()).isEqualTo(numberOfRecordsToPrimeWith - numberOfBlockedMessages);
-                    });
+        // wait for all pre-produced messages to be processed and produced
+        waitAtMost(ofSeconds(120))
+                // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
+                .failFast("PC died - check logs", parallelConsumer::isClosedOrFailed)
+                //, () -> parallelConsumer.getFailureCause()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
+                .pollInterval(1, SECONDS)
+                .untilAsserted(() -> {
+                    assertThat(userFuncFinishedCount.get()).isEqualTo(numberOfRecordsToPrimeWith - numberOfBlockedMessages);
+                });
 
-            // # assert commit ok - nothing blocked
-            {
-                //
-                awaitForSomeLoopCycles(1);
-                parallelConsumer.requestCommitAsap();
-                awaitForSomeLoopCycles(1);
-
-                // initial 0 offset is committed with they offset encoded payload
-                assertThatConsumer("Initial commit has been executed")
-                        .hasCommittedToAnyPartition()
-                        .offset(0);
-                List<OffsetAndMetadata> offsetAndMetadataList = extractAllPartitionsOffsetsAndMetadataSequentially();
-                OffsetAndMetadata mostRecentCommit = getLast(offsetAndMetadataList).get();
-                assertThat(mostRecentCommit.offset()).isZero();
-
-                // check offset encoding incomplete payload doesn't contain expected completed messages
-                String metadata = mostRecentCommit.metadata();
-                HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, metadata);
-                Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset().get();
-                Set<Long> incompletes = decodedOffsetPayload.getIncompleteOffsets();
-                assertThat(incompletes).isNotEmpty()
-                        .contains(offsetToBlock)
-                        .doesNotContain(1L, 50L, 99L, (long) numberOfRecordsToPrimeWith - numberOfBlockedMessages); // some sampling of completed offsets, 99 being the highest
-                int expectedHighestSeenOffset = numberOfRecordsToPrimeWith - 1;
-                assertThat(highestSeenOffset).as("offset 99 is encoded as having been seen").isEqualTo(expectedHighestSeenOffset);
-            }
-
-
-            // partition not blocked
-            assertTruth(partitionState).isAllowedMoreRecords();
-
-            //
-            log.debug("// feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's guaranteed to block");
-            int bytesNeededToCrossThreshold = 5; // roughly
-            int extraRecordsToBlockWithThresholdBlocks = Byte.SIZE * bytesNeededToCrossThreshold;
-            {
-                assertTruth(partitionState).isAllowedMoreRecords(); // should initially be not blocked
-
-                ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
-                awaitForOneLoopCycle();
-
-                log.debug("// assert partition now blocked from threshold");
-                waitAtMost(ofSeconds(10))
-                        .untilAsserted(
-                                () -> assertWithMessage("Partition SHOULD be blocked due to back pressure")
-                                        .that(partitionState)
-                                        .isBlocked()); // blocked
-
-                Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
-                assertThat(partitionOffsetHighWaterMarks)
-                        .isGreaterThan(numberOfRecordsToPrimeWith); // high watermark is beyond our initial processed count upon blocking
-
-                parallelConsumer.requestCommitAsap();
-                awaitForOneLoopCycle();
-
-                log.debug("// assert blocked, but can still write payload");
-                // assert the committed offset metadata contains a payload
-                waitAtMost(defaultTimeout).untilAsserted(() ->
-                        {
-                            OffsetAndMetadata partitionCommit = getLastCommit();
-                            //
-                            assertThat(partitionCommit.offset()).isZero();
-                            //
-                            String meta = partitionCommit.metadata();
-                            HighestOffsetAndIncompletes incompletes = OffsetMapCodecManager
-                                    .deserialiseIncompleteOffsetMapFromBase64(0L, meta);
-                            Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
-                                    .that(incompletes.getIncompleteOffsets()).containsExactlyElementsIn(blockedOffsets);
-                            int expectedHighestSeen = numberOfRecordsToPrimeWith + extraRecordsToBlockWithThresholdBlocks - 1;
-                            Truth8.assertThat(incompletes.getHighestSeenOffset()).hasValue(expectedHighestSeen);
-                        }
-                );
-            }
-
-            // recreates the situation where the payload size is too large and must be dropped
-            log.debug("// test max payload exceeded, payload dropped");
+        // # assert commit ok - nothing blocked
         {
-                log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
-                        "(i.e. the actual system attempts to never allow the payload to grow this big) " +
-                        "i.e. effectively this disables blocking mechanism for the partition");
+            //
+            awaitForSomeLoopCycles(1);
+            parallelConsumer.requestCommitAsap();
+            awaitForSomeLoopCycles(1);
+
+            // initial 0 offset is committed with they offset encoded payload
+            assertThatConsumer("Initial commit has been executed")
+                    .hasCommittedToAnyPartition()
+                    .offset(0);
+            List<OffsetAndMetadata> offsetAndMetadataList = extractAllPartitionsOffsetsAndMetadataSequentially();
+            OffsetAndMetadata mostRecentCommit = getLast(offsetAndMetadataList).get();
+            assertThat(mostRecentCommit.offset()).isZero();
+
+            // check offset encoding incomplete payload doesn't contain expected completed messages
+            String metadata = mostRecentCommit.metadata();
+            HighestOffsetAndIncompletes decodedOffsetPayload = OffsetMapCodecManager.deserialiseIncompleteOffsetMapFromBase64(0, metadata);
+            Long highestSeenOffset = decodedOffsetPayload.getHighestSeenOffset().get();
+            Set<Long> incompletes = decodedOffsetPayload.getIncompleteOffsets();
+            assertThat(incompletes).isNotEmpty()
+                    .contains(offsetToBlock)
+                    .doesNotContain(1L, 50L, 99L, (long) numberOfRecordsToPrimeWith - numberOfBlockedMessages); // some sampling of completed offsets, 99 being the highest
+            int expectedHighestSeenOffset = numberOfRecordsToPrimeWith - 1;
+            assertThat(highestSeenOffset).as("offset 99 is encoded as having been seen").isEqualTo(expectedHighestSeenOffset);
+        }
+
+
+        // partition not blocked
+        assertTruth(partitionState).isAllowedMoreRecords();
+
+        //
+        log.debug("// feed more messages in order to threshold block - as Bitset requires linearly as much space as we are feeding messages into it, it's guaranteed to block");
+        int bytesNeededToCrossThreshold = 5; // roughly
+        int extraRecordsToBlockWithThresholdBlocks = Byte.SIZE * bytesNeededToCrossThreshold;
+        {
+            assertTruth(partitionState).isAllowedMoreRecords(); // should initially be not blocked
+
+            ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
+            awaitForOneLoopCycle();
+
+            log.debug("// assert partition now blocked from threshold");
+            waitAtMost(ofSeconds(10))
+                    .untilAsserted(
+                            () -> assertWithMessage("Partition SHOULD be blocked due to back pressure")
+                                    .that(partitionState)
+                                    .isBlocked()); // blocked
+
+            Long partitionOffsetHighWaterMarks = wm.getPm().getHighestSeenOffset(topicPartition);
+            assertThat(partitionOffsetHighWaterMarks)
+                    .isGreaterThan(numberOfRecordsToPrimeWith); // high watermark is beyond our initial processed count upon blocking
+
+            parallelConsumer.requestCommitAsap();
+            awaitForOneLoopCycle();
+
+            log.debug("// assert blocked, but can still write payload");
+            // assert the committed offset metadata contains a payload
+            waitAtMost(defaultTimeout).untilAsserted(() ->
+                    {
+                        OffsetAndMetadata partitionCommit = getLastCommit();
+                        //
+                        assertThat(partitionCommit.offset()).isZero();
+                        //
+                        String meta = partitionCommit.metadata();
+                        HighestOffsetAndIncompletes incompletes = OffsetMapCodecManager
+                                .deserialiseIncompleteOffsetMapFromBase64(0L, meta);
+                        Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
+                                .that(incompletes.getIncompleteOffsets()).containsExactlyElementsIn(blockedOffsets);
+                        int expectedHighestSeen = numberOfRecordsToPrimeWith + extraRecordsToBlockWithThresholdBlocks - 1;
+                        Truth8.assertThat(incompletes.getHighestSeenOffset()).hasValue(expectedHighestSeen);
+                    }
+            );
+        }
+
+        // recreates the situation where the payload size is too large and must be dropped
+        log.debug("// test max payload exceeded, payload dropped");
+        {
+            log.debug("Force system to allow more records to be processed beyond the safety threshold setting " +
+                    "(i.e. the actual system attempts to never allow the payload to grow this big) " +
+                    "i.e. effectively this disables blocking mechanism for the partition");
             module.setPayloadThresholdMultiplier(99);
             module.setMaxMetadataSize(30); // reduce max cut off size
 
@@ -219,51 +226,51 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             awaitForSomeLoopCycles(2);
 
 
+            assertTruth(partitionState).isBlocked();
+
+
+            log.debug("// assert payload missing from commit now");
+            await().untilAsserted(() -> {
                 assertTruth(partitionState).isBlocked();
+                OffsetAndMetadata partitionCommit = getLastCommit();
+                assertTruth(partitionCommit).hasOffsetEqualTo(0l);
+                assertTruth(partitionCommit).getMetadata().isEmpty();
+            });
+        }
 
+        log.debug("Test that failed messages can retry, causing partition to un-block");
+        {
+            // release message that was blocking partition progression
+            // fail the message
+            finalMsgLock.countDown();
 
-                log.debug("// assert payload missing from commit now");
-                await().untilAsserted(() -> {
-                    assertTruth(partitionState).isBlocked();
-                    OffsetAndMetadata partitionCommit = getLastCommit();
-                    assertTruth(partitionCommit).hasOffsetEqualTo(0l);
-                    assertTruth(partitionCommit).getMetadata().isEmpty();
-                });
-            }
+            // wait for the retry
+            awaitForOneLoopCycle();
+            sleepQuietly(ParallelConsumerOptions.DEFAULT_STATIC_RETRY_DELAY.toMillis());
+            await().until(() -> attempts.get() >= 2);
 
-            log.debug("Test that failed messages can retry, causing partition to un-block");
-            {
-                // release message that was blocking partition progression
-                // fail the message
-                finalMsgLock.countDown();
+            // assert partition still blocked
+            awaitForOneLoopCycle();
+            await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isFalse());
 
-                // wait for the retry
-                awaitForOneLoopCycle();
-                sleepQuietly(ParallelConsumerOptions.DEFAULT_STATIC_RETRY_DELAY.toMillis());
-                await().until(() -> attempts.get() >= 2);
+            // release the message for the second time, allowing it to succeed
+            msgLockTwo.countDown();
+        }
 
-                // assert partition still blocked
-                awaitForOneLoopCycle();
-                await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isFalse());
+        // assert partition is now not blocked
+        {
+            awaitForOneLoopCycle();
+            await().untilAsserted(() -> assertTruth(partitionState).isAllowedMoreRecords());
+        }
 
-                // release the message for the second time, allowing it to succeed
-                msgLockTwo.countDown();
-            }
-
-            // assert partition is now not blocked
-            {
-                awaitForOneLoopCycle();
-                await().untilAsserted(() -> assertTruth(partitionState).isAllowedMoreRecords());
-            }
-
-            // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
-            {
-                await().untilAsserted(() -> {
-                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
-                    assertThat(offsets).contains(userFuncFinishedCount.get());
-                });
-                await().untilAsserted(() -> assertTruth(partitionState).isAllowedMoreRecords());
-            }
+        // assert all committed, nothing blocked- next expected offset is now 1+ the offset of the final message we sent
+        {
+            await().untilAsserted(() -> {
+                List<Integer> offsets = extractAllPartitionsOffsetsSequentially(false);
+                assertThat(offsets).contains(userFuncFinishedCount.get());
+            });
+            await().untilAsserted(() -> assertTruth(partitionState).isAllowedMoreRecords());
+        }
 
     }
 
