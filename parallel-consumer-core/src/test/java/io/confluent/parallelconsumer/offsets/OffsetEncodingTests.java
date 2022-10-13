@@ -40,8 +40,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
-//    PCModuleTestEnv module = new PCModuleTestEnv();
-
     @Test
     void runLengthDeserialise() {
         var sb = ByteBuffer.allocate(3);
@@ -170,11 +168,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         final ParallelConsumerOptions<String, String> newOptions = options.toBuilder().consumer(consumerSpy).build();
         final long FIRST_COMMITTED_OFFSET = 1L;
         {
-            var moduleTwo = new PCModuleTestEnv(newOptions);
-            // override defaults
-            moduleTwo.compressionForced = true;
-            moduleTwo.setForcedCodec(Optional.of(encoding));
-
+            var moduleTwo = new ForcedEncodingCompressingModule(newOptions, encoding);
             WorkManager<String, String> wmm = moduleTwo.workManager();
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
@@ -198,9 +192,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
             {
                 // check for graceful fall back to the smallest available encoder
-                var checkFallbackModule = new PCModuleTestEnv(newOptions);
-                // override defaults
-                checkFallbackModule.compressionForced = true;
+                var checkFallbackModule = new ForcedEncodingCompressingModule(options, null);
                 OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(checkFallbackModule);
                 var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(FIRST_COMMITTED_OFFSET, state);
@@ -222,11 +214,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
 
         // read offsets
         {
-            var moduleThree = new PCModuleTestEnv(newOptions);
-            // override defaults
-            moduleThree.compressionForced = true;
-            moduleThree.setForcedCodec(Optional.of(encoding));
-
+            var moduleThree = new ForcedEncodingCompressingModule(options, encoding);
             var newWm = moduleThree.workManager();
             newWm.onPartitionsAssigned(UniSets.of(tp));
 
@@ -386,4 +374,11 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         }
     }
 
+    private class ForcedEncodingCompressingModule extends PCModuleTestEnv {
+        public ForcedEncodingCompressingModule(ParallelConsumerOptions<String, String> newOptions, OffsetEncoding encoding) {
+            super(newOptions);
+            super.setForcedCodec(Optional.ofNullable(encoding));
+            super.compressionForced = true;
+        }
+    }
 }
