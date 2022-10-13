@@ -9,6 +9,7 @@ import com.google.common.truth.Truth8;
 import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.ShardManager;
@@ -46,6 +47,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 @Slf4j
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
+    protected PCModuleTestEnv module = new PCModuleTestEnv();
 
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so

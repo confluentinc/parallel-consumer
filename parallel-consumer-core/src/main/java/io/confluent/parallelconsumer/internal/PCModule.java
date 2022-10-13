@@ -55,7 +55,8 @@ public class PCModule<K, V> {
 
     protected ProducerManager<K, V> producerManager() {
         if (producerManager == null) {
-            this.producerManager = new ProducerManager<>(producerWrap(), consumerManager(), workManager(), options());
+            final ProducerWrapper<K, V> kvProducerWrapper = producerWrap();
+            this.producerManager = new ProducerManager<>(kvProducerWrapper, consumerManager(), workManager(), options());
         }
         return producerManager;
     }

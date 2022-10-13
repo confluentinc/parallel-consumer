@@ -83,7 +83,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     private void initProducer() {
         producerTransactionLock = new ReentrantReadWriteLock(true);
 
-        if (options.isUsingTransactionalProducer()) {
+        if (options.isUsingTransactionCommitMode()) {
             if (!producerWrapper.isConfiguredForTransactions()) {
                 throw new IllegalArgumentException("Using transactional option, yet Producer doesn't have a transaction ID - Producer needs a transaction id");
             }

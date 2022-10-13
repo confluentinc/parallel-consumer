@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.offsets;
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -35,6 +36,8 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
  */
 @Slf4j
 class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestBase {
+
+    protected PCModuleTestEnv module = new PCModuleTestEnv();
 
     @SneakyThrows
     @Test

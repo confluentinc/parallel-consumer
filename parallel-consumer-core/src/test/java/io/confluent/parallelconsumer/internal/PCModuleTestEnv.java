@@ -70,7 +70,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     @NonNull
     private ProducerWrapper mockProducerWrapTransactional() {
         if (mockProduceWrap == null) {
-            mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), true, producer()));
+            mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), false, producer()));
         }
         return mockProduceWrap;
     }
