@@ -109,7 +109,7 @@ class PartitionStateCommittedOffsetTest {
     }
 
     private void addPollToState(PartitionState<String, String> state, PolledTestBatch polledTestBatch) {
-        state.maybeRegisterNewPollBatchAsWork(polledTestBatch.polledRecordBatch.records(state.getTp()));
+        state.maybeRegisterNewPollBatchAsWork(polledTestBatch.polledRecordBatch.records(state.getTopicPartition()));
     }
 
     /**

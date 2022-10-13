@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 
@@ -23,7 +24,7 @@ public
 class ForcedOffsetSimultaneousEncoder extends OffsetSimultaneousEncoder {
     private final PCModuleTestEnv pcModuleTestEnv;
 
-    public ForcedOffsetSimultaneousEncoder(PCModuleTestEnv pcModuleTestEnv, long baseOffsetForPartition, long highestSucceeded, Set<Long> incompleteOffsets) {
+    public ForcedOffsetSimultaneousEncoder(PCModuleTestEnv pcModuleTestEnv, long baseOffsetForPartition, long highestSucceeded, SortedSet<Long> incompleteOffsets) {
         super(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
         this.pcModuleTestEnv = pcModuleTestEnv;
     }

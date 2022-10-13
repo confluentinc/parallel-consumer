@@ -20,7 +20,7 @@ import org.threeten.extra.MutableClock;
 
 import java.time.Clock;
 import java.util.Optional;
-import java.util.Set;
+import java.util.SortedSet;
 
 /**
  * Version of the {@link PCModule} in test contexts.
@@ -114,7 +114,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     public boolean compressionForced = false;
 
     @Override
-    public OffsetSimultaneousEncoder createOffsetSimultaneousEncoder(final long baseOffsetForPartition, final long highestSucceeded, final Set<Long> incompleteOffsets) {
+    public OffsetSimultaneousEncoder createOffsetSimultaneousEncoder(final long baseOffsetForPartition, final long highestSucceeded, final SortedSet<Long> incompleteOffsets) {
         return new ForcedOffsetSimultaneousEncoder(this, baseOffsetForPartition, highestSucceeded, incompleteOffsets);
     }
 

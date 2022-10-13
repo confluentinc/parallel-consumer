@@ -129,7 +129,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         setupTopicNames();
 
         ParallelConsumerOptions<Object, Object> options = getOptions();
-        setupParallelConsumerInstance(options);
+            setupParallelConsumerInstance(options);
     }
 
     protected ParallelConsumerOptions<Object, Object> getOptions() {
