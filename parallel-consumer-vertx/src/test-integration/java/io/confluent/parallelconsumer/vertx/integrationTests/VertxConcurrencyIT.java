@@ -32,7 +32,6 @@ import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.Isolated;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.tlinkowski.unij.api.UniMaps;
 
@@ -64,7 +63,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Testcontainers
 @Slf4j
-@Isolated
 class VertxConcurrencyIT extends BrokerIntegrationTest {
 
     private static final com.google.common.flogger.FluentLogger flog = com.google.common.flogger.FluentLogger.forEnclosingClass();
@@ -102,6 +100,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 
         stubServer.addMockServiceRequestListener(new RequestListener() {
 
+            @SneakyThrows
             @Override
             public void requestReceived(final Request request, final Response response) {
                 log.debug("req: {}", request);

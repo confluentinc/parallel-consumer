@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -34,7 +33,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -54,6 +52,10 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 // todo migrate commit assertion methods in to a Truth Subject
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
+
+    public final ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> DEFAULT_OPTIONS = ParallelConsumerOptions.<String, String>builder()
+            .commitMode(PERIODIC_CONSUMER_SYNC)
+            .ordering(UNORDERED);
 
     public String INPUT_TOPIC;
     public String OUTPUT_TOPIC;
@@ -85,7 +87,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
-    public static int defaultTimeoutSeconds = 30;
+    public static int defaultTimeoutSeconds = 10;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
@@ -108,6 +110,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      * Time to wait to verify some assertion types
      */
     long verificationWaitDelay;
+
     protected TopicPartition topicPartition;
 
     /**
@@ -122,23 +125,25 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     @BeforeEach
-    public void setupAsyncConsumerTestBase() {
+    public void setupTestBase() {
         setupTopicNames();
+        setupKafkaClients();
 
-        ParallelConsumerOptions<Object, Object> options = getOptions();
+        var options = getOptionsWithClients();
         setupParallelConsumerInstance(options);
     }
 
-    protected ParallelConsumerOptions<Object, Object> getOptions() {
-        ParallelConsumerOptions<Object, Object> options = getDefaultOptions()
+    protected ParallelConsumerOptions<String, String> getOptionsWithClients() {
+        ParallelConsumerOptions<String, String> options = getDefaultOptions()
+                .consumer(consumerSpy)
+                .producer(producerSpy)
                 .build();
+
         return options;
     }
 
-    protected ParallelConsumerOptions.ParallelConsumerOptionsBuilder<Object, Object> getDefaultOptions() {
-        return ParallelConsumerOptions.builder()
-                .commitMode(PERIODIC_CONSUMER_SYNC)
-                .ordering(UNORDERED);
+    private ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> getDefaultOptions() {
+        return DEFAULT_OPTIONS;
     }
 
     @AfterEach
@@ -165,17 +170,13 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         });
     }
 
-    protected void primeFirstRecord() {
+    protected void sendOneRecord() {
         firstRecord = ktu.makeRecord("key-0", "v0-first-primed-record");
         consumerSpy.addRecord(firstRecord);
     }
 
-    protected MockConsumer<String, String> setupClients() {
+    protected void setupKafkaClients() {
         instantiateConsumerProducer();
-
-        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
-
-        return consumerSpy;
     }
 
     protected void instantiateConsumerProducer() {
@@ -188,6 +189,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
 
         when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
+
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
     }
 
     /**
@@ -197,22 +200,25 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     protected void subscribeParallelConsumerAndMockConsumerTo(String topic) {
         List<String> of = of(topic);
         parentParallelConsumer.subscribe(of);
-        consumerSpy.subscribeWithRebalanceAndAssignment(of, 2);
+
+        // todo why not move this into a #subscribe override - don't know partitions?
+//        consumerSpy.subscribeWithRebalanceAndAssignment(of, 2);
     }
 
-    protected void setupParallelConsumerInstance(ProcessingOrder order) {
-        setupParallelConsumerInstance(ParallelConsumerOptions.builder().ordering(order).build());
-    }
+//    protected void setupParallelConsumerInstance(ProcessingOrder order) {
+//        setupParallelConsumerInstance(ParallelConsumerOptions.builder().ordering(order).build());
+//    }
 
-    protected void setupParallelConsumerInstance(ParallelConsumerOptions parallelConsumerOptions) {
-        setupClients();
+    /**
+     * Maybe adds a mock consumer, and then instantiates PC, subscribes it to the generated topic, sets it's polling
+     * times and time between commits, and attaches a loop counter to spy on its iterations.
+     *
+     * @param optionsWithClients
+     */
+    protected void setupParallelConsumerInstance(ParallelConsumerOptions<String, String> optionsWithClients) {
+        optionsWithClients = maybeAddConsumer(optionsWithClients);
 
-        var optionsWithClients = parallelConsumerOptions.toBuilder()
-                .consumer(consumerSpy)
-                .producer(producerSpy)
-                .build();
-
-        parentParallelConsumer = initAsyncConsumer(optionsWithClients);
+        parentParallelConsumer = initParallelConsumer(optionsWithClients);
 
         subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
 
@@ -224,7 +230,18 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         loopCountRef = attachLoopCounter(parentParallelConsumer);
     }
 
-    protected abstract AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions);
+    private ParallelConsumerOptions maybeAddConsumer(ParallelConsumerOptions options) {
+        var copy = options.toBuilder();
+        if (options.getConsumer() == null) {
+            copy.consumer(consumerSpy);
+        }
+        if (options.getProducer() == null) {
+            copy.producer(producerSpy);
+        }
+        return copy.build();
+    }
+
+    protected abstract AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions);
 
     protected void sendSecondRecord(MockConsumer<String, String> consumer) {
         secondRecord = ktu.makeRecord("key-0", "v1");
@@ -473,13 +490,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         log.debug("Releasing {}...", lockIndex);
         locks.get(lockIndex).countDown();
         awaitForSomeLoopCycles(1);
-    }
-
-    protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
-        pauseControlLoop();
-        awaitLatch(latch);
-        resumeControlLoop();
-        awaitForOneLoopCycle();
     }
 
     /**

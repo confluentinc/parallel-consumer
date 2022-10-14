@@ -7,13 +7,13 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
+import lombok.NonNull;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 
@@ -40,13 +40,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Slf4j
 public class OffsetMapCodecManager<K, V> {
 
-    /**
-     * Used to prevent tests running in parallel that depends on setting static state in this class. Manipulation of
-     * static state in tests needs to be removed to this isn't necessary.
-     * <p>
-     * todo remove static state manipulation from tests (make non static)
-     */
-    public static final String METADATA_DATA_SIZE_RESOURCE_LOCK = "Value doesn't matter, just needs a constant";
+    @NonNull PCModule<K, V> module;
 
     /**
      * Maximum size of the commit offset metadata
@@ -55,12 +49,9 @@ public class OffsetMapCodecManager<K, V> {
      *         href="https://github.com/apache/kafka/blob/9bc9a37e50e403a356a4f10d6df12e9f808d4fba/core/src/main/scala/kafka/coordinator/group/OffsetConfig.scala#L52">OffsetConfig#DefaultMaxMetadataSize</a>
      * @see "kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize"
      */
-    // todo refactored to constant in the remove statics branch
-    public static int DefaultMaxMetadataSize = 4096;
+    public static final int KAFKA_MAX_METADATA_SIZE_DEFAULT = 4096;
 
     public static final Charset CHARSET_TO_USE = UTF_8;
-
-    private final PCModule module;
 
     /**
      * Decoding result for encoded offsets
@@ -92,12 +83,6 @@ public class OffsetMapCodecManager<K, V> {
         }
     }
 
-    /**
-     * Forces the use of a specific codec, instead of choosing the most efficient one. Useful for testing.
-     */
-    public static Optional<OffsetEncoding> forcedCodec = Optional.empty();
-
-    // todo remove consumer #233
     public OffsetMapCodecManager(PCModule<K, V> module) {
         this.module = module;
     }
@@ -172,7 +157,7 @@ public class OffsetMapCodecManager<K, V> {
         HighestOffsetAndIncompletes incompletes = deserialiseIncompleteOffsetMapFromBase64(offsetData);
         log.debug("Loaded incomplete offsets from offset payload {}", incompletes);
         var epoch = module.workManager().getPm().getEpochOfPartition(tp);
-        return new PartitionState<>(epoch, module, tp, incompletes);
+        return new PartitionState<K, V>(epoch, module, tp, incompletes);
     }
 
     public String makeOffsetMetadataPayload(long baseOffsetForPartition, PartitionState<K, V> state) throws NoEncodingPossibleException {
@@ -194,12 +179,18 @@ public class OffsetMapCodecManager<K, V> {
      * <p>
      * Can remove string encoding in favour of the boolean array for the `BitSet` if that's how things settle.
      */
-    byte[] encodeOffsetsCompressed(long baseOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
+    protected byte[] encodeOffsetsCompressed(long baseOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
+        OffsetSimultaneousEncoder simultaneousEncoder = prepareEncoder(baseOffsetForPartition, partitionState);
+        simultaneousEncoder.invoke();
+        return simultaneousEncoder.packSmallest();
+    }
+
+    protected OffsetSimultaneousEncoder prepareEncoder(long baseOffsetForPartition, PartitionState<K, V> partitionState) throws NoEncodingPossibleException {
         var incompleteOffsets = partitionState.getIncompleteOffsetsBelowHighestSucceeded();
         long highestSucceeded = partitionState.getOffsetHighestSucceeded();
         if (log.isDebugEnabled()) {
             log.debug("Encoding partition {}, highest succeeded {}, incomplete offsets to encode {}",
-                    partitionState.getTp(),
+                    partitionState.getTopicPartition(),
                     highestSucceeded,
                     incompleteOffsets);
         }
@@ -213,18 +204,7 @@ public class OffsetMapCodecManager<K, V> {
             throw new InternalRuntimeException("Error encoding offsets", e);
         }
 
-        //
-        if (forcedCodec.isPresent()) {
-            var forcedOffsetEncoding = forcedCodec.get();
-            log.debug("Forcing use of {}, for testing", forcedOffsetEncoding);
-            Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
-            byte[] bytes = encodingMap.get(forcedOffsetEncoding);
-            if (bytes == null)
-                throw new NoEncodingPossibleException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
-            return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
-        } else {
-            return simultaneousEncoder.packSmallest();
-        }
+        return module.createOffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
     }
 
     /**

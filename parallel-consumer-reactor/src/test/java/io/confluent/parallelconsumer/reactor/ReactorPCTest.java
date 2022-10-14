@@ -34,14 +34,14 @@ class ReactorPCTest extends ReactorUnitTestBase {
 
     @BeforeEach
     public void setupData() {
-        super.primeFirstRecord();
+        super.sendOneRecord();
     }
 
     @Test
     void kickTires() {
-        primeFirstRecord();
-        primeFirstRecord();
-        primeFirstRecord();
+        sendOneRecord();
+        sendOneRecord();
+        sendOneRecord();
 
         ConcurrentLinkedQueue<Object> msgs = new ConcurrentLinkedQueue<>();
 

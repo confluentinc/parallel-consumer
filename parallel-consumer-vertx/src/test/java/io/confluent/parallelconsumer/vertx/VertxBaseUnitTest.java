@@ -17,7 +17,7 @@ public abstract class VertxBaseUnitTest extends ParallelEoSStreamProcessorTestBa
     JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected AbstractParallelEoSStreamProcessor initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions) {
         VertxOptions vertxOptions = new VertxOptions();
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
@@ -31,7 +31,7 @@ public abstract class VertxBaseUnitTest extends ParallelEoSStreamProcessorTestBa
 
     @BeforeEach
     public void setupData() {
-        super.primeFirstRecord();
+        super.sendOneRecord();
     }
 
 }
