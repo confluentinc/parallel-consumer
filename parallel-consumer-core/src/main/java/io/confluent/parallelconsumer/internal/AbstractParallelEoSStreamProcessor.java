@@ -712,14 +712,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
 
-        // thread yield for spin lock avoidance
-        Duration duration = Duration.ofMillis(1);
-        try {
-            Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-            log.trace("Woke up", e);
-        }
-
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
                 wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
