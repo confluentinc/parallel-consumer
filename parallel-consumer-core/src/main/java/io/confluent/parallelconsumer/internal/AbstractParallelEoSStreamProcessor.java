@@ -584,12 +584,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Control thread can be blocked waiting for work, but is interruptible. Interrupting it can be useful to inform
      * that work is available when there was none, to make tests run faster, or to move on to shutting down the
-     * {@link BrokerPollSystem} so that less messages are downloaded and queued.
+     * {@link BrokerPollSystem} so that fewer messages are downloaded and queued.
      */
     private void interruptControlThread() {
         if (blockableControlThread != null) {
-            log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
-            blockableControlThread.interrupt();
+            if (this.currentlyPollingWorkCompleteMailBox.get()) {
+                log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
+                blockableControlThread.interrupt();
+            } else {
+                log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next looop.");
+            }
         }
     }
 
@@ -1218,7 +1222,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Early notify of work arrived.
      * <p>
-     * Only wake up the thread if it's sleeping while polling the mail box.
+     * Only wake up the thread if it's sleeping while polling the mailbox.
+     * <p>
+     * NOTE: removed in actor branches
      *
      * @see #processWorkCompleteMailBox
      * @see #blockableControlThread
