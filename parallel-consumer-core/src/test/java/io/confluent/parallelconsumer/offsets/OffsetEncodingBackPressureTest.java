@@ -127,13 +127,12 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 int attemptNumber = processingAttemptsForBlockedOffset.incrementAndGet();
                 if (attemptNumber == 1) {
                     log.debug("Force first message to 'never' complete, causing a large offset encoding (lots of messages completing above the low water mark. Waiting for msgLock countdown.");
-                    int timeout = 120;
-                    awaitLatch(finalMsgLock, timeout);
+                    awaitLatch(finalMsgLock);
                     log.debug("Very slow message awoken, throwing exception");
                     throw new FakeRuntimeException("Fake error");
                 } else {
                     log.debug("Second attempt, waiting for msgLockTwo countdown");
-                    awaitLatch(msgLockTwo, 60);
+                    awaitLatch(msgLockTwo);
                     log.debug("Second attempt, unlocked, succeeding");
                 }
             } else if (recordContext.offset() == 2L) {

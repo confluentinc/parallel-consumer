@@ -33,7 +33,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -178,8 +177,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected void setupKafkaClients() {
         instantiateConsumerProducer();
-
-        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
     }
 
     protected void instantiateConsumerProducer() {
@@ -192,6 +189,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
 
         when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
+
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
     }
 
     /**
@@ -235,6 +234,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         var copy = options.toBuilder();
         if (options.getConsumer() == null) {
             copy.consumer(consumerSpy);
+        }
+        if (options.getProducer() == null) {
+            copy.producer(producerSpy);
         }
         return copy.build();
     }
@@ -488,13 +490,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         log.debug("Releasing {}...", lockIndex);
         locks.get(lockIndex).countDown();
         awaitForSomeLoopCycles(1);
-    }
-
-    protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
-        pauseControlLoop();
-        awaitLatch(latch);
-        resumeControlLoop();
-        awaitForOneLoopCycle();
     }
 
     /**
