@@ -34,7 +34,22 @@ public class LoopingResumingIterator<KEY, VALUE> {
      *
      * @see java.util.concurrent.ConcurrentHashMap.Traverser
      */
-    private Iterator<Map.Entry<KEY, VALUE>> iterator;
+    private Iterator<Map.Entry<KEY, VALUE>> firstPassIterator;
+
+    /**
+     * As {@link java.util.concurrent.ConcurrentHashMap}'s iterators are thread safe, they see a snapshot of the map in
+     * time - this may cause the starting point key to be removed. In which case, we limit our iteration to taking the
+     * expected number of elements.
+     * <p>
+     */
+    private final long iterationTargetCount;
+
+    /**
+     * The number of iterations we've done so far.
+     *
+     * @see #iterationTargetCount
+     */
+    private long iterationCount = 0;
 
     /**
      * The key to start from
@@ -72,7 +87,8 @@ public class LoopingResumingIterator<KEY, VALUE> {
     public LoopingResumingIterator(Optional<KEY> startingKey, Map<KEY, VALUE> map) {
         this.iterationStartingPointKey = startingKey;
         this.map = map;
-        iterator = map.entrySet().iterator();
+        this.firstPassIterator = map.entrySet().iterator();
+        this.iterationTargetCount = map.size();
 
         // find the starting point
         if (startingKey.isPresent()) {
@@ -80,7 +96,7 @@ public class LoopingResumingIterator<KEY, VALUE> {
             if (head.isEmpty()) {
                 resetIteratorToZero();
             } else {
-                startingPointKeyValid = true;
+                this.startingPointKeyValid = true;
             }
         }
     }
@@ -94,6 +110,8 @@ public class LoopingResumingIterator<KEY, VALUE> {
      * @return null if no more elements
      */
     public Optional<Map.Entry<KEY, VALUE>> next() {
+        iterationCount++;
+
         // special cases
         if (terminalState) {
             return Optional.empty();
@@ -102,10 +120,13 @@ public class LoopingResumingIterator<KEY, VALUE> {
             return headSave;
         }
 
-        if (iterator.hasNext()) {
-            Map.Entry<KEY, VALUE> next = iterator.next();
+        if (firstPassIterator.hasNext()) {
+            Map.Entry<KEY, VALUE> next = firstPassIterator.next();
+            // could find the starting point earlier
             boolean onSecondPassAndReachedStartingPoint = iterationStartingPointKey.equals(Optional.of(next.getKey()));
-            if (onSecondPassAndReachedStartingPoint) {
+            // or it could be missing entirely
+            boolean numberElementsReturnedExceeded = iterationCount > iterationTargetCount + 1; // off by one due to eager increment
+            if (onSecondPassAndReachedStartingPoint || numberElementsReturnedExceeded) {
                 // end second iteration reached
                 terminalState = true;
                 return Optional.empty();
@@ -136,8 +157,8 @@ public class LoopingResumingIterator<KEY, VALUE> {
      * @see #startingPointIndex
      */
     private Optional<Map.Entry<KEY, VALUE>> advanceToStartingPointAndGet(Object startingPointObject) {
-        while (iterator.hasNext()) {
-            Map.Entry<KEY, VALUE> next = iterator.next();
+        while (firstPassIterator.hasNext()) {
+            Map.Entry<KEY, VALUE> next = firstPassIterator.next();
             if (next.getKey() == startingPointObject) {
                 return Optional.of(next);
             }
@@ -146,7 +167,7 @@ public class LoopingResumingIterator<KEY, VALUE> {
     }
 
     private void resetIteratorToZero() {
-        iterator = map.entrySet().iterator();
+        firstPassIterator = map.entrySet().iterator();
     }
 
 }

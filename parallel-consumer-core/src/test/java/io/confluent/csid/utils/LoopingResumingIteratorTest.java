@@ -12,7 +12,13 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * @author Antony Stubbs
+ * @see LoopingResumingIterator
+ */
 class LoopingResumingIteratorTest {
 
     @Test
@@ -184,46 +190,60 @@ class LoopingResumingIteratorTest {
         Truth.assertThat(next.getKey()).isEqualTo(0);
         Truth.assertThat(next.getValue()).isEqualTo("a");
     }
-//
-//    /**
-//     * Example issue where an element is removed from the underlaying collection during iteration
-//     * <p>
-//     * See https://github.com/confluentinc/parallel-consumer/pull/435
-//     */
-//    @Test
-//    void demoOfNoSuchElementIssue() {
-//        final int INDEX_TO_REMOVE = 4;
-//        Map<Integer, String> map = new ConcurrentHashMap<>();
-//        map.put(0, "a");
-//        map.put(1, "b");
-////        map.put(2, "c");
-////        map.put(3, "d");
-////        map.put(INDEX_TO_REMOVE, "e");
-////        map.put(5, "f");
-////        map.put(6, "g");
-////        map.put(7, "h");
-////        map.put(8, "i");
-////        map.put(9, "j");
-//
-//        var iterator = LoopingResumingIterator.build(1, map);
-//
-////        // remove the last element
-//        Map.Entry<Integer, String> last = null;
-//        while (iterator.hasNext()) {
-//            last = iterator.next();
-//            if (last.getKey() == INDEX_TO_REMOVE) {
-//                map.remove(INDEX_TO_REMOVE);
-//                break;
-//            }
-//        }
-//
-//        Truth.assertThat(iterator.hasNext()).isTrue();
-//
-////        map.clear();
-//
-//        Truth.assertThat(iterator.next()).isNull();
-//
-//        Truth.assertThat(iterator.hasNext()).isFalse();
-//    }
+
+    /**
+     * Exposes an issue where because of iterators being reset, the two iteration passes effectively see a different
+     * collection, through the two different iterators - so the second iterator might be missing the start key
+     * <p>
+     * See https://github.com/confluentinc/parallel-consumer/pull/435
+     *
+     * @see ConcurrentHashMap section about iterators seeing a snapshot of the map state from time of creation
+     */
+    @Test
+    void demoOfNoSuchElementIssue() {
+        final int INDEX_TO_REMOVE = 4;
+        Map<Integer, String> map = new ConcurrentHashMap<>();
+        map.put(0, "a");
+        map.put(1, "b");
+        map.put(2, "c");
+        map.put(3, "d");
+        map.put(INDEX_TO_REMOVE, "e");
+        map.put(5, "f");
+        map.put(6, "g");
+        map.put(7, "h");
+        map.put(8, "i");
+        map.put(9, "j");
+
+        ArrayList<Optional<Map.Entry<Integer, String>>> results = new ArrayList<>();
+
+        var iterator = LoopingResumingIterator.build(INDEX_TO_REMOVE, map);
+
+        // iterate, and remove the staring element
+        for (var x = iterator.next(); x.isPresent(); x = iterator.next()) {
+            results.add(x);
+            if (x.get().getKey() == INDEX_TO_REMOVE) {
+                map.remove(INDEX_TO_REMOVE);
+            }
+        }
+
+        Truth.assertThat(results).containsExactly(
+                Optional.of(Map.entry(4, "e")),
+                Optional.of(Map.entry(5, "f")),
+                Optional.of(Map.entry(6, "g")),
+                Optional.of(Map.entry(7, "h")),
+                Optional.of(Map.entry(8, "i")),
+                Optional.of(Map.entry(9, "j")),
+                Optional.of(Map.entry(0, "a")),
+                Optional.of(Map.entry(1, "b")),
+                Optional.of(Map.entry(2, "c")),
+                Optional.of(Map.entry(3, "d"))
+        );
+
+        Truth8.assertThat(iterator.next()).isEmpty();
+
+        map.clear();
+
+        Truth8.assertThat(iterator.next()).isEmpty();
+    }
 
 }
