@@ -34,7 +34,7 @@ public class LoopingResumingIterator<KEY, VALUE> {
      *
      * @see java.util.concurrent.ConcurrentHashMap.Traverser
      */
-    private Iterator<Map.Entry<KEY, VALUE>> firstPassIterator;
+    private Iterator<Map.Entry<KEY, VALUE>> wrappedIterator;
 
     /**
      * As {@link java.util.concurrent.ConcurrentHashMap}'s iterators are thread safe, they see a snapshot of the map in
@@ -87,7 +87,7 @@ public class LoopingResumingIterator<KEY, VALUE> {
     public LoopingResumingIterator(Optional<KEY> startingKey, Map<KEY, VALUE> map) {
         this.iterationStartingPointKey = startingKey;
         this.map = map;
-        this.firstPassIterator = map.entrySet().iterator();
+        this.wrappedIterator = map.entrySet().iterator();
         this.iterationTargetCount = map.size();
 
         // find the starting point
@@ -120,8 +120,8 @@ public class LoopingResumingIterator<KEY, VALUE> {
             return headSave;
         }
 
-        if (firstPassIterator.hasNext()) {
-            Map.Entry<KEY, VALUE> next = firstPassIterator.next();
+        if (wrappedIterator.hasNext()) {
+            Map.Entry<KEY, VALUE> next = wrappedIterator.next();
             // could find the starting point earlier
             boolean onSecondPassAndReachedStartingPoint = iterationStartingPointKey.equals(Optional.of(next.getKey()));
             // or it could be missing entirely
@@ -157,8 +157,8 @@ public class LoopingResumingIterator<KEY, VALUE> {
      * @see #startingPointIndex
      */
     private Optional<Map.Entry<KEY, VALUE>> advanceToStartingPointAndGet(Object startingPointObject) {
-        while (firstPassIterator.hasNext()) {
-            Map.Entry<KEY, VALUE> next = firstPassIterator.next();
+        while (wrappedIterator.hasNext()) {
+            Map.Entry<KEY, VALUE> next = wrappedIterator.next();
             if (next.getKey() == startingPointObject) {
                 return Optional.of(next);
             }
@@ -167,7 +167,7 @@ public class LoopingResumingIterator<KEY, VALUE> {
     }
 
     private void resetIteratorToZero() {
-        firstPassIterator = map.entrySet().iterator();
+        wrappedIterator = map.entrySet().iterator();
     }
 
 }

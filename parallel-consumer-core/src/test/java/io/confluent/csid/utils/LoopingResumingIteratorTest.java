@@ -124,7 +124,6 @@ class LoopingResumingIteratorTest {
             Assertions.assertThat(results).extracting(Map.Entry::getKey).containsExactly(2, 0, 1);
 
             // check reports now empty
-//                Truth.assertThat(entries.hasNext()).isFalse();
             Truth8.assertThat(entries.next()).isEmpty();
         }
     }
@@ -149,31 +148,10 @@ class LoopingResumingIteratorTest {
 
             // check reports now empty
             {
-//                Truth.assertThat(entries.hasNext()).isFalse();
                 Truth8.assertThat(entries.next()).isEmpty();
             }
         }
     }
-//
-//    @Test
-//    void emptyCollection() {
-//        LinkedHashMap<Integer, String> map = new LinkedHashMap<>();
-//        var entries = LoopingResumingIterator.build(null, map);
-//        // several repeats as hasNext changes state
-//        Truth.assertThat(entries.hasNext()).isFalse();
-//        Truth.assertThat(entries.hasNext()).isFalse();
-//        Truth.assertThat(entries.hasNext()).isFalse();
-//    }
-//
-//    @Test
-//    void emptyCollectionWithStartingPoint() {
-//        LinkedHashMap<Integer, String> map = new LinkedHashMap<>();
-//        var entries = LoopingResumingIterator.build(1, map);
-//        // several repeats as hasNext changes state
-//        Truth.assertThat(entries.hasNext()).isFalse();
-//        Truth.assertThat(entries.hasNext()).isFalse();
-//        Truth.assertThat(entries.hasNext()).isFalse();
-//    }
 
     @Test
     void emptyInitialStartingKey() {
