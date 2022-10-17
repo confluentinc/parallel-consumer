@@ -252,16 +252,18 @@ public class ShardManager<K, V> {
         // loop over shards, and get work from each
         // must synchronise so that the looping iterator doesn't have the collection suddenly shrink from under it
         // (which can currently happen on partition revocation)
-        synchronized (processingShards) {
-            while (workFromAllShards.size() < requestedMaxWorkToRetrieve && shardQueueIterator.hasNext()) {
-                var shardEntry = shardQueueIterator.next();
-                ProcessingShard<K, V> shard = shardEntry.getValue();
+        Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> next = shardQueueIterator.next();
+        while (workFromAllShards.size() < requestedMaxWorkToRetrieve && next.isPresent()) {
+            var shardEntry = next;
+            ProcessingShard<K, V> shard = shardEntry.get().getValue();
 
-                //
-                int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
-                var work = shard.getWorkIfAvailable(remainingToGet);
-                workFromAllShards.addAll(work);
-            }
+            //
+            int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
+            var work = shard.getWorkIfAvailable(remainingToGet);
+            workFromAllShards.addAll(work);
+
+            // next
+            next = shardQueueIterator.next();
         }
 
         // log
@@ -270,15 +272,15 @@ public class ShardManager<K, V> {
         }
 
         //
-        updateResumePoint(shardQueueIterator);
+        updateResumePoint(next);
 
         return workFromAllShards;
     }
 
-    private void updateResumePoint(LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator) {
-        if (shardQueueIterator.hasNext()) {
-            var shardEntry = shardQueueIterator.next();
-            this.iterationResumePoint = Optional.of(shardEntry.getKey());
+    private void updateResumePoint(final Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {
+        // if empty, iteration was exhausted and no resume point is needed
+        iterationResumePoint = lastShard.map(Map.Entry::getKey);
+        if (iterationResumePoint.isPresent()) {
             log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
         }
     }
