@@ -12,26 +12,45 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
-import static io.confluent.csid.utils.BackportUtils.isEmpty;
+import static io.confluent.csid.utils.BackportUtils.hasNo;
 
 /**
  * Loop implementations that will resume from a given key. Can be constructed and used as an iterable, or a function
  * passed into the static version {@link #iterateStartingFromKeyLooping}.
  * <p>
- * The non functional version is useful when you want to use looping constructs such as {@code break} and {@code
- * continue}.
+ * The non-functional version is useful when you want to use looping constructs such as {@code break} and
+ * {@code continue}.
+ * <p>
+ * TODO surely there's a better (standard library) way to do this - try to remove this class - too complex
+ *
+ * @author Antony Stubbs
  */
 @Slf4j
 public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<KEY, VALUE>>, Iterable<Map.Entry<KEY, VALUE>> {
 
+    private Optional<Map.Entry<KEY, VALUE>> head = Optional.empty();
+
+    /**
+     * See {@link java.util.concurrent.ConcurrentHashMap} docs on iteration
+     *
+     * @see java.util.concurrent.ConcurrentHashMap.Traverser
+     */
     private Iterator<Map.Entry<KEY, VALUE>> iterator;
 
+    /**
+     * The key to start from
+     */
     @Getter
-    private final Optional<KEY> iterationStartingPoint;
+    private final Optional<KEY> iterationStartingPointKey;
 
     private final Map<KEY, VALUE> map;
 
-    private boolean hasLoopedAroundBackToBeginning = false;
+    /**
+     * Where the iteration of the collection has now started again from index zero.
+     * <p>
+     * Binary, as can only loop once after reach the end (to reach the initial starting point again).
+     */
+    private boolean isOnSecondPass = false;
 
     /**
      * Tracks starting point with an index, instead of just object equality, in case the collection contains to elements
@@ -40,7 +59,10 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     private Optional<Integer> startingPointIndex = Optional.empty();
 
-    private int indexOfNextElementToRetrieve = 0;
+    /**
+     * Tracks the index of the element, which the wrapped iterator will retrieve next
+     */
+    private int indexOfNextElementIteratorWillRetrieve = 0;
 
     public static <KKEY, VVALUE> LoopingResumingIterator<KKEY, VVALUE> build(KKEY startingKey, Map<KKEY, VVALUE> map) {
         return new LoopingResumingIterator<>(Optional.ofNullable(startingKey), map);
@@ -51,10 +73,21 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
      */
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public LoopingResumingIterator(Optional<KEY> startingKey, Map<KEY, VALUE> map) {
-        this.iterationStartingPoint = startingKey;
+        this.iterationStartingPointKey = startingKey;
         this.map = map;
-        var entries = map.entrySet();
-        this.iterator = entries.iterator();
+        iterator = map.entrySet().iterator();
+
+        // find the starting point
+        if (startingKey.isPresent()) {
+            this.head = advanceToStartingPointAndGet(startingKey.get());
+            if (head.isEmpty()) {
+                startingPointIndex = Optional.of(0); // act as if it was found at 0 and proceed normally
+                resetIteratorToZero();
+            }
+        } else {
+            startingPointIndex = Optional.of(0); // act as if it was found at 0 and proceed normally
+        }
+
     }
 
     public LoopingResumingIterator(Map<KEY, VALUE> map) {
@@ -63,37 +96,47 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
 
     @Override
     public boolean hasNext() {
-        if (isEmpty(iterationStartingPoint)) {
+        if (hasNo(iterationStartingPointKey)) {
+            // reverts to simple non-resuming case
             return iterator.hasNext();
-        } else if (hasLoopedAroundBackToBeginning) {
-            // we've looped around
-            boolean endOfIterationReached = startingPointIndex.orElse(-1) == indexOfNextElementToRetrieve;
-            return !endOfIterationReached;
+        } else if (isOnSecondPass) {
+            boolean endOfSecondIterationReached = startingPointIndex.orElse(-1) == indexOfNextElementIteratorWillRetrieve;
+            // if has not ended 2nd iteration, elements remain
+            return !endOfSecondIterationReached;
         } else {
-            boolean atEndOfFirstIteration = !iterator.hasNext();
-            if (atEndOfFirstIteration) {
-                boolean startingPointIsntZero = isStartingPointIndexFound() && startingPointIndex.get() != 0;
-                if (startingPointIsntZero) {
-                    hasLoopedAroundBackToBeginning = true;
-                    // reset the iterator
-                    resetIterator();
-                    return iterator.hasNext();
-                } else {
-                    // from not found or was first element, there won't be a second pass
-                    return false;
-                }
+            return firstIterationHasNext();
+        }
+    }
+
+    private boolean firstIterationHasNext() {
+        if (iterator.hasNext()) {
+            // return the underlying iterators value
+            return true;
+        } else {
+            // end of first iteration reached
+            boolean hasPositiveStartingPoint = isStartingPointIndexFound() && startingPointIndex.get() != 0;
+            if (hasPositiveStartingPoint) {
+                isOnSecondPass = true;
+                // reset the iterator
+                resetIteratorToZero();
+                return iterator.hasNext();
             } else {
-                return true;
+                // from not found or was first element, there won't be a second pass
+                return false;
             }
         }
     }
 
     @Override
     public Map.Entry<KEY, VALUE> next() { // NOSONAR - NoSuchElementException thrown in nested method
-        if (iterationStartingPoint.isPresent()) {
-            return findStartingPointAndNextValue(iterationStartingPoint.get());
+        if (this.head.isPresent()) {
+            var headValue = head.get();
+            head = Optional.empty();
+            return headValue;
+        } else if (iterationStartingPointKey.isPresent()) {
+            return findStartingPointAndNextValue(iterationStartingPointKey.get());
         } else {
-            return getNext();
+            return advanceIndexAndGetNext();
         }
     }
 
@@ -101,7 +144,7 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
         if (isStartingPointIndexFound()) {
             return getNextAndMaybeLoop(startingPointObject);
         } else {
-            return attemptToFindStart(startingPointObject);
+            return setStartAndGet(startingPointObject);
         }
     }
 
@@ -112,25 +155,29 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
     /**
      * Tries to find the starting point, and returns the corresponding object if found.
      */
-    private Map.Entry<KEY, VALUE> attemptToFindStart(Object startingPointObject) {
-        Optional<Map.Entry<KEY, VALUE>> startingPoint = findStartingPointMaybe(startingPointObject);
-        if (startingPoint.isPresent()) {
+    private Map.Entry<KEY, VALUE> setStartAndGet(Object startingPointObject) {
+        Optional<Map.Entry<KEY, VALUE>> startingPoint = advanceToStartingPointAndGet(startingPointObject);
+        boolean startingPointFound = startingPoint.isPresent();
+        if (startingPointFound) {
             return startingPoint.get();
         } else {
             startingPointIndex = Optional.of(0); // act as if it was found at 0 and proceed normally
-            resetIterator();
-            return getNext();
+            resetIteratorToZero();
+            return advanceIndexAndGetNext(); // return first element
         }
     }
 
     /**
+     * Finds the starting point entry, and sets its index if found.
+     *
      * @return the starting point entry, if found. Otherwise, null.
+     * @see #startingPointIndex
      */
-    private Optional<Map.Entry<KEY, VALUE>> findStartingPointMaybe(Object startingPointObject) {
+    private Optional<Map.Entry<KEY, VALUE>> advanceToStartingPointAndGet(Object startingPointObject) {
         while (iterator.hasNext()) {
-            Map.Entry<KEY, VALUE> next = getNext();
+            Map.Entry<KEY, VALUE> next = advanceIndexAndGetNext();
             if (next.getKey() == startingPointObject) {
-                int value = indexOfNextElementToRetrieve - 1;
+                int value = indexOfNextElementIteratorWillRetrieve - 1;
                 if (value < 0) {
                     value = this.map.size() - 1;
                 }
@@ -143,49 +190,46 @@ public class LoopingResumingIterator<KEY, VALUE> implements Iterator<Map.Entry<K
 
     private Map.Entry<KEY, VALUE> getNextAndMaybeLoop(Object startingPointObject) {
         Map.Entry<KEY, VALUE> toReturn;
-        if (hasLoopedAroundBackToBeginning) {
-            toReturn = getNext();
-
-            if (null != toReturn && toReturn.getKey() == startingPointObject) {
+        if (isOnSecondPass) {
+            toReturn = advanceIndexAndGetNext(); // ConcurrentHashMap.Traverser never throws NoSuchElementException
+            if (toReturn.getKey() == startingPointObject) {
                 // back at the beginning
                 throw new NoSuchElementException("#hasNext() returned true, but there are no more entries that haven't been iterated.");
             }
         } else {
             // still on first pass
             if (iterator.hasNext()) {
-                toReturn = getNext();
+                toReturn = advanceIndexAndGetNext();
             } else {
                 // reached end of first pass
-                hasLoopedAroundBackToBeginning = true;
-                resetIterator();
+                isOnSecondPass = true;
+                resetIteratorToZero();
                 // return first looped value
-                toReturn = getNext();
+                toReturn = advanceIndexAndGetNext();
             }
         }
         return toReturn;
     }
 
-    private void resetIterator() {
-        this.indexOfNextElementToRetrieve = 0;
+    private void resetIteratorToZero() {
+        indexOfNextElementIteratorWillRetrieve = 0;
         iterator = map.entrySet().iterator();
     }
 
-    private Map.Entry<KEY, VALUE> getNext() {
-        Map.Entry<KEY, VALUE> toReturn = null;
-        if (indexOfNextElementToRetrieve == this.map.size() - 1) {
-            indexOfNextElementToRetrieve = 0;
+    private Map.Entry<KEY, VALUE> advanceIndexAndGetNext() {
+        final boolean indexAtEndOfMap = indexOfNextElementIteratorWillRetrieve == this.map.size() - 1;
+        if (indexAtEndOfMap) {
+            // reset to beginning
+            indexOfNextElementIteratorWillRetrieve = 0;
         } else {
-            indexOfNextElementToRetrieve++;
+            indexOfNextElementIteratorWillRetrieve++;
         }
-        if(iterator.hasNext()){
-            toReturn = iterator.next();
-        }
-        return toReturn;
+        return iterator.next();
     }
 
     @Override
     public Iterator<Map.Entry<KEY, VALUE>> iterator() {
-        return this;
+        return this; // NOSONAR - this represents the iteration over the underlying collection as well
     }
 
 }

@@ -11,8 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
-
-import static com.google.common.truth.Truth.assertThat;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class LoopingResumingIteratorTest {
 
@@ -63,7 +62,7 @@ public class LoopingResumingIteratorTest {
     }
 
     @Test
-    public void fromBeingFirstElement() {
+    public void fromBeginningFirstElement() {
         LinkedHashMap<Integer, String> map = new LinkedHashMap<>();
         map.put(0, "a");
         map.put(1, "b");
@@ -111,14 +110,20 @@ public class LoopingResumingIteratorTest {
             var entries = LoopingResumingIterator.build(2, map);
             ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
             var iterator = entries.iterator();
-            while (iterator.hasNext()) {
-                var x = iterator.next();
-                results.add(x);
+
+            {
+                // first iteration run to end
+                while (iterator.hasNext()) {
+                    var x = iterator.next();
+                    results.add(x);
+                }
+                Assertions.assertThat(results).extracting(Map.Entry::getKey).containsExactly(2, 0, 1);
             }
-            if (entries.hasNext()) {
-                iterator.next();
+
+            {
+                // check reports now empty
+                Truth.assertThat(entries.hasNext()).isFalse();
             }
-            Assertions.assertThat(results).extracting(Map.Entry::getKey).containsExactly(2, 0, 1);
         }
     }
 
@@ -141,10 +146,9 @@ public class LoopingResumingIteratorTest {
             }
             Assertions.assertThat(results).extracting(Map.Entry::getKey).containsExactly(0, 1, 2);
 
-
-            if (entries.hasNext()) {
-                Map.Entry<Integer, String> next = iterator.next();
-                assertThat(next).isNotNull();
+            // check reports now empty
+            {
+                Truth.assertThat(entries.hasNext()).isFalse();
             }
         }
     }
@@ -168,21 +172,64 @@ public class LoopingResumingIteratorTest {
         Truth.assertThat(entries.hasNext()).isFalse();
         Truth.assertThat(entries.hasNext()).isFalse();
     }
-    
-        @Test
-    void emptyKeyIterator(){
+
+    @Test
+    void emptyInitialStartingKey() {
+        //
         LinkedHashMap<Integer, String> map = new LinkedHashMap<>();
         map.put(0, "a");
         map.put(1, "b");
-        map.put(2, "c");
-        map.put(3, "d");
+
+        //
         var entries = LoopingResumingIterator.build(null, map);
-        ArrayList<Map.Entry<Integer, String>> results = new ArrayList<>();
-        for (var x : entries) {
-            results.add(x);
-        }
+
+        //
         Map.Entry<Integer, String> next = entries.next();
-        assertThat(next).isNull();
+        Truth.assertThat(next.getKey()).isEqualTo(0);
+        Truth.assertThat(next.getValue()).isEqualTo("a");
+    }
+
+    /**
+     * Example issue where an element is removed from the underlaying collection during iteration
+     * <p>
+     * See https://github.com/confluentinc/parallel-consumer/pull/435
+     */
+    @Test
+    void demoOfNoSuchElementIssue() {
+        final int INDEX_TO_REMOVE = 4;
+        Map<Integer, String> map = new ConcurrentHashMap<>();
+        map.put(0, "a");
+        map.put(1, "b");
+//        map.put(2, "c");
+//        map.put(3, "d");
+//        map.put(INDEX_TO_REMOVE, "e");
+//        map.put(5, "f");
+//        map.put(6, "g");
+//        map.put(7, "h");
+//        map.put(8, "i");
+//        map.put(9, "j");
+
+        var iterator = LoopingResumingIterator.build(1, map);
+
+//        // remove the last element
+        Map.Entry<Integer, String> last = null;
+        while (iterator.hasNext()) {
+            last = iterator.next();
+            if (last.getKey() == INDEX_TO_REMOVE) {
+                map.remove(INDEX_TO_REMOVE);
+                break;
+            }
+        }
+
+        Truth.assertThat(iterator.hasNext()).isTrue();
+
+//        map.clear();
+
+        Truth.assertThat(iterator.next()).isNull();
+
+        Truth.assertThat(iterator.hasNext()).isFalse();
+
+
     }
 
 }

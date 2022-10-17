@@ -53,6 +53,12 @@ public class ShardManager<K, V> {
      * Object Type is either the K key type, or it is a {@link TopicPartition}
      * <p>
      * Used to collate together a queue of work units for each unique key consumed
+     * <p>
+     * Warning: Until PR#200, PR#270 (rebalance messages) is merged, even though we use a thread safe collection type,
+     * access to #processingShards must be synchronized if used from our external LoopingResumingIterator (because it is
+     * not thread safe), and #processingShards is accessed from both the controller and poller.
+     * <p>
+     * TODO remove concurrent collection and synchronize access after PR#270
      *
      * @see ProcessingShard
      * @see K
@@ -102,13 +108,11 @@ public class ShardManager<K, V> {
      * The shard belonging to the given key
      *
      * @return may return empty if the shard has since been removed
+     * @see #processingShards doesn't need to synchornise, as shard state is still valid after being removed (and
+     *         eventually GC'd)
      */
     Optional<ProcessingShard<K, V>> getShard(ShardKey key) {
         return Optional.ofNullable(processingShards.get(key));
-    }
-
-    private LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> getIterator(final Optional<ShardKey> iterationResumePoint) {
-        return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
     }
 
     ShardKey computeShardKey(WorkContainer<?, ?> wc) {
@@ -121,6 +125,7 @@ public class ShardManager<K, V> {
 
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
+     * @see #processingShards doesn't need to sync, as removed shard state is still valid (and eventually GC'd)
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return processingShards.values().stream()
@@ -128,6 +133,9 @@ public class ShardManager<K, V> {
                 .sum();
     }
 
+    /**
+     * @see #processingShards doesn't need to sync, as removed shard state is still valid (and eventually GC'd)
+     */
     public boolean workIsWaitingToBeProcessed() {
         Collection<ProcessingShard<K, V>> allShards = processingShards.values();
         return allShards.parallelStream()
@@ -140,31 +148,42 @@ public class ShardManager<K, V> {
      * @param recordsFromRemovedPartition collection of work to scan to get keys of shards to remove
      */
     void removeAnyShardEntriesReferencedFrom(Collection<Optional<ConsumerRecord<K, V>>> recordsFromRemovedPartition) {
-        for (ConsumerRecord<K, V> work : recordsFromRemovedPartition.stream()
+        final List<ConsumerRecord<K, V>> polledRecordsFromPartition = recordsFromRemovedPartition.stream()
                 .filter(Optional::isPresent)
                 .map(Optional::get)
-                .collect(Collectors.toList())) {
-            removeShardFor(work);
+                .collect(Collectors.toList());
+        for (ConsumerRecord<K, V> consumerRecord : polledRecordsFromPartition) {
+            removeWorkFromShardFor(consumerRecord);
         }
     }
 
-    private void removeShardFor(ConsumerRecord<K, V> consumerRecord) {
+    /**
+     * Removes any tracked work for this record, and removes the shard if it is empty
+     */
+    private void removeWorkFromShardFor(ConsumerRecord<K, V> consumerRecord) {
         ShardKey shardKey = computeShardKey(consumerRecord);
 
         if (processingShards.containsKey(shardKey)) {
+            // remove the work
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
-            removeShardIfEmpty(shardKey);
+
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
+
+            // remove the shard if empty
+            removeShardIfEmpty(shardKey);
         } else {
             log.trace("Shard referenced by WC: {} with shard key: {} already removed", consumerRecord, shardKey);
         }
+
     }
 
     public void addWorkContainer(long epochOfInboundRecords, ConsumerRecord<K, V> aRecord) {
         var wc = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
         ShardKey shardKey = computeShardKey(wc);
+
+        // don't need to synchronise on /adding/ elements, as the iterator would just stop early
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
@@ -174,10 +193,15 @@ public class ShardManager<K, V> {
         Optional<ProcessingShard<K, V>> shardOpt = getShard(key);
 
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
+        // If not, no point to remove the shard, as it will be reused for the next message from the same partition
         boolean keyOrdering = options.getOrdering().equals(KEY);
         if (keyOrdering && shardOpt.isPresent() && shardOpt.get().isEmpty()) {
             log.trace("Removing empty shard (key: {})", key);
-            this.processingShards.remove(key);
+            // must synchronise so that the looping iterator doesn't have the collection suddenly shrink from under it
+            // (which can currently happen on partition revocation)
+            synchronized (processingShards) {
+                this.processingShards.remove(key);
+            }
         }
     }
 
@@ -219,20 +243,25 @@ public class ShardManager<K, V> {
     }
 
     public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
-        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
+        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator =
+                new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
 
         //
         List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
 
-        //
-        while (workFromAllShards.size() < requestedMaxWorkToRetrieve && shardQueueIterator.hasNext()) {
-            var shardEntry = shardQueueIterator.next();
-            ProcessingShard<K, V> shard = shardEntry.getValue();
+        // loop over shards, and get work from each
+        // must synchronise so that the looping iterator doesn't have the collection suddenly shrink from under it
+        // (which can currently happen on partition revocation)
+        synchronized (processingShards) {
+            while (workFromAllShards.size() < requestedMaxWorkToRetrieve && shardQueueIterator.hasNext()) {
+                var shardEntry = shardQueueIterator.next();
+                ProcessingShard<K, V> shard = shardEntry.getValue();
 
-            //
-            int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
-            var work = shard.getWorkIfAvailable(remainingToGet);
-            workFromAllShards.addAll(work);
+                //
+                int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
+                var work = shard.getWorkIfAvailable(remainingToGet);
+                workFromAllShards.addAll(work);
+            }
         }
 
         // log
