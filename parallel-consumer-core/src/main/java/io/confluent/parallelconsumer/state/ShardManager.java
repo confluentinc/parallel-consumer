@@ -53,12 +53,6 @@ public class ShardManager<K, V> {
      * Object Type is either the K key type, or it is a {@link TopicPartition}
      * <p>
      * Used to collate together a queue of work units for each unique key consumed
-     * <p>
-     * Warning: Until PR#200, PR#270 (rebalance messages) is merged, even though we use a thread safe collection type,
-     * access to #processingShards must be synchronized if used from our external LoopingResumingIterator (because it is
-     * not thread safe), and #processingShards is accessed from both the controller and poller.
-     * <p>
-     * TODO remove concurrent collection and synchronize access after PR#270
      *
      * @see ProcessingShard
      * @see K
@@ -108,8 +102,6 @@ public class ShardManager<K, V> {
      * The shard belonging to the given key
      *
      * @return may return empty if the shard has since been removed
-     * @see #processingShards doesn't need to synchornise, as shard state is still valid after being removed (and
-     *         eventually GC'd)
      */
     Optional<ProcessingShard<K, V>> getShard(ShardKey key) {
         return Optional.ofNullable(processingShards.get(key));
@@ -125,7 +117,6 @@ public class ShardManager<K, V> {
 
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
-     * @see #processingShards doesn't need to sync, as removed shard state is still valid (and eventually GC'd)
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return processingShards.values().stream()
@@ -133,9 +124,6 @@ public class ShardManager<K, V> {
                 .sum();
     }
 
-    /**
-     * @see #processingShards doesn't need to sync, as removed shard state is still valid (and eventually GC'd)
-     */
     public boolean workIsWaitingToBeProcessed() {
         Collection<ProcessingShard<K, V>> allShards = processingShards.values();
         return allShards.parallelStream()
@@ -148,7 +136,7 @@ public class ShardManager<K, V> {
      * @param recordsFromRemovedPartition collection of work to scan to get keys of shards to remove
      */
     void removeAnyShardEntriesReferencedFrom(Collection<Optional<ConsumerRecord<K, V>>> recordsFromRemovedPartition) {
-        final List<ConsumerRecord<K, V>> polledRecordsFromPartition = recordsFromRemovedPartition.stream()
+        List<ConsumerRecord<K, V>> polledRecordsFromPartition = recordsFromRemovedPartition.stream()
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());
@@ -197,11 +185,7 @@ public class ShardManager<K, V> {
         boolean keyOrdering = options.getOrdering().equals(KEY);
         if (keyOrdering && shardOpt.isPresent() && shardOpt.get().isEmpty()) {
             log.trace("Removing empty shard (key: {})", key);
-            // must synchronise so that the looping iterator doesn't have the collection suddenly shrink from under it
-            // (which can currently happen on partition revocation)
-            synchronized (processingShards) {
-                this.processingShards.remove(key);
-            }
+            this.processingShards.remove(key);
         }
     }
 
