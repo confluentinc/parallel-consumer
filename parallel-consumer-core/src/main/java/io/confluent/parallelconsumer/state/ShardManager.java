@@ -234,8 +234,6 @@ public class ShardManager<K, V> {
         List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
 
         // loop over shards, and get work from each
-        // must synchronise so that the looping iterator doesn't have the collection suddenly shrink from under it
-        // (which can currently happen on partition revocation)
         Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> next = shardQueueIterator.next();
         while (workFromAllShards.size() < requestedMaxWorkToRetrieve && next.isPresent()) {
             var shardEntry = next;
@@ -261,7 +259,7 @@ public class ShardManager<K, V> {
         return workFromAllShards;
     }
 
-    private void updateResumePoint(final Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {
+    private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {
         // if empty, iteration was exhausted and no resume point is needed
         iterationResumePoint = lastShard.map(Map.Entry::getKey);
         if (iterationResumePoint.isPresent()) {
