@@ -278,7 +278,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         {
             final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
             final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-            log.error("start: {}, end: {}", startOffset, endOffset);
+            log.error("start 2: {}, end: {}", startOffset, endOffset);
         }
 
         AtomicLong bumpersSent = new AtomicLong();
@@ -300,7 +300,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         {
             final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
             final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-            log.error("start: {}, end: {}", startOffset, endOffset);
+            log.error("start 3: {}, end: {}", startOffset, endOffset);
         }
 
         if (offsetResetStrategy.equals(NONE)) {
@@ -329,19 +329,38 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 ////                        .cause()
 //                        .hasMessageContainingAll("Reset policy NONE", "no offset found for partition");
         } else {
+
+            {
+                final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
+                final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
+                log.error("start 4: {}, end: {}, bumpersSent: {}", startOffset, endOffset, bumpersSent);
+            }
+
             // in case we're at the end of the topic, add some messages to make sure we get a poll response
             // must go before failing assertion, otherwise won't be reached
-            getKcu().getProducer().send(new ProducerRecord<>(getTopic(), "key-bumper", "poll-bumper"));
-            bumpersSent.incrementAndGet();
+//            getKcu().getProducer().send(new ProducerRecord<>(getTopic(), "key-bumper", "poll-bumper"));
+//            bumpersSent.incrementAndGet();
+
+            {
+                final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
+                final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
+                log.error("start 5: {}, end: {}, bumpersSent: {}", startOffset, endOffset, bumpersSent);
+            }
 
             //
             Awaitility.await()
+                    .pollInterval(5, SECONDS) // allow bumper messages to propagate
+                    .atMost(30, SECONDS) // so, allow more for more total time
                     .failFast(tempPc::isClosedOrFailed)
                     .untilAsserted(() -> {
                         // in case we're at the end of the topic, add some messages to make sure we get a poll response
                         // must go before failing assertion, otherwise won't be reached
                         getKcu().getProducer().send(new ProducerRecord<>(getTopic(), "key-bumper", "poll-bumper"));
                         bumpersSent.incrementAndGet();
+
+                        final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
+                        final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
+                        log.error("start await loop: {}, end: {}, bumpersSent: {}", startOffset, endOffset, bumpersSent);
 
                         //
                         assertWithMessage("Highest seen offset to read up to")
@@ -355,25 +374,31 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             {
                 final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
                 final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-                log.error("start: {}, end: {}", startOffset, endOffset);
+                log.error("start 6: {}, end: {}", startOffset, endOffset);
             }
 
             var adjustExpected = switch (offsetResetStrategy) {
                 case EARLIEST -> targetStartOffset;
                 case LATEST -> {
                     final long bumperWithTailingRecord = bumpersSent.get() + 1;
-                    yield targetStartOffset + bumperWithTailingRecord;
+                    yield targetStartOffset;
+//                    yield targetStartOffset + bumperWithTailingRecord;
                 }
                 case NONE -> -1; // not valid, tested in other branch
             };
 
-            log.warn("Offset started at should equal the target {}, lowest {}, sent, {}, diff is {})", targetStartOffset, lowest, bumpersSent, lowest.get() - targetStartOffset);
+            final int offset = 0;
+
+            log.warn("Offset started at should equal the target {}, lowest {}, sent {}, diff is {}, offset is {})", targetStartOffset, lowest, bumpersSent, lowest.get() - targetStartOffset, offset);
             log.warn("Offset started at should equal the target ({} sent, diff is {})", bumpersSent, targetStartOffset - lowest.get());
             log.warn("Offset started at should equal the target ({} sent, diff is {})", bumpersSent, targetStartOffset - lowest.get());
 
-            assertWithMessage("Offset started at should equal the target (%s sent, diff is %s)", bumpersSent, lowest.get() - targetStartOffset - +2)
+            assertWithMessage("Offset started at should equal the target (sent %s , diff is %s, offset is %s)",
+                    bumpersSent,
+                    lowest.get() - targetStartOffset,
+                    offset)
                     .that(lowest.get())
-                    .isEqualTo(targetStartOffset + 6);
+                    .isEqualTo(targetStartOffset + offset);
 //            assertWithMessage("Offset started at should equal the target (%s sent, diff is %s)", bumpersSent, targetStartOffset - lowest.get() + 2)
 //                    .that(lowest.get())
 //                    .isEqualTo(targetStartOffset);
@@ -529,20 +554,27 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             {
                 final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
                 final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-                log.error("start: {}, end: {}", startOffset, endOffset);
+                log.error("start 1: {}, end: {}", startOffset, endOffset);
             }
 
             var producedCount = produceMessages(TO_PRODUCE).size();
+
+            {
+                final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
+                final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
+                log.error("start 1.5: {}, end: {}", startOffset, endOffset);
+            }
 
             final int END_OFFSET = 50;
             var groupId = clientUtils.getGroupId();
             runPcUntilOffset(offsetResetPolicy, END_OFFSET, END_OFFSET, UniSets.of(), GroupOption.REUSE_GROUP);
 
+            producedCount = producedCount + 1; // run sends one
 
             {
                 final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
                 final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-                log.error("start: {}, end: {}", startOffset, endOffset);
+                log.error("start 2: {}, end: {}", startOffset, endOffset);
             }
 
             //
@@ -562,7 +594,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             {
                 final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
                 final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-                log.error("start: {}, end: {}", startOffset, endOffset);
+                log.error("start 3: {}, end: {}", startOffset, endOffset);
             }
 
             final int EXPECTED_RESET_OFFSET = switch (offsetResetPolicy) {
@@ -576,13 +608,13 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             {
                 final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
                 final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-                log.error("start: {}, end: {}", startOffset, endOffset);
+                log.error("start 4: {}, end: {}", startOffset, endOffset);
             }
             runPcCheckStartIs(EXPECTED_RESET_OFFSET, producedCount);
             {
                 final long endOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.earliest())).partitionResult(tp).get().offset();
                 final long startOffset = getKcu().getAdmin().listOffsets(UniMaps.of(tp, OffsetSpec.latest())).partitionResult(tp).get().offset();
-                log.error("start: {}, end: {}", startOffset, endOffset);
+                log.error("start 5: {}, end: {}", startOffset, endOffset);
             }
         }
     }
