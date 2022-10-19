@@ -1,7 +1,7 @@
 //
 // STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
@@ -556,6 +556,35 @@ From the `Clients` view, get the connection information customized to your clust
 .. Use these settings presented to https://docs.confluent.io/clients-kafka-java/current/overview.html[configure your clients].
 . Use these clients for steps outlined in the <<common_preparation>> section.
 
+
+[[python]]
+=== Python
+
+**EXPERIMENTAL FEATURE**
+
+Parallel Consumer is available from Python via the `pyallel_consumer` package.
+
+You can import the parallel consumer Java package as a Python package.
+All parallel consumer classes and functions are accessible from this, with support for passing Python objects as
+arguments including functions.
+Imports are aliased under `jio` to avoid conflicts with the std-lib `io.py` module.
+
+```python
+from jio.confluent.parallelconsumer import ParallelConsumerOptions, ParallelStreamProcessor
+...
+options = ParallelConsumerOptions.builder() \
+        .ordering(ParallelConsumerOptions.ProcessingOrder.KEY) \
+        .maxConcurrency(1000) \
+        .consumer(consumer) \
+        .producer(producer) \
+        .build()
+processor = ParallelStreamProcessor.createEosStreamProcessor(options)
+processor.subscribe([topic])
+processor.poll(lambda o: print(f"Concurrently processing a record: {o}"))
+```
+
+See the `parallel-consumer-python` [README](./parallel-consumer-python/README.adoc) for more information.
+
 [[upgrading]]
 == Upgrading
 
@@ -800,6 +829,7 @@ For features in development, have a look at the https://github.com/confluentinc/
 ** For use with Connect:
 *** Source: simply consume from the topic that your Connect plugin is publishing to
 *** Sink: use the poll and producer style API and publish the records to the topic that the connector is sinking from
+** Pyallel Consumer: Python v3.5+
 * Server side
 ** Should work with any cluster that the linked AK client library works with
 *** If using EoS/Transactions, needs a cluster setup that supports EoS/transactions
