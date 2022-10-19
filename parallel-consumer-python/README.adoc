@@ -50,3 +50,10 @@ Recommended (but can use other tools such as .venv):
 === Install Package in Editable Mode
 
 - `pip install -e .`
+
+== Publish Package
+
+- Build the package `python setup.py bdist_wheel`
+- Install [twine](https://twine.readthedocs.io/en/latest/) the official PyPi upload tool `pip install twine`
+- Test upload with testpypi `twine upload -r testpypi ./dist/* --verbose`
+- Upload to pypi `twine upload -r pypi ./dist/* --verbose`
