@@ -1,0 +1,2 @@
+JPype1==1.4.*
+install-jdk @ https://github.com/Robbie-Palmer/install-jdk/archive/patch-1.zip
