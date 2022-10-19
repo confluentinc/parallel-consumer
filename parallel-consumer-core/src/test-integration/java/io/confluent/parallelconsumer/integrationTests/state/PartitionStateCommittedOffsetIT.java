@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.integrationTests.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import com.google.common.truth.Truth;
+import com.google.common.truth.StringSubject;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ManagedTruth;
@@ -31,7 +31,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
-import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
@@ -49,6 +48,7 @@ import static io.confluent.csid.utils.JavaUtils.getLast;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.apache.kafka.clients.consumer.OffsetResetStrategy.NONE;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -120,7 +120,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             log.debug("First run produced, with compaction targets removed: {}", processedOnFirstRunWithTombstoneTargetsRemoved);
 
             //
-            triggerTombStoneProcessing();
+            triggerCompactionProcessing();
 
             // The offsets of the tombstone targets should not be read in second run
             final int expectedOffsetProcessedToSecondRun = TO_PRODUCE + compactedKeys.size();
@@ -158,7 +158,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             setup();
         }
 
-        setupCompacted();
+        setupCompactedEnvironment();
 
         return compactingBroker;
     }
@@ -180,7 +180,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     }
 
     @SneakyThrows
-    private void setupCompacted() {
+    private void setupCompactedEnvironment() {
         log.debug("Setting up aggressive compaction...");
         ConfigResource topicConfig = new ConfigResource(ConfigResource.Type.TOPIC, getTopic());
 
@@ -198,7 +198,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     }
 
     @SneakyThrows
-    private List<String> triggerTombStoneProcessing() {
+    private List<String> triggerCompactionProcessing() {
         // send a lot of messages to fill up segments
         List<String> keys = produceMessages(TO_PRODUCE * 2, "log-compaction-trigger-");
         // or wait?
@@ -260,41 +260,77 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @SneakyThrows
     private void runPcCheckStartIs(long targetStartOffset, long checkUpTo, GroupOption groupOption) {
-        try (var tempPc = super.getKcu().buildPc(PARTITION, groupOption);) {
-            tempPc.subscribe(of(getTopic()));
+        var tempPc = super.getKcu().buildPc(PARTITION, groupOption);
+        tempPc.subscribe(of(getTopic()));
 
-            AtomicLong lowest = new AtomicLong(Long.MAX_VALUE);
-            AtomicLong highest = new AtomicLong();
+        AtomicLong lowest = new AtomicLong(Long.MAX_VALUE);
+        AtomicLong highest = new AtomicLong();
 
-            tempPc.poll(recordContexts -> {
-                long thisOffset = recordContexts.offset();
-                if (thisOffset < lowest.get()) {
-                    log.debug("Found lowest offset {}", thisOffset);
-                    lowest.set(thisOffset);
-                } else if (thisOffset > highest.get()) {
-                    highest.set(thisOffset);
-                }
-            });
+        tempPc.poll(recordContexts -> {
+            long thisOffset = recordContexts.offset();
+            if (thisOffset < lowest.get()) {
+                log.debug("Found lowest offset {}", thisOffset);
+                lowest.set(thisOffset);
+            } else if (thisOffset > highest.get()) {
+                highest.set(thisOffset);
+            }
+        });
 
-            //
-            AtomicLong bumpersSent = new AtomicLong();
-            Awaitility.await().untilAsserted(() -> {
-                // in case we're at the end of the topic, add some messages to make sure we get a poll response
-                getKcu().produceMessages(getTopic(), 1, "poll-bumper");
-                bumpersSent.incrementAndGet();
+        //
+        AtomicLong bumpersSent = new AtomicLong();
 
-                assertWithMessage("Highest seen offset")
-                        .that(highest.get())
-                        .isAtLeast(checkUpTo - 1);
-            });
+
+        if (offsetResetStrategy.equals(NONE)) {
+            Awaitility.await().untilAsserted(() -> assertThat(tempPc.isClosedOrFailed()).isFalse()); // started
+            Awaitility.await().untilAsserted(() -> assertThat(tempPc.isClosedOrFailed()).isTrue()); // crashed
+            final Exception throwable = tempPc.getFailureCause();
+//                final Throwable throwable = Assertions.catchThrowable(() -> awaitExpectedStartOffset.call());
+            StringSubject causeMessage = assertThat(ExceptionUtils.getRootCauseMessage(throwable));
+            causeMessage.contains("NoOffsetForPartitionException");
+            causeMessage.contains("Undefined offset with no reset policy");
+//                Truth.assertThat(throwable)
+//                        .hasCauseThat().hasMessageThat().contains("No offset found for partition");
+//                Truth.assertThat(throwable)
+//                        .hasMessageThat().contains("No offset found for partition");
+
+//                final String[] rootCauseStackTrace = ExceptionUtils.getRootCauseStackTrace(throwable);
+//                final String[] rootCauseStackTracetwo = ExceptionUtils.getStackFrames(throwable);
+//                var rootCauseStackTracetwo1 = ExceptionUtils.getRootCauseMessage(throwable);
+////                var rootCauseStackTracetwo2 = ExceptionUtils.getStackTrace(throwable);
+//                var rootCauseStackTracetwo3 = ExceptionUtils.getMessage(throwable);
+//                var rootCauseStackTracetwo4 = ExceptionUtils.getThrowableList(throwable);
+
+
+//                Assertions.assertThatThrownBy(awaitExpectedStartOffset, "PC should have failed with reset policy NONE")
+//                        .hasSuppressedException(new ExecutionException(new ExecutionException(new NoOffsetForPartitionException(tp))))
+////                        .cause()
+//                        .hasMessageContainingAll("Reset policy NONE", "no offset found for partition");
+        } else {
+            Awaitility.await()
+                    .failFast(tempPc::isClosedOrFailed)
+                    .untilAsserted(() -> {
+                        // in case we're at the end of the topic, add some messages to make sure we get a poll response
+                        getKcu().produceMessages(getTopic(), 1, "poll-bumper");
+                        bumpersSent.incrementAndGet();
+
+                        assertWithMessage("Highest seen offset")
+                                .that(highest.get())
+                                .isAtLeast(checkUpTo - 1);
+                    });
+//                ThrowableAssert.ThrowingCallable awaitExpectedStartOffset = () -> {
+//                };
+//                awaitExpectedStartOffset.call();
 
             var adjustExpected = switch (offsetResetStrategy) {
                 case EARLIEST -> targetStartOffset;
                 case LATEST -> targetStartOffset + 1;
-                case NONE -> throw new IllegalStateException("NONE not supported");
+                case NONE -> -1; // not valid, tested in other branch
             };
             assertWithMessage("Offset started as").that(lowest.get()).isEqualTo(adjustExpected);
+
+            tempPc.close();
         }
+
     }
 
     @SneakyThrows
@@ -345,34 +381,34 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
             getKcu().produceMessages(getTopic(), 1, "poll-bumper");
 
-            if (offsetResetPolicy.equals(OffsetResetStrategy.NONE)) {
-                Awaitility.await().untilAsserted(() -> {
-                    assertWithMessage("PC crashed / failed fast").that(tempPc.isClosedOrFailed()).isTrue();
-                    assertThat(tempPc.getFailureCause()).hasCauseThat().hasMessageThat().contains("Error in BrokerPollSystem system");
-                    var stackTrace = ExceptionUtils.getStackTrace(tempPc.getFailureCause());
-                    Truth.assertThat(stackTrace).contains("Undefined offset with no reset policy for partitions");
-                });
-                return UniLists.of();
-            } else {
+//            if (offsetResetPolicy.equals(NONE)) {
+//                Awaitility.await().untilAsserted(() -> {
+//                    assertWithMessage("PC crashed / failed fast").that(tempPc.isClosedOrFailed()).isTrue();
+//                    assertThat(tempPc.getFailureCause()).hasCauseThat().hasMessageThat().contains("Error in BrokerPollSystem system");
+//                    var stackTrace = ExceptionUtils.getStackTrace(tempPc.getFailureCause());
+//                    Truth.assertThat(stackTrace).contains("Undefined offset with no reset policy for partitions");
+//                });
+//                return UniLists.of();
+//            } else {
 
-                Awaitility.await()
-                        .failFast(tempPc::isClosedOrFailed)
-                        .untilAsserted(() -> {
-                            assertThat(seenOffsets).isNotEmpty();
-                            assertThat(seenOffsets.last().offset()).isGreaterThan(expectedProcessToOffset - 2);
-                        });
+            Awaitility.await()
+                    .failFast(tempPc::isClosedOrFailed)
+                    .untilAsserted(() -> {
+                        assertThat(seenOffsets).isNotEmpty();
+                        assertThat(seenOffsets.last().offset()).isGreaterThan(expectedProcessToOffset - 2);
+                    });
 
-                if (!succeededOffsets.isEmpty()) {
-                    log.debug("Succeeded up to: {}", succeededOffsets.last().offset());
-                }
-                log.debug("Consumed up to {}", seenOffsets.last().offset());
-
-                var sorted = new ArrayList<>(seenOffsets);
-                Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
-
-
-                return sorted;
+            if (!succeededOffsets.isEmpty()) {
+                log.debug("Succeeded up to: {}", succeededOffsets.last().offset());
             }
+            log.debug("Consumed up to {}", seenOffsets.last().offset());
+
+            var sorted = new ArrayList<>(seenOffsets);
+            Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
+
+
+            return sorted;
+//            }
         } finally {
             try {
                 tempPc.close(); // close manually in this branch only, as in other branch it crashes
@@ -394,12 +430,10 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
         final int moveToOffset = 75;
 
-        // reslolve groupId mess
+        // resolve groupId mess
         moveCommittedOffset(getKcu().getGroupId(), moveToOffset);
 
         runPcCheckStartIs(moveToOffset, quantity);
-        var gkcu5 = getKcu().getConsumer().groupMetadata().groupId();
-
     }
 
     private void runPcCheckStartIs(int targetStartOffset, int checkUpTo) {
@@ -409,6 +443,8 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     /**
      * CG offset has disappeared - committed offset hasn't been changed, but broker gives us a bootstrap poll result
      * with a higher offset than expected. Could be caused by retention period, or compaction.
+     *
+     * @see #noOffsetPolicyOnStartup
      */
     @EnumSource(value = OffsetResetStrategy.class)
     @ParameterizedTest
@@ -423,18 +459,27 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             clientUtils.setOffsetResetPolicy(offsetResetPolicy);
             clientUtils.open();
 
+            if (offsetResetPolicy.equals(NONE)) {
+                // no reset policy, so we set initial offset to zero, to avoid crash on startup - see startup test
+                var consumer = getKcu().getConsumer();
+                consumer.subscribe(of(getTopic()));
+                consumer.poll(Duration.ofSeconds(1));
+                // commit offset 0 to partition
+                consumer.commitSync(UniMaps.of(tp, new OffsetAndMetadata(0)));
+                consumer.close();
+//                consumer.seekToBeginning(of(tp));
+//                consumer.position(tp);
+            }
+
             var producedCount = produceMessages(TO_PRODUCE).size();
 
             final int END_OFFSET = 50;
             var groupId = clientUtils.getGroupId();
-            runPcUntilOffset(offsetResetPolicy, END_OFFSET);
+//            runPcUntilOffset(offsetResetPolicy, END_OFFSET);
+            runPcUntilOffset(offsetResetPolicy, END_OFFSET, END_OFFSET, UniSets.of(), GroupOption.REUSE_GROUP);
+
 
             //
-            if (offsetResetPolicy.equals(OffsetResetStrategy.NONE)) {
-                // test finished
-                return;
-            }
-
             final String compactedKey = "key-50";
 
             // before compaction
@@ -457,8 +502,8 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         }
     }
 
-    private void checkHowManyRecordsWithKeyPresent(String keyToSearchFor, int expectedQuantityToFind, long upToOffset) {
-        log.debug("Looking for {} records with key {} up to offset {}", expectedQuantityToFind, keyToSearchFor, upToOffset);
+    private void checkHowManyRecordsWithKeyPresent(String keyToSearchFor, int expectedQuantityToFind, long searchUpToOffset) {
+        log.debug("Looking for {} records with key {} up to offset {}", expectedQuantityToFind, keyToSearchFor, searchUpToOffset);
 
         try (KafkaConsumer<String, String> newConsumer = getKcu().createNewConsumer(GroupOption.NEW_GROUP);) {
             newConsumer.assign(of(tp));
@@ -467,7 +512,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             assertThat(positionAfter).isEqualTo(0);
             final List<ConsumerRecord<String, String>> records = new ArrayList<>();
             long highest = -1;
-            while (highest < upToOffset - 1) {
+            while (highest < searchUpToOffset - 1) {
                 ConsumerRecords<String, String> poll = newConsumer.poll(Duration.ofSeconds(1));
                 records.addAll(poll.records(tp));
                 var lastOpt = getLast(records);
@@ -488,7 +533,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
         checkHowManyRecordsWithKeyPresent("key-" + offset, 2, TO_PRODUCE + 2);
 
-        List<String> strings = triggerTombStoneProcessing();
+        List<String> strings = triggerCompactionProcessing();
 
         return 2 + strings.size();
     }
@@ -499,6 +544,25 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         getKcu().getProducer()
                 .send(compactingRecord)
                 .get(1, SECONDS);
+    }
+
+    /**
+     * When there's no offset reset policy and there are no offsets for the consumer group, the pc should fail fast,
+     * passing up the exception
+     */
+    @Test
+    void noOffsetPolicyOnStartup() {
+        this.offsetResetStrategy = NONE;
+        try (
+                KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer);
+        ) {
+            clientUtils.setOffsetResetPolicy(offsetResetStrategy);
+            clientUtils.open();
+
+            var producedCount = produceMessages(TO_PRODUCE).size();
+
+            runPcUntilOffset(offsetResetStrategy, producedCount, producedCount, UniSets.of(), GroupOption.REUSE_GROUP);
+        }
     }
 
 }
