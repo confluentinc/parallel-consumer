@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
@@ -257,7 +258,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
                 int i = Integer.parseInt(rec.value());
                 if (stepIndex != i) {
                     log.error("bad step: {} vs {}", stepIndex, i);
-                    throw new RuntimeException("bad process step, expected message is missing: " + stepIndex + " vs " + i);
+                    throw new FakeRuntimeException("bad process step, expected message is missing: " + stepIndex + " vs " + i);
                 }
                 stepIndex++;
             }
@@ -284,7 +285,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             }
             if (!missing.isEmpty())
                 log.error("Missing: {}", missing);
-            throw new RuntimeException("bad step, expected message(s) is missing: " + missing);
+            throw new FakeRuntimeException("bad step, expected message(s) is missing: " + missing);
         }
 
         assertThat(producerSpy.history()).as("Finally, all messages expected messages were produced").hasSize(quantityOfMessagesToProduce);

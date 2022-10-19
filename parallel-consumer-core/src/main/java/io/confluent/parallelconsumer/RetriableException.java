@@ -4,6 +4,8 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import lombok.experimental.StandardException;
+
 /**
  * A user's processing function can throw this exception, which signals to PC that processing of the message has failed,
  * and that it should be retired at a later time.
@@ -13,17 +15,9 @@ package io.confluent.parallelconsumer;
  * <p>
  * So in short, if this exception is thrown, nothing will be logged (except at DEBUG level), any other exception will be
  * logged as an error.
+ *
+ * @author Antony Stubbs
  */
+@StandardException
 public class RetriableException extends RuntimeException {
-    public RetriableException(String message) {
-        super(message);
-    }
-
-    public RetriableException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
-    public RetriableException(Throwable cause) {
-        super(cause);
-    }
 }
