@@ -8,6 +8,7 @@ import com.google.common.truth.StringSubject;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ManagedTruth;
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -26,12 +27,13 @@ import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
+import org.awaitility.Awaitility;
+import org.awaitility.core.TerminalFailureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
@@ -69,6 +71,8 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     int TO_PRODUCE = 200;
 
     private OffsetResetStrategy offsetResetStrategy = DEFAULT_OFFSET_RESET_POLICY;
+
+    private ParallelEoSStreamProcessor<String, String> activePc;
 
     @BeforeEach
     void setup() {
@@ -288,6 +292,8 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             StringSubject causeMessage = assertThat(ExceptionUtils.getRootCauseMessage(throwable));
             causeMessage.contains("NoOffsetForPartitionException");
             causeMessage.contains("Undefined offset with no reset policy");
+
+            getKcu().close();
         } else {
             Awaitility.await()
                     .pollInterval(5, SECONDS) // allow bumper messages to propagate
@@ -346,6 +352,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         log.debug("Running PC until at least offset {}", succeedUpToOffset);
         super.getKcu().setOffsetResetPolicy(offsetResetPolicy);
         var tempPc = super.getKcu().buildPc(UNORDERED, newGroup);
+        activePc = tempPc;
         try { // can't use auto closeable because close is complicated as it's expected to crash and close rethrows error
 
             SortedSet<PollContext<String, String>> seenOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
@@ -386,8 +393,6 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
             var sorted = new ArrayList<>(seenOffsets);
             Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
-
-
             return sorted;
         } finally {
             try {
@@ -541,7 +546,16 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
             var producedCount = produceMessages(TO_PRODUCE).size();
 
-            runPcUntilOffset(offsetResetStrategy, producedCount, producedCount, UniSets.of(), GroupOption.REUSE_GROUP);
+            try {
+                runPcUntilOffset(offsetResetStrategy, producedCount, producedCount, UniSets.of(), GroupOption.REUSE_GROUP);
+            } catch (TerminalFailureException e) {
+                var failureCause = activePc.getFailureCause();
+                var rootCauseMessage = ExceptionUtils.getRootCauseMessage(failureCause);
+                var message = assertThat(rootCauseMessage);
+                message.contains("NoOffsetForPartitionException");
+                message.contains("Undefined offset");
+                message.contains("no reset policy");
+            }
         }
     }
 
