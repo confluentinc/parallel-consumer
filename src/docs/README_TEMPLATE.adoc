@@ -564,6 +564,8 @@ From the `Clients` view, get the connection information customized to your clust
 
 Parallel Consumer is available from Python via the `pyallel_consumer` package.
 
+It is hosted on https://pypi.org/project/pyallel-consumer/[PyPi] and can be installed with `pip install pyallel-consumer`
+
 You can import the parallel consumer Java package as a Python package.
 All parallel consumer classes and functions are accessible from this, with support for passing Python objects as
 arguments including functions.
