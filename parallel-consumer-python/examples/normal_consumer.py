@@ -13,7 +13,7 @@ if __name__ == '__main__':
         while True:
             records = consumer.poll(100)
             for record in records:
-                value = record.value()
-                print(f'Consumed record with key {record.key()} and value {value}')
+              value = record.value()
+              print(f'Consumed record with key {record.key()} and value {value}')
     finally:
         consumer.close()
