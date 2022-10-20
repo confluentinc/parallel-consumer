@@ -1,12 +1,20 @@
+from pathlib import Path
+from string import Template
 from xml.etree.ElementTree import parse as parse_xml
-
 from setuptools import setup, find_packages
 
 with open('requirements.txt', 'r', encoding='utf-8') as requirements_file:
     requirements = requirements_file.readlines()
 
-pom = parse_xml('./pyallel_consumer/pom.xml').getroot()
-version = pom.find('{http://maven.apache.org/POM/4.0.0}version').text
+version = '0.1.0a0'
+
+pc_pom_path = Path(__file__).parent.parent / 'pom.xml'
+pc_version = parse_xml(pc_pom_path).getroot().find('{http://maven.apache.org/POM/4.0.0}version').text
+pom_template = Template(Path('./pom-template.xml').read_text())
+pom = pom_template.substitute(package_version=version,
+                              pc_version=pc_version)
+Path('./pyallel_consumer/pom.xml').write_text(pom)
+
 setup(
     name='pyallel_consumer',
     version=version,

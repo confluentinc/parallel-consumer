@@ -5,15 +5,12 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-python</artifactId>
-    <version>0.1.0a0</version>
-    <properties>
-        <jackson.version>2.13.2</jackson.version>
-    </properties>
+    <version>$package_version</version>
     <dependencies>
         <dependency>
             <groupId>io.confluent.parallelconsumer</groupId>
             <artifactId>parallel-consumer-core</artifactId>
-            <version>0.5.2.3</version>
+            <version>$pc_version</version>
         </dependency>
         <dependency>
             <groupId>io.confluent</groupId>
@@ -28,7 +25,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
-            <version>${jackson.version}</version>
+            <version>2.13.2</version>
         </dependency>
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
