@@ -78,8 +78,8 @@ public class KafkaTestUtils {
     /**
      * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager}).
      * <p>
-     * Like {@link AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)} but for a {@link
-     * MockProducer}.
+     * Like {@link AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)} but for a
+     * {@link MockProducer}.
      *
      * @see AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)
      * @see OffsetMapCodecManager
@@ -184,17 +184,19 @@ public class KafkaTestUtils {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
 //        List<Integer> keyWork = UniLists.copyOf(keys);
 
-        int count = 0;
-        while (count < quantity) {
+        int globalCount = 0;
+        while (globalCount < quantity) {
             Integer key = getRandomKey(keys);
             int recsCountForThisKey = (int) (Math.random() * quantity);
-            String value = count + "";
             String keyString = key.toString();
+            final List<ConsumerRecord<String, String>> keyList = keyRecords.computeIfAbsent(key, (ignore) -> new ArrayList<>());
+            int keyCount = keyList.size();
+            String value = keyCount + "," + globalCount;
             ConsumerRecord<String, String> rec = makeRecord(keyString, value);
 //            var consumerRecords = generateRecordsForKey(key, recsCountForThisKey);
-            keyRecords.computeIfAbsent(key, (ignore) -> new ArrayList<>()).add(rec);
+            keyList.add(rec);
 //            keyRecords.put(key, consumerRecords);
-            count++;
+            globalCount++;
         }
         return keyRecords;
     }

@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Deserializer;
@@ -26,7 +27,11 @@ import org.mockito.Mockito;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
@@ -885,6 +890,81 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
 
         assertThat(producerSpy.history()).hasSize(1);
+    }
+
+    /**
+     * Explicit check for situation where thread size is much larger than key set size.
+     * <p>
+     * See <a href="https://github.com/confluentinc/parallel-consumer/issues/433">Different computational results
+     * obtained with different max concurrency configurations for the same parallel consumer #433</a>
+     */
+    @Test
+    void lessKeysThanThreads() {
+        setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()
+                .ordering(KEY)
+                // use many more threads than keys
+                .maxConcurrency(100)
+                .build());
+
+        // use a small set of keys, over a large set of records
+        final int keySetSize = 4;
+        var keys = range(keySetSize).list();
+        final int total = 20_000;
+//        final int total = 10;
+        log.debug("Generating {} records against {} keys...", total, keySetSize);
+        var records = ktu.generateRecords(keys, total);
+        records.entrySet().forEach(x -> log.debug("Key {} has {} records", x.getKey(), x.getValue().size()));
+        log.debug("Sending...");
+        ktu.send(consumerSpy, records);
+
+        // run
+        log.debug("Consuming...");
+        var results = new ConcurrentHashMap<String, Queue<PollContext<String, String>>>();
+        AtomicLong counter = new AtomicLong();
+        parallelConsumer.poll(recordContexts -> {
+            counter.incrementAndGet();
+            log.trace("Consumed {}", recordContexts);
+            results.computeIfAbsent(recordContexts.key(), ignore -> new ConcurrentLinkedQueue<>())
+                    .add(recordContexts);
+        });
+
+        // count how many we've received so far
+        await().atMost(30, TimeUnit.SECONDS)
+                .untilAsserted(() ->
+                        assertThat(counter.get()).isEqualTo(total));
+
+        parallelConsumer.closeDrainFirst();
+
+        // check ordering is exact
+        var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
+        log.debug("Testing...");
+        checkExactOrdering(results, records);
+    }
+
+    /**
+     * todo docs, extract?
+     */
+    private <T> void checkExactOrdering(Map<String, Queue<PollContext<String, String>>> results, HashMap<Integer, List<T>> originalRecords) {
+        originalRecords.entrySet().forEach(entry -> {
+            var originalRecordList = entry.getValue();
+            var originalKey = entry.getKey();
+            var sequence = results.get(originalKey.toString());
+            assertThat(sequence).hasSameSizeAs(originalRecordList);
+            assertThat(sequence.size()).describedAs("Sanity: is same size as original list").isEqualTo(originalRecordList.size());
+            log.debug("Key {} has same size of record as original - {}", originalKey, sequence.size());
+            // check the integer sequence of PollContext value is linear and is without gaps
+            var last = sequence.poll();
+            PollContext<String, String> next = null;
+            while (!sequence.isEmpty()) {
+                next = sequence.poll();
+                var thisValue = Integer.parseInt(StringUtils.substringBefore(next.value(), ","));
+                var lastValue = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
+                assertThat(thisValue).isEqualTo(lastValue);
+                last = next;
+            }
+            log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", originalKey, next.value());
+
+        });
     }
 
 }
