@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer.offsets;
 import lombok.experimental.StandardException;
 
 /**
- * todo docs
+ * Thrown under situations where the {@link BitSetEncoder} would not be able to encode the given data.
  *
  * @author Antony Stubbs
  */
