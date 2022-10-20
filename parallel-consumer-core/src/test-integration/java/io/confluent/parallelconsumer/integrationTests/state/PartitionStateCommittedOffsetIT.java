@@ -15,6 +15,7 @@ import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption;
 import lombok.NonNull;
 import lombok.SneakyThrows;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.kafka.clients.admin.AlterConfigOp;
@@ -72,8 +73,6 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
     private OffsetResetStrategy offsetResetStrategy = DEFAULT_OFFSET_RESET_POLICY;
 
-    private ParallelEoSStreamProcessor<String, String> activePc;
-
     @BeforeEach
     void setup() {
         setupTopic();
@@ -92,7 +91,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             List<String> keys = produceMessages(TO_PRODUCE);
 
             final int UNTIL_OFFSET = TO_PRODUCE / 2;
-            var processedOnFirstRun = runPcUntilOffset(UNTIL_OFFSET, TO_PRODUCE, UniSets.of(TO_PRODUCE - 3L));
+            var processedOnFirstRun = runPcUntilOffset(UNTIL_OFFSET, TO_PRODUCE, UniSets.of(TO_PRODUCE - 3L)).getPollContexts();
             assertWithMessage("Last processed should be at least half of the total sent, so that there is incomplete data to track")
                     .that(getLast(processedOnFirstRun).get().offset())
                     .isGreaterThan(TO_PRODUCE / 2);
@@ -129,7 +128,9 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
             // The offsets of the tombstone targets should not be read in second run
             final int expectedOffsetProcessedToSecondRun = TO_PRODUCE + compactedKeys.size();
-            var processedOnSecondRun = runPcUntilOffset(expectedOffsetProcessedToSecondRun, GroupOption.REUSE_GROUP).stream()
+            var processedOnSecondRun = runPcUntilOffset(expectedOffsetProcessedToSecondRun, GroupOption.REUSE_GROUP)
+                    .getPollContexts()
+                    .stream()
                     .filter(recordContexts -> !recordContexts.key().contains("compaction-trigger"))
                     .collect(Collectors.toList());
 
@@ -168,15 +169,15 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         return compactingBroker;
     }
 
-    private List<PollContext<String, String>> runPcUntilOffset(int offset) {
+    private PcTestExecutionContext runPcUntilOffset(int offset) {
         return runPcUntilOffset(DEFAULT_OFFSET_RESET_POLICY, offset);
     }
 
-    private List<PollContext<String, String>> runPcUntilOffset(OffsetResetStrategy offsetResetPolicy, int offset) {
+    private PcTestExecutionContext runPcUntilOffset(OffsetResetStrategy offsetResetPolicy, int offset) {
         return runPcUntilOffset(offsetResetPolicy, offset, offset, UniSets.of(), GroupOption.NEW_GROUP);
     }
 
-    private List<PollContext<String, String>> runPcUntilOffset(int offset, GroupOption reuseGroup) {
+    private PcTestExecutionContext runPcUntilOffset(int offset, GroupOption reuseGroup) {
         return runPcUntilOffset(DEFAULT_OFFSET_RESET_POLICY, Long.MAX_VALUE, offset, UniSets.of(), reuseGroup);
     }
 
@@ -339,20 +340,25 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         log.debug("Moved offset to {}", offset);
     }
 
-    private List<PollContext<String, String>> runPcUntilOffset(long succeedUpToOffset, long expectedProcessToOffset, Set<Long> exceptionsToSucceed) {
+    private PcTestExecutionContext runPcUntilOffset(long succeedUpToOffset, long expectedProcessToOffset, Set<Long> exceptionsToSucceed) {
         return runPcUntilOffset(DEFAULT_OFFSET_RESET_POLICY, succeedUpToOffset, expectedProcessToOffset, exceptionsToSucceed, GroupOption.NEW_GROUP);
     }
 
+    @Value
+    private static class PcTestExecutionContext {
+        ParallelEoSStreamProcessor<String, String> pc;
+        List<PollContext<String, String>> pollContexts;
+    }
+
     @SneakyThrows
-    private List<PollContext<String, String>> runPcUntilOffset(OffsetResetStrategy offsetResetPolicy,
-                                                               long succeedUpToOffset,
-                                                               long expectedProcessToOffset,
-                                                               Set<Long> exceptionsToSucceed,
-                                                               GroupOption newGroup) {
+    private PcTestExecutionContext runPcUntilOffset(OffsetResetStrategy offsetResetPolicy,
+                                                    long succeedUpToOffset,
+                                                    long expectedProcessToOffset,
+                                                    Set<Long> exceptionsToSucceed,
+                                                    GroupOption newGroup) {
         log.debug("Running PC until at least offset {}", succeedUpToOffset);
         super.getKcu().setOffsetResetPolicy(offsetResetPolicy);
         var tempPc = super.getKcu().buildPc(UNORDERED, newGroup);
-        activePc = tempPc;
         try { // can't use auto closeable because close is complicated as it's expected to crash and close rethrows error
 
             SortedSet<PollContext<String, String>> seenOffsets = Collections.synchronizedSortedSet(new TreeSet<>(Comparator.comparingLong(PollContext::offset)));
@@ -393,10 +399,13 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
             var sorted = new ArrayList<>(seenOffsets);
             Collections.sort(sorted, Comparator.comparingLong(PollContext::offset));
-            return sorted;
+            return new PcTestExecutionContext(tempPc, sorted);
         } finally {
             try {
-                tempPc.close(); // close manually in this branch only, as in other branch it crashes
+                if (!tempPc.isClosedOrFailed()) {
+                    // some test branches, pc will crash and close in the test already
+                    tempPc.close();
+                }
             } catch (Exception e) {
                 log.debug("Cause will get rethrown close on the NONE parameter branch", e);
             }
@@ -546,10 +555,11 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
             var producedCount = produceMessages(TO_PRODUCE).size();
 
+            PcTestExecutionContext context = null;
             try {
-                runPcUntilOffset(offsetResetStrategy, producedCount, producedCount, UniSets.of(), GroupOption.REUSE_GROUP);
+                context = runPcUntilOffset(offsetResetStrategy, producedCount, producedCount, UniSets.of(), GroupOption.REUSE_GROUP);
             } catch (TerminalFailureException e) {
-                var failureCause = activePc.getFailureCause();
+                var failureCause = context.getPc().getFailureCause();
                 var rootCauseMessage = ExceptionUtils.getRootCauseMessage(failureCause);
                 var message = assertThat(rootCauseMessage);
                 message.contains("NoOffsetForPartitionException");
