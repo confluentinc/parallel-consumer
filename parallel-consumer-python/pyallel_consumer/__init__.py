@@ -1,9 +1,11 @@
 import logging
 import subprocess
+import sys
 from pathlib import Path
 
 import jdk
 import jpype.imports
+from jpype._jvmfinder import LinuxJVMFinder, DarwinJVMFinder, WindowsJVMFinder, JVMNotFoundException
 
 
 def load_config(config_path: str) -> 'Properties':
@@ -17,6 +19,16 @@ def load_config(config_path: str) -> 'Properties':
     with FileInputStream(config_path) as input_stream:
         config.load(input_stream)
     return config
+
+
+def _find_jre(java_home: str) -> str:
+    if sys.platform == "win32":
+        finder = WindowsJVMFinder()
+    elif sys.platform == "darwin":
+        finder = DarwinJVMFinder()
+    else:
+        finder = LinuxJVMFinder()
+    return finder.find_libjvm(java_home)
 
 
 def _install_jre() -> str:
@@ -53,7 +65,11 @@ class _Maven:
 
 
 if not jpype.isJVMStarted():
-    jvm_path = _install_jre()
+    try:
+        jvm_path = _find_jre(jdk._JRE_DIR)
+        logging.debug(f'JRE already installed at {jdk._JRE_DIR}')
+    except JVMNotFoundException:
+        jvm_path = _install_jre()
     maven = _Maven()
     maven.install_dependencies()
     class_path = maven.get_class_path()
