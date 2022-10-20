@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
@@ -15,7 +16,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.*;
 
 /**
- * todo javadoc
+ * Offset encoding MagicNumbers to {@link OffsetEncoder}.
  *
  * @author Antony Stubbs
  */

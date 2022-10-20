@@ -1,7 +1,7 @@
-package io.confluent.parallelconsumer.integrationTests;
+package io.confluent.parallelconsumer.integrationTests.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import pl.tlinkowski.unij.api.UniCollectors;

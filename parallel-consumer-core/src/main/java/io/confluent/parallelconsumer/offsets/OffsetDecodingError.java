@@ -1,10 +1,19 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-public class OffsetDecodingError extends Exception {
-    public OffsetDecodingError(final String s, final IllegalArgumentException a) {
-        super(s, a);
-    }
+
+import io.confluent.parallelconsumer.internal.InternalException;
+import lombok.experimental.StandardException;
+
+/*-
+ * Error decoding offsets
+ *
+ * TODO should extend java.lang.Error ?
+ *
+ * @author Antony Stubbs
+ */
+@StandardException
+public class OffsetDecodingError extends InternalException {
 }

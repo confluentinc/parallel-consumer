@@ -17,6 +17,8 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 
 /**
  * Basic tests of simple usage of the Truth Generator maven plugin
+ *
+ * @author Antony Stubbs
  */
 class TruthGeneratorTests {
 

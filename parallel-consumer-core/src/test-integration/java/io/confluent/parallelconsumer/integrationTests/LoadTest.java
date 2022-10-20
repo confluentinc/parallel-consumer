@@ -60,7 +60,7 @@ public class LoadTest extends DbTest {
     void timedNormalKafkaConsumerTest() {
         setupTestData();
         // subscribe in advance, it can be a few seconds
-        kcu.getConsumer().subscribe(UniLists.of(topic));
+        getKcu().getConsumer().subscribe(UniLists.of(topic));
 
         readRecordsPlainConsumer(total, topic);
     }
@@ -70,13 +70,13 @@ public class LoadTest extends DbTest {
     void asyncConsumeAndProcess() {
         setupTestData();
 
-        KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer();
+        KafkaConsumer<String, String> newConsumer = getKcu().createNewConsumer();
         //
         boolean tx = true;
         ParallelConsumerOptions<String, String> options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-                .producer(kcu.createNewProducer(tx))
+                .producer(getKcu().createNewProducer(tx))
                 .consumer(newConsumer)
                 .maxConcurrency(3)
                 .build();
@@ -127,7 +127,7 @@ public class LoadTest extends DbTest {
 
             Executors.newCachedThreadPool().submit(() -> {
                 while (allRecords.size() < total) {
-                    ConsumerRecords<String, String> poll = kcu.getConsumer().poll(ofMillis(500));
+                    ConsumerRecords<String, String> poll = getKcu().getConsumer().poll(ofMillis(500));
                     log.info("Polled batch of {} messages", poll.count());
 
                     //save
@@ -176,7 +176,7 @@ public class LoadTest extends DbTest {
                 String value = RandomStringUtils.randomAlphabetic(messageSizeInBytes);
                 var producerRecord = new ProducerRecord<>(topic, key, value);
                 try {
-                    var meta = kcu.getProducer().send(producerRecord);
+                    var meta = getKcu().getProducer().send(producerRecord);
                     futureMetadataResultsFromPublishing.add(meta);
                 } catch (Exception e) {
                     throw new RuntimeException(e);

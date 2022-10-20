@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -22,6 +22,9 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
 import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
 
 /**
+ * Encapsulates the encoding type, and the actual encoded data, when creating an offset map encoding. Central place for
+ * decoding  the data.
+ *
  * @author Antony Stubbs
  * @see #unwrap
  */
@@ -94,7 +97,7 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case RunLengthV3 -> deserialiseBitSetWrap(data, v3);
             case RunLengthV3Compressed -> deserialiseBitSetWrap(data, v3);
             default ->
-                    throw new InternalRuntimeError("Invalid state"); // only needed for coding errors during dev phase
+                    throw new InternalRuntimeException("Invalid state"); // only needed for coding errors during dev phase
         };
         return binaryArrayString;
     }

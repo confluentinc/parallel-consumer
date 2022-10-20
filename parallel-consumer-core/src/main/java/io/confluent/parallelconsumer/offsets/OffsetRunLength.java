@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 /**
+ * Methods for encoding and decoding the run-lengths.
+ *
  * @author Antony Stubbs
  */
 // todo rename - resolve name against RunLengthEncoder

@@ -121,7 +121,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
         log.info("Producing {} messages before starting test", expectedMessageCount);
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         int preProduceCount = (int) (expectedMessageCount * fractionOfMessagesToPreProduce);
-        try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
+        try (Producer<String, String> kafkaProducer = getKcu().createNewProducer(false)) {
             for (int i = 0; i < preProduceCount; i++) {
                 String key = "key-" + i;
                 Future<RecordMetadata> send = kafkaProducer.send(new ProducerRecord<>(inputName, key, "value-" + i), (meta, exception) -> {
@@ -160,7 +160,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
             public void run() {
                 // pre-produce messages to input-topic
                 log.info("Producing {} messages before starting test", expectedMessageCount);
-                try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
+                try (Producer<String, String> kafkaProducer = getKcu().createNewProducer(false)) {
                     for (int i = preProduceCount; i < expectedMessageCount; i++) {
                         // slow things down just a tad
 //                        Thread.sleep(1);
@@ -363,7 +363,7 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
 
             Properties consumerProps = new Properties();
             consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
-            KafkaConsumer<String, String> newConsumer = kcu.createNewConsumer(false, consumerProps);
+            KafkaConsumer<String, String> newConsumer = getKcu().createNewConsumer(false, consumerProps);
 
             this.parallelConsumer = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                     .ordering(order)
