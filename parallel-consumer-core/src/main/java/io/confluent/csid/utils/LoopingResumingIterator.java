@@ -93,10 +93,10 @@ public class LoopingResumingIterator<KEY, VALUE> {
         // find the starting point
         if (startingKey.isPresent()) {
             this.head = advanceToStartingPointAndGet(startingKey.get());
-            if (head.isEmpty()) {
-                resetIteratorToZero();
-            } else {
+            if (head.isPresent()) {
                 this.startingPointKeyValid = true;
+            } else {
+                resetIteratorToZero();
             }
         }
     }
