@@ -4,7 +4,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.confluent.parallelconsumer</groupId>
-    <artifactId>python</artifactId>
+    <artifactId>parallel-consumer-python</artifactId>
     <version>0.1.0a0</version>
     <properties>
         <jackson.version>2.13.2</jackson.version>
@@ -24,11 +24,6 @@
             <groupId>io.confluent</groupId>
             <artifactId>kafka-json-serializer</artifactId>
             <version>7.2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.13.2.2</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
