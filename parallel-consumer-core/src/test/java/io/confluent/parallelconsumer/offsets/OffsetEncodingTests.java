@@ -194,20 +194,20 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
             wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
-            List<WorkContainer<String, String>> work = workManager.getWorkIfAvailable();
+            List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
             assertThat(work).hasSameSizeAs(records);
 
-            KafkaTestUtils.completeWork(workManager, work, FIRST_SUCCEEDED_OFFSET);
+            KafkaTestUtils.completeWork(wmm, work, FIRST_SUCCEEDED_OFFSET);
 
-            KafkaTestUtils.completeWork(workManager, work, 69);
+            KafkaTestUtils.completeWork(wmm, work, 69);
 
-            KafkaTestUtils.completeWork(workManager, work, 25_000);
+            KafkaTestUtils.completeWork(wmm, work, 25_000);
 
-            KafkaTestUtils.completeWork(workManager, work, highestSucceeded);
+            KafkaTestUtils.completeWork(wmm, work, highestSucceeded);
 
 
             // make the commit
-            var completedEligibleOffsets = workManager.collectCommitDataForDirtyPartitions();
+            var completedEligibleOffsets = wmm.collectCommitDataForDirtyPartitions();
             assertThat(completedEligibleOffsets.get(tp).offset()).isEqualTo(FIRST_COMMITTED_OFFSET);
             consumerSpy.commitSync(completedEligibleOffsets);
 
@@ -215,7 +215,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 // check for graceful fall back to the smallest available encoder
                 OffsetMapCodecManager<String, String> om = new OffsetMapCodecManager<>(module);
                 OffsetMapCodecManager.forcedCodec = Optional.empty(); // turn off forced
-                var state = workManager.getPm().getPartitionState(tp);
+                var state = wmm.getPm().getPartitionState(tp);
                 String bestPayload = om.makeOffsetMetadataPayload(FIRST_COMMITTED_OFFSET, state);
                 assertThat(bestPayload).isNotEmpty();
             }
