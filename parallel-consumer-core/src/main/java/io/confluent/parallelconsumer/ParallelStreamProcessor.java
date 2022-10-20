@@ -27,7 +27,9 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     }
 
     /**
-     * Register a function to be applied in parallel to each received message
+     * Register a function to be applied in parallel to each received message.
+     * <p>
+     * Throw a {@link RetriableException} to retry the message without the system logging an ERROR level message.
      *
      * @param usersVoidConsumptionFunction the function
      */
@@ -36,8 +38,10 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
 
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link
-     * ProducerRecord}s to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns one or more
+     * {@link ProducerRecord}s to be sent back to the broker.
+     * <p>
+     * Throw a {@link RetriableException} to retry the message without the system logging an ERROR level message.
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
@@ -45,20 +49,26 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
                             Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns one or many {@link
-     * ProducerRecord}s to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns one or many
+     * {@link ProducerRecord}s to be sent back to the broker.
+     * <p>
+     * Throw a {@link RetriableException} to retry the message without the system logging an ERROR level message.
      */
     void pollAndProduceMany(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction);
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
-     * ProducerRecord} to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns a
+     * {@link ProducerRecord} to be sent back to the broker.
+     * <p>
+     * Throw a {@link RetriableException} to retry the message without the system logging an ERROR level message.
      */
     void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction);
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns a {@link
-     * ProducerRecord} to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns a
+     * {@link ProducerRecord} to be sent back to the broker.
+     * <p>
+     * Throw a {@link RetriableException} to retry the message without the system logging an ERROR level message.
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
