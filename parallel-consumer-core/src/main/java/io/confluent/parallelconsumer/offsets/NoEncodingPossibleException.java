@@ -4,11 +4,14 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.ParallelConsumerInternalException;
+import io.confluent.parallelconsumer.internal.InternalException;
+import lombok.experimental.StandardException;
 
-public class NoEncodingPossibleException extends ParallelConsumerInternalException {
-
-    public NoEncodingPossibleException(String msg) {
-        super(msg);
-    }
+/**
+ * Throw when for whatever reason, no encoding of the offsets is possible.
+ *
+ * @author Antony Stubbs
+ */
+@StandardException
+public class NoEncodingPossibleException extends InternalException {
 }

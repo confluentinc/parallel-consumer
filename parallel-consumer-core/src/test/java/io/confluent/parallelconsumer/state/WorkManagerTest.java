@@ -7,11 +7,12 @@ package io.confluent.parallelconsumer.state;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
-import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -26,6 +27,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -42,11 +45,16 @@ import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
+ * Needs to run in {@link ExecutionMode#SAME_THREAD} because it manipulates the static state in
+ * {@link WorkContainer#setStaticModule(PCModule)}.
+ *
  * @see WorkManager
  */
+@Execution(ExecutionMode.SAME_THREAD)
 @Slf4j
 public class WorkManagerTest {
 
@@ -57,24 +65,35 @@ public class WorkManagerTest {
 
     int offset;
 
-    MutableClock time = MutableClock.epochUTC();
+    PCModuleTestEnv module;
 
     @BeforeEach
     public void setup() {
-        setupWorkManager(ParallelConsumerOptions.builder().build());
+        var options = ParallelConsumerOptions.builder().build();
+        setupWorkManager(options);
+    }
+
+    private MutableClock getClock() {
+        return module.getMutableClock();
     }
 
     protected List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
 
-    private void setupWorkManager(ParallelConsumerOptions build) {
+    private void setupWorkManager(ParallelConsumerOptions options) {
         offset = 0;
 
-        wm = new WorkManager<>(build, new MockConsumer<>(OffsetResetStrategy.EARLIEST), time);
+        var mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        var optsOverride = options.toBuilder().consumer(mockConsumer).build();
+
+        module = new PCModuleTestEnv(optsOverride);
+
+        wm = module.workManager();
         wm.getSuccessfulWorkListeners().add((work) -> {
             log.debug("Heard some successful work: {}", work);
             successfulWork.add(work);
         });
 
+        module.setWorkManager(wm);
     }
 
     private void assignPartition(final int partition) {
@@ -324,29 +343,29 @@ public class WorkManagerTest {
 
     @Test
     void containerDelay() {
-        var wc = new WorkContainer<String, String>(0, null, null, WorkContainer.DEFAULT_TYPE, this.time);
-        assertThat(wc.hasDelayPassed()).isTrue(); // when new, there's no delay
-        wc.onUserFunctionFailure(new FakeRuntimeError(""));
-        assertThat(wc.hasDelayPassed()).isFalse();
+        var wc = new WorkContainer<String, String>(0, mock(ConsumerRecord.class), module);
+        assertThat(wc.isDelayPassed()).isTrue(); // when new, there's no delay
+        wc.onUserFunctionFailure(new FakeRuntimeException(""));
+        assertThat(wc.isDelayPassed()).isFalse();
         advanceClockBySlightlyLessThanDelay();
-        assertThat(wc.hasDelayPassed()).isFalse();
+        assertThat(wc.isDelayPassed()).isFalse();
         advanceClockByDelay();
-        boolean actual = wc.hasDelayPassed();
-        assertThat(actual).isTrue();
+        ManagedTruth.assertThat(wc).isDelayPassed();
     }
 
     private void advanceClockBySlightlyLessThanDelay() {
-        Duration retryDelay = WorkContainer.defaultRetryDelay;
+        Duration retryDelay = module.options().getDefaultMessageRetryDelay();
         Duration duration = retryDelay.dividedBy(2);
-        time.add(duration);
+        getClock().add(duration);
     }
 
     private void advanceClockByDelay() {
-        time.add(WorkContainer.defaultRetryDelay);
+        Duration retryDelay = module.options().getDefaultMessageRetryDelay();
+        getClock().add(retryDelay);
     }
 
     private void advanceClock(Duration by) {
-        time.add(by);
+        getClock().add(by);
     }
 
     @Test
@@ -584,7 +603,7 @@ public class WorkManagerTest {
 
         var treeMap = new TreeMap<Long, WorkContainer<String, String>>();
         for (ConsumerRecord<String, String> record : records) {
-            treeMap.put(record.offset(), new WorkContainer<>(0, record, null, TimeUtils.getClock()));
+            treeMap.put(record.offset(), new WorkContainer<>(0, record, mock(PCModuleTestEnv.class)));
         }
 
         // read back, assert correct order
@@ -614,7 +633,7 @@ public class WorkManagerTest {
 
         //
         assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
-        assertThat(wm.getNumberOfEntriesInPartitionQueues()).as("Partition commit queues are now empty").isZero();
+        assertThat(wm.getNumberOfIncompleteOffsets()).as("Partition commit queues are now empty").isZero();
 
         // drain commit queue
         var completedFutureOffsets = wm.collectCommitDataForDirtyPartitions();
@@ -683,7 +702,7 @@ public class WorkManagerTest {
      * initial request (without needing to iterate to other shards)
      *
      * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/236">#236</a> Under some conditions, a
-     * shard (by partition or key), can get starved for attention
+     *         shard (by partition or key), can get starved for attention
      */
     @Test
     void starvation() {

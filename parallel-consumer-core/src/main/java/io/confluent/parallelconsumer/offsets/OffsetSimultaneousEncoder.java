@@ -4,6 +4,8 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import static io.confluent.csid.utils.Range.range;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 
@@ -20,6 +23,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
  * <p>
  * Have results in an accessible structure, easily selecting the highest compression.
  *
+ * @author Antony Stubbs
  * @see #invoke()
  */
 @Slf4j
@@ -32,10 +36,11 @@ public class OffsetSimultaneousEncoder {
     public static final int LARGE_INPUT_MAP_SIZE_THRESHOLD = 200;
 
     /**
-     * The offsets which have not yet been fully completed and can't have their offset committed
+     * The offsets which have not yet been fully completed and can't have their offset committed - only used to test
+     * with {@link Set#contains} (no order requirement, but {@link SortedSet} just in case).
      */
     @Getter
-    private final Set<Long> incompleteOffsets;
+    private final SortedSet<Long> incompleteOffsets;
 
     /**
      * The lowest committable offset
@@ -81,18 +86,21 @@ public class OffsetSimultaneousEncoder {
      */
     private final Set<OffsetEncoder> encoders;
 
-    public OffsetSimultaneousEncoder(long lowWaterMark, long highestSucceededOffset, Set<Long> incompleteOffsets) {
-        this.lowWaterMark = lowWaterMark;
+    public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, SortedSet<Long> incompleteOffsets) {
+        this.lowWaterMark = baseOffsetToCommit;
         this.incompleteOffsets = incompleteOffsets;
 
         //
         if (highestSucceededOffset == -1) { // nothing succeeded yet
-            highestSucceededOffset = lowWaterMark;
+            highestSucceededOffset = baseOffsetToCommit;
         }
+
+        highestSucceededOffset = maybeRaiseOffsetHighestSucceeded(baseOffsetToCommit, highestSucceededOffset);
 
         long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
         if (bitsetLengthL < 0) {
-            throw new IllegalStateException("Cannot have negative length BitSet");
+            throw new IllegalStateException(msg("Cannot have negative length BitSet (calculated length: {}, base offset to commit: {}, highest succeeded offset: {})",
+                    bitsetLengthL, baseOffsetToCommit, highestSucceededOffset));
         }
 
         // BitSet only support Integer.MAX_VALUE bits
@@ -101,6 +109,35 @@ public class OffsetSimultaneousEncoder {
         if (bitsetLengthL != length) throw new IllegalArgumentException("Integer overflow");
 
         this.encoders = initEncoders();
+    }
+
+    /**
+     * Ensure that the {@param #highestSucceededOffset} is always at least a single offset behind the {}@param
+     * baseOffsetToCommit}. Needed to allow us to jump over gaps in the partitions such as transaction markers.
+     * <p>
+     * Under normal operation, it is expected that the highest succeeded offset will generally always be higher than the
+     * next expected offset to poll. This is because PC processes records well beyond the
+     * {@link PartitionState#getOffsetHighestSequentialSucceeded()} all the time, unless operation in
+     * {@link ParallelConsumerOptions.ProcessingOrder#PARTITION} order. So this situation - where the highest succeeded
+     * offset is below the next offset to poll at the time of commit - will either be an incredibly rare case: only at
+     * the very beginning of processing records, or where ALL records are slow enough or blocked, or in synthetically
+     * created scenarios (like test cases).
+     */
+    private long maybeRaiseOffsetHighestSucceeded(long baseOffsetToCommit, long highestSucceededOffset) {
+        long nextExpectedMinusOne = baseOffsetToCommit - 1;
+
+        boolean gapLargerThanOne = highestSucceededOffset < nextExpectedMinusOne;
+        if (gapLargerThanOne) {
+            long gap = nextExpectedMinusOne - highestSucceededOffset;
+            log.debug("Gap detected in partition (highest succeeded: {} while next expected poll offset: {} - gap is {}), probably tx markers. Moving highest succeeded to next expected - 1",
+                    highestSucceededOffset,
+                    nextExpectedMinusOne,
+                    gap);
+            // jump straight to the lowest incomplete - 1, allows us to jump over gaps in the partitions such as transaction markers
+            highestSucceededOffset = nextExpectedMinusOne;
+        }
+
+        return highestSucceededOffset;
     }
 
     private Set<OffsetEncoder> initEncoders() {

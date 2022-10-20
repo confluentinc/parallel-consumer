@@ -5,10 +5,9 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import com.google.common.truth.Truth;
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.PartitionState;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -52,6 +51,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(MockitoExtension.class)
 class WorkManagerOffsetMapCodecManagerTest {
 
+    PCModuleTestEnv module;
+
     WorkManager<String, String> wm;
 
     OffsetMapCodecManager<String, String> offsetCodecManager;
@@ -75,7 +76,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     long highestSucceeded = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
+    PartitionState<String, String> state = new PartitionState<>(0, module, tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
 
     @Mock
     ConsumerRecord<String, String> mockCr;
@@ -86,10 +87,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     }
 
     private void injectSucceededWorkAtOffset(long offset) {
-        WorkContainer<String, String> workContainer = new WorkContainer<>(0, mockCr, null, TimeUtils.getClock());
         Mockito.doReturn(offset).when(mockCr).offset();
-        state.addWorkContainer(workContainer);
-        state.onSuccess(workContainer); // in this case the highest seen is also the highest succeeded
+        state.addNewIncompleteRecord(mockCr);
+        state.onSuccess(offset); // in this case the highest seen is also the highest succeeded
     }
 
     /**
@@ -117,10 +117,14 @@ class WorkManagerOffsetMapCodecManagerTest {
 
     @BeforeEach
     void setup() {
-        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
-        wm = new WorkManager<>(ParallelConsumerOptions.<String, String>builder().build(), consumer);
+        MockConsumer<String, String> mockConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .consumer(mockConsumer)
+                .build();
+        module = new PCModuleTestEnv(options);
+        wm = module.workManager();
         wm.onPartitionsAssigned(UniLists.of(tp));
-        offsetCodecManager = new OffsetMapCodecManager<>(consumer);
+        offsetCodecManager = new OffsetMapCodecManager<>(module);
     }
 
     @BeforeAll
@@ -329,9 +333,9 @@ class WorkManagerOffsetMapCodecManagerTest {
         for (var inputString : inputsToCompress) {
             int inputLength = inputString.length();
 
-            Set<Long> longs = bitmapStringToIncomplete(finalOffsetForPartition, inputString);
+            var offsets = bitmapStringToIncomplete(finalOffsetForPartition, inputString);
 
-            OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, longs).invoke();
+            OffsetSimultaneousEncoder simultaneousEncoder = new OffsetSimultaneousEncoder(finalOffsetForPartition, highestSucceeded, offsets).invoke();
             byte[] byteByte = simultaneousEncoder.getEncodingMap().get(ByteArray);
             byte[] bitsBytes = simultaneousEncoder.getEncodingMap().get(BitSet);
 
@@ -353,7 +357,7 @@ class WorkManagerOffsetMapCodecManagerTest {
         long highestSucceeded = input.length() - 1;
 
         int nextExpectedOffset = 0;
-        Set<Long> incompletes = bitmapStringToIncomplete(nextExpectedOffset, input);
+        var incompletes = bitmapStringToIncomplete(nextExpectedOffset, input);
         OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(nextExpectedOffset, highestSucceeded, incompletes);
         encoder.invoke();
         byte[] pack = encoder.packSmallest();
@@ -398,7 +402,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         //
         log.debug("Testing round - size: {} input: '{}'", input.length(), input);
-        Set<Long> inputIncompletes = bitmapStringToIncomplete(finalOffsetForPartition, input);
+        var inputIncompletes = bitmapStringToIncomplete(finalOffsetForPartition, input);
         String sanityEncoding = incompletesToBitmapString(finalOffsetForPartition, highestSeen + 1, inputIncompletes);
         Truth.assertThat(sanityEncoding).isEqualTo(input);
 

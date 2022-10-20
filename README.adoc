@@ -1,13 +1,25 @@
 //
-// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README.adoc
+// STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
 //
 // To render the README directly, run `mvn asciidoc-template::build`
 //
+
+
+// dynamic include base for editing in IDEA
+:project_root: ./
+// for editing the template to see the includes, this will correctly render includes
+ifeval::["{docname}" == "README_TEMPLATE"]
+
+TIP:: Editing template file
+
+:project_root: ../../
+
+endif::[]
 
 
 = Confluent Parallel Consumer
@@ -21,14 +33,6 @@
 :github_name: parallel-consumer
 :base_url: https://github.com/confluentinc/{github_name}
 :issues_link: {base_url}/issues
-
-// dynamic include base for editing in IDEA
-:project_root: ./
-
-// uncomment the following if not using IDEA or having issues, for editing the template to see the includes
-// note that with this line not commented out, the rendering of the root level asiidoc file will be incorrect (i.e.
-// leave it commented out when committing work)
-//:project_root: ../../
 
 
 ifdef::env-github[]
@@ -50,9 +54,11 @@ image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelcons
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
-Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
+Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project is here].
 
-NOTE: This is not a part of Confluent's commercial support offering, except through consulting engagements.
+TIP: If you like this project, please ⭐ Star it in GitHub to show your appreciation, help us gauge popularity of the project and allocate resources.
+
+NOTE: This is not a part of the Confluent commercial support offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
 
 IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
@@ -241,11 +247,17 @@ without operational burden or harming the cluster's performance
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
 ** Reactor.io Publisher (Mono/Flux) and Java's CompletableFuture (through `Mono#fromFuture`)
+* Exactly Once bulk transaction system
+** When using the transactional mode, record processing that happens in parallel and produce records back to kafka get all grouped into a large batch transaction, and the offsets and records are submitted through the transactional producer, giving you Exactly once Semantics for parallel processing.
+** For further information, see the <<transaction-system>> section.
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility
 * Throttle control and broker liveliness management
 * Clean draining shutdown cycle
+* Manual global pause / resume of all partitions, without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
+** Circuit breaker patterns for individual paritions or keys can be done through throwing failure exceptions in the processing function (see https://github.com/confluentinc/parallel-consumer/pull/291[PR #291 Explicit terminal and retriable exceptions] for further refinement)
+** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
@@ -471,7 +483,6 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
  * @see AbstractParallelEoSStreamProcessor
- * @see #poll(Consumer)
  */
 ----
 
@@ -869,6 +880,7 @@ The `transactional` mode is explained in the next section.
 If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.
 
+[[transaction-system]]
 === Apache Kafka EoS Transaction Model
 
 There is also the option to use Kafka's Exactly Once Semantics (EoS) system.
@@ -881,6 +893,94 @@ NOTE:: As with the `synchronous` processing mode, this will also block the proce
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is __idempotent__.
 
 For implementations details, see the <<Transactional System Architecture>> section.
+
+.From the Options Javadoc
+[source,java,indent=0]
+----
+        /**
+         * Periodically commits through the Producer using transactions.
+         * <p>
+         * Messages sent in parallel by different workers get added to the same transaction block - you end up with
+         * transactions 100ms (by default) "large", containing all records sent during that time period, from the
+         * offsets being committed.
+         * <p>
+         * Of no use, if not also producing messages (i.e. using a {@link ParallelStreamProcessor#pollAndProduce}
+         * variation).
+         * <p>
+         * Note: Records being sent by different threads will all be in a single transaction, as PC shares a single
+         * Producer instance. This could be seen as a performance overhead advantage, efficient resource use, in
+         * exchange for a loss in transaction granularity.
+         * <p>
+         * The benefits of using this mode are:
+         * <p>
+         * a) All records produced from a given source offset will either all be visible, or none will be
+         * ({@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}).
+         * <p>
+         * b) If any records making up a transaction have a terminal issue being produced, or the system crashes before
+         * finishing sending all the records and committing, none will ever be visible and the system will eventually
+         * retry them in new transactions - potentially with different combinations of records from the original.
+         * <p>
+         * c) A source offset, and it's produced records will be committed as an atomic set. Normally: either the record
+         * producing could fail, or the committing of the source offset could fail, as they are separate individual
+         * operations. When using Transactions, they are committed together - so if either operations fails, the
+         * transaction will never get committed, and upon recovery, the system will retry the set again (and no
+         * duplicates will be visible in the topic).
+         * <p>
+         * This {@code CommitMode} is the slowest of the options, but there will be no duplicates in Kafka caused by
+         * producing a record multiple times if previous offset commits have failed or crashes have occurred (however
+         * message replay may cause duplicates in external systems which is unavoidable - external systems must be
+         * idempotent).
+         * <p>
+         * The default commit interval {@link AbstractParallelEoSStreamProcessor#KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY}
+         * gets automatically reduced from the default of 5 seconds to 100ms (the same as Kafka Streams <a
+         * href=https://docs.confluent.io/platform/current/streams/developer-guide/config-streams.html">commit.interval.ms</a>).
+         * Reducing this configuration places higher load on the broker, but will reduce (but cannot eliminate) replay
+         * upon failure. Note also that when using transactions in Kafka, consumption in {@code READ_COMMITTED} mode is
+         * blocked up to the offset of the first STILL open transaction. Using a smaller commit frequency reduces this
+         * minimum consumption latency - the faster transactions are closed, the faster the transaction content can be
+         * read by {@code READ_COMMITTED} consumers. More information about this can be found on the Confluent blog
+         * post:
+         * <a href="https://www.confluent.io/blog/enabling-exactly-once-kafka-streams/">Enabling Exactly-Once in Kafka
+         * Streams</a>.
+         * <p>
+         * When producing multiple records (see {@link ParallelStreamProcessor#pollAndProduceMany}), all records must
+         * have been produced successfully to the broker before the transaction will commit, after which all will be
+         * visible together, or none.
+         * <p>
+         * Records produced while running in this mode, won't be seen by consumer running in
+         * {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG} {@link org.apache.kafka.common.IsolationLevel#READ_COMMITTED}
+         * mode until the transaction is complete and all records are produced successfully. Records produced into a
+         * transaction that gets aborted or timed out, will never be visible.
+         * <p>
+         * The system must prevent records from being produced to the brokers whose source consumer record offsets has
+         * not been included in this transaction. Otherwise, the transactions would include produced records from
+         * consumer offsets which would only be committed in the NEXT transaction, which would break the EoS guarantees.
+         * To achieve this, first work processing and record producing is suspended (by acquiring the commit lock -
+         * see{@link #commitLockAcquisitionTimeout}, as record processing requires the produce lock), then succeeded
+         * consumer offsets are gathered, transaction commit is made, then when the transaction has finished, processing
+         * resumes by releasing the commit lock. This periodically slows down record production during this phase, by
+         * the time needed to commit the transaction.
+         * <p>
+         * This is all separate from using an IDEMPOTENT Producer, which can be used, along with the
+         * {@link ParallelConsumerOptions#commitMode} {@link CommitMode#PERIODIC_CONSUMER_SYNC} or
+         * {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS}.
+         * <p>
+         * Failure:
+         * <p>
+         * Commit lock: If the system cannot acquire the commit lock in time, it will shut down for whatever reason, the
+         * system will shut down (fail fast) - during the shutdown a final commit attempt will be made. The default
+         * timeout for acquisition is very high though - see {@link #commitLockAcquisitionTimeout}. This can be caused
+         * by the user processing function taking too long to complete.
+         * <p>
+         * Produce lock: If the system cannot acquire the produce lock in time, it will fail the record processing and
+         * retry the record later. This can be caused by the controller taking too long to commit for some reason. See
+         * {@link #produceLockAcquisitionTimeout}. If using {@link #allowEagerProcessingDuringTransactionCommit}, this
+         * may cause side effect replay when the record is retried, otherwise there is no replay. See
+         * {@link #allowEagerProcessingDuringTransactionCommit} for more details.
+         *
+         * @see ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval
+         */
+----
 
 [[streams-usage]]
 == Using with Kafka Streams
@@ -950,12 +1050,22 @@ ParallelEoSStreamProcessorTestBase#DEFAULT_BROKER_POLL_FREQUENCY_MS
 ParallelEoSStreamProcessorTestBase#DEFAULT_COMMIT_INTERVAL_MAX_MS
 ----
 
+=== Recommended IDEA Plugins
+
+* AsciiDoc
+* CheckStyle
+* CodeGlance
+* EditorConfig
+* Rainbow Brackets
+* SonarLint
+* Lombok
+
 === Readme
 
 The `README` uses a special https://github.com/whelk-io/asciidoc-template-maven-plugin/pull/25[custom maven processor plugin] to import live code blocks into the root readme, so that GitHub can show the real code as includes in the `README`.
 This is because GitHub https://github.com/github/markup/issues/1095[doesn't properly support the _include_ directive].
 
-The source of truth readme is in link:{project_root}/src/docs/README.adoc[].
+The source of truth readme is in link:{project_root}/src/docs/README_TEMPLATE.adoc[].
 
 === Maven targets
 
@@ -1132,12 +1242,29 @@ If both serialised formats are significantly large, they are then both compresse
 *** Completely random offset maps, compressed and uncompressed `BitSet` is roughly the same (2000 entries, uncompressed bitset: 250, compressed: 259, compressed bytes array: 477)
 *** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again if random.
 * Gets stored along with base offset for each partition, in the offset `commitsync` `metadata` string
-* The offset commit metadata has a hardcoded limit of 4096 bytes per partition (@see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`)
+* The offset commit metadata has a hardcoded limit of 4096 bytes (4 kb) per partition (@see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`)
 ** Because of this, if our map doesn't fit into this, we have to drop it and not use it, losing the shorter replay benefits.
-However with runlength encoding and typical offset patterns this should be quite rare.
+However, with runlength encoding and typical offset patterns this should be quite rare.
 *** Work is being done on continuous and predictive space requirements, which will optionally prevent the system from continuing past a point by introducing local backpressure which it can't proceed without dropping the encoded map information - see https://github.com/confluentinc/parallel-consumer/issues/53[Exact continuous offset encoding for precise offset payload size back pressure].
 ** Not being able to fit the map into the metadata, depends on message acknowledgement patterns in the use case and the numbers of messages involved.
-Also the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
+Also, the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
+
+===== FAQ
+
+[qanda]
+If for example, offset 5 cannot be processed for whatever reason, does it cause the committed offset to stick to 5?::
+Yes - the committed offset would "stick" to 5, with the metadata payload containing all the per msg ack's beyond 5.
++
+(Reference: https://github.com/confluentinc/parallel-consumer/issues/415#issuecomment-1256022394[#415])
+
+In the above scenario, would the system eventually exceed the OffsetMap size limit?::
+No, as if the payload size hits 75% or more of the limit (4kB), the back pressure system kicks in, and no more records will be taken for processing, until it drops below 75% again.
+Instead, it will keep retrying existing records.
++
+However, note that if the only record to continually fail is 5, and all others succeed, let's say offset 6-50,000, then the metadata payload is only ~2 shorts (1 and (50,000-6=) 49,994), as it will use run length encoding.
+So it's very efficient.
++
+(Reference: https://github.com/confluentinc/parallel-consumer/issues/415#issuecomment-1256022394[#415])
 
 == Attribution
 
@@ -1149,6 +1276,10 @@ http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and ht
 
 = Change Log
 
+A high level summary of noteworthy changes in each version.
+
+NOTE:: Dependency version bumps are not listed here.
+
 // git log --pretty="* %s" 0.3.0.2..HEAD
 
 // only show TOC if this is the root document (not in the README)
@@ -1156,13 +1287,91 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
-== Next Version
+== 0.5.2.4
 
-== v0.5.0.1
+=== Fixes
+
+* fixes #409: Adds support for compacted topics and commit offset resetting (#425)
+** Truncate the offset state when bootstrap polled offset higher or lower than committed
+** Prune missing records from the tracked incomplete offset state, when they're missing from polled batches
+
+== 0.5.2.3
+
+=== Improvements
+
+* Transactional commit mode system improvements and docs (#355)
+** Clarifies transaction system with much better documentation.
+** Fixes a potential race condition which could cause offset leaks between transactions boundaries.
+** Introduces lock acquisition timeouts.
+** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
+* Adds a very simple Dependency Injection system modeled on Dagger (#398)
+* Various refactorings e.g. new ProducerWrap
+
+* Dependencies
+** build(deps): prod: zstd, reactor, dev: podam, progressbar, postgresql maven-plugins: versions, help (#420)
+** build(deps-dev): bump postgresql from 42.4.1 to 42.5.0
+** bump podam, progressbar, zstd, reactor
+** build(deps): bump versions-maven-plugin from 2.11.0 to 2.12.0
+** build(deps): bump maven-help-plugin from 3.2.0 to 3.3.0
+** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
+** build(deps): Upgrade to AK 3.3.0 (#309)
+
+
+=== Fixes
+
+* fixes #419: NoSuchElementException during race condition in PartitionState (#422)
+* Fixes #412: ClassCastException with retryDelayProvider (#417)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
+
+== v0.5.2.2
+
+=== Fixes
+
+- Fixes dependency scope for Mockito from compile to test (#376)
+
+== v0.5.2.1
+
+=== Fixes
+
+- Fixes regression issue with order of state truncation vs commit (#362)
+
+== v0.5.2.0
 
 === Fixes and Improvements
 
-- fixes: #225 Build support for Java 17, 18 (#289)
+- fixes #184: Fix multi topic subscription with KEY order by adding topic to shard key (#315)
+- fixes #329: Committing around transaction markers causes encoder to crash (#328)
+- build: Upgrade Truth-Generator to 0.1.1 for user Subject discovery (#332)
+
+=== Build
+
+- build: Allow snapshots locally, fail in CI (#331)
+- build: OSS Index scan change to warn only and exclude Guava CVE-2020-8908 as it's WONT_FIX (#330)
+
+=== Dependencies
+
+- build(deps): bump reactor-core from 3.4.19 to 3.4.21 (#344)
+- build(deps): dependabot bump Mockito, Surefire, Reactor, AssertJ, Release (#342) (#342)
+- build(deps): dependabot bump TestContainers, Vert.x, Enforcer, Versions, JUnit, Postgress (#336)
+
+=== Linked issues
+
+- Message with null key lead to continuous failure when using KEY ordering #318
+- Subscribing to two or more topics with KEY ordering, results in messages of the same Key never being processed #184
+- Cannot have negative length BitSet error - committing transaction adjacent offsets #329
+
+== v0.5.1.0
+
+=== Features
+
+* #193: Pause / Resume PC (circuit breaker) without unsubscribing from topics
+
+=== Fixes and Improvements
+
+* #225: Build and runtime support for Java 16+ (#289)
+* #306: Change Truth-Generator dependency from compile to test
+* #298: Improve PollAndProduce performance by first producing all records, and then waiting for the produce results.Previously, this was done for each ProduceRecord individually.
 
 == v0.5.0.0
 
