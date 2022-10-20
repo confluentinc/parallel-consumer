@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * @author Antony Stubbs
@@ -204,18 +205,20 @@ class LoopingResumingIteratorTest {
             }
         }
 
-        Truth.assertThat(results).containsExactly(
-                Optional.of(Map.entry(4, "e")),
-                Optional.of(Map.entry(5, "f")),
-                Optional.of(Map.entry(6, "g")),
-                Optional.of(Map.entry(7, "h")),
-                Optional.of(Map.entry(8, "i")),
-                Optional.of(Map.entry(9, "j")),
-                Optional.of(Map.entry(0, "a")),
-                Optional.of(Map.entry(1, "b")),
-                Optional.of(Map.entry(2, "c")),
-                Optional.of(Map.entry(3, "d"))
-        );
+        var expected = new LinkedHashMap<Integer, String>();
+        expected.put(4, "e");
+        expected.put(5, "f");
+        expected.put(6, "g");
+        expected.put(7, "h");
+        expected.put(8, "i");
+        expected.put(9, "j");
+        expected.put(0, "a");
+        expected.put(1, "b");
+        expected.put(2, "c");
+        expected.put(3, "d");
+        var expectedAsList = expected.entrySet().stream().map(Optional::of).collect(Collectors.toList());
+
+        Truth.assertThat(results).containsExactlyElementsIn(expectedAsList).inOrder();
 
         Truth8.assertThat(iterator.next()).isEmpty();
 
