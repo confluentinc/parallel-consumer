@@ -47,7 +47,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     }
 
     @Override
-    public void poll(RecordProcessor.PollConsumer<K, V> usersVoidConsumptionFunction) {
+    public void poll(UserFunctions.Processor<K, V> usersVoidConsumptionFunction) {
         Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc = (context) -> {
             log.trace("asyncPoll - Consumed a consumerRecord ({}), executing void function...", context);
 

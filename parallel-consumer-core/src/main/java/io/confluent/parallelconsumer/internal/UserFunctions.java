@@ -5,7 +5,8 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
-import io.confluent.parallelconsumer.RecordProcessor;
+import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.UserFunctions.Processor;
 import lombok.experimental.UtilityClass;
 
 import java.util.function.BiFunction;
@@ -13,6 +14,8 @@ import java.util.function.Function;
 
 /**
  * Single entry point for wrapping the actual execution of user functions
+ *
+ * @author Antony Stubbs
  */
 @UtilityClass
 public class UserFunctions {
@@ -43,7 +46,7 @@ public class UserFunctions {
      * @param wrappedFunction the function to run
      * @param userFuncParam   the parameter to pass into the user's function
      */
-    public static <PARAM, RESULT> RESULT carefullyRun(Function<PARAM, RESULT> wrappedFunction, PARAM userFuncParam) {
+    public static <PARAM, RESULT> RESULT carefullyRun(Function<K, V> wrappedFunction, PollContext<K, V> userFuncParam) {
         try {
             return wrappedFunction.apply(userFuncParam);
         } catch (Throwable e) {
@@ -56,9 +59,9 @@ public class UserFunctions {
      * @param wrappedFunction the function to run
      * @param userFuncParam   the parameter to pass into the user's function
      */
-    public static <PARAM> void carefullyRun(RecordProcessor.PollConsumer<PARAM> wrappedFunction, PARAM userFuncParam) {
+    public static <K, V> void carefullyRun(Processor<K, V> wrappedFunction, PollContext<K, V> userFuncParam) {
         try {
-            wrappedFunction.accept(userFuncParam);
+            wrappedFunction.process(userFuncParam);
         } catch (Throwable e) {
             throw new ExceptionInUserFunctionException(MSG, e);
         }

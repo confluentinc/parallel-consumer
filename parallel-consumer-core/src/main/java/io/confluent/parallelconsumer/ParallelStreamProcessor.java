@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.RecordProcessor.PollConsumerAndProducer;
+import io.confluent.parallelconsumer.UserFunctions.Transformer;
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
 import lombok.Data;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -33,15 +33,15 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      * @param usersVoidConsumptionFunction the function
      */
     // todo why isn't this in ParallelConsumer ?
-    void poll(RecordProcessor.PollConsumer<K, V> usersVoidConsumptionFunction);
+    void poll(UserFunctions.Processor<K, V> usersVoidConsumptionFunction);
 
     /**
-     * Register a function to be applied in parallel to each received message, which in turn returns one or more {@link
-     * ProducerRecord}s to be sent back to the broker.
+     * Register a function to be applied in parallel to each received message, which in turn returns one or more
+     * {@link ProducerRecord}s to be sent back to the broker.
      *
      * @param callback applied after the produced message is acknowledged by kafka
      */
-    void pollAndProduceMany(PollConsumerAndProducer<K, V> userFunction,
+    void pollAndProduceMany(Transformer<K, V> userFunction,
                             Consumer<ConsumeProduceResult<K, V, K, V>> callback);
 
     /**
