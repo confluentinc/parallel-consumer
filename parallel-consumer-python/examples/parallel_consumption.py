@@ -14,11 +14,11 @@ if __name__ == '__main__':
     producer = get_producer(props)
 
     options = ParallelConsumerOptions.builder() \
-      .ordering(ParallelConsumerOptions.ProcessingOrder.KEY) \
-      .maxConcurrency(1000) \
-      .consumer(consumer) \
-      .producer(producer) \
-      .build()
+        .ordering(ParallelConsumerOptions.ProcessingOrder.KEY) \
+        .maxConcurrency(1000) \
+        .consumer(consumer) \
+        .producer(producer) \
+        .build()
     processor = ParallelStreamProcessor.createEosStreamProcessor(options)
     processor.subscribe([topic])
     processor.poll(lambda o: print(f"Concurrently processing a record: {o}"))
