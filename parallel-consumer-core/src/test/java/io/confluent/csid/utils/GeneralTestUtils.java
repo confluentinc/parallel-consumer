@@ -18,9 +18,6 @@ public class GeneralTestUtils {
 
     public static void changeLogLevelTo(Level targetLevel) {
         log.warn("Making sure log level isn't too low");
-//        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-//        root.setLevel(Level.INFO);
-
         Logger csid = (Logger) LoggerFactory.getLogger("io.confluent.csid");
         csid.setLevel(targetLevel);
     }
