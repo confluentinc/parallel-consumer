@@ -59,7 +59,7 @@ class _Maven:
     def _run_command(self, *commands: str):
         process = subprocess.run([str(self._mvn_path), *commands, '-f', str(self._project_dir)], capture_output=True)
         if process.returncode != 0:
-            raise EnvironmentError(f'Return code {process.returncode} {process.stderr}')
+            raise EnvironmentError(f'Return code {process.returncode} {process.stderr} {process.stdout}')
         logging.debug(process)
         return process.stdout.decode()
 
