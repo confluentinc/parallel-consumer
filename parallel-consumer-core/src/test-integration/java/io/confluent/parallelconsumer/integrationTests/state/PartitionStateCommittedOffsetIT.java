@@ -73,6 +73,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
 
     private OffsetResetStrategy offsetResetStrategy = DEFAULT_OFFSET_RESET_POLICY;
 
+    // messy but as result of test is thrown as an exception, is a bit of a pain. But - only used in one test - forgive me
     private ParallelEoSStreamProcessor<String, String> activePc;
 
     @BeforeEach
@@ -397,7 +398,10 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
             return sorted;
         } finally {
             try {
-                tempPc.close(); // close manually in this branch only, as in other branch it crashes
+                if (!tempPc.isClosedOrFailed()) {
+                    // some test branches, pc will crash and close in the test already
+                    tempPc.close();
+                }
             } catch (Exception e) {
                 log.debug("Cause will get rethrown close on the NONE parameter branch", e);
             }
