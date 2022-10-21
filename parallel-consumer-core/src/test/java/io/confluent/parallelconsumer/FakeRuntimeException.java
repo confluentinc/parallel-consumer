@@ -12,5 +12,5 @@ import lombok.experimental.StandardException;
  * @author Antony Stubbs
  */
 @StandardException
-public class FakeRuntimeException extends RetriableException {
+public class FakeRuntimeException extends PCRetriableException {
 }
