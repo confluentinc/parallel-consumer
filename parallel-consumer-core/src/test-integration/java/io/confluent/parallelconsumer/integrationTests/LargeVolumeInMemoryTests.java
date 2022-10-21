@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
+import io.confluent.csid.utils.Range;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -209,7 +210,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
         super.injectWorkSuccessListener(parallelConsumer.getWm(), successfulWork);
 
-        List<Integer> keys = range(numberOfKeys).listAsIntegers();
+        List<Integer> keys = Range.listOfIntegers(numberOfKeys);
         HashMap<Integer, List<ConsumerRecord<String, String>>> records = ktu.generateRecords(keys, quantityOfMessagesToProduce);
         ktu.send(consumerSpy, records);
 
