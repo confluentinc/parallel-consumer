@@ -18,7 +18,7 @@ endif::[]
 
 === Improvements
 
-* feature: Simple RetriableException to remove error spam from logs (#444)
+* feature: Simple PCRetriableException to remove error spam from logs (#444)
 
 === Fixes
 
