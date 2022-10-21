@@ -52,7 +52,7 @@ public class BitSetEncoder extends OffsetEncoder {
     public static final Integer MAX_LENGTH_ENCODABLE = Integer.MAX_VALUE;
 
     @Getter
-    private BitSet bitSet;
+    private final BitSet bitSet;
 
     private final long originalLength;
 
@@ -70,7 +70,15 @@ public class BitSetEncoder extends OffsetEncoder {
 
         this.version = newVersion;
 
+
+        if (length > MAX_LENGTH_ENCODABLE) {
+            throw new BitSetEncodingNotSupportedException("BitSet only supports " + MAX_LENGTH_ENCODABLE + " bits, but " + length + " were requested");
+        }
+
         this.originalLength = length;
+
+        // prep bit set buffer
+        bitSet = new BitSet(Math.toIntExact(length));
     }
 
     private ByteBuffer constructWrappedByteBuffer(long length, Version newVersion) throws BitSetEncodingNotSupportedException {
@@ -92,9 +100,6 @@ public class BitSetEncoder extends OffsetEncoder {
             throw new BitSetEncodingNotSupportedException(StringUtils.msg("BitSet V2 too long to encode, as length overflows Integer.MAX_VALUE. Length: {}. (max: {})", bitsetEntriesRequired, MAX_LENGTH_ENCODABLE));
         }
 
-        // prep bit set buffer
-        bitSet = new BitSet((int) bitsetEntriesRequired);
-
         int bytesRequiredForEntries = (int) (Math.ceil((double) bitsetEntriesRequired / Byte.SIZE));
         int lengthEntryWidth = Integer.BYTES;
         int wrappedBufferLength = lengthEntryWidth + bytesRequiredForEntries + 1;
@@ -108,17 +113,12 @@ public class BitSetEncoder extends OffsetEncoder {
 
     /**
      * This was a bit "short" sighted of me....
-     *
-     * @return
      */
     private ByteBuffer initV1(long bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > Short.MAX_VALUE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
             throw new BitSetEncodingNotSupportedException("Input too long to encode for BitSet V1, length overflows Short.MAX_VALUE: " + bitsetEntriesRequired + ". (max: " + Short.MAX_VALUE + ")");
         }
-
-        // prep bit set buffer
-        bitSet = new BitSet((int) bitsetEntriesRequired);
 
         int bytesRequiredForEntries = (int) (Math.ceil((double) bitsetEntriesRequired / Byte.SIZE));
         int lengthEntryWidth = Short.BYTES;
