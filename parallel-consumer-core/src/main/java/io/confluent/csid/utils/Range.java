@@ -41,6 +41,10 @@ public class Range implements Iterable<Long> {
         this.limit = limit;
     }
 
+    public static List<Integer> listOfIntegers(int max) {
+        return Range.range(max).listAsIntegers();
+    }
+
     @Override
     public Iterator<Long> iterator() {
         final long max = limit;
@@ -69,6 +73,9 @@ public class Range implements Iterable<Long> {
         };
     }
 
+    /**
+     * Potentially slow, but useful for tests
+     */
     public List<Integer> listAsIntegers() {
         ArrayList<Integer> integers = new ArrayList<>();
         forEach(e -> integers.add(Math.toIntExact(e)));

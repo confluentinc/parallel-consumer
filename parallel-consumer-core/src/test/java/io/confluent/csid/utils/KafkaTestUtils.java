@@ -223,7 +223,7 @@ public class KafkaTestUtils {
 
     @Setter
     @Getter
-    private List<Integer> defaultKeys = Range.range(100).listAsIntegers();
+    private List<Integer> defaultKeys = Range.listOfIntegers(100);
 
     private Integer getRandomDefaultKey() {
         int i = (int) (random() * defaultKeys.size());
