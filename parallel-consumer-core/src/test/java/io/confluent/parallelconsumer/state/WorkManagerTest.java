@@ -570,7 +570,7 @@ public class WorkManagerTest {
 
         KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
-        List<Integer> keys = range(uniqueKeys).list();
+        List<Integer> keys = range(uniqueKeys).listAsIntegers();
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());

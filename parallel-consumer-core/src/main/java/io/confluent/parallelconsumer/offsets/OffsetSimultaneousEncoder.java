@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -194,7 +195,7 @@ public class OffsetSimultaneousEncoder {
      * <li>{@link OffsetEncoding#BitSet}</li>
      * <li>{@link OffsetEncoding#RunLength}</li>
      * </ul>
-     * Conditionaly encodes compression variants:
+     * Conditionally encodes compression variants:
      * <ul>
      * <li>{@link OffsetEncoding#BitSetCompressed}</li>
      * <li>{@link OffsetEncoding#RunLengthCompressed}</li>
@@ -222,20 +223,16 @@ public class OffsetSimultaneousEncoder {
          *  the entire range. So when BitSet can't be used, the encoding would be potentially a lot faster as RunLength
          *  didn't need the whole loop.
          */
-        range(lengthBetweenBaseAndHighOffset).forEach(rangeIndex -> {
-            final long offset = this.lowWaterMark + rangeIndex;
-            List<OffsetEncoder> removeToBeRemoved = new ArrayList<>();
-            if (this.incompleteOffsets.contains(offset)) {
-                log.trace("Found an incomplete offset {}", offset);
-                encoders.forEach(x -> {
-                    x.encodeIncompleteOffset(rangeIndex);
-                });
+        Range relativeOffsetsLongRange = range(lengthBetweenBaseAndHighOffset);
+        relativeOffsetsLongRange.forEach(relativeOffset -> {
+            // range index (relativeOffset) is used as we don't actually encode offsets, we encode the relative offset from the base offset
+            final long actualOffset = this.lowWaterMark + relativeOffset;
+            if (this.incompleteOffsets.contains(actualOffset)) {
+                log.trace("Found an incomplete offset {}", actualOffset);
+                encoders.forEach(x -> x.encodeIncompleteOffset(relativeOffset));
             } else {
-                encoders.forEach(x -> {
-                    x.encodeCompletedOffset(rangeIndex);
-                });
+                encoders.forEach(x -> x.encodeCompletedOffset(relativeOffset));
             }
-            encoders.removeAll(removeToBeRemoved);
         });
 
         registerEncodings(encoders);

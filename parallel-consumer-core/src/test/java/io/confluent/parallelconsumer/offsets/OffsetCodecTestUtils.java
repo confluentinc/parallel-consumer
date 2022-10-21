@@ -51,10 +51,10 @@ public class OffsetCodecTestUtils {
         var incompleteOffsets = new TreeSet<Long>();
 
         final long longLength = inputBitmapString.length();
-        range(longLength).forEach(i -> {
-            var bit = inputBitmapString.charAt(i);
+        range(longLength).forEach(index -> {
+            var bit = inputBitmapString.charAt(Math.toIntExact(index));
             if (bit == 'o') {
-                incompleteOffsets.add(baseOffset + i);
+                incompleteOffsets.add(baseOffset + index);
             } else if (bit == 'x') {
                 log.trace("Dropping completed offset");
             } else {

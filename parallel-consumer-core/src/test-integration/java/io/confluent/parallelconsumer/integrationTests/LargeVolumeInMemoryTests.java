@@ -209,7 +209,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         List<WorkContainer<String, String>> successfulWork = new ArrayList<>();
         super.injectWorkSuccessListener(parallelConsumer.getWm(), successfulWork);
 
-        List<Integer> keys = range(numberOfKeys).list();
+        List<Integer> keys = range(numberOfKeys).listAsIntegers();
         HashMap<Integer, List<ConsumerRecord<String, String>>> records = ktu.generateRecords(keys, quantityOfMessagesToProduce);
         ktu.send(consumerSpy, records);
 

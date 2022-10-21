@@ -37,12 +37,12 @@ public class ByteBufferEncoder extends OffsetEncoder {
     }
 
     @Override
-    public void encodeIncompleteOffset(final int rangeIndex) {
+    public void encodeIncompleteOffset(final long relativeOffset) {
         this.bytesBuffer.put((byte) 0);
     }
 
     @Override
-    public void encodeCompletedOffset(final int rangeIndex) {
+    public void encodeCompletedOffset(final long relativeOffset) {
         this.bytesBuffer.put((byte) 1);
     }
 

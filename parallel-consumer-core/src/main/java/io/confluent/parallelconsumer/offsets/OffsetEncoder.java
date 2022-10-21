@@ -28,9 +28,9 @@ public abstract class OffsetEncoder {
 
     protected abstract OffsetEncoding getEncodingTypeCompressed();
 
-    abstract void encodeIncompleteOffset(final int rangeIndex);
+    abstract void encodeIncompleteOffset(final long relativeOffset);
 
-    abstract void encodeCompletedOffset(final int rangeIndex);
+    abstract void encodeCompletedOffset(final long relativeOffset);
 
     abstract byte[] serialise() throws EncodingNotSupportedException;
 
