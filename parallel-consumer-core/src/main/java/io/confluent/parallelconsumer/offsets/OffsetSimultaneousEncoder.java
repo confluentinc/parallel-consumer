@@ -17,6 +17,7 @@ import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v1;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
+import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_ABSENCE;
 
 /**
  * Encode with multiple strategies at the same time.
@@ -94,22 +95,19 @@ public class OffsetSimultaneousEncoder {
         this.incompleteOffsets = incompleteOffsets;
 
         //
-        if (highestSucceededOffset == -1) { // nothing succeeded yet
+        if (highestSucceededOffset == KAFKA_OFFSET_ABSENCE) { // nothing succeeded yet
             highestSucceededOffset = baseOffsetToCommit;
         }
 
         highestSucceededOffset = maybeRaiseOffsetHighestSucceeded(baseOffsetToCommit, highestSucceededOffset);
 
-        long bitsetLengthL = highestSucceededOffset - this.lowWaterMark + 1;
-        if (bitsetLengthL < 0) {
-            throw new IllegalStateException(msg("Cannot have negative length BitSet (calculated length: {}, base offset to commit: {}, highest succeeded offset: {})",
-                    bitsetLengthL, baseOffsetToCommit, highestSucceededOffset));
-        }
+        lengthBetweenBaseAndHighOffset = highestSucceededOffset - this.lowWaterMark + 1;
 
-        // BitSet only support Integer.MAX_VALUE bits
-        lengthBetweenBaseAndHighOffset = (int) bitsetLengthL;
-        // sanity
-        if (bitsetLengthL != lengthBetweenBaseAndHighOffset) throw new IllegalArgumentException("Integer overflow");
+        if (lengthBetweenBaseAndHighOffset < 0) {
+            // sanity check
+            throw new IllegalStateException(msg("Cannot have negative length encoding (calculated length: {}, base offset to commit: {}, highest succeeded offset: {})",
+                    lengthBetweenBaseAndHighOffset, baseOffsetToCommit, highestSucceededOffset));
+        }
 
         this.encoders = initEncoders();
     }
