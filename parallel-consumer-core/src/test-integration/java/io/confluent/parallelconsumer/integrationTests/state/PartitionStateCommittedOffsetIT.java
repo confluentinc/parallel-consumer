@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.integrationTests.state;
 import com.google.common.truth.StringSubject;
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
@@ -368,7 +369,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
                     log.debug("Exceptional offset {} succeeded", thisOffset);
                 } else if (thisOffset >= succeedUpToOffset) {
                     log.debug("Failing on {}", thisOffset);
-                    throw new RuntimeException("Failing on " + thisOffset);
+                    throw new FakeRuntimeException("Failing on " + thisOffset);
                 } else {
                     log.debug("Succeeded {}: {}", thisOffset, pollContext.getSingleRecord());
                     succeededOffsets.add(pollContext);
