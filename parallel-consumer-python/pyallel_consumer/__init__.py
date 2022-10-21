@@ -64,7 +64,9 @@ class _Maven:
         return process.stdout.decode()
 
 
-if not jpype.isJVMStarted():
+def start_jvm():
+    if jpype.isJVMStarted():
+        return
     try:
         jvm_path = _find_jre(jdk._JRE_DIR)
         logging.debug(f'JRE already installed at {jdk._JRE_DIR}')
@@ -76,4 +78,6 @@ if not jpype.isJVMStarted():
     logging.info('Starting JVM')
     jpype.startJVM(jvmpath=jvm_path, classpath=[class_path])
 
+
 jpype.imports.registerDomain("jio", alias="io")
+start_jvm()
