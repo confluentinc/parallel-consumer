@@ -41,6 +41,9 @@ public class Range implements Iterable<Long> {
         this.limit = limit;
     }
 
+    /**
+     * Potentially slow, but useful for tests
+     */
     public static List<Integer> listOfIntegers(int max) {
         return Range.range(max).listAsIntegers();
     }
