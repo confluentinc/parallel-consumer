@@ -477,8 +477,8 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
- * Currently there is no direct implementation, only the {@link ParallelStreamProcessor} version (see {@link
- * AbstractParallelEoSStreamProcessor}), but there may be in the future.
+ * Currently, there is no direct implementation, only the {@link ParallelStreamProcessor} version (see
+ * {@link AbstractParallelEoSStreamProcessor}), but there may be in the future.
  *
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
@@ -740,7 +740,7 @@ The system catches these exceptions, logs them and replaces the record in the qu
 All types of Exceptions thrown are considered retriable.
 To not retry a record, do not throw an exception from your processing function.
 
-TIP:: To avoid the system logging an error, throw an exception which extends RetriableException.
+TIP:: To avoid the system logging an error, throw an exception which extends PCRetriableException.
 
 TIP:: If there was an error processing a record, and you'd like to skip it - do not throw an exception, and the system will mark the record as succeeded.
 
