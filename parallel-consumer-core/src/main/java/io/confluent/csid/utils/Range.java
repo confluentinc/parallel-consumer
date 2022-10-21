@@ -18,7 +18,6 @@ import java.util.stream.LongStream;
  *
  * @see #range(long)
  */
-@Deprecated
 public class Range implements Iterable<Long> {
 
     private final long limit;
@@ -80,7 +79,7 @@ public class Range implements Iterable<Long> {
     /**
      * Potentially slow, but useful for tests
      */
-    public List<Integer> listAsIntegers() {
+    protected List<Integer> listAsIntegers() {
         ArrayList<Integer> integers = new ArrayList<>();
         forEach(e -> integers.add(Math.toIntExact(e)));
         return integers;
