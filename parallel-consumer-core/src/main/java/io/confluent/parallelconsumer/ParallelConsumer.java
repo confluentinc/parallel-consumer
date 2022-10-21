@@ -14,7 +14,6 @@ import java.util.Collection;
 import java.util.regex.Pattern;
 
 // tag::javadoc[]
-
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
