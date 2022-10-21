@@ -27,6 +27,14 @@ public class BackportUtils {
         return !optional.isPresent();
     }
 
+
+    /**
+     * @see Optional#isEmpty()  intro'd java 11
+     */
+    public static boolean hasNo(Optional<?> optional) {
+        return !optional.isPresent();
+    }
+
     public static byte[] readFully(InputStream is) throws IOException {
         return BackportUtils.readFully(is, -1, true);
     }

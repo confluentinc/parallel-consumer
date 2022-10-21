@@ -132,7 +132,7 @@ class PartitionStateCommittedOffsetTest {
         addPollToState(state, polledTestBatch);
 
         //
-        Truth.assertThat(state.getNextExpectedInitialPolledOffset()).isEqualTo(unexpectedlyHighOffset);
+        Truth.assertThat(state.getOffsetToCommit()).isEqualTo(unexpectedlyHighOffset);
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
         assertThat(offsetAndMetadata).getOffset().isEqualTo(unexpectedlyHighOffset);

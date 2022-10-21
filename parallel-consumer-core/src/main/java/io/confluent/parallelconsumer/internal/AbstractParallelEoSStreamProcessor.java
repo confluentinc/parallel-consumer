@@ -5,10 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
-import io.confluent.parallelconsumer.ParallelConsumer;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.PollContextInternal;
+import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
@@ -1175,7 +1172,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             return intermediateResults;
         } catch (Exception e) {
             // handle fail
-            log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox. Context: {}", context, e);
+            var cause = e.getCause();
+            String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
+                    " mailbox. Context: {}", context, e);
+            if (cause instanceof PCRetriableException) {
+                log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
+            } else {
+                log.error(msg, e);
+            }
+
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
                 addToMailbox(context, wc); // always add on error

@@ -107,10 +107,6 @@ public class ShardManager<K, V> {
         return Optional.ofNullable(processingShards.get(key));
     }
 
-    private LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> getIterator(final Optional<ShardKey> iterationResumePoint) {
-        return new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
-    }
-
     ShardKey computeShardKey(WorkContainer<?, ?> wc) {
         return ShardKey.of(wc, options.getOrdering());
     }
@@ -140,31 +136,42 @@ public class ShardManager<K, V> {
      * @param recordsFromRemovedPartition collection of work to scan to get keys of shards to remove
      */
     void removeAnyShardEntriesReferencedFrom(Collection<Optional<ConsumerRecord<K, V>>> recordsFromRemovedPartition) {
-        for (ConsumerRecord<K, V> work : recordsFromRemovedPartition.stream()
+        List<ConsumerRecord<K, V>> polledRecordsFromPartition = recordsFromRemovedPartition.stream()
                 .filter(Optional::isPresent)
                 .map(Optional::get)
-                .collect(Collectors.toList())) {
-            removeShardFor(work);
+                .collect(Collectors.toList());
+        for (ConsumerRecord<K, V> consumerRecord : polledRecordsFromPartition) {
+            removeWorkFromShardFor(consumerRecord);
         }
     }
 
-    private void removeShardFor(ConsumerRecord<K, V> consumerRecord) {
+    /**
+     * Removes any tracked work for this record, and removes the shard if it is empty
+     */
+    private void removeWorkFromShardFor(ConsumerRecord<K, V> consumerRecord) {
         ShardKey shardKey = computeShardKey(consumerRecord);
 
         if (processingShards.containsKey(shardKey)) {
+            // remove the work
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
-            removeShardIfEmpty(shardKey);
+
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
+
+            // remove the shard if empty
+            removeShardIfEmpty(shardKey);
         } else {
             log.trace("Shard referenced by WC: {} with shard key: {} already removed", consumerRecord, shardKey);
         }
+
     }
 
     public void addWorkContainer(long epochOfInboundRecords, ConsumerRecord<K, V> aRecord) {
         var wc = new WorkContainer<>(epochOfInboundRecords, aRecord, module);
         ShardKey shardKey = computeShardKey(wc);
+
+        // don't need to synchronise on /adding/ elements, as the iterator would just stop early
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
@@ -174,6 +181,7 @@ public class ShardManager<K, V> {
         Optional<ProcessingShard<K, V>> shardOpt = getShard(key);
 
         // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
+        // If not, no point to remove the shard, as it will be reused for the next message from the same partition
         boolean keyOrdering = options.getOrdering().equals(KEY);
         if (keyOrdering && shardOpt.isPresent() && shardOpt.get().isEmpty()) {
             log.trace("Removing empty shard (key: {})", key);
@@ -219,20 +227,25 @@ public class ShardManager<K, V> {
     }
 
     public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
-        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator = getIterator(iterationResumePoint);
+        LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator =
+                new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
 
         //
         List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
 
-        //
-        while (workFromAllShards.size() < requestedMaxWorkToRetrieve && shardQueueIterator.hasNext()) {
-            var shardEntry = shardQueueIterator.next();
-            ProcessingShard<K, V> shard = shardEntry.getValue();
+        // loop over shards, and get work from each
+        Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> next = shardQueueIterator.next();
+        while (workFromAllShards.size() < requestedMaxWorkToRetrieve && next.isPresent()) {
+            var shardEntry = next;
+            ProcessingShard<K, V> shard = shardEntry.get().getValue();
 
             //
             int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
             var work = shard.getWorkIfAvailable(remainingToGet);
             workFromAllShards.addAll(work);
+
+            // next
+            next = shardQueueIterator.next();
         }
 
         // log
@@ -241,15 +254,15 @@ public class ShardManager<K, V> {
         }
 
         //
-        updateResumePoint(shardQueueIterator);
+        updateResumePoint(next);
 
         return workFromAllShards;
     }
 
-    private void updateResumePoint(LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator) {
-        if (shardQueueIterator.hasNext()) {
-            var shardEntry = shardQueueIterator.next();
-            this.iterationResumePoint = Optional.of(shardEntry.getKey());
+    private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {
+        // if empty, iteration was exhausted and no resume point is needed
+        iterationResumePoint = lastShard.map(Map.Entry::getKey);
+        if (iterationResumePoint.isPresent()) {
             log.debug("Work taken is now over max, stopping (saving iteration resume point {})", iterationResumePoint);
         }
     }

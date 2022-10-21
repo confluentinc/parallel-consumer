@@ -72,7 +72,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         setupParallelConsumerInstance(commitMode);
 
         parallelConsumer.poll((ignore) -> {
-            throw new RuntimeException("My user's function error");
+            throw new FakeRuntimeException("My user's function error");
         });
 
         // let it process
