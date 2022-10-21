@@ -12,6 +12,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -24,9 +25,9 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
      * Get offsets from {@link WorkManager} that are ready to commit
      */
     @Override
-    public void retrieveOffsetsAndCommit() {
-        log.debug("Commit starting - find completed work to commit offsets");
-        preAcquireWork();
+    public void retrieveOffsetsAndCommit() throws TimeoutException, InterruptedException {
+        log.debug("Find completed work to commit offsets");
+        preAcquireOffsetsToCommit();
         try {
             var offsetsToCommit = wm.collectCommitDataForDirtyPartitions();
             if (offsetsToCommit.isEmpty()) {
@@ -35,7 +36,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
                 log.debug("Will commit offsets for {} partition(s): {}", offsetsToCommit.size(), offsetsToCommit);
                 ConsumerGroupMetadata groupMetadata = consumerMgr.groupMetadata();
 
-                log.debug("Begin commit");
+                log.debug("Begin commit offsets");
                 commitOffsets(offsetsToCommit, groupMetadata);
 
                 log.debug("On commit success");
@@ -50,7 +51,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         // default noop
     }
 
-    protected void preAcquireWork() {
+    protected void preAcquireOffsetsToCommit() throws TimeoutException, InterruptedException {
         // default noop
     }
 

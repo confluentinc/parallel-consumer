@@ -18,12 +18,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 
@@ -70,7 +66,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
-    void commit() {
+    void commit() throws TimeoutException, InterruptedException {
         if (isOwner()) {
             retrieveOffsetsAndCommit();
         } else if (isSync()) {
@@ -149,14 +145,15 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         int attempts = 0;
         while (waitingOnCommitResponse) {
             if (attempts > ARBITRARY_RETRY_LIMIT)
-                throw new InternalRuntimeError("Too many attempts taking commit responses");
+                throw new InternalRuntimeException("Too many attempts taking commit responses");
 
             try {
                 log.debug("Waiting on a commit response");
                 Duration timeout = AbstractParallelEoSStreamProcessor.DEFAULT_TIMEOUT;
                 CommitResponse take = commitResponseQueue.poll(commitTimeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
-                if (take == null)
-                    throw new InternalRuntimeError(msg("Timeout waiting for commit response {} to request {}", timeout, commitRequest));
+                if (take == null) {
+                    throw InternalRuntimeException.msg("Timeout waiting for commit response {} to request {}", timeout, commitRequest);
+                }
                 waitingOnCommitResponse = take.getRequest().getId() != commitRequest.getId();
             } catch (InterruptedException e) {
                 log.debug("Interrupted waiting for commit response, retrying", e);
@@ -172,7 +169,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         return request;
     }
 
-    void maybeDoCommit() {
+    void maybeDoCommit() throws TimeoutException, InterruptedException {
         CommitRequest poll = commitRequestQueue.poll();
         if (poll != null) {
             log.debug("Commit requested, performing...");

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.JavaUtils.toTreeSet;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,8 +28,8 @@ class RunLengthEncoderTest {
     @SneakyThrows
     @Test
     void noGaps() {
-        Set<Long> incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
-        Set<Long> completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
+        var incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(toTreeSet());
+        var completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(toTreeSet());
         List<Integer> runs = UniLists.of(1, 3, 1, 1, 3, 1, 1);
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
 
@@ -68,8 +69,8 @@ class RunLengthEncoderTest {
     @SneakyThrows
     @Test
     void noGapsSerialisation() {
-        Set<Long> incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
-        Set<Long> completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
+        var incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(toTreeSet()); // lol - DRY!
+        var completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(toTreeSet()); // lol - DRY!
         List<Integer> runs = UniLists.of(1, 3, 1, 1, 3, 1, 1);
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
 
@@ -110,10 +111,10 @@ class RunLengthEncoderTest {
     @SneakyThrows
     @Test
     void gapsInOffsetsWork() {
-        Set<Long> incompletes = UniSets.of(0, 6, 10).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
+        var incompletes = UniSets.of(0, 6, 10).stream().map(x -> (long) x).collect(toTreeSet());
 
         // NB: gaps between completed offsets get encoded as succeeded offsets. This doesn't matter because they don't exist and we'll neve see them.
-        Set<Long> completes = UniSets.of(1, 2, 3, 4, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
+        Set<Long> completes = UniSets.of(1, 2, 3, 4, 5, 9).stream().map(x -> (long) x).collect(Collectors.toSet());
         List<Integer> runs = UniLists.of(1, 5, 3, 1, 1);
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
 

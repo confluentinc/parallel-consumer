@@ -26,8 +26,7 @@ import java.util.stream.Collectors;
  * Used in tests to stub out the behaviour of the real Broker and Client's long polling system (the mock Kafka Consumer
  * doesn't have this behaviour).
  *
- * @param <K>
- * @param <V>
+ * @author Antony Stubbs
  */
 @ToString
 @Slf4j

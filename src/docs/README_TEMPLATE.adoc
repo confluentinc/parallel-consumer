@@ -54,9 +54,11 @@ image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelcons
 
 Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with *key concurrency* and *extendable non-blocking IO* processing.
 
-Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project].
+Confluent's https://www.confluent.io/confluent-accelerators/#parallel-consumer[product page for the project is here].
 
-NOTE: This is not a part of Confluent's commercial support offering, except through consulting engagements.
+TIP: If you like this project, please ⭐ Star it in GitHub to show your appreciation, help us gauge popularity of the project and allocate resources.
+
+NOTE: This is not a part of the Confluent commercial support offering, except through consulting engagements.
 See the <<Support and Issues>> section for more information.
 
 IMPORTANT: This project has been stable and reached its initial target feature set in Q1 2021.
@@ -243,6 +245,9 @@ without operational burden or harming the cluster's performance
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
 ** Reactor.io Publisher (Mono/Flux) and Java's CompletableFuture (through `Mono#fromFuture`)
+* Exactly Once bulk transaction system
+** When using the transactional mode, record processing that happens in parallel and produce records back to kafka get all grouped into a large batch transaction, and the offsets and records are submitted through the transactional producer, giving you Exactly once Semantics for parallel processing.
+** For further information, see the <<transaction-system>> section.
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility
@@ -636,7 +641,11 @@ Ordering guarantees will always be adhered to, regardless of failure.
 A failure is denoted by *any* exception being thrown from the user's processing function.
 The system catches these exceptions, logs them and replaces the record in the queue for processing later.
 All types of Exceptions thrown are considered retriable.
-To not retry a record, do not throw an exception from your processing fuction.
+To not retry a record, do not throw an exception from your processing function.
+
+TIP:: To avoid the system logging an error, throw an exception which extends PCRetriableException.
+
+TIP:: If there was an error processing a record, and you'd like to skip it - do not throw an exception, and the system will mark the record as succeeded.
 
 If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the system will treat the same way.
 
@@ -732,6 +741,7 @@ The `transactional` mode is explained in the next section.
 If you're used to using the auto commit mode in the normal Kafka consumer, you can think of the `Asynchronous` mode being similar to this.
 We suggest starting with this mode, and it is the default.
 
+[[transaction-system]]
 === Apache Kafka EoS Transaction Model
 
 There is also the option to use Kafka's Exactly Once Semantics (EoS) system.
@@ -744,6 +754,12 @@ NOTE:: As with the `synchronous` processing mode, this will also block the proce
 CAUTION: This cannot be true for any externally integrated third party system, unless that system is __idempotent__.
 
 For implementations details, see the <<Transactional System Architecture>> section.
+
+.From the Options Javadoc
+[source,java,indent=0]
+----
+include::{project_root}/parallel-consumer-core/src/main/java/io/confluent/parallelconsumer/ParallelConsumerOptions.java[tag=transactionalJavadoc]
+----
 
 [[streams-usage]]
 == Using with Kafka Streams
@@ -1005,12 +1021,29 @@ If both serialised formats are significantly large, they are then both compresse
 *** Completely random offset maps, compressed and uncompressed `BitSet` is roughly the same (2000 entries, uncompressed bitset: 250, compressed: 259, compressed bytes array: 477)
 *** Very large maps (20,000 entries), a compressed `BitSet` seems to be significantly smaller again if random.
 * Gets stored along with base offset for each partition, in the offset `commitsync` `metadata` string
-* The offset commit metadata has a hardcoded limit of 4096 bytes per partition (@see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`)
+* The offset commit metadata has a hardcoded limit of 4096 bytes (4 kb) per partition (@see `kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = 4096`)
 ** Because of this, if our map doesn't fit into this, we have to drop it and not use it, losing the shorter replay benefits.
-However with runlength encoding and typical offset patterns this should be quite rare.
+However, with runlength encoding and typical offset patterns this should be quite rare.
 *** Work is being done on continuous and predictive space requirements, which will optionally prevent the system from continuing past a point by introducing local backpressure which it can't proceed without dropping the encoded map information - see https://github.com/confluentinc/parallel-consumer/issues/53[Exact continuous offset encoding for precise offset payload size back pressure].
 ** Not being able to fit the map into the metadata, depends on message acknowledgement patterns in the use case and the numbers of messages involved.
-Also the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
+Also, the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
+
+===== FAQ
+
+[qanda]
+If for example, offset 5 cannot be processed for whatever reason, does it cause the committed offset to stick to 5?::
+Yes - the committed offset would "stick" to 5, with the metadata payload containing all the per msg ack's beyond 5.
++
+(Reference: https://github.com/confluentinc/parallel-consumer/issues/415#issuecomment-1256022394[#415])
+
+In the above scenario, would the system eventually exceed the OffsetMap size limit?::
+No, as if the payload size hits 75% or more of the limit (4kB), the back pressure system kicks in, and no more records will be taken for processing, until it drops below 75% again.
+Instead, it will keep retrying existing records.
++
+However, note that if the only record to continually fail is 5, and all others succeed, let's say offset 6-50,000, then the metadata payload is only ~2 shorts (1 and (50,000-6=) 49,994), as it will use run length encoding.
+So it's very efficient.
++
+(Reference: https://github.com/confluentinc/parallel-consumer/issues/415#issuecomment-1256022394[#415])
 
 == Attribution
 

@@ -49,9 +49,14 @@ public class ConsumerSubject extends ConsumerParentSubject {
 
     private final Duration timeout = Duration.ofSeconds(10);
 
+    public CommitHistorySubject hasCommittedToPartition(String topic, int partition) {
+        TopicPartition topicPartition = new TopicPartition(topic, partition);
+        return hasCommittedToPartition(topicPartition);
+    }
+
     public CommitHistorySubject hasCommittedToPartition(TopicPartition topicPartitions) {
-        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(UniSets.of(topicPartitions));
-        return map.values().stream()
+        Map<TopicPartition, CommitHistorySubject> rawCommitHistory = hasCommittedToPartition(UniSets.of(topicPartitions));
+        return rawCommitHistory.values().stream()
                 .findFirst()
                 .orElse(
                         check("getCommitHistory(%s)", topicPartitions.topic())

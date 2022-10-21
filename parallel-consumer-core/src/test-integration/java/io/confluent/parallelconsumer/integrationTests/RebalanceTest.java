@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.RESUE_GROUP;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.REUSE_GROUP;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.equalTo;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
@@ -30,6 +31,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
  *
  * @author Antony Stubbs
  */
+@Slf4j
 class RebalanceTest extends BrokerIntegrationTest<String, String> {
 
     Consumer<String, String> consumer;
@@ -63,26 +65,35 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
     @SneakyThrows
     @Test
     void commitUponRevoke() {
-        var recordsCount = 20L;
+        var numberOfRecordsToProduce = 20L;
         var count = new AtomicLong();
 
         //
-        kcu.produceMessages(topic, recordsCount);
+        getKcu().produceMessages(topic, numberOfRecordsToProduce);
 
         // effectively disable commit
         pc.setTimeBetweenCommits(INFINITE);
 
         // consume all the messages
-        pc.poll(recordContexts -> count.getAndIncrement());
-        await().untilAtomic(count, is(equalTo(recordsCount)));
+        pc.poll(recordContexts -> {
+            count.getAndIncrement();
+            log.debug("Processed record, count now {} - offset: {}", count, recordContexts.offset());
+        });
+        await().untilAtomic(count, is(equalTo(numberOfRecordsToProduce)));
+        log.debug("All records consumed");
 
         // cause rebalance
-        var newConsumer = kcu.createNewConsumer(RESUE_GROUP);
+        final Duration newPollTimeout = Duration.ofSeconds(5);
+        log.debug("Creating new consumer in same group and subscribing to same topic set with a no record timeout of {}, expect this phase to take entire timeout...", newPollTimeout);
+        var newConsumer = getKcu().createNewConsumer(REUSE_GROUP);
         newConsumer.subscribe(UniLists.of(topic));
-        ConsumerRecords<Object, Object> poll = newConsumer.poll(Duration.ofSeconds(5));
+        log.debug("Polling with new group member for records with timeout {}...", newPollTimeout);
+        ConsumerRecords<Object, Object> newConsumersPollResult = newConsumer.poll(newPollTimeout);
+        log.debug("Poll complete");
 
         // make sure only there are no duplicates
-        assertThat(poll).hasCountEqualTo(0);
+        assertThat(newConsumersPollResult).hasCountEqualTo(0);
+        log.debug("Test finished");
     }
 
 }

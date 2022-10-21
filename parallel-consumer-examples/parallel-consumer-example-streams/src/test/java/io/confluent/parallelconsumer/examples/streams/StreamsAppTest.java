@@ -27,7 +27,7 @@ public class StreamsAppTest extends BrokerIntegrationTest<String, String> {
 
         coreApp.run();
 
-        try (Producer<String, String> kafkaProducer = kcu.createNewProducer(false)) {
+        try (Producer<String, String> kafkaProducer = getKcu().createNewProducer(false)) {
 
             kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic, "a key 1", "a value"));
             kafkaProducer.send(new ProducerRecord<>(StreamsApp.inputTopic, "a key 2", "a value"));
@@ -46,12 +46,12 @@ public class StreamsAppTest extends BrokerIntegrationTest<String, String> {
 
         @Override
         Consumer<String, String> getKafkaConsumer() {
-            return kcu.getConsumer();
+            return getKcu().getConsumer();
         }
 
         @Override
         Producer<String, String> getKafkaProducer() {
-            return kcu.createNewProducer(false);
+            return getKcu().createNewProducer(false);
         }
 
         @Override

@@ -1,9 +1,9 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,6 +19,7 @@ import static io.confluent.csid.utils.Range.range;
  * <p>
  * todo unify or refactor with {@link BitSetEncoder}. Why was it ever seperate?
  *
+ * @author Antony Stubbs
  * @see BitSetEncoder
  */
 @Slf4j
@@ -56,7 +57,7 @@ public class OffsetBitSet {
         int originalBitsetSize = switch (encoding) {
             case BitSet -> wrap.getShort();
             case BitSetV2 -> wrap.getInt();
-            default -> throw new InternalRuntimeError("Invalid state");
+            default -> throw new InternalRuntimeException("Invalid state");
         };
         ByteBuffer slice = wrap.slice();
         Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);

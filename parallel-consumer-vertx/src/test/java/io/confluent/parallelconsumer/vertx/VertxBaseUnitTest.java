@@ -12,8 +12,6 @@ import io.vertx.core.VertxOptions;
 import io.vertx.ext.web.client.WebClient;
 import org.junit.jupiter.api.BeforeEach;
 
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
-
 public abstract class VertxBaseUnitTest extends ParallelEoSStreamProcessorTestBase {
 
     JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
@@ -24,7 +22,6 @@ public abstract class VertxBaseUnitTest extends ParallelEoSStreamProcessorTestBa
         Vertx vertx = Vertx.vertx(vertxOptions);
         WebClient wc = WebClient.create(vertx);
         var build = parallelConsumerOptions.toBuilder()
-                .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER) // force tx
                 .maxConcurrency(10)
                 .build();
         vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(vertx, wc, build);

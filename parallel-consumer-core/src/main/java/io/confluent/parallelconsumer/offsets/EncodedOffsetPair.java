@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -23,6 +23,10 @@ import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.de
 import static io.confluent.parallelconsumer.offsets.OffsetSimpleSerialisation.deserialiseByteArrayToBitMapString;
 
 /**
+ * Encapsulates the encoding type, and the actual encoded data, when creating an offset map encoding. Central place for
+ * decoding  the data.
+ *
+ * @author Antony Stubbs
  * @see #unwrap
  */
 @Slf4j
@@ -91,7 +95,8 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrap(data, v2);
             case RunLengthV2 -> deserialiseBitSetWrap(data, v2);
             case RunLengthV2Compressed -> deserialiseBitSetWrap(data, v2);
-            default -> throw new InternalRuntimeError("Invalid state"); // todo why is this needed? what's not covered?
+            default ->
+                    throw new InternalRuntimeException("Invalid state"); // todo why is this needed? what's not covered?
         };
         return binaryArrayString;
     }
@@ -109,7 +114,8 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrapToIncompletes(BitSetV2, baseOffset, decompressZstd(data));
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
-            default -> throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
+            default ->
+                    throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };
         return binaryArrayString;
     }
