@@ -490,8 +490,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var msg8Lock = new CountDownLatch(1);
 
         final var processedState = new HashMap<Integer, Boolean>();
-        for (Long msgIndex : Range.range(8)) {
-            processedState.put(msgIndex.intValue(), false);
+        for (Integer msgIndex : Range.range(8).listAsIntegers()) {
+            processedState.put(msgIndex, false);
         }
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock, msg4Lock, msg5Lock, msg6Lock, msg7Lock, msg8Lock);

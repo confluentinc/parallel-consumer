@@ -4,13 +4,14 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.MathUtils;
+import io.confluent.csid.utils.Range;
 import lombok.Getter;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.LongStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
@@ -90,14 +91,18 @@ public class RunLengthEncoder extends OffsetEncoder {
         for (final Long runLength : runLengthEncodingLongs) {
             switch (version) {
                 case v1 -> {
-                    final short shortCastRunlength = runLength.shortValue();
-//                    final short shortCastRunlength = MathUtils.toShortExact(runLength);
-                    if (runLength != shortCastRunlength)
-                        throw new RunlengthV1EncodingNotSupported(msg("Runlength too long for Short ({} cast to {})", runLength, shortCastRunlength));
-                    runLengthEncodedByteBuffer.putShort(shortCastRunlength);
+                    try {
+                        runLengthEncodedByteBuffer.putShort(MathUtils.toShortExact(runLength));
+                    } catch (ArithmeticException e) {
+                        throw new RunlengthV1EncodingNotSupported(msg("Run-length too long for Short ({} vs max value of short is {})", runLength, Short.MAX_VALUE), e);
+                    }
                 }
                 case v2 -> {
-                    runLengthEncodedByteBuffer.putInt(Math.toIntExact(runLength));
+                    try {
+                        runLengthEncodedByteBuffer.putInt(Math.toIntExact(runLength));
+                    } catch (ArithmeticException e) {
+                        throw new RunlengthV1EncodingNotSupported(msg("Run-length too long for Integer ({} vs max value of Integer is {})", runLength, Integer.MAX_VALUE), e);
+                    }
                 }
                 case v3 -> {
                     runLengthEncodedByteBuffer.putLong(runLength);
@@ -152,10 +157,10 @@ public class RunLengthEncoder extends OffsetEncoder {
         for (final long run : runLengthEncodingLongs) {
             if (succeeded) {
                 final long finalOffsetPosition = offsetPosition;
-                LongStream.range(0, run).forEachOrdered(longIndex -> {
+                for (var longIndex : Range.range(run)) {
                     long newGoodOffset = finalOffsetPosition + longIndex;
                     successfulOffsets.add(newGoodOffset);
-                });
+                }
             }
             offsetPosition += run;
             succeeded = !succeeded;

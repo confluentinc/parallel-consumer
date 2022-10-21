@@ -182,7 +182,7 @@ public class OffsetSimultaneousEncoder {
         try {
             encoders.add(new ByteBufferEncoder(lengthBetweenBaseAndHighOffset, this));
         } catch (ArithmeticException a) {
-            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
+            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage(), a);
         }
     }
 

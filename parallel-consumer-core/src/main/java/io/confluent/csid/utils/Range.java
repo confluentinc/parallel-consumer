@@ -79,7 +79,7 @@ public class Range implements Iterable<Long> {
     /**
      * Potentially slow, but useful for tests
      */
-    protected List<Integer> listAsIntegers() {
+    public List<Integer> listAsIntegers() {
         ArrayList<Integer> integers = new ArrayList<>();
         forEach(e -> integers.add(Math.toIntExact(e)));
         return integers;
