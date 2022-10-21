@@ -49,7 +49,7 @@ import static lombok.AccessLevel.*;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInterface, ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
     /*
      * This is a bit of a GOD class now, and so care should be taken not to expand it's scope furhter. Where possible,
