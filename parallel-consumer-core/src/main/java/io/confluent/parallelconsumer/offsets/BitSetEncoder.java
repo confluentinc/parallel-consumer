@@ -74,7 +74,7 @@ public class BitSetEncoder extends OffsetEncoder {
 
         this.originalLength = length;
 
-        // prep bit set buffer
+        // prep bit set buffer, range check above
         bitSet = new BitSet(Math.toIntExact(length));
     }
 
