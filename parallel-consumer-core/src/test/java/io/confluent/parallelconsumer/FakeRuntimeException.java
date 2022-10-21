@@ -7,7 +7,7 @@ package io.confluent.parallelconsumer;
 import lombok.experimental.StandardException;
 
 /**
- * Used for testing error handling - easier to identify than a plan exception.
+ * Used for testing error handling - easier to identify than a plain exception.
  *
  * @author Antony Stubbs
  */

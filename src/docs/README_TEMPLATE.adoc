@@ -645,7 +645,7 @@ To not retry a record, do not throw an exception from your processing function.
 
 TIP:: To avoid the system logging an error, throw an exception which extends RetriableException.
 
-TIP:: If there was an error procesing eh record, and you'd like to skip it - do not throw an exception, and the system will mark the record as succeeded.
+TIP:: If there was an error processing a record, and you'd like to skip it - do not throw an exception, and the system will mark the record as succeeded.
 
 If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the system will treat the same way.
 
