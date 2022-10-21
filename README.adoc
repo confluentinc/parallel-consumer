@@ -1,7 +1,7 @@
 //
 // STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
-// Do NOT edit /README_TEMPLATE.adoc as your changes will be overwritten when the template is rendered again during
+// Do NOT edit /README.adoc as your changes will be overwritten when the template is rendered again during
 // `process-sources`.
 //
 // Changes made to this template, must then be rendered to the base readme, by running `mvn process-sources`
@@ -258,6 +258,7 @@ without operational burden or harming the cluster's performance
 * Manual global pause / resume of all partitions, without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
 ** Circuit breaker patterns for individual paritions or keys can be done through throwing failure exceptions in the processing function (see https://github.com/confluentinc/parallel-consumer/pull/291[PR #291 Explicit terminal and retriable exceptions] for further refinement)
 ** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
+* High-level Python API
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
@@ -653,6 +654,37 @@ From the `Clients` view, get the connection information customized to your clust
 .. Use these settings presented to https://docs.confluent.io/clients-kafka-java/current/overview.html[configure your clients].
 . Use these clients for steps outlined in the <<common_preparation>> section.
 
+
+[[python]]
+=== Python
+
+**EXPERIMENTAL FEATURE**
+
+Parallel Consumer is available from Python via the `pyallel_consumer` package.
+
+It is hosted on https://pypi.org/project/pyallel-consumer/[PyPi] and can be installed with `pip install pyallel-consumer`
+
+You can import the parallel consumer Java package as a Python package.
+All parallel consumer classes and functions are accessible from this, with support for passing Python objects as
+arguments including functions.
+Imports are aliased under `jio` to avoid conflicts with the std-lib `io.py` module.
+
+```python
+from jio.confluent.parallelconsumer import ParallelConsumerOptions, ParallelStreamProcessor
+...
+options = ParallelConsumerOptions.builder() \
+        .ordering(ParallelConsumerOptions.ProcessingOrder.KEY) \
+        .maxConcurrency(1000) \
+        .consumer(consumer) \
+        .producer(producer) \
+        .build()
+processor = ParallelStreamProcessor.createEosStreamProcessor(options)
+processor.subscribe([topic])
+processor.poll(lambda o: print(f"Concurrently processing a record: {o}"))
+```
+
+See the `parallel-consumer-python` [README](./parallel-consumer-python/README.adoc) for more information.
+
 [[upgrading]]
 == Upgrading
 
@@ -1025,6 +1057,7 @@ For features in development, have a look at the https://github.com/confluentinc/
 ** For use with Connect:
 *** Source: simply consume from the topic that your Connect plugin is publishing to
 *** Sink: use the poll and producer style API and publish the records to the topic that the connector is sinking from
+** Pyallel Consumer: Python v3.5+
 * Server side
 ** Should work with any cluster that the linked AK client library works with
 *** If using EoS/Transactions, needs a cluster setup that supports EoS/transactions
@@ -1288,6 +1321,10 @@ toc::[]
 endif::[]
 
 == 0.5.2.4
+
+=== Features
+
+* Python client available as pyallel_consumer package
 
 === Fixes
 

@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 import random
 import string
 from pathlib import Path
@@ -28,6 +32,9 @@ from org.apache.kafka.clients.producer import ProducerConfig, KafkaProducer, Pro
 from org.apache.kafka.clients.consumer import ConsumerConfig, KafkaConsumer, OffsetResetStrategy
 
 from jio.confluent.parallelconsumer import ParallelConsumerOptions, ParallelStreamProcessor
+
+
+MAX_TIMEOUT = (1, MINUTE)
 
 
 @fixture(scope='module')
@@ -88,7 +95,7 @@ def consumer(common_props) -> KafkaConsumer:
 
 @fixture
 def num_messages() -> int:
-    return 4000
+    return 4_000
 
 
 @fixture
@@ -136,7 +143,7 @@ def consume_messages(consumer: KafkaConsumer, num_messages: int):
 
     newCachedThreadPool().submit(JProxy(Callable, dict(call=process_messages)))
     success_criterion = lambda: count.get() == num_messages
-    wait().at_most(1, MINUTE).until(success_criterion)
+    wait().at_most(*MAX_TIMEOUT).until(success_criterion)
     assert success_criterion()
 
 
@@ -157,7 +164,7 @@ def parallel_consume_messages(processor, num_messages):
 
     processor.poll(process_message)
     success_criterion = lambda: count.get() >= num_messages
-    wait().at_most(1, MINUTE).until(success_criterion)
+    wait().at_most(*MAX_TIMEOUT).until(success_criterion)
     processor.close()
     assert success_criterion()
 

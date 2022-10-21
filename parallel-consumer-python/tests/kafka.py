@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 from typing import Dict, Union
 
 import jpype

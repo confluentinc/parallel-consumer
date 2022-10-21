@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 from examples.kafka import get_consumer, create_topic
 from pyallel_consumer import load_config
 
