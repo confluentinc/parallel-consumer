@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.MathUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -102,7 +103,7 @@ public class BitSetEncoder extends OffsetEncoder {
         final ByteBuffer wrappedBitSetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
 
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-        wrappedBitSetBytesBuffer.putInt((int) bitsetEntriesRequired);
+        wrappedBitSetBytesBuffer.putInt(Math.toIntExact(bitsetEntriesRequired));
 
         return wrappedBitSetBytesBuffer;
     }
@@ -122,7 +123,7 @@ public class BitSetEncoder extends OffsetEncoder {
         final ByteBuffer wrappedBitSetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
 
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-        wrappedBitSetBytesBuffer.putShort((short) bitsetEntriesRequired);
+        wrappedBitSetBytesBuffer.putShort(MathUtils.toShortExact(bitsetEntriesRequired));
 
         return wrappedBitSetBytesBuffer;
     }
