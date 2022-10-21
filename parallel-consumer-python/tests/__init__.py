@@ -4,6 +4,7 @@
 
 import time
 from functools import wraps
+from random import randint
 from typing import Callable
 
 
@@ -18,3 +19,7 @@ def timeit(fn: Callable):
         return result
 
     return inner_log_time
+
+
+def sleep_a_bit():
+    time.sleep(randint(0, 5) / 1000)
