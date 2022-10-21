@@ -8,11 +8,12 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 /**
- * Range function for Java
+ * Range function for Java that provides an Iterable, not just an Iterator which {@link java.util.stream.LongStream#range#iterator()} can.
  * <p>
  * https://stackoverflow.com/a/16570509/105741
  *
@@ -20,7 +21,7 @@ import java.util.stream.IntStream;
  * @deprecated use {@link java.util.stream.LongStream#range} instead
  */
 @Deprecated
-public class Range implements Iterable<Integer> {
+public class Range implements Iterable<Long> {
 
     private final long limit;
 
@@ -28,22 +29,12 @@ public class Range implements Iterable<Integer> {
         this.limit = limit;
     }
 
-    /**
-     * Exclusive of max
-     *
-     * @deprecated use {@link java.util.stream.LongStream#range} instead
-     */
-    @Deprecated
-    public static Range range(long max) {
-        return new Range(max);
-    }
-
     @Override
-    public Iterator<Integer> iterator() {
+    public Iterator<Long> iterator() {
         final long max = limit;
-        return new Iterator<Integer>() {
+        return new Iterator<>() {
 
-            private int current = 0;
+            private long current = 0;
 
             @Override
             public boolean hasNext() {
@@ -51,7 +42,7 @@ public class Range implements Iterable<Integer> {
             }
 
             @Override
-            public Integer next() {
+            public Long next() {
                 if (hasNext()) {
                     return current++;
                 } else {
@@ -66,23 +57,26 @@ public class Range implements Iterable<Integer> {
         };
     }
 
-    public List<Integer> list() {
-        ArrayList<Integer> integers = new ArrayList<Integer>();
-        forEach(integers::add);
+    public List<Integer> listAsIntegers() {
+        ArrayList<Integer> integers = new ArrayList<>();
+        forEach(e -> integers.add(Math.toIntExact(e)));
         return integers;
     }
 
-    public IntStream toStream() {
-        return IntStream.range(0, (int) limit);
+    public LongStream toStream() {
+        return LongStream.range(0, limit);
     }
 
-    static IntStream rangeStream(int i) {
-        return IntStream.range(0, i);
-    }
-
-    static void range(int max, Consumer<Integer> consumer) {
+    static void range(int max, IntConsumer consumer) {
         IntStream.range(0, max)
-                .forEach(consumer::accept);
+                .forEach(consumer);
+    }
+
+    /**
+     * Exclusive of max
+     */
+    public static Range range(long max) {
+        return new Range(max);
     }
 
 }

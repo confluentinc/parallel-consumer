@@ -28,16 +28,16 @@ public abstract class OffsetEncoder {
 
     protected abstract OffsetEncoding getEncodingTypeCompressed();
 
-    abstract void encodeIncompleteOffset(final int rangeIndex);
+    abstract void encodeIncompleteOffset(final long relativeOffset);
 
-    abstract void encodeCompletedOffset(final int rangeIndex);
+    abstract void encodeCompletedOffset(final long relativeOffset);
 
     abstract byte[] serialise() throws EncodingNotSupportedException;
 
     abstract int getEncodedSize();
 
     boolean quiteSmall() {
-        return this.getEncodedSize() < OffsetSimultaneousEncoder.LARGE_INPUT_MAP_SIZE_THRESHOLD;
+        return this.getEncodedSize() < OffsetSimultaneousEncoder.LARGE_ENCODED_SIZE_THRESHOLD_BYTES;
     }
 
     byte[] compress() throws IOException {

@@ -19,9 +19,11 @@ public class ByteBufferEncoder extends OffsetEncoder {
 
     private final ByteBuffer bytesBuffer;
 
-    public ByteBufferEncoder(final int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
+    public ByteBufferEncoder(long length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
         super(offsetSimultaneousEncoder);
-        this.bytesBuffer = ByteBuffer.allocate(1 + length);
+        // safe cast the length to an int, as we're not expecting to have more than 2^31 offsets
+        final int safeCast = Math.toIntExact(length);
+        this.bytesBuffer = ByteBuffer.allocate(1 + safeCast);
     }
 
     @Override
@@ -35,12 +37,12 @@ public class ByteBufferEncoder extends OffsetEncoder {
     }
 
     @Override
-    public void encodeIncompleteOffset(final int rangeIndex) {
+    public void encodeIncompleteOffset(final long relativeOffset) {
         this.bytesBuffer.put((byte) 0);
     }
 
     @Override
-    public void encodeCompletedOffset(final int rangeIndex) {
+    public void encodeCompletedOffset(final long relativeOffset) {
         this.bytesBuffer.put((byte) 1);
     }
 

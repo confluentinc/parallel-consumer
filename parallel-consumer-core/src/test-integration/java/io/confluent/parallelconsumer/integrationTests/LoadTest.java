@@ -163,7 +163,7 @@ public class LoadTest extends DbTest {
     private void publishMessages(int keyRange, int total, String topic) {
 
         // produce data
-        var keys = range(keyRange).list();
+        var keys = range(keyRange).listAsIntegers();
         var integers = Lists.newArrayList(IntStream.range(0, total).iterator());
 
         // publish

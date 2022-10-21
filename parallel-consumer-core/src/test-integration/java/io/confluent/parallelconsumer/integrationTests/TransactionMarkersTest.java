@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
@@ -157,7 +158,7 @@ public class TransactionMarkersTest extends BrokerIntegrationTest<String, String
                     log.debug(msg("{} over block limit of {}, blocking...", index, blockOver));
                     Thread.sleep(Long.MAX_VALUE);
                 } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                    throw new FakeRuntimeException(e);
                 }
             }
         });

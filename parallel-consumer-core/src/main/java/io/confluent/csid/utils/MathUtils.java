@@ -4,9 +4,12 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import lombok.experimental.UtilityClass;
+
 /**
  * @author Antony Stubbs
  */
+@UtilityClass
 public class MathUtils {
 
     /**
@@ -17,9 +20,10 @@ public class MathUtils {
      * @see Math#toIntExact
      */
     public static short toShortExact(long value) {
-        if ((short) value != value) {
+        final short shortCast = (short) value;
+        if (shortCast != value) {
             throw new ArithmeticException("short overflow");
         }
-        return (short) value;
+        return shortCast;
     }
 }

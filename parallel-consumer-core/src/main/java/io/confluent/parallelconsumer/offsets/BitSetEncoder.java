@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.MathUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -47,33 +48,38 @@ public class BitSetEncoder extends OffsetEncoder {
 
     private static final Version DEFAULT_VERSION = Version.v2;
 
+    /**
+     * {@link BitSet} only supports {@link Integer#MAX_VALUE) bits
+     */
     public static final Integer MAX_LENGTH_ENCODABLE = Integer.MAX_VALUE;
 
     @Getter
     private final BitSet bitSet;
 
-    private final int originalLength;
+    private final long originalLength;
 
     private Optional<byte[]> encodedBytes = Optional.empty();
-
-    public BitSetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) throws BitSetEncodingNotSupportedException {
-        this(length, offsetSimultaneousEncoder, DEFAULT_VERSION);
-    }
 
     /**
      * @param length the difference between the highest and lowest offset to be encoded
      */
-    public BitSetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) throws BitSetEncodingNotSupportedException {
+    public BitSetEncoder(long length, OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) throws BitSetEncodingNotSupportedException {
         super(offsetSimultaneousEncoder);
 
         this.version = newVersion;
 
-        bitSet = new BitSet(length);
+
+        if (length > MAX_LENGTH_ENCODABLE) {
+            throw new BitSetEncodingNotSupportedException("BitSet only supports " + MAX_LENGTH_ENCODABLE + " bits, but " + length + " were requested");
+        }
 
         this.originalLength = length;
+
+        // prep bit set buffer
+        bitSet = new BitSet(Math.toIntExact(length));
     }
 
-    private ByteBuffer constructWrappedByteBuffer(final int length, final Version newVersion) throws BitSetEncodingNotSupportedException {
+    private ByteBuffer constructWrappedByteBuffer(long length, Version newVersion) throws BitSetEncodingNotSupportedException {
         return switch (newVersion) {
             case v1 -> initV1(length);
             case v2 -> initV2(length);
@@ -87,20 +93,19 @@ public class BitSetEncoder extends OffsetEncoder {
      * Integer.MAX_VALUE should always be good enough as system restricts large from being processed at once.
      */
     // TODO refactor inivtV2 and V1 together, passing in the Short or Integer
-    private ByteBuffer initV2(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
+    private ByteBuffer initV2(long bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > MAX_LENGTH_ENCODABLE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
             throw new BitSetEncodingNotSupportedException(StringUtils.msg("BitSet V2 too long to encode, as length overflows Integer.MAX_VALUE. Length: {}. (max: {})", bitsetEntriesRequired, MAX_LENGTH_ENCODABLE));
         }
 
-        // prep bit set buffer
         int bytesRequiredForEntries = (int) (Math.ceil((double) bitsetEntriesRequired / Byte.SIZE));
         int lengthEntryWidth = Integer.BYTES;
         int wrappedBufferLength = lengthEntryWidth + bytesRequiredForEntries + 1;
         final ByteBuffer wrappedBitSetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
 
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-        wrappedBitSetBytesBuffer.putInt(bitsetEntriesRequired);
+        wrappedBitSetBytesBuffer.putInt(Math.toIntExact(bitsetEntriesRequired));
 
         return wrappedBitSetBytesBuffer;
     }
@@ -108,20 +113,19 @@ public class BitSetEncoder extends OffsetEncoder {
     /**
      * This was a bit "short" sighted of me....
      */
-    private ByteBuffer initV1(int bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
+    private ByteBuffer initV1(long bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > Short.MAX_VALUE) {
             // need to upgrade to using Integer for the bitset length, but can't change serialisation format in-place
             throw new BitSetEncodingNotSupportedException("Input too long to encode for BitSet V1, length overflows Short.MAX_VALUE: " + bitsetEntriesRequired + ". (max: " + Short.MAX_VALUE + ")");
         }
 
-        // prep bit set buffer
         int bytesRequiredForEntries = (int) (Math.ceil((double) bitsetEntriesRequired / Byte.SIZE));
         int lengthEntryWidth = Short.BYTES;
         int wrappedBufferLength = lengthEntryWidth + bytesRequiredForEntries + 1;
         final ByteBuffer wrappedBitSetBytesBuffer = ByteBuffer.allocate(wrappedBufferLength);
 
         // bitset doesn't serialise it's set capacity, so we have to as the unused capacity actually means something
-        wrappedBitSetBytesBuffer.putShort((short) bitsetEntriesRequired);
+        wrappedBitSetBytesBuffer.putShort(MathUtils.toShortExact(bitsetEntriesRequired));
 
         return wrappedBitSetBytesBuffer;
     }
@@ -147,13 +151,14 @@ public class BitSetEncoder extends OffsetEncoder {
     }
 
     @Override
-    public void encodeIncompleteOffset(final int index) {
+    public void encodeIncompleteOffset(final long relativeOffset) {
         // noop - bitset defaults to 0's (`unset`)
     }
 
     @Override
-    public void encodeCompletedOffset(final int index) {
-        bitSet.set(index);
+    public void encodeCompletedOffset(final long relativeOffset) {
+        // range will already have been checked at initialization
+        bitSet.set(Math.toIntExact(relativeOffset));
     }
 
     @Override

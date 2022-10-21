@@ -14,6 +14,7 @@ import java.util.stream.LongStream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
+import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_ABSENCE;
 
 /**
  * RunLength encoder that leverages the nature of this system.
@@ -66,13 +67,13 @@ public class RunLengthEncoder extends OffsetEncoder {
     }
 
     @Override
-    public void encodeIncompleteOffset(final int rangeIndex) {
-        encodeRunLength(false, rangeIndex);
+    public void encodeIncompleteOffset(final long relativeOffset) {
+        encodeRunLength(false, relativeOffset);
     }
 
     @Override
-    public void encodeCompletedOffset(final int rangeIndex) {
-        encodeRunLength(true, rangeIndex);
+    public void encodeCompletedOffset(final long relativeOffset) {
+        encodeRunLength(true, relativeOffset);
     }
 
     @Override
@@ -123,20 +124,20 @@ public class RunLengthEncoder extends OffsetEncoder {
         return encodedBytes.get();
     }
 
-    int previousRangeIndex = -1;
+    long previousRangeIndex = KAFKA_OFFSET_ABSENCE;
 
-    private void encodeRunLength(final boolean currentIsComplete, final int rangeIndex) {
+    private void encodeRunLength(final boolean currentIsComplete, final long relativeOffset) {
         // run length
         boolean currentOffsetMatchesOurRunLengthState = previousRunLengthState == currentIsComplete;
         if (currentOffsetMatchesOurRunLengthState) {
-            int delta = rangeIndex - previousRangeIndex;
+            long delta = relativeOffset - previousRangeIndex;
             currentRunLengthCount += delta;
         } else {
             previousRunLengthState = currentIsComplete;
             runLengthEncodingLongs.add(currentRunLengthCount);
             currentRunLengthCount = 1; // reset to 1
         }
-        previousRangeIndex = rangeIndex;
+        previousRangeIndex = relativeOffset;
     }
 
     /**

@@ -16,9 +16,9 @@ import java.util.Set;
 import static io.confluent.csid.utils.Range.range;
 
 /**
- * Deserialisation tools for {@link BitSetEncoder}.
+ * Deserialization tools for {@link BitSetEncoder}.
  * <p>
- * todo unify or refactor with {@link BitSetEncoder}. Why was it ever seperate?
+ * todo unify or refactor with {@link BitSetEncoder}. Why was it ever separate?
  *
  * @author Antony Stubbs
  * @see BitSetEncoder
@@ -44,8 +44,9 @@ public class OffsetBitSet {
         BitSet bitSet = BitSet.valueOf(s);
 
         StringBuilder result = new StringBuilder(bitSet.size());
-        for (var offset : range(originalBitsetSize)) {
-            if (bitSet.get(offset)) {
+        for (Long offset : range(originalBitsetSize)) {
+            // range will already have been checked at initialization
+            if (bitSet.get(Math.toIntExact(offset))) {
                 result.append('x');
             } else {
                 result.append('o');
@@ -72,7 +73,9 @@ public class OffsetBitSet {
         BitSet bitSet = BitSet.valueOf(inputBuffer);
         int numberOfIncompletes = originalBitsetSize - bitSet.cardinality();
         var incompletes = new HashSet<Long>(numberOfIncompletes);
-        for (var relativeOffset : range(originalBitsetSize)) {
+        for (long relativeOffsetLong : range(originalBitsetSize)) {
+            // range will already have been checked at initialization
+            var relativeOffset = Math.toIntExact(relativeOffsetLong);
             long offset = baseOffset + relativeOffset;
             if (bitSet.get(relativeOffset)) {
                 log.trace("Ignoring completed offset {}", relativeOffset);
