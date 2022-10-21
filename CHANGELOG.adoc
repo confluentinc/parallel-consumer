@@ -16,6 +16,10 @@ endif::[]
 
 == 0.5.2.4
 
+=== Improvements
+
+* feature: Simple PCRetriableException to remove error spam from logs (#444)
+
 === Fixes
 
 * fixes #409: Adds support for compacted topics and commit offset resetting (#425)
