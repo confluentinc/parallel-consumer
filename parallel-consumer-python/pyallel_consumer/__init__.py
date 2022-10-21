@@ -1,6 +1,7 @@
 import logging
 import subprocess
 import sys
+from functools import wraps
 from pathlib import Path
 
 import jdk
@@ -31,11 +32,11 @@ def _find_jre(java_home: str) -> str:
     return finder.find_libjvm(java_home)
 
 
-def _install_jre() -> str:
+@wraps(jdk.install)
+def _install_jre(version: str = '17', *args, **kwargs) -> str:
     logging.info('Installing JRE')
     try:
-        # https://github.com/jpype-project/jpype/issues/1097: support for java 17+
-        jre_install_dir = jdk.install('13', jre=True)
+        jre_install_dir = jdk.install(version, *args, jre=True, **kwargs)
     except PermissionError as e:
         jre_install_dir = Path(e.filename.split('/Contents/')[0])
     jvm_path = Path(jre_install_dir) / 'Contents/Home/lib/libjli.dylib'
