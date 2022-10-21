@@ -1,0 +1,3 @@
+pytest
+testcontainers[kafka]==3.7.*
+busypie==0.5.*

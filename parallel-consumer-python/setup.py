@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 from pathlib import Path
 from string import Template
 from xml.etree.ElementTree import parse as parse_xml
@@ -19,7 +23,7 @@ setup(
     name='pyallel_consumer',
     version=version,
     description="Python wrapper for Confluent Parallel Consumer",
-    packages=find_packages(),
+    packages=find_packages(exclude=['*tests*']),
     install_requires=requirements,
     package_data={'': ['**mvn/**', 'mvnw', 'mvnw.cmd', 'pom.xml']},
     long_description='Python wrapper for '
