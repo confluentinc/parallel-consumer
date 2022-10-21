@@ -58,10 +58,6 @@ public class BitSetEncoder extends OffsetEncoder {
 
     private Optional<byte[]> encodedBytes = Optional.empty();
 
-    public BitSetEncoder(int length, OffsetSimultaneousEncoder offsetSimultaneousEncoder) throws BitSetEncodingNotSupportedException {
-        this(length, offsetSimultaneousEncoder, DEFAULT_VERSION);
-    }
-
     /**
      * @param length the difference between the highest and lowest offset to be encoded
      */
