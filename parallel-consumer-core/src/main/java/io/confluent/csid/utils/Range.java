@@ -8,22 +8,35 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.function.IntConsumer;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 /**
  * Range function for Java that provides an Iterable, not just an Iterator which {@link java.util.stream.LongStream#range#iterator()} can.
  * <p>
- * https://stackoverflow.com/a/16570509/105741
+ * <a href="https://stackoverflow.com/a/16570509/105741">For loop - like Python range function</a>
  *
- * @author Antony Stubbs
- * @deprecated use {@link java.util.stream.LongStream#range} instead
+ * @see #range(long)
  */
 @Deprecated
 public class Range implements Iterable<Long> {
 
     private final long limit;
+
+    /**
+     * Provides an {@link Iterable} for the range of numbers from 0 to the given limit.
+     * <p>
+     * Exclusive of max.
+     * <p>
+     * Consider using {@link IntStream#range(int, int)#forEachOrdered} instead:
+     * <pre>
+     * IntStream.range(0, originalBitsetSize).forEachOrdered(offset -> {
+     * </pre>
+     * However, if you don't want o use a closure, this is a good alternative.
+     */
+    public static Range range(long max) {
+        return new Range(max);
+    }
 
     public Range(long limit) {
         this.limit = limit;
@@ -65,18 +78,6 @@ public class Range implements Iterable<Long> {
 
     public LongStream toStream() {
         return LongStream.range(0, limit);
-    }
-
-    static void range(int max, IntConsumer consumer) {
-        IntStream.range(0, max)
-                .forEach(consumer);
-    }
-
-    /**
-     * Exclusive of max
-     */
-    public static Range range(long max) {
-        return new Range(max);
     }
 
 }
