@@ -559,7 +559,7 @@
             <plugin>
                 <groupId>io.whelk.asciidoc</groupId>
                 <artifactId>asciidoc-template-maven-plugin</artifactId>
-                <version>1.0.20</version>
+                <version>1.0.21</version>
                 <inherited>false</inherited>
                 <executions>
                     <execution>
