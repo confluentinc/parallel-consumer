@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
@@ -30,6 +31,7 @@ import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_AB
  * @see #invoke()
  */
 @Slf4j
+@ToString(onlyExplicitlyIncluded = true)
 public class OffsetSimultaneousEncoder {
 
     /**
@@ -53,11 +55,13 @@ public class OffsetSimultaneousEncoder {
     /**
      * The lowest committable offset
      */
+    @ToString.Include
     private final long lowWaterMark;
 
     /**
      * The difference between the base offset (the offset to be committed) and the highest seen offset.
      */
+    @ToString.Include
     private final long lengthBetweenBaseAndHighOffset;
 
     /**
@@ -79,6 +83,7 @@ public class OffsetSimultaneousEncoder {
      * <p>
      * Visible for testing.
      */
+    @ToString.Include
     public static boolean compressionForced = false;
 
     /**
@@ -149,22 +154,22 @@ public class OffsetSimultaneousEncoder {
             log.trace("Relatively large input map size: {} (start: {} end: {})", lengthBetweenBaseAndHighOffset, lowWaterMark, getEndOffsetExclusive());
         }
 
-        try {
-            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, v1));
-        } catch (BitSetEncodingNotSupportedException a) {
-            log.debug("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
-        }
+        addBitsetEncoder(newEncoders, v1);
+        addBitsetEncoder(newEncoders, v2);
 
-        try {
-            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, v2));
-        } catch (BitSetEncodingNotSupportedException a) {
-            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
-        }
 
         newEncoders.add(new RunLengthEncoder(this, v1));
         newEncoders.add(new RunLengthEncoder(this, v2));
 
         return newEncoders;
+    }
+
+    private void addBitsetEncoder(ConcurrentHashMap.KeySetView<OffsetEncoder, Boolean> newEncoders, OffsetEncoding.Version version) {
+        try {
+            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, version));
+        } catch (BitSetEncodingNotSupportedException a) {
+            log.debug("Cannot construct {} version {} : {}", BitSetEncoder.class.getSimpleName(), version, a.getMessage());
+        }
     }
 
     /**
@@ -238,7 +243,7 @@ public class OffsetSimultaneousEncoder {
                         encoder.encodeCompletedOffset(relativeOffset);
                     }
                 } catch (EncodingNotSupportedException e) {
-                    log.debug("Error encoding offset {} with encoder {}, removing encoder", actualOffset, encoder.getClass().getSimpleName(), e);
+                    log.debug("Error encoding offset {} with encoder {}, removing encoder", actualOffset, encoder, e);
                     activeEncoders.remove(encoder);
                 }
             });

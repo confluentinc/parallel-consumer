@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.csid.utils.MathUtils;
 import io.confluent.csid.utils.Range;
 import lombok.Getter;
+import lombok.ToString;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -27,26 +28,27 @@ import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_AB
  *
  * @author Antony Stubbs
  */
+@ToString(callSuper = true, onlyExplicitlyIncluded = true)
 public class RunLengthEncoder extends OffsetEncoder {
 
+    @ToString.Include
     private int currentRunLengthSize = 0;
 
+    @ToString.Include
     private boolean previousRunLengthState = false;
 
+    @ToString.Include
     @Getter
     private final List<Integer> runLengthEncodingIntegers;
 
     private Optional<byte[]> encodedBytes = Optional.empty();
 
-    private final Version version; // default to new version
-
     private static final Version DEFAULT_VERSION = Version.v2;
 
     public RunLengthEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) {
-        super(offsetSimultaneousEncoder);
+        super(offsetSimultaneousEncoder, newVersion);
         // run length setup
         runLengthEncodingIntegers = new ArrayList<>();
-        version = newVersion;
     }
 
     @Override
