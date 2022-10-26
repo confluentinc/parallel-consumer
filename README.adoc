@@ -478,8 +478,8 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
- * Currently there is no direct implementation, only the {@link ParallelStreamProcessor} version (see {@link
- * AbstractParallelEoSStreamProcessor}), but there may be in the future.
+ * Currently, there is no direct implementation, only the {@link ParallelStreamProcessor} version (see
+ * {@link AbstractParallelEoSStreamProcessor}), but there may be in the future.
  *
  * @param <K> key consume / produce key type
  * @param <V> value consume / produce value type
@@ -770,7 +770,11 @@ Ordering guarantees will always be adhered to, regardless of failure.
 A failure is denoted by *any* exception being thrown from the user's processing function.
 The system catches these exceptions, logs them and replaces the record in the queue for processing later.
 All types of Exceptions thrown are considered retriable.
-To not retry a record, do not throw an exception from your processing fuction.
+To not retry a record, do not throw an exception from your processing function.
+
+TIP:: To avoid the system logging an error, throw an exception which extends PCRetriableException.
+
+TIP:: If there was an error processing a record, and you'd like to skip it - do not throw an exception, and the system will mark the record as succeeded.
 
 If for some reason you want to proactively fail a record, without relying on some other system throwing an exception which you don't catch - simply throw an exception of your own design, which the system will treat the same way.
 
@@ -1325,6 +1329,10 @@ endif::[]
 === Features
 
 * Python client available as pyallel_consumer package
+
+=== Improvements
+
+* feature: Simple PCRetriableException to remove error spam from logs (#444)
 
 === Fixes
 

@@ -20,6 +20,10 @@ endif::[]
 
 * Python client available as pyallel_consumer package
 
+=== Improvements
+
+* feature: Simple PCRetriableException to remove error spam from logs (#444)
+
 === Fixes
 
 * fixes #409: Adds support for compacted topics and commit offset resetting (#425)

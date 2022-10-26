@@ -301,11 +301,13 @@ public class PartitionState<K, V> {
 
     /**
      * If the offset is higher than expected, according to the previously committed / polled offset, truncate up to it.
-     * Offsets between have disappeared and will never be polled again.
+     * If lower, reset down to it.
      * <p>
-     * Only runs if this is the first {@link WorkContainer} to be added since instantiation.
+     * Only runs if this is the first {@link ConsumerRecord} to be added since instantiation.
+     * <p>
+     * Can be caused by the offset reset policy of the underlying consumer.
      */
-    private void maybeTruncateBelowOrAbove(long polledOffset) {
+    private void maybeTruncateBelowOrAbove(long bootstrapPolledOffset) {
         if (bootstrapPhase) {
             bootstrapPhase = false;
         } else {
@@ -313,30 +315,33 @@ public class PartitionState<K, V> {
             return;
         }
 
-        long expectedBootstrapRecordOffset = getNextExpectedInitialPolledOffset();
+        // during bootstrap, getOffsetToCommit() will return the offset of the last record committed, so we can use that to determine if we need to truncate
+        long expectedBootstrapRecordOffset = getOffsetToCommit();
 
-        boolean pollAboveExpected = polledOffset > expectedBootstrapRecordOffset;
+        boolean pollAboveExpected = bootstrapPolledOffset > expectedBootstrapRecordOffset;
 
-        boolean pollBelowExpected = polledOffset < expectedBootstrapRecordOffset;
+        boolean pollBelowExpected = bootstrapPolledOffset < expectedBootstrapRecordOffset;
 
         if (pollAboveExpected) {
-            // previously committed offset record has been removed, or manual reset to higher offset detected
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition by the broker or committed offset has been raised. Bootstrap polled {} but " +
-                            "expected {} from loaded commit data. Could be caused by record retention or compaction.",
-                    polledOffset,
-                    polledOffset,
+            // previously committed offset record has been removed from the topic, so we need to truncate up to it
+            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition " +
+                            "by the broker or committed offset has been raised. Bootstrap polled {} but expected {} from loaded commit data. " +
+                            "Could be caused by record retention or compaction and offset reset policy LATEST.",
+                    bootstrapPolledOffset,
+                    bootstrapPolledOffset,
                     expectedBootstrapRecordOffset);
 
             // truncate
-            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(polledOffset, false);
+            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(bootstrapPolledOffset, false);
             incompletesToPrune.forEach(incompleteOffsets::remove);
         } else if (pollBelowExpected) {
-            // manual reset to lower offset detected
+            // reset to lower offset detected, so we need to reset our state to match
             log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
-                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}.",
-                    polledOffset,
+                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}. " +
+                            "Could be caused by record retention or compaction and offset reset policy EARLIEST.",
+                    bootstrapPolledOffset,
                     expectedBootstrapRecordOffset,
-                    polledOffset
+                    bootstrapPolledOffset
             );
 
             // reset
@@ -365,7 +370,7 @@ public class PartitionState<K, V> {
     // visible for testing
     protected OffsetAndMetadata createOffsetAndMetadata() {
         Optional<String> payloadOpt = tryToEncodeOffsets();
-        long nextOffset = getNextExpectedInitialPolledOffset();
+        long nextOffset = getOffsetToCommit();
         return payloadOpt
                 .map(encodedOffsets -> new OffsetAndMetadata(nextOffset, encodedOffsets))
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
@@ -374,10 +379,10 @@ public class PartitionState<K, V> {
     /**
      * Next offset expected to be polled, upon freshly connecting to a broker.
      * <p>
-     * Defines as the offset one below the highest sequentially succeeded offset.
+     * Defined as the offset, one below the highest sequentially succeeded offset.
      */
     // visible for testing
-    protected long getNextExpectedInitialPolledOffset() {
+    protected long getOffsetToCommit() {
         return getOffsetHighestSequentialSucceeded() + 1;
     }
 
@@ -443,7 +448,7 @@ public class PartitionState<K, V> {
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
-            long offsetOfNextExpectedMessage = getNextExpectedInitialPolledOffset();
+            long offsetOfNextExpectedMessage = getOffsetToCommit();
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
@@ -523,20 +528,20 @@ public class PartitionState<K, V> {
             return;
         }
 
-        var low = getFirst(records).get().offset(); // NOSONAR see #isEmpty
+        var lowOffset = getFirst(records).get().offset(); // NOSONAR see #isEmpty
 
-        maybeTruncateBelowOrAbove(low);
+        maybeTruncateBelowOrAbove(lowOffset);
 
         // build the hash set once, so we can do random access checks of our tracked incompletes
         var polledOffsetLookup = records.stream()
                 .map(ConsumerRecord::offset)
                 .collect(Collectors.toSet());
 
-        var high = getLast(records).get().offset(); // NOSONAR see #isEmpty
+        var highOffset = getLast(records).get().offset(); // NOSONAR see #isEmpty
 
         // for the incomplete offsets within this range of poll batch
-        var incompletesWithinPolledBatch = incompleteOffsets.keySet().subSet(low, true, high, true);
         var offsetsToRemoveFromTracking = new ArrayList<Long>();
+        var incompletesWithinPolledBatch = incompleteOffsets.keySet().subSet(lowOffset, true, highOffset, true);
         for (long incompleteOffset : incompletesWithinPolledBatch) {
             boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(incompleteOffset);
 
@@ -553,8 +558,8 @@ public class PartitionState<K, V> {
                             "base offset, after initial load and before a rebalance.",
                     offsetsToRemoveFromTracking,
                     getTp(),
-                    low,
-                    high
+                    lowOffset,
+                    highOffset
             );
             offsetsToRemoveFromTracking.forEach(incompleteOffsets::remove);
         }

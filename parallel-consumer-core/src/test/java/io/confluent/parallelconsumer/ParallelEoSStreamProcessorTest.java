@@ -71,7 +71,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         setupParallelConsumerInstance(commitMode);
 
         parallelConsumer.poll((ignore) -> {
-            throw new RuntimeException("My user's function error");
+            throw new FakeRuntimeException("My user's function error");
         });
 
         // let it process
@@ -108,7 +108,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // finish processing only msg 1
         parallelConsumer.poll(context -> {
-            log.error("msg: {}", context);
+            log.debug("msg: {}", context);
             startBarrierLatch.countDown();
             int offset = (int) context.offset();
             LatchTestUtils.awaitLatch(locks, offset);
