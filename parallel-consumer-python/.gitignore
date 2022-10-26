@@ -39,3 +39,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+**mvn/**
+mvnw
+mvnw.cmd
+./pyallel_consumer/pom.xml

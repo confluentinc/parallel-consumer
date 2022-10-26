@@ -1,8 +1,10 @@
 #
 # Copyright (C) 2020-2022 Confluent, Inc.
 #
+
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import partial
 from random import randint
 from sys import maxsize
 from typing import Dict
@@ -10,7 +12,6 @@ from typing import Dict
 from confluent_kafka import Consumer
 from confluent_kafka.serialization import StringDeserializer
 from pytest import fixture
-from functools import partial
 
 from tests import timeit
 

@@ -110,7 +110,7 @@ def loaded_topic(kafka_container, common_props, producer, num_messages) -> str:
     return topic_name
 
 
-@fixture(scope='module')
+@fixture(scope='session')
 def kafka_container() -> KafkaContainer:
     kafka_container = KafkaContainer("confluentinc/cp-kafka:7.2.2") \
         .with_env("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") \
