@@ -1,0 +1,13 @@
+= Releasing
+
+- Update the changelog and commit
+- Run the maven release:prepare goal:
+
+`release:prepare -DautoVersionSubmodules=true -DpushChanges=false -Darguments=-DskipTests -Pci`
+
+- Push the plugin's commits one at a time (otherwise need to request Jenkins to build the release tag - so this is a minor shortcut)
+- Wait for Jenkins to finish running the build (~15 minutes)
+- Wait for Sonatype to publish from it's staging area (~15 minutes)
+- Create the release on GH from the tag
+- Paste in the details from the changelog, save, share as discussion
+- Announce on slack(s), mailing list,

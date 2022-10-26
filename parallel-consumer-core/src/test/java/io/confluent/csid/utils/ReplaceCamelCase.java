@@ -1,18 +1,18 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import org.junit.jupiter.api.DisplayNameGenerator;
-import org.junit.platform.commons.util.StringUtils;
-import org.mockito.internal.util.StringUtil;
 
 import java.lang.reflect.Method;
 
 /**
- * Nicer test names
- *
+ * Nicer test names.
+ * <p>
+ * This seems to break some aspects of Ideas test tracking system (i.e. replay failures).
+ * <p>
  * https://leeturner.me/posts/building-a-camel-case-junit5-displaynamegenerator/
  */
 public class ReplaceCamelCase extends DisplayNameGenerator.Standard {

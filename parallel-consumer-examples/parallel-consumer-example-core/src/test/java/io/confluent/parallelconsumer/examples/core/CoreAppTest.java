@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.core;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
@@ -9,25 +9,24 @@ import io.confluent.csid.utils.LongPollingMockConsumer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.Serdes;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
-import java.util.HashMap;
 
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_GROUP_METADATA;
 import static org.mockito.Mockito.when;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
-public class CoreAppTest {
+class CoreAppTest {
 
     @SneakyThrows
     @Test
@@ -75,13 +74,15 @@ public class CoreAppTest {
 
         @Override
         Consumer<String, String> getKafkaConsumer() {
-            when(mockConsumer.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA); // todo fix AK mock consumer
+            when(mockConsumer.groupMetadata())
+                    .thenReturn(new ConsumerGroupMetadata("groupid")); // todo fix AK mock consumer
             return mockConsumer;
         }
 
         @Override
         Producer<String, String> getKafkaProducer() {
-            return new MockProducer<>(true, null, null);
+            var stringSerializer = Serdes.String().serializer();
+            return new MockProducer<>(true, stringSerializer, stringSerializer);
         }
 
         @Override

@@ -1,11 +1,12 @@
 package io.confluent.parallelconsumer.vertx;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.csid.utils.Java8StreamUtils;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContext;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -15,8 +16,6 @@ import io.vertx.ext.web.client.WebClient;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.Producer;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -25,7 +24,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
+import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
 public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelEoSStreamProcessor<K, V>
@@ -64,11 +63,11 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
     }
 
     @Override
-    public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction) {
+    public Stream<VertxCPResult<K, V>> vertxHttpReqInfoStream(Function<PollContext<K, V>, RequestInfo> requestInfoFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
-        Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunctionWrapped = x -> {
+        Function<PollContext<K, V>, RequestInfo> requestInfoFunctionWrapped = x -> {
             result.in(x);
             RequestInfo apply = carefullyRun(requestInfoFunction, x);
             result.requestInfo(Optional.of(apply));
@@ -89,11 +88,11 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
     }
 
     @Override
-    public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
+    public Stream<VertxCPResult<K, V>> vertxHttpRequestStream(BiFunction<WebClient, PollContext<K, V>, HttpRequest<Buffer>> webClientRequestFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
-        BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> requestInfoFunctionWrapped = (wc, x) -> {
+        BiFunction<WebClient, PollContext<K, V>, HttpRequest<Buffer>> requestInfoFunctionWrapped = (wc, x) -> {
             result.in(x);
             HttpRequest<Buffer> apply = carefullyRun(webClientRequestFunction, wc, x);
 
@@ -115,11 +114,11 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
 
     @Override
     public Stream<VertxCPResult<K, V>> vertxHttpWebClientStream(
-            BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
+            BiFunction<WebClient, PollContext<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction) {
 
         VertxCPResult.VertxCPResultBuilder<K, V> result = VertxCPResult.builder();
 
-        BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> wrappedFunc = (x, y) -> {
+        BiFunction<WebClient, PollContext<K, V>, Future<HttpResponse<Buffer>>> wrappedFunc = (x, y) -> {
             // capture
             result.in(y);
             Future<HttpResponse<Buffer>> apply = carefullyRun(webClientRequestFunction, x, y);
@@ -148,7 +147,7 @@ public class JStreamVertxParallelEoSStreamProcessor<K, V> extends VertxParallelE
     @Getter
     @Builder
     public static class VertxCPResult<K, V> {
-        private final ConsumerRecord<K, V> in;
+        private final PollContext<K, V> in;
         private final Future<HttpResponse<Buffer>> asr;
 
         // todo change to class generic type variables? 2 fields become 1. Not worth the hassle atm.

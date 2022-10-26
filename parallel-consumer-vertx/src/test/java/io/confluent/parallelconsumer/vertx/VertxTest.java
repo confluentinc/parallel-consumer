@@ -1,35 +1,32 @@
 package io.confluent.parallelconsumer.vertx;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.MappingBuilder;
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.csid.utils.WireMockUtils;
+import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.assertj.core.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Isolated;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.util.ArrayList;
@@ -39,66 +36,44 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.TRANSACTIONAL_PRODUCER;
+import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
+import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+@Isolated
 @Slf4j
 @ExtendWith(VertxExtension.class)
-public class VertxTest extends ParallelEoSStreamProcessorTestBase {
+class VertxTest extends VertxBaseUnitTest {
 
-    JStreamVertxParallelEoSStreamProcessor<String, String> vertxAsync;
+    WireMockServer stubServer;
 
-    public static WireMockServer stubServer;
-
-    protected static final String stubResponse = "Good times.";
-
-    VertxParallelEoSStreamProcessor.RequestInfo getGoodHost() {
-        return new VertxParallelEoSStreamProcessor.RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
+    RequestInfo getGoodHost() {
+        return new RequestInfo("localhost", stubServer.port(), "/", UniMaps.of());
     }
 
-    VertxParallelEoSStreamProcessor.RequestInfo getBadHost() {
-        return new VertxParallelEoSStreamProcessor.RequestInfo("localhost", 1, "", UniMaps.of());
-    }
-
-    @BeforeAll
-    public static void setupWireMock() {
-        WireMockConfiguration options = wireMockConfig().dynamicPort();
-        stubServer = new WireMockServer(options);
-        MappingBuilder mappingBuilder = get(urlPathEqualTo("/"))
-                .willReturn(aResponse()
-                        .withBody(stubResponse));
-        stubServer.stubFor(mappingBuilder);
-        stubServer.stubFor(get(urlPathEqualTo("/api")).
-                willReturn(aResponse().withBody(stubResponse)));
-        stubServer.start();
-    }
-
-    @Override
-    protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        VertxOptions vertxOptions = new VertxOptions();
-        Vertx vertx = Vertx.vertx(vertxOptions);
-        WebClient wc = WebClient.create(vertx);
-        var build = parallelConsumerOptions.toBuilder()
-                .commitMode(TRANSACTIONAL_PRODUCER) // force tx
-                .build();
-        vertxAsync = new JStreamVertxParallelEoSStreamProcessor<>(vertx, wc, build);
-
-        return vertxAsync;
+    RequestInfo getBadRequest() {
+        int badPort = 1;
+        String badHostname = "xxxxxxxxx"; // bad host names seem to fail faster than valid host names with invalid ports
+        return new RequestInfo(badHostname, badPort, "/", UniMaps.of());
     }
 
     @BeforeEach
-    public void setupData() {
-        super.primeFirstRecord();
+    void setupWireMock() {
+        WireMockUtils wireMockUtils = new WireMockUtils();
+        stubServer = wireMockUtils.setupWireMock();
+    }
+
+    @AfterEach
+    void closeWireMock() {
+        stubServer.stop();
     }
 
     @SneakyThrows
     @Test
-    public void sanityTest(Vertx vertx, VertxTestContext tc) {
+    void sanityTest(Vertx vertx, VertxTestContext tc) {
         WebClient client = WebClient.create(vertx);
         HttpRequest<Buffer> bufferHttpRequest = client.get(getGoodHost().getPort(), getGoodHost().getHost(), "");
         bufferHttpRequest.send(tc.succeeding(response -> tc.verify(() -> {
@@ -108,16 +83,12 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
     }
 
     @Test
-    @SneakyThrows
-    public void failingHttpCall() {
+    void failingHttpCall() {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var tupleStream =
-                vertxAsync.vertxHttpReqInfoStream((ConsumerRecord<String, String> rec) -> {
-                    VertxParallelEoSStreamProcessor.RequestInfo badHost = getBadHost();
-                    return badHost;
-                });
+                vertxAsync.vertxHttpReqInfoStream((PollContext<String, String> rec) -> getBadRequest());
 
         //
         awaitLatch(latch);
@@ -130,20 +101,21 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(res).doesNotContainNull();
         assertThat(res).extracting(AsyncResult::failed).containsOnly(true);
         assertThat(res).flatExtracting(x ->
-                Arrays.asList(x.cause().getMessage().split(" ")))
-                .contains("Connection", "refused:");
+                        Arrays.asList(x.cause().getMessage().toLowerCase().split(" ")))
+                .contains("failed", "resolve");
     }
 
+    // todo how is this different from #failingHttpCall ?
     @SneakyThrows
     @Test
-    public void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
+    void testVertxFunctionFail(Vertx vertx, VertxTestContext tc) {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
                     log.debug("Inner user function");
-                    return getBadHost();
+                    return getBadRequest();
                 });
 
         // wait
@@ -158,7 +130,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(actual).isNotNull();
 
         actual.onComplete(tc.failing(ar -> tc.verify(() -> {
-            assertThat(ar).hasMessageContainingAll("Connection", "refused");
+            assertThat(ar).hasMessageContainingAll("Failed", "resolve");
             tc.completeNow();
         })));
 
@@ -166,39 +138,32 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
     }
 
     @Test
-    public void testHttpMinimal() {
-        var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOnCompleteHook(latch::countDown);
+    void testHttpMinimal() {
+        vertxAsync.setTimeBetweenCommits(ofSeconds(1));
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
                     log.debug("Inner user function");
-                    VertxParallelEoSStreamProcessor.RequestInfo goodHost = getGoodHost();
+                    RequestInfo goodHost = getGoodHost();
                     var params = UniMaps.of("randomParam", rec.value());
                     goodHost.setParams(params);
 
                     return goodHost;
                 });
 
-        // wait
-        awaitLatch(latch);
-
         //
-        waitForOneLoopCycle();
+        awaitForCommitExact(1);
 
         // verify
-        var res = getResults(futureStream);
-
-        KafkaTestUtils.assertCommits(producerSpy, of(1));
-
         // test results are successes
+        var res = getResults(futureStream);
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
-        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(stubResponse);
+        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(WireMockUtils.stubResponse);
     }
 
     @SneakyThrows
     @Test
-    public void testHttp() {
+    void testHttp() {
         var latch = new CountDownLatch(1);
         vertxAsync.addVertxOnCompleteHook(latch::countDown);
 
@@ -206,7 +171,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
                 vertxAsync.vertxHttpRequestStream((webClient, rec) -> {
                     log.debug("Inner user function");
                     var data = rec.value();
-                    VertxParallelEoSStreamProcessor.RequestInfo reqInfo = getGoodHost();
+                    RequestInfo reqInfo = getGoodHost();
                     var httpRequest = webClient.get(reqInfo.getPort(), reqInfo.getHost(), reqInfo.getContextPath());
                     httpRequest = httpRequest.addQueryParam("randomParam", data);
 
@@ -221,7 +186,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(res).hasSize(1).doesNotContainNull();
         assertThat(res).extracting(AsyncResult::cause).containsOnlyNulls();
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
-        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(stubResponse);
+        assertThat(res).extracting(x -> x.result().bodyAsString()).contains(WireMockUtils.stubResponse);
     }
 
     private List<AsyncResult<HttpResponse<Buffer>>> getResults(
@@ -232,7 +197,7 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
 
     @Test
     @Disabled
-    public void handleHttpResponseCodes() {
+    void handleHttpResponseCodes() {
         assertThat(true).isFalse();
     }
 
@@ -250,6 +215,45 @@ public class VertxTest extends ParallelEoSStreamProcessorTestBase {
         if (!success)
             throw new AssertionError("Timeout reached");
         return list;
+    }
+
+    @SneakyThrows
+    @Test
+    void genericVertxFuture(Vertx vertx, VertxTestContext tc) {
+        primeFirstRecord();
+        primeFirstRecord();
+
+        var latch = new CountDownLatch(1);
+        vertxAsync.addVertxOnCompleteHook(latch::countDown);
+
+        var latchTwo = new CountDownLatch(1);
+
+        Checkpoint cp = tc.checkpoint(3);
+
+        vertxAsync.vertxFuture(rec -> vertx.executeBlocking(event -> {
+            log.debug("Inner user function {}", rec);
+            var data = rec.value();
+
+            try {
+                log.info("Waiting");
+                latchTwo.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            cp.flag();
+            log.info("Finished waiting");
+
+            event.complete();
+        }));
+
+        log.info("Pausing");
+        Thread.sleep(1000L);
+        latchTwo.countDown();
+        log.info("Counted down");
+
+        awaitLatch(latch);
+        log.info("Latch gotten");
     }
 
 }

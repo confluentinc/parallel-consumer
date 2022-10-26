@@ -1,15 +1,12 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
-import lombok.experimental.UtilityClass;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
@@ -17,7 +14,7 @@ import java.util.Optional;
 public class BackportUtils {
 
     /**
-     * @see Duration#toSeconds() intro'd in Java 9
+     * @see Duration#toSeconds() intro'd in Java 9 (isn't in 8)
      */
     public static long toSeconds(Duration duration) {
         return duration.toMillis() / 1000;
@@ -27,6 +24,14 @@ public class BackportUtils {
      * @see Optional#isEmpty()  intro'd java 11
      */
     public static boolean isEmpty(Optional<?> optional) {
+        return !optional.isPresent();
+    }
+
+
+    /**
+     * @see Optional#isEmpty()  intro'd java 11
+     */
+    public static boolean hasNo(Optional<?> optional) {
         return !optional.isPresent();
     }
 

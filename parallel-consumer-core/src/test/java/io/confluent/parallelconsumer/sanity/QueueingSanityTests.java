@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.sanity;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class QueueingSanityTests {
 
     @Test
-    public void test(){
+    public void test() {
         ConcurrentLinkedDeque<Integer> q = new ConcurrentLinkedDeque<>();
 
         assertThat(q.add(1)).isTrue();

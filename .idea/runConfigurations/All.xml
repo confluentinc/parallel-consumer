@@ -1,20 +1,26 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="All" type="JUnit" factoryName="JUnit">
-    <useClassPathOnly />
-    <option name="PACKAGE_NAME" value="io.confluent" />
-    <option name="MAIN_CLASS_NAME" value="" />
-    <option name="METHOD_NAME" value="" />
-    <option name="TEST_OBJECT" value="package" />
-    <option name="PARAMETERS" value="" />
-    <option name="TEST_SEARCH_SCOPE">
-      <value defaultName="wholeProject" />
-    </option>
-    <dir value="$PROJECT_DIR$" />
-    <patterns>
-      <pattern testClass="*" />
-    </patterns>
-    <method v="2">
-      <option name="Make" enabled="true" />
-    </method>
-  </configuration>
+    <configuration default="false" name="All" type="JUnit" factoryName="JUnit">
+        <extension name="net.ashald.envfile">
+            <option name="IS_ENABLED" value="false" />
+            <option name="IS_SUBST" value="false" />
+            <option name="IS_PATH_MACRO_SUPPORTED" value="false" />
+            <option name="IS_IGNORE_MISSING_FILES" value="false" />
+            <option name="IS_ENABLE_EXPERIMENTAL_INTEGRATIONS" value="false" />
+            <ENTRIES>
+                <ENTRY IS_ENABLED="true" PARSER="runconfig" />
+            </ENTRIES>
+        </extension>
+        <option name="MAIN_CLASS_NAME" value="" />
+        <option name="METHOD_NAME" value="" />
+        <option name="TEST_OBJECT" value="pattern" />
+        <option name="TEST_SEARCH_SCOPE">
+            <value defaultName="wholeProject" />
+        </option>
+        <patterns>
+            <pattern testClass=".*" />
+        </patterns>
+        <method v="2">
+            <option name="Make" enabled="true" />
+        </method>
+    </configuration>
 </component>

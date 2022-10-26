@@ -1,9 +1,10 @@
 package io.confluent.csid.utils;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import com.google.auto.service.AutoService;
-import lombok.extern.slf4j.Slf4j;
-import org.junit.platform.engine.TestExecutionResult;
-import org.junit.platform.engine.reporting.ReportEntry;
 import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;
@@ -25,12 +26,10 @@ import static io.confluent.csid.utils.StringUtils.msg;
 @AutoService(TestExecutionListener.class)
 public class MyRunListener implements TestExecutionListener {
 
-    private final String template = """
-
-            =========
-               JUNIT {}:    {} ({})
-            =========
-            """;
+    private final String template = "\n" +
+            "=========\n" +
+            "   JUNIT {}:    {} ({})\n" +
+            "=========";
 
     @Override
     public void testPlanExecutionStarted(final TestPlan testPlan) {

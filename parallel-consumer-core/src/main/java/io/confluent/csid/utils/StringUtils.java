@@ -1,15 +1,20 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import org.slf4j.helpers.FormattingTuple;
 import org.slf4j.helpers.MessageFormatter;
 
 public class StringUtils {
 
+    /**
+     * @see MessageFormatter#arrayFormat(String, Object[])
+     * @see FormattingTuple#getMessage()
+     */
     public static String msg(String s, Object... args) {
-        return MessageFormatter.basicArrayFormat(s, args);
+        return MessageFormatter.arrayFormat(s, args).getMessage();
     }
 
     public static boolean isBlank(final String property) {

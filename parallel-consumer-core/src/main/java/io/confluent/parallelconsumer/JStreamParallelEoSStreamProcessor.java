@@ -1,12 +1,11 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.Java8StreamUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
 import java.util.List;
@@ -21,7 +20,7 @@ public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamPr
 
     private final ConcurrentLinkedDeque<ConsumeProduceResult<K, V, K, V>> userProcessResultsStream;
 
-    public JStreamParallelEoSStreamProcessor(ParallelConsumerOptions parallelConsumerOptions) {
+    public JStreamParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> parallelConsumerOptions) {
         super(parallelConsumerOptions);
 
         this.userProcessResultsStream = new ConcurrentLinkedDeque<>();
@@ -30,8 +29,8 @@ public class JStreamParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamPr
     }
 
     @Override
-    public Stream<ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<ConsumerRecord<K, V>, List<ProducerRecord<K, V>>> userFunction) {
-        super.pollAndProduceMany(userFunction, (result) -> {
+    public Stream<ConsumeProduceResult<K, V, K, V>> pollProduceAndStream(Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction) {
+        super.pollAndProduceMany(userFunction, result -> {
             log.trace("Wrapper callback applied, sending result to stream. Input: {}", result);
             this.userProcessResultsStream.add(result);
         });

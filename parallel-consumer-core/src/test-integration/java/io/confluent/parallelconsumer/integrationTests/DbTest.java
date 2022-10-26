@@ -1,8 +1,8 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -14,18 +14,20 @@ import org.testcontainers.containers.output.Slf4jLogConsumer;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Simulate real forward pressure, back pressure and error conditions by testing against a real database
+ * Simulate real forward pressure, back pressure and error conditions by testing against a real database, instead of
+ * just simulating "work" with a random sleep.
  */
 @Slf4j
 public class DbTest extends BrokerIntegrationTest<String, String> {
 
     protected static final PostgreSQLContainer dbc;
 
-    /**
+    /*
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
@@ -45,6 +47,8 @@ public class DbTest extends BrokerIntegrationTest<String, String> {
         }
     }
 
+    static ReentrantLock dbLock = new ReentrantLock();
+
     @SneakyThrows
     @BeforeEach
     public void setupDatabase() {
@@ -54,16 +58,19 @@ public class DbTest extends BrokerIntegrationTest<String, String> {
         dataSource.setPassword(dbc.getPassword());
 
         connection = dataSource.getConnection();
-//        connection = DriverManager.getConnection(dbc.getJdbcUrl(), dbc.getUsername(), dbc.getPassword());
 
-        PreparedStatement create_table = connection.prepareStatement("""
-                CREATE TABLE IF NOT EXISTS DATA(
-                   ID SERIAL PRIMARY KEY     NOT NULL,
-                   KEY           TEXT    NOT NULL,
-                   VALUE         TEXT     NOT NULL
-                );
-                """);
+
+        // create if exists doesn't seem to be thread safe - something around postgres creating indexes causes a distinct exception
+        dbLock.lock();
+        PreparedStatement create_table = connection.prepareStatement(
+                """
+                        CREATE TABLE IF NOT EXISTS DATA(
+                           ID SERIAL PRIMARY KEY     NOT NULL,
+                           KEY           TEXT    NOT NULL,
+                           VALUE         TEXT     NOT NULL
+                        );""");
         create_table.execute();
+        dbLock.unlock();
     }
 
     @SneakyThrows

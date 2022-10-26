@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.vertx;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -13,12 +13,12 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
-import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
+
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
 public class VertxApp {
@@ -45,16 +45,18 @@ public class VertxApp {
                 .producer(kafkaProducer)
                 .build();
 
-        setupSubscription(kafkaConsumer);
-
         this.parallelConsumer = JStreamVertxParallelStreamProcessor.createEosStreamProcessor(options);
+        parallelConsumer.subscribe(of(inputTopic));
+
+        postSetup();
 
         int port = getPort();
 
         // tag::example[]
-        var resultStream = parallelConsumer.vertxHttpReqInfoStream(record -> {
-            log.info("Concurrently constructing and returning RequestInfo from record: {}", record);
-            Map<String, String> params = UniMaps.of("recordKey", record.key(), "payload", record.value());
+        var resultStream = parallelConsumer.vertxHttpReqInfoStream(context -> {
+            var consumerRecord = context.getSingleConsumerRecord();
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", consumerRecord);
+            Map<String, String> params = UniMaps.of("recordKey", consumerRecord.key(), "payload", consumerRecord.value());
             return new RequestInfo("localhost", port, "/api", params); // <1>
         });
         // end::example[]
@@ -69,12 +71,12 @@ public class VertxApp {
         return 8080;
     }
 
-    void setupSubscription(Consumer<String, String> kafkaConsumer) {
-        kafkaConsumer.subscribe(UniLists.of(inputTopic));
+    void close() {
+        this.parallelConsumer.closeDrainFirst();
     }
 
-    void close() {
-        this.parallelConsumer.closeDrainFirst(Duration.ofSeconds(2));
+    protected void postSetup() {
+        // no-op, for testing
     }
 
 }

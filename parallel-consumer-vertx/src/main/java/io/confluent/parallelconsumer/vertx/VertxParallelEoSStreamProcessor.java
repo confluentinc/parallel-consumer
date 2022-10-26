@@ -1,24 +1,28 @@
 package io.confluent.parallelconsumer.vertx;
 
 /*-
- * Copyright (C) 2020 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.*;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContext;
+import io.confluent.parallelconsumer.PollContextInternal;
+import io.confluent.parallelconsumer.internal.ExternalEngine;
+import io.confluent.parallelconsumer.state.WorkContainer;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.client.WebClientOptions;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.utils.Time;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
@@ -27,15 +31,17 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static io.confluent.parallelconsumer.UserFunctions.carefullyRun;
+import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
+
 
 @Slf4j
-public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProcessor<K, V>
+public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         implements VertxParallelStreamProcessor<K, V> {
 
     /**
@@ -61,37 +67,71 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     /**
      * Simple constructor. Internal Vertx objects will be created.
      */
-    public VertxParallelEoSStreamProcessor(org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                                           Producer<K, V> producer,
-                                           ParallelConsumerOptions options) {
+    public VertxParallelEoSStreamProcessor(ParallelConsumerOptions options) {
         this(Vertx.vertx(), null, options);
     }
 
     /**
      * Provide your own instances of the Vertx engine and it's webclient.
      * <p>
-     * Use this to share a Vertx runtime with different systems for efficiency.
+     * Use this to share a Vertx runtime with different systems for efficiency, or to customise configuration.
+     * <p>
+     * By default Vert.x's {@link WebClient} uses quite small connection limits to servers. PC overrides this to
+     * {@link ParallelConsumerOptions#getMaxConcurrency()}. You can configure these yourself by providing a configured
+     * Vert.x {@link WebClient} with {@link WebClientOptions} set to how you please. Consider also looking at other
+     * options below.
+     *
+     * @see WebClientOptions#setMaxPoolSize
+     * @see WebClientOptions#setMaxWaitQueueSize(int)
+     * @see WebClientOptions#setPipelining(boolean)
+     * @see WebClientOptions#setPipeliningLimit(int)
+     * @see WebClientOptions#setHttp2MaxPoolSize(int)
+     * @see WebClientOptions#setHttp2MultiplexingLimit(int)
      */
     public VertxParallelEoSStreamProcessor(Vertx vertx,
                                            WebClient webClient,
                                            ParallelConsumerOptions options) {
         super(options);
+
+        int cores = Runtime.getRuntime().availableProcessors();
+        VertxOptions vertxOptions = new VertxOptions().setWorkerPoolSize(cores);
+
+        int maxConcurrency = options.getMaxConcurrency();
+
+        // should this be user configurable? - probably
+        WebClientOptions webClientOptions = new WebClientOptions()
+                .setMaxPoolSize(maxConcurrency) // defaults to 5
+                .setHttp2MaxPoolSize(maxConcurrency) // defaults to 1
+                ;
+
         if (vertx == null)
-            vertx = Vertx.vertx();
+            vertx = Vertx.vertx(vertxOptions);
         this.vertx = vertx;
         if (webClient == null)
-            webClient = WebClient.create(vertx);
+            webClient = WebClient.create(vertx, webClientOptions);
         this.webClient = webClient;
     }
 
+    /**
+     * The vert.x module doesn't use any thread pool for dispatching work, as the work is all done by the vert.x engine.
+     * This thread is only used to dispatch the work to vert.x.
+     * <p>
+     * TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to
+     * vert.x.
+     */
     @Override
-    public void vertxHttpReqInfo(Function<ConsumerRecord<K, V>, RequestInfo> requestInfoFunction,
+    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+        return super.setupWorkerPool(1);
+    }
+
+    @Override
+    public void vertxHttpReqInfo(Function<PollContext<K, V>, RequestInfo> requestInfoFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
                                  Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
-        vertxHttpRequest((WebClient wc, ConsumerRecord<K, V> rec) -> {
+        vertxHttpRequest((WebClient webClient, PollContext<K, V> rec) -> {
             RequestInfo reqInf = carefullyRun(requestInfoFunction, rec);
 
-            HttpRequest<Buffer> req = wc.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
+            HttpRequest<Buffer> req = webClient.get(reqInf.getPort(), reqInf.getHost(), reqInf.getContextPath());
             Map<String, String> params = reqInf.getParams();
             for (var entry : params.entrySet()) {
                 req = req.addQueryParam(entry.getKey(), entry.getValue());
@@ -101,49 +141,62 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     }
 
     @Override
-    public void vertxHttpRequest(BiFunction<WebClient, ConsumerRecord<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
+    public void vertxHttpRequest(BiFunction<WebClient, PollContext<K, V>, HttpRequest<Buffer>> webClientRequestFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
-                                 Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) { // TODO remove, redundant over onSend?
+                                 Consumer<AsyncResult<HttpResponse<Buffer>>> onWebRequestComplete) {
 
         vertxHttpWebClient((webClient, record) -> {
             HttpRequest<Buffer> call = carefullyRun(webClientRequestFunction, webClient, record);
 
             Future<HttpResponse<Buffer>> send = call.send(); // dispatches the work to vertx
 
-            // hook in the users' call back for when the web request get's sent
-            send.onComplete(ar -> {
-                onWebRequestComplete.accept(ar);
-            });
+            // hook in the users' call back for when the web request gets a response
+            send.onComplete(ar ->
+                    onWebRequestComplete.accept(ar)
+            );
 
             return send;
         }, onSend);
     }
 
     @Override
-    public void vertxHttpWebClient(BiFunction<WebClient, ConsumerRecord<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
-                                   Consumer<Future<HttpResponse<Buffer>>> onSend) {
+    public void vertxHttpWebClient(BiFunction<WebClient, PollContext<K, V>, Future<HttpResponse<Buffer>>> webClientRequestFunction,
+                                   Consumer<Future<HttpResponse<Buffer>>> onWebRequestSentCallback) {
 
-        Function<ConsumerRecord<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (record) -> {
+        // wrap single record function in batch function
+        Function<PollContextInternal<K, V>, List<Future<HttpResponse<Buffer>>>> userFuncWrapper = (context) -> {
+            log.trace("Consumed a record ({}), executing void function...", context);
 
-            Future<HttpResponse<Buffer>> send = carefullyRun(webClientRequestFunction, webClient, record);
+            Future<HttpResponse<Buffer>> futureWebResponse = carefullyRun(webClientRequestFunction, webClient, context.getPollContext());
 
-            // send callback
-            onSend.accept(send);
+            // execute user's onSend callback
+            onWebRequestSentCallback.accept(futureWebResponse);
 
+            addVertxHooks(context, futureWebResponse);
+
+            return UniLists.of(futureWebResponse);
+        };
+
+        Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
+        }; // don't need it, we attach to vertx futures for callback
+
+        super.supervisorLoop(userFuncWrapper, noOp);
+    }
+
+    private void addVertxHooks(final PollContextInternal<K, V> context, final Future<?> send) {
+        context.streamWorkContainers().forEach(wc -> {
             // attach internal handler
-            WorkContainer<K, V> wc = wm.getWorkContainerForRecord(record);
             wc.setWorkType(VERTX_TYPE);
 
             send.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
-                log.trace("Response body: {}", h.bodyAsString());
                 wc.onUserFunctionSuccess();
-                addToMailbox(wc);
+                addToMailbox(context, wc);
             });
             send.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
-                wc.onUserFunctionFailure();
-                addToMailbox(wc);
+                wc.onUserFunctionFailure(h);
+                addToMailbox(context, wc);
             });
 
             // add plugin callback hook
@@ -151,11 +204,42 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
                 log.trace("Running plugin hook");
                 this.onVertxCompleteHook.ifPresent(Runnable::run);
             });
+        });
+    }
+
+    @Override
+    public void vertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
+
+        // wrap single record function in batch function
+        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
+            log.trace("Consumed a record ({}), executing void function...", context);
+
+            Future<?> send = carefullyRun(result, context.getPollContext());
+
+            addVertxHooks(context, send);
 
             return UniLists.of(send);
         };
 
-        Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
+        Consumer<Future<?>> noOp = ignore -> {
+        }; // don't need it, we attach to vertx futures for callback
+
+        super.supervisorLoop(userFuncWrapper, noOp);
+    }
+
+    @Override
+    public void batchVertxFuture(final Function<PollContext<K, V>, Future<?>> result) {
+
+        Function<PollContextInternal<K, V>, List<Future<?>>> userFuncWrapper = context -> {
+
+            Future<?> send = carefullyRun(result, context.getPollContext());
+
+            addVertxHooks(context, send);
+
+            return UniLists.of(send);
+        };
+
+        Consumer<Future<?>> noOp = ignore -> {
         }; // don't need it, we attach to vertx futures for callback
 
         super.supervisorLoop(userFuncWrapper, noOp);
@@ -195,7 +279,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
         // logging
-        if (isVertxWork(resultsFromUserFunction)) {
+        if (isAsyncFutureWork(resultsFromUserFunction)) {
             log.debug("Vertx creation function success, user's function success");
         } else {
             super.onUserFunctionSuccess(wc, resultsFromUserFunction);
@@ -203,20 +287,21 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ParallelEoSStreamProc
     }
 
     @Override
-    protected void addToMailBoxOnUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
+    protected void addToMailBoxOnUserFunctionSuccess(final PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
         // no op
-        if (isVertxWork(resultsFromUserFunction)) {
+        if (isAsyncFutureWork(resultsFromUserFunction)) {
             log.debug("User function success but not adding vertx vertical to mailbox yet");
         } else {
-            super.addToMailBoxOnUserFunctionSuccess(wc, resultsFromUserFunction);
+            super.addToMailBoxOnUserFunctionSuccess(context, wc, resultsFromUserFunction);
         }
     }
 
     /**
      * Determines if any of the elements in the supplied list is a Vertx Future type
      */
-    private boolean isVertxWork(List<?> resultsFromUserFunction) {
+    @Override
+    protected boolean isAsyncFutureWork(List<?> resultsFromUserFunction) {
         for (Object object : resultsFromUserFunction) {
             return (object instanceof Future);
         }
