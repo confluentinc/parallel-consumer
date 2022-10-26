@@ -12,5 +12,5 @@ import lombok.experimental.StandardException;
  * @author Antony Stubbs
  */
 @StandardException
-public class RunlengthV1EncodingNotSupported extends EncodingNotSupportedException {
+public class RunLengthV1EncodingNotSupported extends EncodingNotSupportedException {
 }

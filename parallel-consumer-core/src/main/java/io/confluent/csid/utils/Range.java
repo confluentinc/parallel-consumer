@@ -4,12 +4,13 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * Class for simple ranges.
@@ -76,13 +77,10 @@ public class Range implements Iterable<Long> {
         };
     }
 
-    /**
-     * Potentially slow, but useful for tests
-     */
     public List<Integer> listAsIntegers() {
-        List<Integer> integers = new ArrayList<>();
-        forEach(e -> integers.add(Math.toIntExact(e)));
-        return integers;
+        return IntStream.range(0, Math.toIntExact(limit))
+                .boxed()
+                .collect(toList());
     }
 
     public LongStream toStream() {

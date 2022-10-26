@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.MathUtils;
 import io.confluent.csid.utils.Range;
 import lombok.Getter;
 
@@ -20,13 +21,16 @@ import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_AB
  * RunLength encoder that leverages the nature of this system.
  * <p>
  * One such nature is that gaps between completed offsets get encoded as succeeded offsets. This doesn't matter because
- * they don't exist and we'll neve see them (they no longer exist in the source partition).
+ * they don't exist, and we'll never see them (they no longer exist in the source partition).
+ * <p>
+ * Run-length is written "Run-length": https://en.wikipedia.org/wiki/Run-length_encoding
  *
  * @author Antony Stubbs
  */
 public class RunLengthEncoder extends OffsetEncoder {
 
-    private int currentRunLengthCount = 0;
+    private int currentRunLengthSize = 0;
+
     private boolean previousRunLengthState = false;
 
     @Getter
@@ -62,12 +66,12 @@ public class RunLengthEncoder extends OffsetEncoder {
     }
 
     @Override
-    public void encodeIncompleteOffset(final long relativeOffset) {
+    public void encodeIncompleteOffset(final long relativeOffset) throws EncodingNotSupportedException {
         encodeRunLength(false, relativeOffset);
     }
 
     @Override
-    public void encodeCompletedOffset(final long relativeOffset) {
+    public void encodeCompletedOffset(final long relativeOffset) throws EncodingNotSupportedException {
         encodeRunLength(true, relativeOffset);
     }
 
@@ -84,10 +88,11 @@ public class RunLengthEncoder extends OffsetEncoder {
         for (final Integer runLength : runLengthEncodingIntegers) {
             switch (version) {
                 case v1 -> {
-                    final short shortCastRunlength = runLength.shortValue();
-                    if (runLength != shortCastRunlength)
-                        throw new RunlengthV1EncodingNotSupported(msg("Runlength too long for Short ({} cast to {})", runLength, shortCastRunlength));
-                    runLengthEncodedByteBuffer.putShort(shortCastRunlength);
+                    try {
+                        runLengthEncodedByteBuffer.putShort(MathUtils.toShortExact(runLength));
+                    } catch (ArithmeticException e) {
+                        throw new RunLengthV1EncodingNotSupported(msg("Run-length too long for Short ({} vs Short max of {})", runLength, Short.MAX_VALUE));
+                    }
                 }
                 case v2 -> {
                     runLengthEncodedByteBuffer.putInt(runLength);
@@ -101,7 +106,7 @@ public class RunLengthEncoder extends OffsetEncoder {
     }
 
     void addTail() {
-        runLengthEncodingIntegers.add(currentRunLengthCount);
+        runLengthEncodingIntegers.add(currentRunLengthSize);
     }
 
     @Override
@@ -116,16 +121,33 @@ public class RunLengthEncoder extends OffsetEncoder {
 
     long previousRangeIndex = KAFKA_OFFSET_ABSENCE;
 
-    private void encodeRunLength(final boolean currentIsComplete, final long relativeOffset) {
+    private void encodeRunLength(final boolean currentIsComplete, final long relativeOffset) throws EncodingNotSupportedException {
         // run length
+        final long delta = relativeOffset - previousRangeIndex;
         boolean currentOffsetMatchesOurRunLengthState = previousRunLengthState == currentIsComplete;
         if (currentOffsetMatchesOurRunLengthState) {
-            long delta = relativeOffset - previousRangeIndex;
-            currentRunLengthCount += delta;
+            switch (version) {
+                case v1 -> {
+                    try {
+                        final int deltaAsInt = Math.toIntExact(delta);
+                        final int newRunLength = Math.addExact(currentRunLengthSize, deltaAsInt);
+                        currentRunLengthSize = MathUtils.toShortExact(newRunLength);
+                    } catch (ArithmeticException e) {
+                        throw new RunLengthV1EncodingNotSupported(msg("Run-length too big for Short ({} vs max of {})", currentRunLengthSize + delta, Short.MAX_VALUE));
+                    }
+                }
+                case v2 -> {
+                    try {
+                        currentRunLengthSize = Math.toIntExact(Math.addExact(currentRunLengthSize, delta));
+                    } catch (ArithmeticException e) {
+                        throw new RunLengthV2EncodingNotSupported(msg("Run-length too big for Integer ({} vs max of {})", currentRunLengthSize, Integer.MAX_VALUE));
+                    }
+                }
+            }
         } else {
             previousRunLengthState = currentIsComplete;
-            runLengthEncodingIntegers.add(currentRunLengthCount);
-            currentRunLengthCount = 1; // reset to 1
+            runLengthEncodingIntegers.add(currentRunLengthSize);
+            currentRunLengthSize = 1; // reset to 1
         }
         previousRangeIndex = relativeOffset;
     }

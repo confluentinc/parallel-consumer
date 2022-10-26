@@ -67,15 +67,14 @@ public class BitSetEncoder extends OffsetEncoder {
 
         this.version = newVersion;
 
-
-        if (length > MAX_LENGTH_ENCODABLE) {
-            throw new BitSetEncodingNotSupportedException("BitSet only supports " + MAX_LENGTH_ENCODABLE + " bits, but " + length + " were requested");
+        // prep bit set buffer, range check above
+        try {
+            bitSet = new BitSet(Math.toIntExact(length));
+        } catch (ArithmeticException e) {
+            throw new BitSetEncodingNotSupportedException("BitSet only supports " + MAX_LENGTH_ENCODABLE + " bits, but " + length + " were requested", e);
         }
 
         this.originalLength = length;
-
-        // prep bit set buffer, range check above
-        bitSet = new BitSet(Math.toIntExact(length));
     }
 
     private ByteBuffer constructWrappedByteBuffer(long length, Version newVersion) throws BitSetEncodingNotSupportedException {

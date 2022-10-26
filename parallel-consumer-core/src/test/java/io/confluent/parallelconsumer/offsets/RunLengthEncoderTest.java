@@ -14,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import static io.confluent.csid.utils.JavaUtils.toTreeSet;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
@@ -140,6 +141,65 @@ class RunLengthEncoderTest {
             List<Long> calculatedCompletedOffsets = rl.calculateSucceededActualOffsets(0);
 
             assertThat(calculatedCompletedOffsets).containsExactlyElementsOf(completes);
+        }
+    }
+
+
+    /**
+     * todo
+     */
+    @SneakyThrows
+    @Test
+    void vTwoIntegerOverflow() {
+        final long integerMaxOverflowOffset = 100;
+        final long overflowedValue = Integer.MAX_VALUE + integerMaxOverflowOffset;
+
+        var incompletes = UniSets.of(0L, 4L, 6L, 7L, 8L, 10L, overflowedValue).stream().collect(toTreeSet());
+        var completes = UniSets.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(toTreeSet());
+        List<Integer> runs = UniLists.of(1, 3, 1, 1, 3, 1, 1);
+        OffsetSimultaneousEncoder offsetSimultaneousEncoder
+                = new OffsetSimultaneousEncoder(-1, overflowedValue - 1, incompletes);
+
+        {
+            RunLengthEncoder rl = new RunLengthEncoder(offsetSimultaneousEncoder, v2);
+
+            rl.encodeIncompleteOffset(0); // 1
+            rl.encodeCompletedOffset(1); // 3
+            rl.encodeCompletedOffset(2);
+            rl.encodeCompletedOffset(3);
+            rl.encodeIncompleteOffset(4); // 1
+            rl.encodeCompletedOffset(5); // 1
+            rl.encodeIncompleteOffset(6); // 3
+            rl.encodeIncompleteOffset(7);
+            rl.encodeIncompleteOffset(8);
+            rl.encodeCompletedOffset(9); // 1
+            rl.encodeIncompleteOffset(10); // 1
+
+            // fill
+            // inject overflow offset
+            LongStream.range(11, overflowedValue).boxed().forEach(relativeOffset -> {
+                try {
+                    rl.encodeCompletedOffset(relativeOffset);
+                } catch (EncodingNotSupportedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+
+            rl.encodeIncompleteOffset(overflowedValue); // inject extremely high successful offset to cause overflow
+
+//            rl.encodeIncompleteOffset(overflowedValue + 10); // inject extremely high successful offset to cause overflow
+
+            rl.addTail();
+
+            // before serialisation
+            {
+                assertThat(rl.getRunLengthEncodingIntegers()).containsExactlyElementsOf(runs);
+
+                List<Long> calculatedCompletedOffsets = rl.calculateSucceededActualOffsets(0);
+
+                assertThat(calculatedCompletedOffsets).containsExactlyElementsOf(completes);
+            }
         }
     }
 }
