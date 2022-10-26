@@ -212,10 +212,10 @@ public class OffsetSimultaneousEncoder {
      * TODO: optimisation - inline this into the partition iteration loop in {@link WorkManager}
      * <p>
      * TODO: optimisation - could double the run-length range from Short.MAX_VALUE (~33,000) to Short.MAX_VALUE * 2
-     *  (~66,000) by using unsigned shorts instead (higest representable relative offset is Short.MAX_VALUE because each
-     *  runlength entry is a Short)
+     *  (~66,000) by using unsigned shorts instead (highest representable relative offset is Short.MAX_VALUE because each
+     *  run-length entry is a Short)
      * <p>
-     *  TODO VERY large offests ranges are slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
+     *  TODO VERY large offset ranges is slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
      */
     public OffsetSimultaneousEncoder invoke() {
         log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, getEndOffsetExclusive());
