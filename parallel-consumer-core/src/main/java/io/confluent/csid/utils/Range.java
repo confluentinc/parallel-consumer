@@ -21,7 +21,22 @@ import static java.util.stream.Collectors.toList;
  */
 public class Range implements Iterable<Long> {
 
+    private final long start;
+
     private final long limit;
+
+    /**
+     * @see this#range(long)
+     */
+    public Range(int start, long max) {
+        this.start = start;
+        this.limit = max;
+    }
+
+    public Range(long limit) {
+        this.start = 0L;
+        this.limit = limit;
+    }
 
     /**
      * Provides an {@link Iterable} for the range of numbers from 0 to the given limit.
@@ -38,8 +53,11 @@ public class Range implements Iterable<Long> {
         return new Range(max);
     }
 
-    public Range(long limit) {
-        this.limit = limit;
+    /**
+     * @see #range(long)
+     */
+    public static Range range(int start, long max) {
+        return new Range(start, max);
     }
 
     /**
@@ -49,12 +67,13 @@ public class Range implements Iterable<Long> {
         return Range.range(max).listAsIntegers();
     }
 
+
     @Override
     public Iterator<Long> iterator() {
         final long max = limit;
         return new Iterator<>() {
 
-            private long current = 0;
+            private long current = start;
 
             @Override
             public boolean hasNext() {
@@ -78,13 +97,13 @@ public class Range implements Iterable<Long> {
     }
 
     public List<Integer> listAsIntegers() {
-        return IntStream.range(0, Math.toIntExact(limit))
+        return IntStream.range(Math.toIntExact(start), Math.toIntExact(limit))
                 .boxed()
                 .collect(toList());
     }
 
     public LongStream toStream() {
-        return LongStream.range(0, limit);
+        return LongStream.range(start, limit);
     }
 
 }
