@@ -397,7 +397,6 @@ public class PartitionState<K, V> {
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
-    // todo change from Set to List (order)
     public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         return incompleteOffsets.keySet().parallelStream()

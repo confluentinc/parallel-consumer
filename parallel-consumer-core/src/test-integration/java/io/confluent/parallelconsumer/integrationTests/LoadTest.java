@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
+import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
@@ -29,7 +30,6 @@ import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
@@ -164,7 +164,7 @@ public class LoadTest extends DbTest {
     private void publishMessages(int keyRange, int total, String topic) {
 
         // produce data
-        var keys = range(keyRange).list();
+        var keys = Range.listOfIntegers(keyRange);
         var integers = Lists.newArrayList(IntStream.range(0, total).iterator());
 
         // publish
