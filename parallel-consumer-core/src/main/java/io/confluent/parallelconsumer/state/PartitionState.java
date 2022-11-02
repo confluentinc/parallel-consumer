@@ -344,9 +344,7 @@ public class PartitionState<K, V> {
             );
 
             // reset
-            var resetHighestSeenOffset = Optional.<Long>empty();
-            var resetIncompletesMap = new TreeSet<Long>();
-            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
+            var offsetData = OffsetMapCodecManager.HighestOffsetAndIncompletes.of();
             initStateFromOffsetData(offsetData);
         }
     }
