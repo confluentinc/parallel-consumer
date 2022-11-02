@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -366,5 +367,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         } else {
             log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
         }
+    }
+
+    public PCMetrics.PollerMetrics getMetrics() {
+        var b = PCMetrics.PollerMetrics.builder();
+        b.state(runState);
+        b.paused(isPausedForThrottling());
+
+        //
+//        b.pausedPartitions();
+        return b.build();
     }
 }
