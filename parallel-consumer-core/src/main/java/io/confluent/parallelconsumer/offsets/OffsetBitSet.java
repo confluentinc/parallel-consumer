@@ -3,14 +3,15 @@ package io.confluent.parallelconsumer.offsets;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
 import java.util.BitSet;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import static io.confluent.csid.utils.Range.range;
 
@@ -61,15 +62,14 @@ public class OffsetBitSet {
             default -> throw new InternalRuntimeException("Invalid state");
         };
         ByteBuffer slice = wrap.slice();
-        Set<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
+        SortedSet<Long> incompletes = deserialiseBitSetToIncompletes(baseOffset, originalBitsetSize, slice);
         long highestSeenOffset = baseOffset + originalBitsetSize - 1;
         return HighestOffsetAndIncompletes.of(highestSeenOffset, incompletes);
     }
 
-    static Set<Long> deserialiseBitSetToIncompletes(long baseOffset, int originalBitsetSize, ByteBuffer inputBuffer) {
+    static SortedSet<Long> deserialiseBitSetToIncompletes(long baseOffset, int originalBitsetSize, ByteBuffer inputBuffer) {
         BitSet bitSet = BitSet.valueOf(inputBuffer);
-        int numberOfIncompletes = originalBitsetSize - bitSet.cardinality();
-        var incompletes = new HashSet<Long>(numberOfIncompletes);
+        var incompletes = new TreeSet<Long>();
         for (long relativeOffsetLong : range(originalBitsetSize)) {
             // range will already have been checked at initialization
             var relativeOffset = Math.toIntExact(relativeOffsetLong);

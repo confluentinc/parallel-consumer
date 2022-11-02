@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -345,9 +344,7 @@ public class PartitionState<K, V> {
             );
 
             // reset
-            var resetHighestSeenOffset = Optional.<Long>empty();
-            var resetIncompletesMap = UniSets.<Long>of();
-            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
+            var offsetData = OffsetMapCodecManager.HighestOffsetAndIncompletes.of();
             initStateFromOffsetData(offsetData);
         }
     }

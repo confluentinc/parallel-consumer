@@ -15,10 +15,10 @@ import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -51,7 +51,7 @@ class PartitionStateCommittedOffsetTest {
             .filter(offset -> offset >= unexpectedlyHighOffset)
             .collect(Collectors.toList());
 
-    HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>(incompletes));
+    HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new TreeSet<>(incompletes));
 
     PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
 
