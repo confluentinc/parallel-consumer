@@ -47,7 +47,6 @@ public class PolledTestBatch {
         this.tp = tp;
 
         create(polledOffsetsWithCompactedRemoved);
-
     }
 
     void create(long fromOffset, long highestSeenOffset) {

@@ -22,6 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Used in tests to stub out the behaviour of the real Broker and Client's long polling system (the mock Kafka Consumer
@@ -202,7 +203,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
     public void subscribeWithRebalanceAndAssignment(Collection<String> topics, int partitions) {
         List<TopicPartition> topicPartitions = topics.stream()
-                .flatMap(y -> Range.rangeStream(partitions).boxed()
+                .flatMap(y -> IntStream.range(0, partitions).boxed()
                         .map(x -> new TopicPartition(y, x)))
                 .collect(Collectors.toList());
         rebalance(topicPartitions);

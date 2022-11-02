@@ -1,40 +1,79 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.function.Consumer;
 import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+
+import static java.util.stream.Collectors.toList;
 
 /**
- * https://stackoverflow.com/a/16570509/105741
+ * Class for simple ranges.
+ * <p>
+ * <a href="https://stackoverflow.com/a/16570509/105741">For loop - like Python range function</a>
+ *
+ * @see #range(long)
  */
-public class Range implements Iterable<Integer> {
+public class Range implements Iterable<Long> {
+
+    private final long start;
 
     private final long limit;
 
+    /**
+     * @see this#range(long)
+     */
+    public Range(int start, long max) {
+        this.start = start;
+        this.limit = max;
+    }
+
     public Range(long limit) {
+        this.start = 0L;
         this.limit = limit;
     }
 
     /**
-     * Exclusive of max
+     * Provides an {@link Iterable} for the range of numbers from 0 to the given limit.
+     * <p>
+     * Exclusive of max.
+     * <p>
+     * Consider using {@link IntStream#range(int, int)#forEachOrdered} instead:
+     * <pre>
+     * IntStream.range(0, originalBitsetSize).forEachOrdered(offset -> {
+     * </pre>
+     * However, if you don't want o use a closure, this is a good alternative.
      */
     public static Range range(long max) {
         return new Range(max);
     }
 
-    @Override
-    public Iterator<Integer> iterator() {
-        final long max = limit;
-        return new Iterator<Integer>() {
+    /**
+     * @see #range(long)
+     */
+    public static Range range(int start, long max) {
+        return new Range(start, max);
+    }
 
-            private int current = 0;
+    /**
+     * Potentially slow, but useful for tests
+     */
+    public static List<Integer> listOfIntegers(int max) {
+        return Range.range(max).listAsIntegers();
+    }
+
+
+    @Override
+    public Iterator<Long> iterator() {
+        final long max = limit;
+        return new Iterator<>() {
+
+            private long current = start;
 
             @Override
             public boolean hasNext() {
@@ -42,7 +81,7 @@ public class Range implements Iterable<Integer> {
             }
 
             @Override
-            public Integer next() {
+            public Long next() {
                 if (hasNext()) {
                     return current++;
                 } else {
@@ -57,23 +96,14 @@ public class Range implements Iterable<Integer> {
         };
     }
 
-    public List<Integer> list() {
-        ArrayList<Integer> integers = new ArrayList<Integer>();
-        forEach(integers::add);
-        return integers;
+    public List<Integer> listAsIntegers() {
+        return IntStream.range(Math.toIntExact(start), Math.toIntExact(limit))
+                .boxed()
+                .collect(toList());
     }
 
-    public IntStream toStream() {
-        return IntStream.range(0, (int) limit);
-    }
-
-    static IntStream rangeStream(int i) {
-        return IntStream.range(0, i);
-    }
-
-    static void range(int max, Consumer<Integer> consumer) {
-        IntStream.range(0, max)
-                .forEach(consumer::accept);
+    public LongStream toStream() {
+        return LongStream.range(start, limit);
     }
 
 }
