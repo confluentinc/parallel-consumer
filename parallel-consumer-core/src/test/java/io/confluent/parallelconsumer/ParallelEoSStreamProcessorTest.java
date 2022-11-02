@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
+import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
@@ -33,7 +34,6 @@ import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -490,8 +490,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var msg8Lock = new CountDownLatch(1);
 
         final var processedState = new HashMap<Integer, Boolean>();
-        for (Integer msgIndex : range(8)) {
-            processedState.put(msgIndex, false);
+        for (Long msgIndex : Range.range(8)) {
+            processedState.put(msgIndex.intValue(), false);
         }
 
         List<CountDownLatch> locks = of(msg0Lock, msg1Lock, msg2Lock, msg3Lock, msg4Lock, msg5Lock, msg6Lock, msg7Lock, msg8Lock);
