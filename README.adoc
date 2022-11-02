@@ -587,8 +587,23 @@ See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example
 [[project-reactor]]
 === Project Reactor
 
-TODO example
+As per the Vert.x support, there is also a Reactor module.
+This means you can use Reactor's non-blocking threading model to process your messages, allowing for orders of magnitudes higher concurrent processing than the core module's thread per worker module.
 
+See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-reactor/src/main/java/io/confluent/parallelconsumer/examples/reactor/ReactorApp.java[Reactor example] project, and it's test.
+
+.Call any Reactor API for each message usage. This example uses a simple `Mono.just` to return a value, but you can use any Reactor API here.
+[source,java,indent=0]
+----
+        parallelConsumer.react(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", consumerRecord);
+            Map<String, String> params = UniMaps.of("recordKey", consumerRecord.key(), "payload", consumerRecord.value());
+            return Mono.just("something todo"); // <1>
+        });
+----
+
+[[spring]]
 [[streams-usage-code]]
 === Kafka Streams Concurrent Processing
 
@@ -884,12 +899,18 @@ If you're used to using the auto commit mode in the normal Kafka consumer, you c
 We suggest starting with this mode, and it is the default.
 
 [[transaction-system]]
-=== Apache Kafka EoS Transaction Model
+=== Apache Kafka EoS Transaction Model in BULK
 
 There is also the option to use Kafka's Exactly Once Semantics (EoS) system.
-This causes all messages produced as a result of processing a message to be committed within a transaction, along with their source offset.
+This causes all messages produced, by all workers in parallel, as a result of processing their messages, to be committed within a SINGLE, BULK transaction, along with their source offset.
+
+Note importantly - this is a BULK transaction, not a per input record transaction.
+
 This means that even under failure, the results will exist exactly once in the Kafka output topic.
 If as a part of your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
+
+CAUTION:: This is a BULK transaction, not a per input record transaction.
+There is not a single transaction per input record and per worker "thread", but one *LARGE* transaction that gets used by all parallel processing, until the commit interval.
 
 NOTE:: As with the `synchronous` processing mode, this will also block the processing loop until a successful transaction completes
 
