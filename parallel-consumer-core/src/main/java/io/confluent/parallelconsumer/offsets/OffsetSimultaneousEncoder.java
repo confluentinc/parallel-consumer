@@ -9,14 +9,17 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.*;
+import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_ABSENCE;
 import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_ABSENCE;
 
 /**
@@ -28,6 +31,7 @@ import static io.confluent.parallelconsumer.state.PartitionState.KAFKA_OFFSET_AB
  * @see #invoke()
  */
 @Slf4j
+@ToString(onlyExplicitlyIncluded = true)
 public class OffsetSimultaneousEncoder {
 
     /**
@@ -51,11 +55,13 @@ public class OffsetSimultaneousEncoder {
     /**
      * The lowest committable offset
      */
+    @ToString.Include
     private final long lowWaterMark;
 
     /**
      * The difference between the base offset (the offset to be committed) and the highest seen offset.
      */
+    @ToString.Include
     private final long lengthBetweenBaseAndHighOffset;
 
     /**
@@ -77,6 +83,7 @@ public class OffsetSimultaneousEncoder {
      * <p>
      * Visible for testing.
      */
+    @ToString.Include
     public static boolean compressionForced = false;
 
     /**
@@ -86,9 +93,9 @@ public class OffsetSimultaneousEncoder {
     public static final String COMPRESSION_FORCED_RESOURCE_LOCK = "Value doesn't matter, just needs a constant";
 
     /**
-     * The encoders to run
+     * The encoders to run. Concurrent so we can remove encoders while traversing.
      */
-    private final Set<OffsetEncoder> encoders;
+    private final ConcurrentHashMap.KeySetView<OffsetEncoder, Boolean> activeEncoders;
 
     public OffsetSimultaneousEncoder(long baseOffsetToCommit, long highestSucceededOffset, SortedSet<Long> incompleteOffsets) {
         this.lowWaterMark = baseOffsetToCommit;
@@ -109,7 +116,7 @@ public class OffsetSimultaneousEncoder {
                     lengthBetweenBaseAndHighOffset, baseOffsetToCommit, highestSucceededOffset));
         }
 
-        this.encoders = initEncoders();
+        this.activeEncoders = initEncoders();
     }
 
     /**
@@ -141,29 +148,29 @@ public class OffsetSimultaneousEncoder {
         return highestSucceededOffset;
     }
 
-    private Set<OffsetEncoder> initEncoders() {
-        var newEncoders = new HashSet<OffsetEncoder>();
+    private ConcurrentHashMap.KeySetView<OffsetEncoder, Boolean> initEncoders() {
+        ConcurrentHashMap.KeySetView<OffsetEncoder, Boolean> newEncoders = ConcurrentHashMap.newKeySet();
         if (lengthBetweenBaseAndHighOffset > LARGE_INPUT_MAP_SIZE) {
             log.trace("Relatively large input map size: {} (start: {} end: {})", lengthBetweenBaseAndHighOffset, lowWaterMark, getEndOffsetExclusive());
         }
 
-        try {
-            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, v1));
-        } catch (BitSetEncodingNotSupportedException a) {
-            log.debug("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
-        }
+        addBitsetEncoder(newEncoders, v1);
+        addBitsetEncoder(newEncoders, v2);
 
-        try {
-            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, v2));
-        } catch (BitSetEncodingNotSupportedException a) {
-            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage());
-        }
 
         newEncoders.add(new RunLengthEncoder(this, v1));
         newEncoders.add(new RunLengthEncoder(this, v2));
         newEncoders.add(new RunLengthEncoder(this, v3));
 
         return newEncoders;
+    }
+
+    private void addBitsetEncoder(ConcurrentHashMap.KeySetView<OffsetEncoder, Boolean> newEncoders, OffsetEncoding.Version version) {
+        try {
+            newEncoders.add(new BitSetEncoder(lengthBetweenBaseAndHighOffset, this, version));
+        } catch (BitSetEncodingNotSupportedException a) {
+            log.debug("Cannot construct {} version {} : {}", BitSetEncoder.class.getSimpleName(), version, a.getMessage());
+        }
     }
 
     /**
@@ -180,9 +187,9 @@ public class OffsetSimultaneousEncoder {
      */
     void addByteBufferEncoder() {
         try {
-            encoders.add(new ByteBufferEncoder(lengthBetweenBaseAndHighOffset, this));
+            activeEncoders.add(new ByteBufferEncoder(lengthBetweenBaseAndHighOffset, this));
         } catch (ArithmeticException a) {
-            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a.getMessage(), a);
+            log.warn("Cannot use {} encoder ({})", BitSetEncoder.class.getSimpleName(), a);
         }
     }
 
@@ -206,10 +213,10 @@ public class OffsetSimultaneousEncoder {
      * TODO: optimisation - inline this into the partition iteration loop in {@link WorkManager}
      * <p>
      * TODO: optimisation - could double the run-length range from Short.MAX_VALUE (~33,000) to Short.MAX_VALUE * 2
-     *  (~66,000) by using unsigned shorts instead (higest representable relative offset is Short.MAX_VALUE because each
-     *  runlength entry is a Short)
+     *  (~66,000) by using unsigned shorts instead (highest representable relative offset is Short.MAX_VALUE because each
+     *  run-length entry is a Short)
      * <p>
-     *  TODO VERY large offests ranges are slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
+     *  TODO VERY large offset ranges is slow (Integer.MAX_VALUE) - encoding scans could be avoided if passing in map of incompletes which should already be known
      */
     public OffsetSimultaneousEncoder invoke() {
         log.debug("Starting encode of incompletes, base offset is: {}, end offset is: {}", lowWaterMark, getEndOffsetExclusive());
@@ -227,15 +234,23 @@ public class OffsetSimultaneousEncoder {
         relativeOffsetsLongRange.forEach(relativeOffset -> {
             // range index (relativeOffset) is used as we don't actually encode offsets, we encode the relative offset from the base offset
             final long actualOffset = this.lowWaterMark + relativeOffset;
-            if (this.incompleteOffsets.contains(actualOffset)) {
-                log.trace("Found an incomplete offset {}", actualOffset);
-                encoders.forEach(x -> x.encodeIncompleteOffset(relativeOffset));
-            } else {
-                encoders.forEach(x -> x.encodeCompletedOffset(relativeOffset));
-            }
+            final boolean isIncomplete = this.incompleteOffsets.contains(actualOffset);
+            activeEncoders.forEach(encoder -> {
+                try {
+                    if (isIncomplete) {
+                        log.trace("Found an incomplete offset {}", actualOffset);
+                        encoder.encodeIncompleteOffset(relativeOffset);
+                    } else {
+                        encoder.encodeCompletedOffset(relativeOffset);
+                    }
+                } catch (EncodingNotSupportedException e) {
+                    log.debug("Error encoding offset {} with encoder {}, removing encoder", actualOffset, encoder, e);
+                    activeEncoders.remove(encoder);
+                }
+            });
         });
 
-        registerEncodings(encoders);
+        registerEncodings(activeEncoders);
 
         log.debug("In order: {}", this.sortedEncodings);
 

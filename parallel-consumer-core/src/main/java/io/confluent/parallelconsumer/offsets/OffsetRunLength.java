@@ -10,8 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.nio.*;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -80,7 +80,7 @@ public class OffsetRunLength {
         final IntBuffer v2IntegerBuffer = in.asIntBuffer();
         final LongBuffer v3LongBuffer = in.asLongBuffer();
 
-        final var incompletes = new HashSet<Long>(); // we don't know the capacity yet
+        final var incompletes = new TreeSet<Long>();
 
         long highestSeenOffset = 0L;
 

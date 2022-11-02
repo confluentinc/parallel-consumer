@@ -4,12 +4,14 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+import java.util.stream.LongStream;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * Range function for Java that provides an Iterable, not just an Iterator which {@link java.util.stream.LongStream#range#iterator()} can.
@@ -20,7 +22,22 @@ import java.util.stream.LongStream;
  */
 public class Range implements Iterable<Long> {
 
+    private final long start;
+
     private final long limit;
+
+    /**
+     * @see this#range(long)
+     */
+    public Range(int start, long max) {
+        this.start = start;
+        this.limit = max;
+    }
+
+    public Range(long limit) {
+        this.start = 0L;
+        this.limit = limit;
+    }
 
     /**
      * Provides an {@link Iterable} for the range of numbers from 0 to the given limit.
@@ -36,6 +53,21 @@ public class Range implements Iterable<Long> {
     public static Range range(long max) {
         return new Range(max);
     }
+
+    /**
+     * @see #range(long)
+     */
+    public static Range range(long start, long max) {
+        return new Range(start, max);
+    }
+
+    /**
+     * Potentially slow, but useful for tests
+     */
+    public static List<Integer> listOfIntegers(int max) {
+        return Range.range(max).listAsIntegers();
+    }
+
 
     public Range(long limit) {
         this.limit = limit;
@@ -53,7 +85,7 @@ public class Range implements Iterable<Long> {
         final long max = limit;
         return new Iterator<>() {
 
-            private long current = 0;
+            private long current = start;
 
             @Override
             public boolean hasNext() {
@@ -76,17 +108,14 @@ public class Range implements Iterable<Long> {
         };
     }
 
-    /**
-     * Potentially slow, but useful for tests
-     */
     public List<Integer> listAsIntegers() {
-        ArrayList<Integer> integers = new ArrayList<>();
-        forEach(e -> integers.add(Math.toIntExact(e)));
-        return integers;
+        return IntStream.range(Math.toIntExact(start), Math.toIntExact(limit))
+                .boxed()
+                .collect(toList());
     }
 
     public LongStream toStream() {
-        return LongStream.range(0, limit);
+        return LongStream.range(start, limit);
     }
 
 }

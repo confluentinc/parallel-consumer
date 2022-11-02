@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.BufferOverflowException;
@@ -41,10 +42,9 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
  * @see RunLengthEncoder
  * @see OffsetBitSet
  */
+@ToString(callSuper = true)
 @Slf4j
 public class BitSetEncoder extends OffsetEncoder {
-
-    private final Version version; // default to new version
 
     private static final Version DEFAULT_VERSION = Version.v2;
 
@@ -64,19 +64,16 @@ public class BitSetEncoder extends OffsetEncoder {
      * @param length the difference between the highest and lowest offset to be encoded
      */
     public BitSetEncoder(long length, OffsetSimultaneousEncoder offsetSimultaneousEncoder, Version newVersion) throws BitSetEncodingNotSupportedException {
-        super(offsetSimultaneousEncoder);
+        super(offsetSimultaneousEncoder, newVersion);
 
-        this.version = newVersion;
-
-
-        if (length > MAX_LENGTH_ENCODABLE) {
-            throw new BitSetEncodingNotSupportedException("BitSet only supports " + MAX_LENGTH_ENCODABLE + " bits, but " + length + " were requested");
+        // prep bit set buffer, range check above
+        try {
+            bitSet = new BitSet(Math.toIntExact(length));
+        } catch (ArithmeticException e) {
+            throw new BitSetEncodingNotSupportedException("BitSet only supports " + MAX_LENGTH_ENCODABLE + " bits, but " + length + " were requested", e);
         }
 
         this.originalLength = length;
-
-        // prep bit set buffer, range check above
-        bitSet = new BitSet(Math.toIntExact(length));
     }
 
     private ByteBuffer constructWrappedByteBuffer(long length, Version newVersion) throws BitSetEncodingNotSupportedException {
@@ -88,9 +85,9 @@ public class BitSetEncoder extends OffsetEncoder {
     }
 
     /**
-     * Switch from encoding bitset length as a short to an integer (length of 32,000 was reasonable too short).
+     * Switch from encoding bitset length as a short to an integer (Short.MAX_VALUE size of 32,000 was too short).
      * <p>
-     * Integer.MAX_VALUE should always be good enough as system restricts large from being processed at once.
+     * Integer.MAX_VALUE is the most we can use, as {@link BitSet} only supports {@link Integer#MAX_VALUE} bits.
      */
     // TODO refactor inivtV2 and V1 together, passing in the Short or Integer
     private ByteBuffer initV2(long bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
@@ -111,7 +108,8 @@ public class BitSetEncoder extends OffsetEncoder {
     }
 
     /**
-     * This was a bit "short" sighted of me....
+     * This was a bit "short" sighted of me.... Encodes the capacity of the bitset as a short, which is only ~32,000
+     * bits ({@link Short#MAX_VALUE}).
      */
     private ByteBuffer initV1(long bitsetEntriesRequired) throws BitSetEncodingNotSupportedException {
         if (bitsetEntriesRequired > Short.MAX_VALUE) {
