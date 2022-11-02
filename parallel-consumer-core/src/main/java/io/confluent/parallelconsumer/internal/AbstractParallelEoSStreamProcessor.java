@@ -1303,4 +1303,36 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
+
+    /**
+     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
+     */
+    public PCMetrics calculateMetrics() {
+        var metrics = PCMetrics.builder();
+
+        addMetricsTo(metrics);
+
+        getWm().addMetricsTo(metrics);
+
+        return metrics.build();
+    }
+
+    /**
+     * todo docs
+     */
+    public PCMetrics calculateMetricsWithIncompletes() {
+        PCMetrics pcMetrics = calculateMetrics();
+        Map<TopicPartition, PCMetrics.PCPartitionMetrics> partitionMetrics = pcMetrics.getPartitionMetrics();
+
+        getWm().enrichWithIncompletes(partitionMetrics);
+
+        PCMetrics.PCMetricsBuilder<?, ?> metrics = pcMetrics.toBuilder();
+        return metrics.build();
+    }
+
+    protected void addMetricsTo(PCMetrics.PCMetricsBuilder<?, ? extends PCMetrics.PCMetricsBuilder<?, ?>> metrics) {
+        metrics.dynamicLoadFactor(dynamicExtraLoadFactor.getCurrentFactor());
+        metrics.pollerMetrics(brokerPollSubsystem.getMetrics());
+    }
+
 }

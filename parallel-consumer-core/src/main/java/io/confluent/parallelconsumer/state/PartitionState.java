@@ -4,6 +4,8 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.Offsets;
+import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
@@ -627,5 +629,30 @@ public class PartitionState<K, V> {
         return false;
     }
 
-}
+    public PCMetrics.PCPartitionMetrics getMetrics() {
+        var b = PCMetrics.PCPartitionMetrics.builder();
+        b.topicPartition(getTp());
 
+        //
+        b.highestSeenOffset(getOffsetHighestSeen());
+        b.epoch(getPartitionsAssignmentEpoch());
+        b.highestCompletedOffset(getOffsetHighestSucceeded());
+        b.numberOfIncompletes(incompleteOffsets.size());
+
+        //
+//        b.compressionStats(getCompressionStats());
+
+        //
+        return b.build();
+    }
+
+    private PCMetrics.PCPartitionMetrics.CompressionStats getCompressionStats() {
+        log.error("UnsupportedOperationException(\"Not implemented yet\");");
+        return PCMetrics.PCPartitionMetrics.CompressionStats.builder().build();
+    }
+
+    public Offsets calculateIncompleteMetrics() {
+        return Offsets.from(getIncompleteOffsetsBelowHighestSucceeded());
+    }
+
+}

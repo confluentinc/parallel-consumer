@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.*;
 import lombok.Getter;
@@ -271,5 +272,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isDirty() {
         return pm.isDirty();
+    }
+
+    public void addMetricsTo(PCMetrics.PCMetricsBuilder<?, ? extends PCMetrics.PCMetricsBuilder<?, ?>> metrics) {
+        metrics.partitionMetrics(getPm().getMetrics());
+        metrics.shardMetrics(getSm().getMetrics());
+    }
+
+    public void enrichWithIncompletes(Map<TopicPartition, PCMetrics.PCPartitionMetrics> metrics) {
+        getPm().enrichWithIncompletes(metrics);
     }
 }

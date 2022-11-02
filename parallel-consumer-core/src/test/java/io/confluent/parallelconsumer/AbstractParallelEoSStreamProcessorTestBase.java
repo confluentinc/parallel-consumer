@@ -490,4 +490,5 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
                 .about(LongPollingMockConsumerSubject.<String, String>mockConsumers())
                 .that(consumerSpy);
     }
+
 }

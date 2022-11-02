@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.RateLimiter;
@@ -163,4 +164,15 @@ public class ProcessingShard<K, V> {
         return options.getOrdering() != UNORDERED;
     }
 
+    public PCMetrics.ShardMetrics getMetrics() {
+        var b = PCMetrics.ShardMetrics.builder();
+        b.shardKey(getKey());
+        b.shardSize(getCountOfWorkTracked());
+
+        //
+//        b.averageTimeSpentInQueue();
+//        b.averageUserProcessingTime();
+
+        return b.build();
+    }
 }

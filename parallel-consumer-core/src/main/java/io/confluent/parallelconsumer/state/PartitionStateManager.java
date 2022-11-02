@@ -4,6 +4,9 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.Offsets;
+import io.confluent.parallelconsumer.PCMetrics;
+import io.confluent.parallelconsumer.PCMetrics.PCPartitionMetrics.IncompleteMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
@@ -17,10 +20,7 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -298,4 +298,27 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return this.partitionStates.values().stream()
                 .anyMatch(PartitionState::isDirty);
     }
+
+    public Map<TopicPartition, PCMetrics.PCPartitionMetrics> getMetrics() {
+        return getAssignedPartitions().values().stream()
+                .map(PartitionState::getMetrics)
+                .collect(Collectors.toMap(PCMetrics.PCPartitionMetrics::getTopicPartition, t -> t));
+    }
+
+    public void enrichWithIncompletes(final Map<TopicPartition, PCMetrics.PCPartitionMetrics> metrics) {
+        getAssignedPartitions().forEach((key, value) -> {
+            // code smell? - a kind of weird way to do this
+            Offsets incompleteOffsets = value.calculateIncompleteMetrics();
+            var pcMetrics = Optional.ofNullable(metrics.get(key));
+            pcMetrics.ifPresent(metrics1 -> {
+                // replace the metrics with the new one with the incomplete offsets added
+                var b = metrics1.toBuilder();
+                var incompleteMetrics = Optional.of(new IncompleteMetrics(incompleteOffsets));
+                var build = b.incompleteMetrics(incompleteMetrics).build();
+                // replace the old metrics with the new one
+                metrics.put(key, build);
+            });
+        });
+    }
+
 }

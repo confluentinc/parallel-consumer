@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
+import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -59,6 +60,7 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
+    @Getter(AccessLevel.PRIVATE)
     private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
@@ -267,4 +269,9 @@ public class ShardManager<K, V> {
         }
     }
 
+    public Map<ShardKey, PCMetrics.ShardMetrics> getMetrics() {
+        return getProcessingShards().values().stream()
+                .map(ProcessingShard::getMetrics)
+                .collect(Collectors.toMap(PCMetrics.ShardMetrics::getShardKey, t -> t));
+    }
 }
