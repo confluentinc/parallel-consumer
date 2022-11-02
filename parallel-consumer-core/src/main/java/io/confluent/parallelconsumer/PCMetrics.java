@@ -8,6 +8,8 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.State;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.state.ShardKey;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
@@ -26,12 +28,17 @@ import java.util.Optional;
 public class PCMetrics {
 
     long dynamicLoadFactor;
+    long incrementingCountOfRecordsProcessed;
 
     Map<TopicPartition, PCPartitionMetrics> partitionMetrics;
 
     Map<ShardKey, ShardMetrics> shardMetrics;
 
     PollerMetrics pollerMetrics;
+
+    Timer functionTimer;
+
+    Counter successCounter;
 
     /**
      * The number of partitions assigned to this consumer

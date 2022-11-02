@@ -34,7 +34,6 @@ public class Offsets {
     public static Offsets fromRecords(List<RecordContext<?, ?>> records) {
         return fromLongs(records.stream()
                 .map(RecordContext::offset)
-                .collect(Collectors.toList()));
     }
 
     // due to type erasure, can't use method overloading
@@ -55,7 +54,6 @@ public class Offsets {
      */
     @Value
     public static class Offset {
-
         long value;
 
         public static Offset of(Long offset) {

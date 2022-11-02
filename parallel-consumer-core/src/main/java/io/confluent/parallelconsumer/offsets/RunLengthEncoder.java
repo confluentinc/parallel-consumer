@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.csid.utils.MathUtils;
 import io.confluent.csid.utils.Range;
+import io.micrometer.core.instrument.DistributionSummary;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -104,8 +105,14 @@ public class RunLengthEncoder extends OffsetEncoder {
 
         byte[] array = runLengthEncodedByteBuffer.array();
         encodedBytes = Optional.of(array);
+
+        offsetsPerByte.record(this.currentRunLengthSize);
+
         return array;
     }
+
+    DistributionSummary offsetsPerByte;
+    DistributionSummary offsetsPerBit;
 
     void addTail() {
         runLengthEncodingIntegers.add(currentRunLengthSize);

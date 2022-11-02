@@ -8,6 +8,14 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
+import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
+import io.micrometer.core.instrument.binder.logging.LogbackMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -48,6 +56,9 @@ import static lombok.AccessLevel.PROTECTED;
  */
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+
+    @Getter
+    private final SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -1132,6 +1143,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         lastCommitCheckTime = Instant.now();
     }
 
+    io.micrometer.core.instrument.Timer timer = metricsRegistry.timer("user.function");
+
     /**
      * Run the supplied function.
      */
@@ -1157,7 +1170,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 return null;
             }
 
+
+            long start = System.nanoTime();
             resultsFromUserFunction = usersFunction.apply(context);
+            timer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
@@ -1202,9 +1218,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         addToMailbox(context, wc);
     }
 
+    Counter successCounter = Counter
+            .builder("instance")
+            .description("indicates instance count of the object")
+            .tags("dev", "performance")
+            .register(metricsRegistry);
+
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
         wc.onUserFunctionSuccess();
+        successCounter.increment();
     }
 
     protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
@@ -1303,7 +1326,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-
     /**
      * Gather metrics from the {@link ParallelConsumer} and for monitoring.
      */
@@ -1313,6 +1335,74 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         addMetricsTo(metrics);
 
         getWm().addMetricsTo(metrics);
+
+        metrics.functionTimer(timer);
+        metrics.successCounter(successCounter);
+
+        new JvmMemoryMetrics().bindTo(metricsRegistry);
+        new JvmGcMetrics().bindTo(metricsRegistry);
+        new JvmThreadMetrics().bindTo(metricsRegistry);
+        new ProcessorMetrics().bindTo(metricsRegistry);
+        new KafkaClientMetrics().bindTo(metricsRegistry);
+
+
+//        CompositeMeterRegistry compositeRegistry = new CompositeMeterRegistry();
+
+//        compositeRegistry.add(oneSimpleMeter);
+//
+//        var registry = compositeRegistry;
+//
+//
+//        successCounter.increment(2.0);
+//
+//        assertTrue(successCounter.count() == 2);
+//
+//        successCounter.increment(-1);
+//
+//        assertTrue(successCounter.count() == 1);
+//
+//
+//        io.micrometer.core.instrument.Timer timer = registry.timer("app.event");
+//        timer.record(() -> {
+//            try {
+//                TimeUnit.MILLISECONDS.sleep(15);
+//            } catch (InterruptedException ignored) {
+//            }
+//        });
+//
+//        timer.record(30, TimeUnit.MILLISECONDS);
+//
+//
+//        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+//        List<String> list = new ArrayList<>(4);
+//
+//        Gauge gauge = Gauge
+//                .builder("cache.size", list, List::size)
+//                .register(registry);
+//
+//
+//        list.add("1");
+//
+//
+//        //
+//        DistributionSummary distributionSummary = DistributionSummary
+//                .builder("request.size")
+//                .baseUnit("bytes")
+//                .register(registry);
+//
+//        distributionSummary.record(3);
+//        distributionSummary.record(4);
+//        distributionSummary.record(5);
+//
+//
+//        Timer timer = new Timer
+//                .("test.timer")
+//                .publishPercentiles(0.3, 0.5, 0.95)
+//                .publishPercentileHistogram()
+//                .register(registry);
+
+
+        new LogbackMetrics().bindTo(metricsRegistry);
 
         return metrics.build();
     }

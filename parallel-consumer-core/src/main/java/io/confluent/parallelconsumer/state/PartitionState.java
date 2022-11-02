@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.micrometer.core.instrument.DistributionSummary;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -431,6 +432,9 @@ public class PartitionState<K, V> {
         }
     }
 
+    DistributionSummary ratioOfPayloadUsed;
+
+
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
      * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see
@@ -448,7 +452,9 @@ public class PartitionState<K, V> {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
             long offsetOfNextExpectedMessage = getOffsetToCommit();
+            var offsetRange = getOffsetHighestSucceeded() - offsetOfNextExpectedMessage;
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
+            ratioOfPayloadUsed.record(offsetMapPayload.length() / (double) offsetRange);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
                 return empty();
