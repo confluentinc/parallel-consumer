@@ -51,7 +51,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 1, unit = MINUTES)
+@Timeout(value = 10, unit = MINUTES)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -908,8 +908,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // use a small set of keys, over a large set of records
         final int keySetSize = 4;
-        var keys = range(keySetSize).list();
-        final int total = 20_000;
+        var keys = Range.range(keySetSize).listAsIntegers();
+        final int total = 100_000;
 //        final int total = 10;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
@@ -929,7 +929,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         // count how many we've received so far
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(3000, TimeUnit.SECONDS)
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
