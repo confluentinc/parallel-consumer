@@ -34,6 +34,7 @@ public class Offsets {
     public static Offsets fromRecords(List<RecordContext<?, ?>> records) {
         return fromLongs(records.stream()
                 .map(RecordContext::offset)
+                .collect(Collectors.toUnmodifiableList()));
     }
 
     // due to type erasure, can't use method overloading

@@ -7,9 +7,8 @@ package io.confluent.parallelconsumer;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Test;
 import java.util.concurrent.TimeUnit;
+
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static org.awaitility.Awaitility.await;
 
