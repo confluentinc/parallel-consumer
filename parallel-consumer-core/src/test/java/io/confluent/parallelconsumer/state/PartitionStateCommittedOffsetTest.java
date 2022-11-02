@@ -8,6 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.offsets.OffsetEncodingTests;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
+import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.LongStreamEx;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -33,6 +35,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
  * @see PartitionState#maybeTruncateOrPruneTrackedOffsets
  * @see io.confluent.parallelconsumer.integrationTests.state.PartitionStateCommittedOffsetIT
  */
+@Slf4j
 class PartitionStateCommittedOffsetTest {
 
     ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
@@ -45,42 +48,77 @@ class PartitionStateCommittedOffsetTest {
 
     final long highestSeenOffset = 101L;
 
-    List<Long> incompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L, 95L, 96L, 97L, 98L, 100L);
+    List<Long> trackedIncompletes = UniLists.of(previouslyCommittedOffset, 15L, unexpectedlyHighOffset, 60L, 80L, 95L, 96L, 97L, 98L, 100L);
 
-    List<Long> expectedTruncatedIncompletes = incompletes.stream()
+    List<Long> expectedTruncatedIncompletes = trackedIncompletes.stream()
             .filter(offset -> offset >= unexpectedlyHighOffset)
             .collect(Collectors.toList());
 
-    HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new TreeSet<>(incompletes));
+    HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new TreeSet<>(trackedIncompletes));
 
     PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
+
+    /**
+     * Checks exactly what {@link java.util.NavigableSet#subSet} returns, specifically with regard to checking for
+     * potential off by one in the implementation in {@link PartitionState#maybeTruncateOrPruneTrackedOffsets},
+     */
+    @Test
+    void concurrentSkipListMapSanityCheck() {
+        ConcurrentSkipListMap<Long, Boolean> incompletes = new ConcurrentSkipListMap<>();
+        incompletes.put(2L, true);
+        incompletes.put(3L, true);
+        incompletes.put(4L, true);
+        incompletes.put(5L, true);
+        incompletes.put(6L, true);
+
+        ConcurrentSkipListMap<Long, Boolean> polled = new ConcurrentSkipListMap<>();
+        polled.put(3L, true);
+        polled.put(5L, true);
+
+        final long lowPoll = polled.firstKey();
+        final long highPoll = polled.lastKey();
+
+        var polledRange = incompletes.keySet().subSet(lowPoll, true, highPoll, true);
+
+        polledRange.forEach(x -> {
+            if (polled.containsKey(x)) {
+                log.warn("Found: {}", x);
+            } else {
+                log.warn("Not found, dropping: {}", x);
+                incompletes.remove(x);
+            }
+        });
+
+        assertThat(incompletes.keySet()).containsExactly(2L, 3L, 5L, 6L);
+    }
 
     /**
      * Test for offset gaps in partition data (i.e. compacted topics)
      */
     @Test
     void compactedTopic() {
-        Set<Long> compacted = UniSets.of(80L, 95L, 97L);
+        Set<Long> missingOffsets = UniSets.of(80L, 95L, 97L);
         long slightlyLowerRange = highestSeenOffset - 2L; // to check subsets don't mess with incompletes not represented in this polled batch
         List<Long> polledOffsetsWithCompactedRemoved = LongStreamEx.range(previouslyCommittedOffset, slightlyLowerRange)
-                .filter(offset -> !compacted.contains(offset))
+                .filter(offset -> !missingOffsets.contains(offset))
                 .boxed().toList();
 
-        //
-        PolledTestBatch polledTestBatch = new PolledTestBatch(mu, tp, polledOffsetsWithCompactedRemoved);
 
         //
-        addPollToState(state, polledTestBatch);
+        PolledTestBatch polledTestBatchWithoutMissingOffsets = new PolledTestBatch(mu, tp, polledOffsetsWithCompactedRemoved);
+
+        //
+        addPollToState(state, polledTestBatchWithoutMissingOffsets);
 
         //
         OffsetAndMetadata offsetAndMetadata = state.createOffsetAndMetadata();
 
         assertThat(offsetAndMetadata).getOffset().isEqualTo(previouslyCommittedOffset);
 
-        var compactedIncompletes = incompletes.stream().filter(offset -> !compacted.contains(offset)).collect(Collectors.toList());
-        assertThat(state).getAllIncompleteOffsets().containsExactlyElementsIn(compactedIncompletes);
-
-        // check still contains 100,101
+        //
+        // this also checks that the state still contains 100, as it's not in the polled batches' range and should still be tracked as incomplete
+        var incompletesWithoutMissingOffsets = trackedIncompletes.stream().filter(offset -> !missingOffsets.contains(offset)).collect(Collectors.toList());
+        assertThat(state).getAllIncompleteOffsets().containsExactlyElementsIn(incompletesWithoutMissingOffsets);
     }
 
     /**
