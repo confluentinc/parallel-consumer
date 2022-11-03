@@ -3,7 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.Getter;
 
 import java.time.Duration;
@@ -112,7 +112,7 @@ public class ProgressTracker {
     }
 
     public Exception constructError(String messageToAppend) {
-        return new InternalRuntimeError(msg("No progress beyond {} records after {} rounds. {}",
+        return new InternalRuntimeException(msg("No progress beyond {} records after {} rounds. {}",
                 processedCount, rounds, messageToAppend));
     }
 }

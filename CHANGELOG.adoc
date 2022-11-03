@@ -3,6 +3,10 @@
 
 = Change Log
 
+A high level summary of noteworthy changes in each version.
+
+NOTE:: Dependency version bumps are not listed here.
+
 // git log --pretty="* %s" 0.3.0.2..HEAD
 
 // only show TOC if this is the root document (not in the README)
@@ -10,7 +14,85 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
-== Next Version
+== 0.5.2.4
+
+=== Improvements
+
+* feature: Simple PCRetriableException to remove error spam from logs (#444)
+
+=== Fixes
+
+* fixes #409: Adds support for compacted topics and commit offset resetting (#425)
+** Truncate the offset state when bootstrap polled offset higher or lower than committed
+** Prune missing records from the tracked incomplete offset state, when they're missing from polled batches
+* fix: Improvements to encoding ranges (int vs long) #439
+** Replace integer offset references with long - use Long everywhere we deal with offsets, and where we truncate down, do it exactly, detect and handle truncation issues.
+
+== 0.5.2.3
+
+=== Improvements
+
+* Transactional commit mode system improvements and docs (#355)
+** Clarifies transaction system with much better documentation.
+** Fixes a potential race condition which could cause offset leaks between transactions boundaries.
+** Introduces lock acquisition timeouts.
+** Fixes a potential issue with removing records from the retry queue incorrectly, by having an inconsistency between compareTo and equals in the retry TreeMap.
+* Adds a very simple Dependency Injection system modeled on Dagger (#398)
+* Various refactorings e.g. new ProducerWrap
+
+* Dependencies
+** build(deps): prod: zstd, reactor, dev: podam, progressbar, postgresql maven-plugins: versions, help (#420)
+** build(deps-dev): bump postgresql from 42.4.1 to 42.5.0
+** bump podam, progressbar, zstd, reactor
+** build(deps): bump versions-maven-plugin from 2.11.0 to 2.12.0
+** build(deps): bump maven-help-plugin from 3.2.0 to 3.3.0
+** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
+** build(deps): Upgrade to AK 3.3.0 (#309)
+
+
+=== Fixes
+
+* fixes #419: NoSuchElementException during race condition in PartitionState (#422)
+* Fixes #412: ClassCastException with retryDelayProvider (#417)
+* fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
+
+== v0.5.2.2
+
+=== Fixes
+
+- Fixes dependency scope for Mockito from compile to test (#376)
+
+== v0.5.2.1
+
+=== Fixes
+
+- Fixes regression issue with order of state truncation vs commit (#362)
+
+== v0.5.2.0
+
+=== Fixes and Improvements
+
+- fixes #184: Fix multi topic subscription with KEY order by adding topic to shard key (#315)
+- fixes #329: Committing around transaction markers causes encoder to crash (#328)
+- build: Upgrade Truth-Generator to 0.1.1 for user Subject discovery (#332)
+
+=== Build
+
+- build: Allow snapshots locally, fail in CI (#331)
+- build: OSS Index scan change to warn only and exclude Guava CVE-2020-8908 as it's WONT_FIX (#330)
+
+=== Dependencies
+
+- build(deps): bump reactor-core from 3.4.19 to 3.4.21 (#344)
+- build(deps): dependabot bump Mockito, Surefire, Reactor, AssertJ, Release (#342) (#342)
+- build(deps): dependabot bump TestContainers, Vert.x, Enforcer, Versions, JUnit, Postgress (#336)
+
+=== Linked issues
+
+- Message with null key lead to continuous failure when using KEY ordering #318
+- Subscribing to two or more topics with KEY ordering, results in messages of the same Key never being processed #184
+- Cannot have negative length BitSet error - committing transaction adjacent offsets #329
 
 == v0.5.1.0
 
