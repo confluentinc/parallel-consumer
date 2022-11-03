@@ -3,25 +3,6 @@ package io.confluent.parallelconsumer.integrationTests;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
-
-import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.state.ShardKey;
-import io.confluent.parallelconsumer.state.ShardKey.KeyOrderedKey;
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import lombok.SneakyThrows;

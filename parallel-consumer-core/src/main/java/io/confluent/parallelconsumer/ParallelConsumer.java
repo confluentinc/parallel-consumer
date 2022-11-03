@@ -48,7 +48,7 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
     void subscribe(Pattern pattern, ConsumerRebalanceListener callback);
 
     /**
-     * Alias for #scribe(List.of(topicName))
+     * Alias for #subscribe(List.of(topicName))
      *
      * @see #subscribe(Collection)
      */

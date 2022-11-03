@@ -9,23 +9,19 @@ import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedSubject;
 import one.util.streamex.StreamEx;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
-import io.stubbs.truth.generator.UserManagedTruth;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerParentSubject;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import pl.tlinkowski.unij.api.UniSets;
 
 import javax.annotation.Generated;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.List;
 
 import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
 

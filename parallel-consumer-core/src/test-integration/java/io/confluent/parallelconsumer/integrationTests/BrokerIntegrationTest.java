@@ -1,15 +1,11 @@
-
-/*-
- * Copyright (C) 2020-2022 Confluent, Inc.
- */
 package io.confluent.parallelconsumer.integrationTests;
+
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
-import lombok.Getter;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -30,8 +26,8 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * @author Antony Stubbs
@@ -54,6 +50,7 @@ public abstract class BrokerIntegrationTest<K, V> {
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
+    @Getter(AccessLevel.PROTECTED)
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
     public static KafkaContainer createKafkaContainer(String logSegmentSize) {
@@ -66,7 +63,6 @@ public abstract class BrokerIntegrationTest<K, V> {
                 // try to speed up initial consumer group formation
                 .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
                 .withReuse(true);
-    }
 
         if (StringUtils.isNotBlank(logSegmentSize)) {
             base = base.withEnv("KAFKA_LOG_SEGMENT_BYTES", logSegmentSize);
