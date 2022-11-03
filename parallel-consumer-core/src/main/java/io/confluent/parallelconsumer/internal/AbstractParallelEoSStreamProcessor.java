@@ -426,7 +426,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
                 if (isAutoCommitEnabled)
                     throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
-            } else if (consumer instanceof MockConsumer<K, V>) {
+            } else if (consumer instanceof MockConsumer) {
                 log.debug("Detected MockConsumer class which doesn't do auto commits");
             } else {
                 throw new UnsupportedOperationException("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
