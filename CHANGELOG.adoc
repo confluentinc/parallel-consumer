@@ -14,6 +14,12 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.2.5
+
+=== Fixes
+
+* fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
+
 == 0.5.2.4
 
 === Improvements

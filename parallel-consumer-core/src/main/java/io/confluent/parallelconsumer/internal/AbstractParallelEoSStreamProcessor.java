@@ -412,6 +412,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
         try {
             if (consumer instanceof KafkaConsumer) {
+                // Could use Commons Lang FieldUtils#readField - but, avoid needing commons lang
                 Field coordinatorField = KafkaConsumer.class.getDeclaredField("coordinator");
                 coordinatorField.setAccessible(true);
                 ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
