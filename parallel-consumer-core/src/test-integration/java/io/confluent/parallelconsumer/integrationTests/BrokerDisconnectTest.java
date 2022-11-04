@@ -51,8 +51,6 @@ class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
 
         //
         await().atMost(Duration.ofSeconds(60)).untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(recordsProduced)));
-
-
     }
 
     private void checkPCState() {

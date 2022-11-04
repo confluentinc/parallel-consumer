@@ -13,6 +13,7 @@ import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;

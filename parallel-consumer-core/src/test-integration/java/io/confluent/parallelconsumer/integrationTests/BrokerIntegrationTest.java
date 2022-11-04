@@ -96,9 +96,10 @@ public abstract class BrokerIntegrationTest<K, V> {
         kcu.close();
     }
 
-    protected void setupTopic() {
+    protected String setupTopic() {
         String name = getClass().getSimpleName();
         setupTopic(name);
+        return name;
     }
 
     protected String setupTopic(String name) {
