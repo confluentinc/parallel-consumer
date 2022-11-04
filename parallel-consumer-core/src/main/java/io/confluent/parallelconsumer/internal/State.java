@@ -24,5 +24,7 @@ public enum State {
      */
     DRAINING,
     CLOSING,
-    CLOSED;
+    CLOSED,
+
+    CRASHED;
 }

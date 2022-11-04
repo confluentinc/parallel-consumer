@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import pl.tlinkowski.unij.api.UniLists;
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -161,6 +163,10 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
                                Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         pollAndProduceMany(consumerRecord -> UniLists.of(userFunction.apply(consumerRecord)), callback);
+    }
+
+    public <K, V> PCProducerApi producerApi(Supplier<Producer<K, V>> producerSupplier, ParallelConsumerOptions.ProcessingOrder order) {
+        return null;
     }
 
 }
