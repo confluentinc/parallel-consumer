@@ -218,7 +218,7 @@ public class KafkaClientUtils implements AutoCloseable {
         properties.putAll(options);
 
         KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(properties);
-        log.debug("New consume {}", kvKafkaConsumer);
+        log.debug("New consumer {}", kvKafkaConsumer);
         return kvKafkaConsumer;
     }
 
@@ -259,6 +259,8 @@ public class KafkaClientUtils implements AutoCloseable {
             txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + nextInt()); // required for tx
             txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
         }
+
+        txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
 
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
 
@@ -330,6 +332,7 @@ public class KafkaClientUtils implements AutoCloseable {
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll, GroupOption groupOption) {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
+        consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 1);
         boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);
         KafkaConsumer<String, String> newConsumer = createNewConsumer(newConsumerGroup, consumerProps);
         lastConsumerConstructed = newConsumer;
@@ -338,7 +341,7 @@ public class KafkaClientUtils implements AutoCloseable {
                 .ordering(order)
                 .consumer(newConsumer)
                 .commitMode(commitMode)
-                .maxConcurrency(100)
+                .maxConcurrency(1)
                 .build());
 
         pc.setTimeBetweenCommits(ofSeconds(1));

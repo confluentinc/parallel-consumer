@@ -12,8 +12,8 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.kafka.clients.admin.CreateTopicsResult;
-import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.common.config.ConfigResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,11 +26,13 @@ import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
+import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 
 /**
  * @author Antony Stubbs
@@ -56,6 +58,7 @@ public abstract class BrokerIntegrationTest {
     @Getter(AccessLevel.PROTECTED)
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
+    //advertised.listeners
     public static KafkaContainer createKafkaContainer(String logSegmentSize) {
         KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
@@ -65,6 +68,9 @@ public abstract class BrokerIntegrationTest {
                 // default produce batch size is - must be at least higher than it: 16KB
                 // try to speed up initial consumer group formation
                 .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
+                //
+                .withEnv("KAFKA_ADVERTISED_LISTENERS", "localhost:") // for use with toxi proxy
+                //
                 .withNetwork(network)
                 .withReuse(true);
 
@@ -97,8 +103,9 @@ public abstract class BrokerIntegrationTest {
 
     // Toxiproxy container, which will be used as a TCP proxy
 //    @Rule
+    @Getter
     @Container
-    public ToxiproxyContainer toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
+    private final ToxiproxyContainer toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
             .withNetwork(network)
             .withNetworkAliases(TOXIPROXY_NETWORK_ALIAS);
 
@@ -106,8 +113,49 @@ public abstract class BrokerIntegrationTest {
         toxiproxy.start();
     }
 
+
     // Starting proxying connections to a target container
-    final ToxiproxyContainer.ContainerProxy proxy = toxiproxy.getProxy(kafkaContainer, 6379);
+    @Getter
+    private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(kafkaContainer, KAFKA_PORT);
+
+    {
+        updateAdvertisedListenersToProxy();
+    }
+
+    /**
+     * After the proxy is started, we need to update the advertised listeners to point to the proxy, otherwise the
+     * clients will try to connect directly, bypassing the proxy.
+     *
+     * @see KafkaContainer#containerIsStarted
+     */
+    @SneakyThrows
+    private void updateAdvertisedListenersToProxy() {
+        final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, null);
+        var toxiPort = getBrokerProxy().getProxyPort();
+
+        log.debug("Updating advertised listeners to point to toxi proxy: {}", toxiPort);
+
+        //
+        ConfigResource configResource = new ConfigResource(ConfigResource.Type.BROKER, "1");
+        // as we only have a single node cluster, only need something here which will satisfy config validation - although
+        //  internally the KafkaContainer actually sets the broker to broker listener to something else
+        var brokerBs = String.format("BROKER://%s:%s", kafkaContainer.getHost(), "9092");
+        var bs = String.format("PLAINTEXT://%s:%s", "localhost", brokerProxy.getProxyPort());
+        String value = String.join(",", brokerBs, bs);
+        ConfigEntry toxiAdvertListener = new ConfigEntry("advertised.listeners", value);
+        AlterConfigOp op = new AlterConfigOp(toxiAdvertListener, AlterConfigOp.OpType.SET);
+
+        //
+        // fix - reuse existing admin client? or refactor to make construction nicer
+        var p = new Properties();
+        p.put("bootstrap.servers", bs);
+        AdminClient admin = AdminClient.create(p);
+        admin.incrementalAlterConfigs(Map.of(configResource, List.of(op))).all().get();
+        admin.close();
+
+        //
+        log.debug("Updated advertised listeners to point to toxi proxy: {}", toxiPort);
+    }
 
     int numPartitions = 1;
     int partitionNumber = 0;
@@ -152,13 +200,15 @@ public abstract class BrokerIntegrationTest {
         return topic;
     }
 
+    @SneakyThrows
     protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
+        log.debug("Ensuring topic exists on broker: {}...", topic);
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
-        CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
+        AdminClient admin = kcu.getAdmin();
+
+        CreateTopicsResult topics = admin.createTopics(UniLists.of(e1));
         try {
             Void all = topics.all().get(1, TimeUnit.SECONDS);
-        } catch (ExecutionException e) {
-            // fine
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -177,13 +227,13 @@ public abstract class BrokerIntegrationTest {
     int outPort = -1;
 
     protected void simulateBrokerResume() {
-        log.warn("Simulating broker connection recover");
-        proxy.setConnectionCut(false);
+        log.warn("Simulating broker connection recovery");
+        brokerProxy.setConnectionCut(false);
     }
 
     protected void simulateBrokerUnreachable() {
         log.warn("Simulating broker connection cut");
-        proxy.setConnectionCut(true);
+        brokerProxy.setConnectionCut(true);
     }
 
     protected void terminateBrokerWithDockerNetwork() {

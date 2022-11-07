@@ -1,6 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import com.google.common.truth.Truth;
+import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
@@ -25,8 +26,19 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
 
     @SneakyThrows
     @Test
+    void proxyTest() {
+        simulateBrokerUnreachable();
+        String topicName = setupTopic();
+        getKcu().produceMessages(topicName, 1);
+        Truth.assertThat(false).isTrue();
+    }
+
+    @SneakyThrows
+    @Test
     void brokerRestart() {
-        var recordsProduced = 100000;
+//        var recordsProduced = 10_000;
+        var recordsProduced = 100;
+//        var recordsProduced = 10;
         String topicName = setupTopic();
         getKcu().produceMessages(topicName, recordsProduced);
 
@@ -35,11 +47,12 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         AtomicInteger processedCount = new AtomicInteger();
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
+//            ThreadUtils.sleepSecondsLog(1);
             processedCount.incrementAndGet();
         });
 
         // make sure we've started consuming already before disconnecting the broker
-        await().untilAtomic(processedCount, is(greaterThan(100)));
+        await().untilAtomic(processedCount, is(greaterThan(10)));
         log.debug("Consumed 100");
 
         //
@@ -49,8 +62,8 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         checkPCState();
 
         log.debug("Stay disconnected for a while...");
-        Thread.sleep(15000);
-        log.debug("Finished disconnect, resuming connection.");
+        // todo how long to test we can recover from?
+        ThreadUtils.sleepSecondsLog(10);
 
         //
         simulateBrokerResume();
@@ -59,7 +72,12 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         checkPCState();
 
         //
-        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> Truth.assertThat(processedCount.get()).isAtLeast(recordsProduced));
+        await()
+                .atMost(Duration.ofMinutes(60))
+                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                .untilAsserted(() -> Truth
+                        .assertThat(processedCount.get())
+                        .isAtLeast(recordsProduced));
     }
 
     private void checkPCState() {

@@ -443,7 +443,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
         this.offsetResetStrategy = offsetResetPolicy;
         try (
                 KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker();
-                KafkaClientUtils clientUtils = new KafkaClientUtils(compactingKafkaBroker, toxiproxy);
+                KafkaClientUtils clientUtils = new KafkaClientUtils(compactingKafkaBroker, getToxiproxy());
         ) {
             log.debug("Compacting broker started {}", compactingKafkaBroker.getBootstrapServers());
 
@@ -544,7 +544,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
     void noOffsetPolicyOnStartup() {
         this.offsetResetStrategy = NONE;
         try (
-                KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer, toxiproxy);
+                KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer, getToxiproxy());
         ) {
             clientUtils.setOffsetResetPolicy(offsetResetStrategy);
             clientUtils.open();

@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -42,15 +43,15 @@ public class ConsumerManager<K, V> {
     ConsumerRecords<K, V> poll(Duration requestedLongPollTimeout) {
         Duration timeoutToUse = requestedLongPollTimeout;
         ConsumerRecords<K, V> records;
+        if (commitRequested) {
+            log.debug("Commit requested, so will not long poll as need to perform the commit");
+            timeoutToUse = Duration.ofMillis(1);// disable long poll, as commit needs performing
+            commitRequested = false;
+        }
+        pollingBroker.set(true);
+        updateMetadataCache();
+        log.debug("Poll starting with timeout: {}", timeoutToUse);
         try {
-            if (commitRequested) {
-                log.debug("Commit requested, so will not long poll as need to perform the commit");
-                timeoutToUse = Duration.ofMillis(1);// disable long poll, as commit needs performing
-                commitRequested = false;
-            }
-            pollingBroker.set(true);
-            updateMetadataCache();
-            log.debug("Poll starting with timeout: {}", timeoutToUse);
             records = consumer.poll(timeoutToUse);
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
             updateMetadataCache();
