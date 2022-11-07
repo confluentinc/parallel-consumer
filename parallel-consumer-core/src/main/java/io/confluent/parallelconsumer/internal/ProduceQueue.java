@@ -77,7 +77,7 @@ public class ProduceQueue<K, V> {
         state = State.RUNNING;
         while (state == State.RUNNING) {
             try {
-                blockWhileInFlightsTooHigh();
+//                blockWhileInFlightsTooHigh();
                 sendOneQueuedRecordBlocking();
             } catch (InterruptedException e) {
                 log.warn("Interrupted while sending message, shutting down", e);
@@ -115,7 +115,8 @@ public class ProduceQueue<K, V> {
 
     @ToString.Include
     public int outboundSize() {
-        return outboundQueue.size();
+        return accumulatingSendFutures.queueSize();
+//        return outboundQueue.size();
     }
 
     /**
