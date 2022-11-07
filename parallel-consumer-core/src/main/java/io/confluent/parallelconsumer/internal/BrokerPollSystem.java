@@ -129,7 +129,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             log.debug("Broker poller thread finished normally, returning OK (true) to future...");
             return true;
         } catch (Exception e) {
-            log.error("Unknown error", e);
+            log.error("Unhandled error, crashing broker poller...", e);
             throw e;
         }
     }

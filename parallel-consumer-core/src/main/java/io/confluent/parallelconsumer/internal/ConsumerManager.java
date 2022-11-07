@@ -4,10 +4,12 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.errors.WakeupException;
 import pl.tlinkowski.unij.api.UniMaps;
 
@@ -15,6 +17,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
  * Delegate for {@link KafkaConsumer}
@@ -92,11 +96,14 @@ public class ConsumerManager<K, V> {
             try {
                 consumer.commitSync(offsetsToSend);
                 inProgress = false;
+            } catch (TimeoutException e) {
+                throw new ParallelConsumerException("Timeout committing offsets", e);
             } catch (WakeupException w) {
-                log.debug("Got woken up, retry. errors: " + erroneousWakups + " none: " + noWakeups + " correct:" + correctPollWakeups, w);
+                log.debug(msg("Got woken up, retry. errors: {} none: {} correct: {}", erroneousWakups, noWakeups, correctPollWakeups), w);
                 erroneousWakups++;
             }
         }
+
     }
 
     public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets, OffsetCommitCallback callback) {
