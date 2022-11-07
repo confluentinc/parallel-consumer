@@ -27,6 +27,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.ToxiproxyContainer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,12 +58,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class KafkaClientUtils implements AutoCloseable {
 
     public static final int MAX_POLL_RECORDS = 10_000;
+
     public static final String GROUP_ID_PREFIX = "group-1-";
+
+    private final ToxiproxyContainer toxiproxyContainer;
 
     class PCVersion {
         public static final String V051 = "0.5.1";
     }
-
 
     private final KafkaContainer kContainer;
 
@@ -87,22 +90,40 @@ public class KafkaClientUtils implements AutoCloseable {
      */
     private KafkaConsumer<String, String> lastConsumerConstructed;
 
-    public KafkaClientUtils(KafkaContainer kafkaContainer) {
+    public KafkaClientUtils(KafkaContainer kafkaContainer, ToxiproxyContainer toxiproxyContainer) {
+        this.toxiproxyContainer = toxiproxyContainer;
         kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
         kafkaContainer.addEnv("KAFKA_transaction_state_log_min_isr", "1");
         kafkaContainer.start();
         this.kContainer = kafkaContainer;
     }
 
-    private Properties setupCommonProps() {
+    private Properties createCommonProperties() {
         var commonProps = new Properties();
-        String servers = this.kContainer.getBootstrapServers();
+        String servers = getBootstrapServers();
         commonProps.put("bootstrap.servers", servers);
         return commonProps;
     }
 
+    private String getBootstrapServers() {
+        var bootstraps = String.format("PLAINTEXT://%s:%s", getHost(), getProxiedKafkaPort());
+        return bootstraps;
+    }
+
+    private int getProxiedKafkaPort() {
+        return getProxy().getProxyPort();
+    }
+
+    private ToxiproxyContainer.ContainerProxy getProxy() {
+        return toxiproxyContainer.getProxy(kContainer, KafkaContainer.KAFKA_PORT);
+    }
+
+    private String getHost() {
+        return getProxy().getContainerIpAddress();
+    }
+
     private Properties setupProducerProps() {
-        var producerProps = setupCommonProps();
+        var producerProps = createCommonProperties();
 
         producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
@@ -111,7 +132,7 @@ public class KafkaClientUtils implements AutoCloseable {
     }
 
     private Properties setupConsumerProps(String groupIdToUse) {
-        var consumerProps = setupCommonProps();
+        var consumerProps = createCommonProperties();
 
         //
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupIdToUse);
@@ -136,10 +157,10 @@ public class KafkaClientUtils implements AutoCloseable {
 
     @BeforeEach
     public void open() {
-        log.info("Setting up clients...");
+        log.info("Setting up clients using {}...", createCommonProperties());
         consumer = this.createNewConsumer();
         producer = this.createNewProducer(false);
-        admin = AdminClient.create(setupCommonProps());
+        admin = AdminClient.create(createCommonProperties());
     }
 
     @AfterEach

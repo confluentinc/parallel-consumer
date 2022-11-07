@@ -63,7 +63,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see io.confluent.parallelconsumer.state.PartitionStateCommittedOffsetTest
  */
 @Slf4j
-class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, String> {
+class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
 
     public static final OffsetResetStrategy DEFAULT_OFFSET_RESET_POLICY = OffsetResetStrategy.EARLIEST;
 
@@ -443,7 +443,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
         this.offsetResetStrategy = offsetResetPolicy;
         try (
                 KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker();
-                KafkaClientUtils clientUtils = new KafkaClientUtils(compactingKafkaBroker);
+                KafkaClientUtils clientUtils = new KafkaClientUtils(compactingKafkaBroker, toxiproxy);
         ) {
             log.debug("Compacting broker started {}", compactingKafkaBroker.getBootstrapServers());
 
@@ -544,7 +544,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
     void noOffsetPolicyOnStartup() {
         this.offsetResetStrategy = NONE;
         try (
-                KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer);
+                KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer, toxiproxy);
         ) {
             clientUtils.setOffsetResetPolicy(offsetResetStrategy);
             clientUtils.open();

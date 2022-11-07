@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import com.github.dockerjava.api.DockerClient;
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.AccessLevel;
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
+import org.testcontainers.containers.ToxiproxyContainer;
+import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
@@ -34,22 +37,22 @@ import static org.apache.commons.lang3.RandomUtils.nextInt;
  */
 @Testcontainers
 @Slf4j
-public abstract class BrokerIntegrationTest<K, V> {
+public abstract class BrokerIntegrationTest {
 
-    static {
-        System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
-    }
+    // An alias that can be used to resolve the Toxiproxy container by name in the network it is connected to.
+    // It can be used as a hostname of the Toxiproxy container by other containers in the same network.
+    private static final String TOXIPROXY_NETWORK_ALIAS = "toxiproxy";
 
-    int numPartitions = 1;
-    int partitionNumber = 0;
-
-    @Getter
-    String topic;
+    // Create a common docker network so that containers can communicate
+//    @Rule
+//    @Container
+    public static Network network = Network.newNetwork();
 
     /**
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
+    @Container
     @Getter(AccessLevel.PROTECTED)
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
@@ -62,6 +65,7 @@ public abstract class BrokerIntegrationTest<K, V> {
                 // default produce batch size is - must be at least higher than it: 16KB
                 // try to speed up initial consumer group formation
                 .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
+                .withNetwork(network)
                 .withReuse(true);
 
         if (StringUtils.isNotBlank(logSegmentSize)) {
@@ -75,8 +79,44 @@ public abstract class BrokerIntegrationTest<K, V> {
         kafkaContainer.start();
     }
 
+
+    static {
+        System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
+    }
+
+
+    private static final DockerImageName REDIS_IMAGE = DockerImageName.parse("redis:5.0.4");
+//
+//    // The target container - this could be anything
+////    @Rule
+//    public GenericContainer<?> redis = new GenericContainer<>(REDIS_IMAGE)
+//            .withExposedPorts(6379)
+//            .withNetwork(network);
+
+    private static final DockerImageName TOXIPROXY_IMAGE = DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.5.0");
+
+    // Toxiproxy container, which will be used as a TCP proxy
+//    @Rule
+    @Container
+    public ToxiproxyContainer toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
+            .withNetwork(network)
+            .withNetworkAliases(TOXIPROXY_NETWORK_ALIAS);
+
+    {
+        toxiproxy.start();
+    }
+
+    // Starting proxying connections to a target container
+    final ToxiproxyContainer.ContainerProxy proxy = toxiproxy.getProxy(kafkaContainer, 6379);
+
+    int numPartitions = 1;
+    int partitionNumber = 0;
+
+    @Getter
+    String topic;
+
     @Getter(AccessLevel.PROTECTED)
-    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
+    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, toxiproxy);
 
     @BeforeAll
     static void followKafkaLogs() {
@@ -136,7 +176,17 @@ public abstract class BrokerIntegrationTest<K, V> {
 
     int outPort = -1;
 
-    protected void terminateBroker() {
+    protected void simulateBrokerResume() {
+        log.warn("Simulating broker connection recover");
+        proxy.setConnectionCut(false);
+    }
+
+    protected void simulateBrokerUnreachable() {
+        log.warn("Simulating broker connection cut");
+        proxy.setConnectionCut(true);
+    }
+
+    protected void terminateBrokerWithDockerNetwork() {
         log.warn(kafkaContainer.getPortBindings().toString());
         log.warn(kafkaContainer.getExposedPorts().toString());
         log.warn(kafkaContainer.getBoundPortNumbers().toString());
@@ -152,13 +202,14 @@ public abstract class BrokerIntegrationTest<K, V> {
 
 
         Network network = kafkaContainer.getNetwork();
-        List<com.github.dockerjava.api.model.Network> exec1 = kafkaContainer.getDockerClient().listNetworksCmd().exec();
-        com.github.dockerjava.api.model.Network exec = kafkaContainer.getDockerClient().inspectNetworkCmd().exec();
+        DockerClient client = kafkaContainer.getDockerClient();
+        List<com.github.dockerjava.api.model.Network> exec1 = client.listNetworksCmd().exec();
+//        com.github.dockerjava.api.model.Network exec = client.inspectNetworkCmd().exec();
         List<String> networkAliases = kafkaContainer.getNetworkAliases();
-        getKafkaContainer().getDockerClient()
-                .disconnectFromNetworkCmd()
+        String networkId = networkAliases.stream().findFirst().get();
+        client.disconnectFromNetworkCmd()
                 .withContainerId(kafkaContainer.getContainerId())
-                .withNetworkId(networkAliases.stream().findFirst().get())
+                .withNetworkId(networkId)
                 .exec();
     }
 

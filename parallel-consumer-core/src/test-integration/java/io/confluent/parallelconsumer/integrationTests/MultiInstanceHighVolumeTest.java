@@ -34,7 +34,7 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
-class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> {
+class MultiInstanceHighVolumeTest extends BrokerIntegrationTest {
 
     public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
     public List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());

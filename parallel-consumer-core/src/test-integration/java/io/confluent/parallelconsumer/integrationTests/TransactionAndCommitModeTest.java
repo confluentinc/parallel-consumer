@@ -61,7 +61,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Tag("transactions")
 @Slf4j
-class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String> {
+class TransactionAndCommitModeTest extends BrokerIntegrationTest {
 
     int LOW_MAX_POLL_RECORDS_CONFIG = 1;
     int DEFAULT_MAX_POLL_RECORDS_CONFIG = 500;

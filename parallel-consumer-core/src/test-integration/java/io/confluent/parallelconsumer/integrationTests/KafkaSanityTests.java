@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 //@Isolated
 @Slf4j
-public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
+public class KafkaSanityTests extends BrokerIntegrationTest {
 
     /**
      * @link io.confluent.csid.asyncconsumer.BrokerPollSystem#pollBrokerForRecords

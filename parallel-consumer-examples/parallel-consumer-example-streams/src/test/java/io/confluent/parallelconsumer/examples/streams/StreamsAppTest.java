@@ -14,7 +14,7 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 
 @Slf4j
-public class StreamsAppTest extends BrokerIntegrationTest<String, String> {
+public class StreamsAppTest extends BrokerIntegrationTest {
 
     @SneakyThrows
     @Test

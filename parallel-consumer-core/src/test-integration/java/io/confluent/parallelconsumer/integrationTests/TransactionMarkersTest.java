@@ -43,7 +43,7 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
  */
 @Tag("transactions")
 @Slf4j
-public class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
+public class TransactionMarkersTest extends BrokerIntegrationTest {
 
     /**
      * Block all records beyond the second record

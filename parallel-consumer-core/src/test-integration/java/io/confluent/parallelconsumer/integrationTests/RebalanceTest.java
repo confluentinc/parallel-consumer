@@ -32,7 +32,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
  * @author Antony Stubbs
  */
 @Slf4j
-class RebalanceTest extends BrokerIntegrationTest<String, String> {
+class RebalanceTest extends BrokerIntegrationTest {
 
     Consumer<String, String> consumer;
 

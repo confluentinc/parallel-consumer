@@ -84,7 +84,7 @@ public class ConsumerManager<K, V> {
     }
 
     public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        // we dont' want to be woken up during a commit, only polls
+        // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {

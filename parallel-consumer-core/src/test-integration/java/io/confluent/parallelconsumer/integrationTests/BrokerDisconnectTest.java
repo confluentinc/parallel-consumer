@@ -1,21 +1,27 @@
 package io.confluent.parallelconsumer.integrationTests;
 
+import com.google.common.truth.Truth;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.shaded.org.hamcrest.Matchers;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
+import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
+import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 
 /**
  * Exercises PC's reaction to the broker connection being lost of the broker being restarted
  */
 @Slf4j
-class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
+class BrokerDisconnectTest extends BrokerIntegrationTest {
+
+    ParallelEoSStreamProcessor<String, String> pc;
 
     @SneakyThrows
     @Test
@@ -25,36 +31,40 @@ class BrokerDisconnectTest extends BrokerIntegrationTest<String, String> {
         getKcu().produceMessages(topicName, recordsProduced);
 
         //
-        ParallelEoSStreamProcessor<String, String> pc = getKcu().buildPc();
+        pc = getKcu().buildPc(ParallelConsumerOptions.ProcessingOrder.UNORDERED, ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC, 500);
         AtomicInteger processedCount = new AtomicInteger();
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
-            log.debug(recordContexts.toString());
             processedCount.incrementAndGet();
         });
 
-        //
-        await().atMost(Duration.ofSeconds(60)).untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(100)));
-        log.warn("Consumed 100");
+        // make sure we've started consuming already before disconnecting the broker
+        await().untilAtomic(processedCount, is(greaterThan(100)));
+        log.debug("Consumed 100");
 
         //
-        terminateBroker();
+        simulateBrokerUnreachable();
+
+        //
+        checkPCState();
+
+        log.debug("Stay disconnected for a while...");
+        Thread.sleep(15000);
+        log.debug("Finished disconnect, resuming connection.");
+
+        //
+        simulateBrokerResume();
 
         //
         checkPCState();
 
         //
-        startNewBroker();
-
-        //
-        checkPCState();
-
-        //
-        await().atMost(Duration.ofSeconds(60)).untilAtomic(processedCount, Matchers.is(Matchers.greaterThan(recordsProduced)));
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> Truth.assertThat(processedCount.get()).isAtLeast(recordsProduced));
     }
 
     private void checkPCState() {
-        log.debug("");
+        // todo check state
+        assertThat(pc).isNotClosedOrFailed();
     }
 
 }

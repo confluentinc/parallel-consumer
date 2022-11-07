@@ -50,7 +50,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Tag("transactions")
 @Slf4j
-class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
+class TransactionTimeoutsTest extends BrokerIntegrationTest {
 
     public static final int NUMBER_TO_SEND = 5;
 

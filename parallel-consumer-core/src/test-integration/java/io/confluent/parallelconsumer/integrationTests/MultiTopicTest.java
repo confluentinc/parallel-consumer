@@ -34,7 +34,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author Antony Stubbs
  */
 @Slf4j
-class MultiTopicTest extends BrokerIntegrationTest<String, String> {
+class MultiTopicTest extends BrokerIntegrationTest {
 
     @ParameterizedTest
     @EnumSource(ProcessingOrder.class)

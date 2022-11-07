@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * just simulating "work" with a random sleep.
  */
 @Slf4j
-public class DbTest extends BrokerIntegrationTest<String, String> {
+public class DbTest extends BrokerIntegrationTest {
 
     protected static final PostgreSQLContainer dbc;
 
