@@ -63,7 +63,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     // todo test for all commit modes
     @SneakyThrows
     @Test
-    void brokerRestart() {
+    void brokerConnectionInterupption() {
         setupAndWarmUp(getKcu());
 
         //
@@ -154,6 +154,45 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
      */
     @Test
     void multiBroker() {
+        // todo
+    }
+
+    // todo test for all commit modes
+    @SneakyThrows
+    @Test
+    void brokerRestartTest() {
+        setupAndWarmUp(getKcu());
+
+        //
+        restartBroker();
+
+        //
+        checkPCState();
+
+        log.debug("Stay disconnected for a while...");
+        Truth.assertThat(processedCount.get()).isLessThan(recordsProduced);
+        // todo how long to test we can recover from?
+        // 10 seconds, doesn't notice
+        // 120 unknown error
+        ThreadUtils.sleepSecondsLog(180);
+
+        //
+        checkPCState();
+
+        //
+        await()
+                .atMost(Duration.ofMinutes(60))
+                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                .untilAsserted(() -> Truth
+                        .assertThat(processedCount.get())
+                        .isAtLeast(recordsProduced));
+    }
+
+    private void restartBroker() {
+        log.error("Closing broker...");
+        kafkaContainer.stop();
+        log.error("Starting broker...");
+        kafkaContainer.start();
     }
 
 }
