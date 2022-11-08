@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerException;
-import lombok.RequiredArgsConstructor;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
@@ -24,7 +24,6 @@ import static io.confluent.csid.utils.StringUtils.msg;
  * Delegate for {@link KafkaConsumer}
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ConsumerManager<K, V> {
 
     /**
@@ -32,6 +31,8 @@ public class ConsumerManager<K, V> {
      *         https://docs.confluent.io/platform/current/installation/configuration/consumer-configs.html#consumerconfigs_default.api.timeout.ms
      */
     public static final Duration DEFAULT_API_TIMEOUT = Duration.ofSeconds(60);
+
+    private final ParallelConsumerOptions<K, V> options;
 
     private final Consumer<K, V> consumer;
 
@@ -49,6 +50,11 @@ public class ConsumerManager<K, V> {
     private int correctPollWakeups = 0;
     private int noWakeups = 0;
     private boolean commitRequested;
+
+    public ConsumerManager(ParallelConsumerOptions<K, V> options) {
+        this.options = options;
+        consumer = options.getConsumer();
+    }
 
     ConsumerRecords<K, V> poll(Duration requestedLongPollTimeout) {
         Duration timeoutToUse = requestedLongPollTimeout;
@@ -98,30 +104,44 @@ public class ConsumerManager<K, V> {
         // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
+        int failedCommitAttempts = 0;
         while (inProgress) {
             try {
                 consumer.commitSync(offsetsToSend);
                 inProgress = false;
             } catch (TimeoutException e) {
-                throw new ParallelConsumerException("Timeout committing offsets", e);
+                failedCommitAttempts++;
+                if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
+                    throw new ParallelConsumerException("Timeout committing offsets", e);
+                }
             } catch (WakeupException w) {
+                failedCommitAttempts++;
                 log.debug(msg("Got woken up, retry. errors: {} none: {} correct: {}", erroneousWakups, noWakeups, correctPollWakeups), w);
                 erroneousWakups++;
             }
         }
-
     }
 
     public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets, OffsetCommitCallback callback) {
         // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
+        int failedCommitAttempts = 0;
         while (inProgress) {
             try {
                 consumer.commitAsync(offsets, callback);
                 inProgress = false;
+            } catch (TimeoutException e) {
+                failedCommitAttempts++;
+                if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
+                    throw new ParallelConsumerException("Timeout committing offsets", e);
+                }
             } catch (WakeupException w) {
-                log.debug("Got woken up, retry. errors: " + erroneousWakups + " none: " + noWakeups + " correct:" + correctPollWakeups, w);
+                log.debug(msg("Got woken up, retry. errors: {}, none: {} correct: {}",
+                                erroneousWakups,
+                                noWakeups,
+                                correctPollWakeups),
+                        w);
                 erroneousWakups++;
             }
         }

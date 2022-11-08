@@ -66,7 +66,7 @@ public class PCModule<K, V> {
 
     protected ConsumerManager<K, V> consumerManager() {
         if (consumerManager == null) {
-            consumerManager = new ConsumerManager<>(optionsInstance.getConsumer());
+            consumerManager = new ConsumerManager<>(optionsInstance);
         }
         return consumerManager;
     }

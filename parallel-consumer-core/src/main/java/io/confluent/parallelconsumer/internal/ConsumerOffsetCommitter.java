@@ -146,7 +146,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         int attempts = 0;
         while (waitingOnCommitResponse) {
             if (attempts > ARBITRARY_RETRY_LIMIT) {
-                throw new InternalRuntimeException(msg("Too many attempts taking commit responses ({} attempts to commit)",
+                throw new InternalRuntimeException(msg("Too many attempts taking commit response from commit thread ({} attempts to commit)",
                         attempts));
             }
 

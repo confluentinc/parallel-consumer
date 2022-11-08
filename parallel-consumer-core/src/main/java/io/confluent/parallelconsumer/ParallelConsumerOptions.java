@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.internal.ConsumerManager;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.Value;
 import lombok.experimental.FieldNameConstants;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -21,6 +22,8 @@ import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.FAIL_FAST;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
 import static java.time.Duration.ofMillis;
 
 /**
@@ -330,6 +333,39 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final Duration offsetCommitTimeout = ConsumerManager.DEFAULT_API_TIMEOUT;
+
+    @Builder.Default
+    private final RetrySettings retrySettings = RetrySettings.builder().build();
+
+    @Value
+    @Builder
+    public static class RetrySettings {
+
+        public static final int DEFAULT_MAX_RETRIES = 5;
+
+        @Builder.Default
+        int maxRetries = DEFAULT_MAX_RETRIES;
+
+        @Builder.Default
+        FailureReaction failureReaction = FAIL_FAST;
+
+        public boolean isFailFastOrRetryExhausted(int failedCommitAttempts) {
+            final boolean failFast = getFailureReaction().equals(FAIL_FAST);
+            final boolean retryLimitExhausted = getFailureReaction().equals(RETRY_UP_TO_MAX_RETRIES) && failedCommitAttempts >= getMaxRetries();
+            return failFast || retryLimitExhausted;
+        }
+
+        public enum FailureReaction {
+            /**
+             * Retry forever
+             */
+            RETRY_FOREVER,
+
+            FAIL_FAST,
+
+            RETRY_UP_TO_MAX_RETRIES
+        }
+    }
 
     /**
      * The maximum number of messages to attempt to pass into the user functions.
