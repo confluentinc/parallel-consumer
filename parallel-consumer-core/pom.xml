@@ -108,7 +108,7 @@
         <dependency>
             <groupId>uk.co.jemos.podam</groupId>
             <artifactId>podam</artifactId>
-            <version>7.2.10.RELEASE</version>
+            <version>7.2.11.RELEASE</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
