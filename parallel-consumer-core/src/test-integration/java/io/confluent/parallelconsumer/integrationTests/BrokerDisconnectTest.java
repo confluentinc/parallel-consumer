@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.KafkaContainer;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -59,6 +60,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         log.debug("Consumed 100");
     }
 
+    // todo test for all commit modes
     @SneakyThrows
     @Test
     void brokerRestart() {
@@ -104,20 +106,21 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     @Test
     void brokerShutdown() {
         // need ot start
-        KafkaContainer finikyKafka = getKafkaContainer();
+        KafkaContainer finickyKafka = getKafkaContainer();
 
-        KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finikyKafka, getToxiproxy());
+        KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finickyKafka, getToxiproxy());
 
         setupAndWarmUp(kafkaClientUtils);
 
         //
-        brokerDies(finikyKafka);
+        brokerDies(finickyKafka);
 
         //
         checkPCState();
 
         // wait a while
-        ThreadUtils.sleepSecondsLog(120);
+        int secondsToWait = 120;
+        sleepUnlessCrashed(secondsToWait);
 
         //
         checkPCState();
@@ -131,9 +134,26 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
                         .isAtLeast(recordsProduced));
     }
 
-    private static void brokerDies(KafkaContainer finikyKafka) {
-        log.debug("Making broker unavailable");
-        finikyKafka.close();
+    private void sleepUnlessCrashed(int secondsToWait) {
+        var start = Instant.now();
+        await()
+                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                .forever()
+                .untilAsserted(() ->
+                        assertThat(Instant.now()).isAtLeast(start.plusSeconds(secondsToWait)));
+    }
+
+    private void brokerDies(KafkaContainer finickyKafka) {
+        log.error("Making broker unavailable");
+        finickyKafka.close();
+        getToxiproxy().close();
+    }
+
+    /**
+     * test against multiple brokers, against a topic that's on both
+     */
+    @Test
+    void multiBroker() {
     }
 
 }

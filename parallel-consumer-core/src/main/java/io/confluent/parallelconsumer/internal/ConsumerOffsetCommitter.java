@@ -99,7 +99,6 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                 consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
                     if (exception != null) {
                         log.error("Error committing offsets", exception);
-                        // todo keep work in limbo until async response is received?
                     }
                 });
             }
@@ -146,7 +145,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         int attempts = 0;
         while (waitingOnCommitResponse) {
             if (attempts > ARBITRARY_RETRY_LIMIT) {
-                throw new InternalRuntimeException("Too many attempts taking commit responses");
+                throw new InternalRuntimeException(msg("Too many attempts taking commit responses ({} attempts to commit)",
+                        attempts));
             }
 
             try {
@@ -154,7 +154,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                 // todo time out should match committers timeout plus buffer?
                 CommitResponse take = commitResponseQueue.poll(commitTimeout.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
                 if (take == null) {
-                    throw new InternalRuntimeException(msg("Timeout ({}) waiting for commit response from internal committer to request {}", commitTimeout, commitRequest));
+                    throw new InternalRuntimeException(msg("Timeout ({}) waiting for commit response from internal committer to request {}",
+                            commitTimeout, commitRequest));
                 }
                 waitingOnCommitResponse = take.getRequest().getId() != commitRequest.getId();
             } catch (InterruptedException e) {

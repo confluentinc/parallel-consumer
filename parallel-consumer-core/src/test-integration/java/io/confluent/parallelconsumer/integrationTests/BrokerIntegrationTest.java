@@ -69,8 +69,6 @@ public abstract class BrokerIntegrationTest {
                 // try to speed up initial consumer group formation
                 .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
                 //
-                .withEnv("KAFKA_ADVERTISED_LISTENERS", "localhost:") // for use with toxi proxy
-                //
                 .withNetwork(network)
                 .withReuse(true);
 

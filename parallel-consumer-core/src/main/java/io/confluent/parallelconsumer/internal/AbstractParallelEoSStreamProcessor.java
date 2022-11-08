@@ -502,7 +502,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
+    private void doClose(Duration timeout) {
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
@@ -531,12 +531,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // last check to see if after worker pool closed, has any new work arrived?
         processWorkCompleteMailBox(Duration.ZERO);
 
-        //
-        commitOffsetsThatAreReady();
+        // last commit attempt
+        try {
+            commitOffsetsThatAreReady();
+        } catch (Exception e) {
+            log.error("Error committing offsets, continuing close...", e);
+        }
 
-        // only close consumer once producer has committed it's offsets (tx'l)
+        // only close consumer once producer has committed its offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
-        brokerPollSubsystem.closeAndWait();
+        try {
+            brokerPollSubsystem.closeAndWait();
+        } catch (Exception e) {
+            log.error("Error closing broker poll sub system, continuing close...", e);
+        }
 
         maybeCloseConsumer();
 
@@ -546,7 +554,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.state = closed;
 
         if (this.getFailureCause() != null) {
-            log.error("PC closed due to error: {}", getFailureCause(), null);
+            log.error("PC closed due to error", getFailureCause());
         }
     }
 
@@ -647,8 +655,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
-                    failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    failureReason = new ParallelConsumerException("Error from poll control thread: " + e.getMessage(), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
+                    log.error("Shutdown after error complete, rethrowing error");
                     throw failureReason;
                 }
             }
