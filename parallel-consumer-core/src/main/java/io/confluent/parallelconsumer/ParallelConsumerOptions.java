@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.ConsumerManager;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -328,7 +329,7 @@ public class ParallelConsumerOptions<K, V> {
      * {@link CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
      */
     @Builder.Default
-    private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
+    private final Duration offsetCommitTimeout = ConsumerManager.DEFAULT_API_TIMEOUT;
 
     /**
      * The maximum number of messages to attempt to pass into the user functions.

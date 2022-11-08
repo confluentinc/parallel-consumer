@@ -19,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
     protected final ConsumerManager<K, V> consumerMgr;
+
     protected final WorkManager<K, V> wm;
 
     /**

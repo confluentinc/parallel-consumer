@@ -27,6 +27,12 @@ import static io.confluent.csid.utils.StringUtils.msg;
 @RequiredArgsConstructor
 public class ConsumerManager<K, V> {
 
+    /**
+     * @see default.api.timeout.ms
+     *         https://docs.confluent.io/platform/current/installation/configuration/consumer-configs.html#consumerconfigs_default.api.timeout.ms
+     */
+    public static final Duration DEFAULT_API_TIMEOUT = Duration.ofSeconds(60);
+
     private final Consumer<K, V> consumer;
 
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
@@ -107,7 +113,7 @@ public class ConsumerManager<K, V> {
     }
 
     public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets, OffsetCommitCallback callback) {
-        // we dont' want to be woken up during a commit, only polls
+        // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {
