@@ -106,13 +106,16 @@ public class ConsumerManager<K, V> {
         noWakeups++;
         int failedCommitAttempts = 0;
         while (inProgress) {
+            Duration timeout = DEFAULT_API_TIMEOUT;
             try {
-                consumer.commitSync(offsetsToSend);
+                consumer.commitSync(offsetsToSend, timeout);
                 inProgress = false;
             } catch (TimeoutException e) {
                 failedCommitAttempts++;
                 if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
                     throw new ParallelConsumerException("Timeout committing offsets", e);
+                } else {
+                    log.warn("Timeout ({}) committing offsets, will retry (failed {} times)", timeout, failedCommitAttempts);
                 }
             } catch (WakeupException w) {
                 failedCommitAttempts++;

@@ -12,6 +12,7 @@ import java.time.Duration;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.apache.kafka.clients.consumer.OffsetResetStrategy.EARLIEST;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Check that various validation and combinations of {@link ParallelConsumerOptions} works.
@@ -51,4 +52,17 @@ class ParallelConsumerOptionsTest {
         assertThat(pc.getTimeBetweenCommits()).isEqualTo(testFreq);
         assertThat(options.getCommitInterval()).isEqualTo(testFreq);
     }
+
+    @Test
+    void retrySettings() {
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .retrySettings(ParallelConsumerOptions.RetrySettings.builder()
+                        .maxRetries(1)
+                        .build())
+                .consumer(new LongPollingMockConsumer<>(EARLIEST))
+                .build();
+
+        assertThrows(IllegalArgumentException.class, options::validate);
+    }
+
 }

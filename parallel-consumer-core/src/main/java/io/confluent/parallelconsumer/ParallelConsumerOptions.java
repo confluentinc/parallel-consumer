@@ -192,6 +192,8 @@ public class ParallelConsumerOptions<K, V> {
         /**
          * Periodically commits offsets asynchronously. The fastest option, under normal conditions will have few or no
          * duplicates. Under failure recovery may have more duplicates than {@link #PERIODIC_CONSUMER_SYNC}.
+         * <p>
+         * If you don't want PC to progress if commit does not succeed, use {@link #PERIODIC_CONSUMER_SYNC} instead.
          */
         PERIODIC_CONSUMER_ASYNCHRONOUS
 
@@ -349,6 +351,13 @@ public class ParallelConsumerOptions<K, V> {
         @Builder.Default
         FailureReaction failureReaction = FAIL_FAST;
 
+        public void validate() {
+            if (maxRetries != DEFAULT_MAX_RETRIES && failureReaction != RETRY_UP_TO_MAX_RETRIES) {
+                throw new IllegalArgumentException("If you set maxRetries, you must also set failureReaction to " +
+                        "RETRY_UP_TO_MAX_RETRIES");
+            }
+        }
+
         public boolean isFailFastOrRetryExhausted(int failedCommitAttempts) {
             final boolean failFast = getFailureReaction().equals(FAIL_FAST);
             final boolean retryLimitExhausted = getFailureReaction().equals(RETRY_UP_TO_MAX_RETRIES) && failedCommitAttempts >= getMaxRetries();
@@ -420,6 +429,8 @@ public class ParallelConsumerOptions<K, V> {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
         transactionsValidation();
+
+        retrySettings.validate();
     }
 
     private void transactionsValidation() {

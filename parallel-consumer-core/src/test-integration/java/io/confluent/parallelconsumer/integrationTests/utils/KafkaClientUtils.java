@@ -325,11 +325,19 @@ public class KafkaClientUtils implements AutoCloseable {
         return expectedKeys;
     }
 
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll, GroupOption groupOption) {
+        return buildPc(ParallelConsumerOptions.<String, String>builder()
+                .ordering(order)
+                .commitMode(commitMode)
+                .build(), groupOption, maxPoll);
+    }
+
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll) {
         return buildPc(order, commitMode, maxPoll, GroupOption.REUSE_GROUP);
     }
 
-    public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll, GroupOption groupOption) {
+    public ParallelEoSStreamProcessor<String, String> buildPc(ParallelConsumerOptions<String, String> options, GroupOption groupOption, int maxPoll) {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 1);
@@ -337,12 +345,9 @@ public class KafkaClientUtils implements AutoCloseable {
         KafkaConsumer<String, String> newConsumer = createNewConsumer(newConsumerGroup, consumerProps);
         lastConsumerConstructed = newConsumer;
 
-        var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
-                .ordering(order)
-                .consumer(newConsumer)
-                .commitMode(commitMode)
-                .maxConcurrency(1)
-                .build());
+        options = options.toBuilder().consumer(newConsumer).build();
+
+        var pc = new ParallelEoSStreamProcessor<>(options);
 
         pc.setTimeBetweenCommits(ofSeconds(1));
 

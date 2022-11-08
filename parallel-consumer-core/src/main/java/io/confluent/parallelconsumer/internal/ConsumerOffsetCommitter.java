@@ -138,10 +138,6 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     private void commitAndWait() {
-        // request
-        CommitRequest commitRequest = requestCommitInternal();
-
-        // wait
         boolean waitingOnCommitResponse = true;
         int attempts = 0;
         while (waitingOnCommitResponse) {
@@ -150,6 +146,10 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                         attempts));
             }
 
+            // request
+            CommitRequest commitRequest = requestCommitInternal();
+
+            // wait
             try {
                 log.debug("Waiting on a commit response");
                 // todo time out should match committers timeout plus buffer?

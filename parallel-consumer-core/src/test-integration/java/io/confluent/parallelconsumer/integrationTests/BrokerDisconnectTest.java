@@ -15,6 +15,10 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
@@ -48,7 +52,15 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         kcu.produceMessages(topicName, recordsProduced);
 
         //
-        pc = kcu.buildPc(ParallelConsumerOptions.ProcessingOrder.UNORDERED, ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC, 500);
+        var retrySettings = ParallelConsumerOptions.RetrySettings.builder()
+                .failureReaction(RETRY_FOREVER)
+                .build();
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(UNORDERED)
+                .commitMode(PERIODIC_CONSUMER_SYNC)
+                .retrySettings(retrySettings)
+                .build();
+        pc = kcu.buildPc(options, NEW_GROUP, 1);
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
 //            ThreadUtils.sleepSecondsLog(1);
@@ -63,7 +75,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     // todo test for all commit modes
     @SneakyThrows
     @Test
-    void brokerConnectionInterupption() {
+    void brokerConnectionInterruption() {
         setupAndWarmUp(getKcu());
 
         //
