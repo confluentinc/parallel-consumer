@@ -686,7 +686,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         maybeWakeupPoller();
 
         //
-        final boolean shouldTryCommitNow = maybeAcquireCommitLock();
+        final boolean shouldTryCommitNow = maybeShouldCommitAndAcquireCommitLock();
 
         // make sure all work that's been completed are arranged ready for commit
         Duration timeToBlockFor = shouldTryCommitNow ? Duration.ZERO : getTimeToBlockFor();
@@ -755,8 +755,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @return true if committing should either way be attempted now
      */
-    private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
-        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty();
+    private boolean maybeShouldCommitAndAcquireCommitLock() throws TimeoutException, InterruptedException {
+        var stateIsDirty = wm.isDirty();
+        var timeToCommitNow = isTimeToCommitNow();
+
+        final boolean shouldTryCommitNow = timeToCommitNow && stateIsDirty;
+
+        if (timeToCommitNow && !stateIsDirty) {
+            log.debug("Even though it's time to commit, not committing now - as no work has been completed since last commit");
+        }
+
         // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on

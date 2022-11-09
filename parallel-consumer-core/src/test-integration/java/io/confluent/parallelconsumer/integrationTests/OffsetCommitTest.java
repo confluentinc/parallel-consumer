@@ -1,7 +1,10 @@
 package io.confluent.parallelconsumer.integrationTests;
 
+import com.google.common.truth.Truth;
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
+import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.NonNull;
@@ -22,11 +25,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.JavaUtils.catchAndWrap;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.BOTH;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.FIRST;
+import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
+import static java.time.Duration.ofSeconds;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -46,26 +53,18 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     OffsetAndMetadata offsetZeroMeta = new OffsetAndMetadata(0);
     NewTopic newTopic = new NewTopic(topicName, numPartitions, (short) 1);
     Map<TopicPartition, OffsetAndMetadata> offsetZeroMetaTp = Map.of(tp, offsetZeroMeta);
-    Duration timeout = Duration.ofSeconds(1);
+    Duration timeout = ofSeconds(1);
     int numberToSend = 5;
-    KafkaConsumer<String, String> firstConsumer;
+    KafkaConsumer<String, String> proxiedConsumer;
     KafkaConsumer<String, String> secondConsumer;
+
 
     @SneakyThrows
     @Test
     void canTerminateConsumerConnection() {
-        kcu.getAdmin().createTopics(of(newTopic)).all().get();
-
-//        killFirstConsumerConnection();
-
-        var overridingOptions = new Properties();
-        var brokerProxy = getBrokerProxy();
-        var proxyPort = brokerProxy.getProxyPort();
-        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        firstConsumer = kcu.createNewConsumer(topicName, overridingOptions);
-        firstConsumer.subscribe(topicList);
-        firstConsumer.enforceRebalance(); // todo remove
+        proxiedConsumer = createProxiedConsumer();
+        proxiedConsumer.subscribe(topicList);
+        proxiedConsumer.enforceRebalance(); // todo remove
 
 
         var configResourceConfigMap = kcu.getAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
@@ -102,7 +101,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
 
     private ConsumerRecords<String, String> getPoll() {
         log.debug("Polling");
-        ConsumerRecords<String, String> poll = firstConsumer.poll(Duration.ofSeconds(30));
+        ConsumerRecords<String, String> poll = proxiedConsumer.poll(ofSeconds(30));
         log.debug("Polled");
         return poll;
     }
@@ -111,75 +110,17 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         kcu.produceMessages(topicName, numberToSend);
     }
 
-
     /**
-     * Sanity check for the type of error reported when committing offsets for partitions which aren't assigned to the
-     * consumer
-     *
-     * @see https://github.com/confluentinc/parallel-consumer/issues/203
+     * Assert the behaviour of the consumer when connection goes down and up
      */
     @SneakyThrows
     @Test
     void consumerOffsetCommitter() {
         kcu.getAdmin().createTopics(of(newTopic)).all().get();
 
-        KafkaConsumer<String, String> c1 = kcu.createNewConsumer(topicName);
-        KafkaConsumer<String, String> c2 = kcu.createNewConsumer(topicName);
-
-        c1.subscribe(topicList);
-        c2.subscribe(topicList);
-
-        var numberToSend = 5;
-        send(numberToSend);
-
-        var all = new ArrayList<ConsumerRecord<String, String>>();
-        var timeout = Duration.ofMillis(1000);
-        ConsumerRecords<String, String> poll = c1.poll(timeout);
-        ConsumerRecords<String, String> poll1 = c2.poll(timeout);
-
-        all.addAll(StreamEx.of(poll.iterator()).toList());
-        all.addAll(StreamEx.of(poll1.iterator()).toList());
-
-        assertThat(all).hasSize(numberToSend);
-
-        TopicPartition tp = new TopicPartition(topicName, 0);
-        OffsetAndMetadata v1 = new OffsetAndMetadata(1);
-
-        catchAndWrap(() -> c1.commitSync(Map.of(tp, v1)));
-
-        try {
-            catchAndWrap(() -> c2.commitSync(Map.of(tp, v1)));
-        } catch (Exception e) {
-            log.error("{}", ExceptionUtils.getStackTrace(e));
-        }
-
-        var poll3 = c1.poll(timeout);
-        var poll4 = c2.poll(timeout);
-        assertThat(poll3).isEmpty();
-        assertThat(poll4).isEmpty();
-
-        //
-        catchAndWrap(() -> c1.commitSync(Map.of(tp, v1)));
-        catchAndWrap(() -> c2.commitSync(Map.of(tp, v1)));
-    }
-
-
-    /**
-     * Assert the behaiviour of the consumer when connection goes down and up
-     */
-    @SneakyThrows
-    @Test
-    void consumerOffsetCommitterTwo() {
-        kcu.getAdmin().createTopics(of(newTopic)).all().get();
-
-        var overridingOptions = new Properties();
-        var brokerProxy = getBrokerProxy();
-        var proxyPort = brokerProxy.getProxyPort();
-        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        firstConsumer = kcu.createNewConsumer(topicName, overridingOptions);
-        firstConsumer.subscribe(topicList);
-        firstConsumer.enforceRebalance(); // todo remove
+        proxiedConsumer = createProxiedConsumer();
+        proxiedConsumer.subscribe(topicList);
+        proxiedConsumer.enforceRebalance(); // todo remove
 
         send(numberToSend);
 
@@ -188,11 +129,11 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertThat(poll).hasSize(numberToSend);
 
         //
-        assertThat(firstConsumer.assignment()).containsExactly(tp);
+        assertThat(proxiedConsumer.assignment()).containsExactly(tp);
 
         all.addAll(StreamEx.of(poll.iterator()).toList());
 
-        assertThat(all).hasSize(numberToSend);
+        assertThat(all).hasSize(numberToSend); // todo remove?
 
         // create second consumer and being polling
         secondConsumer = kcu.createNewConsumer(topicName);
@@ -203,21 +144,21 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertAssignment(FIRST);
 
         // poll first consumer
-        ConsumerRecords<String, String> poll15 = firstConsumer.poll(timeout);
+        ConsumerRecords<String, String> poll15 = proxiedConsumer.poll(timeout);
 
         // check assignment
         assertAssignment(FIRST);
-        assertThat(firstConsumer.assignment()).containsExactly(tp);
+        assertThat(proxiedConsumer.assignment()).containsExactly(tp);
         assertThat(secondConsumer.assignment()).isEmpty();
 
         //
         killFirstConsumerConnection();
 
         // commit first - should fail as connection closed
-        assertThrows(InternalRuntimeException.class, () -> catchAndWrap(() -> firstConsumer.commitSync(offsetZeroMetaTp)));
+        assertThrows(InternalRuntimeException.class, () -> catchAndWrap(() -> proxiedConsumer.commitSync(offsetZeroMetaTp)));
 
         // check assignment
-        assertThat(firstConsumer.assignment()).containsExactly(tp);
+        assertThat(proxiedConsumer.assignment()).containsExactly(tp);
         assertThat(secondConsumer.assignment()).isEmpty();
 
         // commit second
@@ -231,7 +172,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertAssignment(FIRST);
 
         // try poll
-        var poll3 = firstConsumer.poll(timeout);
+        var poll3 = proxiedConsumer.poll(timeout);
         var poll4 = secondConsumer.poll(timeout);
         assertThat(poll3).isEmpty();
         assertThat(poll4).hasSize(numberToSend);
@@ -243,7 +184,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertAssignment(BOTH);
 
         // try to commit both
-        assertThrows(org.apache.kafka.common.errors.TimeoutException.class, () -> firstConsumer.commitSync(offsetZeroMetaTp));
+        assertThrows(org.apache.kafka.common.errors.TimeoutException.class, () -> proxiedConsumer.commitSync(offsetZeroMetaTp));
         catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
 
         // check assignment
@@ -253,24 +194,30 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         restoreFirstConsumerConnection();
 
         // try to commit both
-        assertThrows(CommitFailedException.class, () -> firstConsumer.commitSync(offsetZeroMetaTp));
+        assertThrows(CommitFailedException.class, () -> proxiedConsumer.commitSync(offsetZeroMetaTp));
         catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
 
         // rebalance has occurred - moves back to first consumer
         await().atMost(Duration.ofMinutes(1))
                 .untilAsserted(() -> {
-//                    send(1);
-                    firstConsumer.poll(timeout);
+                    proxiedConsumer.poll(timeout);
                     secondConsumer.poll(timeout);
                     assertAssignment(FIRST);
                 });
 
         // commit both
-        catchAndWrap(() -> firstConsumer.commitSync(offsetZeroMetaTp));
+        catchAndWrap(() -> proxiedConsumer.commitSync(offsetZeroMetaTp));
         catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
 
         // check assignment
         assertAssignment(FIRST);
+    }
+
+    private KafkaConsumer<String, String> createProxiedConsumer() {
+        var overridingOptions = new Properties();
+        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
+        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
+        return kcu.createNewConsumer(topicName, overridingOptions);
     }
 
     enum AssignmentState {
@@ -281,7 +228,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     }
 
     private void assertAssignment(AssignmentState assignment) {
-        var firstAssignment = firstConsumer.assignment();
+        var firstAssignment = proxiedConsumer.assignment();
         var secondAssignment = secondConsumer.assignment();
         log.debug("firstAssignment: {}, secondAssignment: {}", firstAssignment, secondAssignment);
         switch (assignment) {
@@ -306,7 +253,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
 
     @SneakyThrows
     private void killFirstConsumerConnection() {
-        log.warn("Killing first consumer connection via proxy disable");
+        log.warn("Killing first consumer connection via proxy disable"); // todo debug
         Proxy proxy = getProxy();
         proxy.disable();
         Thread.sleep(1000);
@@ -339,6 +286,73 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     private void restoreConnectionBandwidth() {
         log.warn("Restore first consumer bandwidth via proxy");
         getBrokerProxy().setConnectionCut(false);
+    }
+
+    /**
+     * Test Parallel Consumers behaviour in the same way - what happens when the broker connection goes down and up
+     */
+    @SneakyThrows
+    @Test
+    void parallelConsumerBrokerReconnectionTest() {
+        proxiedConsumer = createProxiedConsumer();
+        var processedCount = new AtomicInteger();
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .consumer(proxiedConsumer)
+                .commitMode(ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC) // todo test async too
+                .retrySettings(ParallelConsumerOptions.RetrySettings.builder()
+                        .failureReaction(RETRY_FOREVER)
+                        .build())
+                .build();
+        var pc = kcu.buildPc(options, null, 1);
+        pc.subscribe(topicList);
+        pc.poll(recordContexts -> {
+            log.debug("{}", recordContexts);
+            processedCount.incrementAndGet();
+
+            //
+            killFirstConsumerConnection();
+
+            log.warn("Making PC try to commit the dirty state while the connection is closed...");
+            pc.requestCommitAsap();
+        });
+
+        // allow time for pc to start polling before killing connection
+        ThreadUtils.sleepSecondsLog(1);
+
+        // to make the state dirty, so we can try committing
+        send(1);
+
+        await().untilAsserted(() -> Truth.assertThat(processedCount.get()).isEqualTo(1));
+
+        //
+//        killFirstConsumerConnection();
+
+        // send some messages
+        send(numberToSend);
+
+        // wait for a while, making sure none of the extra 5 records make it through
+        var delay = 30;
+        await().failFast(pc::isClosedOrFailed)
+                .pollDelay(ofSeconds(delay))
+                .timeout(ofSeconds(delay + DEFAULT_API_TIMEOUT.toSeconds() * 2)) // longer than the commit timeout
+                .untilAsserted(() -> {
+                    Truth.assertThat(processedCount.get()).isEqualTo(1);
+                });
+
+        //
+        restoreFirstConsumerConnection();
+
+        //
+        await().failFast(pc::isClosedOrFailed)
+                .untilAsserted(() -> {
+                    Truth.assertThat(processedCount.get()).isAtLeast(numberToSend);
+                });
+
+        //
+        pc.close();
+
+        //
+        log.debug("Processed: {}", processedCount.get());
     }
 
 }

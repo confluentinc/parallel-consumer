@@ -356,11 +356,13 @@ public class KafkaClientUtils implements AutoCloseable {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 1);
-        boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);
-        KafkaConsumer<String, String> newConsumer = createNewConsumer(newConsumerGroup, consumerProps);
-        lastConsumerConstructed = newConsumer;
 
-        options = options.toBuilder().consumer(newConsumer).build();
+        if (options.getConsumer() == null) {
+            boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);
+            KafkaConsumer<String, String> newConsumer = createNewConsumer(newConsumerGroup, consumerProps);
+            lastConsumerConstructed = newConsumer;
+            options = options.toBuilder().consumer(newConsumer).build();
+        }
 
         var pc = new ParallelEoSStreamProcessor<>(options);
 
