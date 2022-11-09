@@ -13,5 +13,5 @@ import java.util.concurrent.TimeoutException;
  * @author Antony Stubbs
  */
 public interface OffsetCommitter {
-    void retrieveOffsetsAndCommit() throws TimeoutException, InterruptedException;
+    void retrieveOffsetsAndCommit() throws PCTimeoutException, InterruptedException, TimeoutException;
 }

@@ -100,7 +100,7 @@ public class ConsumerManager<K, V> {
         }
     }
 
-    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
+    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) throws PCTimeoutException {
         // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
@@ -108,15 +108,11 @@ public class ConsumerManager<K, V> {
         while (inProgress) {
             Duration timeout = DEFAULT_API_TIMEOUT;
             try {
+                log.debug("Committing offsets Sync");
                 consumer.commitSync(offsetsToSend, timeout);
                 inProgress = false;
-            } catch (TimeoutException e) {
-                failedCommitAttempts++;
-                if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
-                    throw new ParallelConsumerException("Timeout committing offsets", e);
-                } else {
-                    log.warn("Timeout ({}) committing offsets, will retry (failed {} times)", timeout, failedCommitAttempts);
-                }
+            } catch (org.apache.kafka.common.errors.TimeoutException e) { // distinguish from java.util.TimeoutException
+                throw new PCTimeoutException("Timeout committing offsets from KafkaConsumer", e);
             } catch (WakeupException w) {
                 failedCommitAttempts++;
                 log.debug(msg("Got woken up, retry. errors: {} none: {} correct: {}", erroneousWakups, noWakeups, correctPollWakeups), w);

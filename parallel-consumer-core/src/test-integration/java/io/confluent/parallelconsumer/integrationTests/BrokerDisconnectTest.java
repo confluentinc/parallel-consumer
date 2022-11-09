@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
@@ -53,7 +53,9 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
 
         //
         var retrySettings = ParallelConsumerOptions.RetrySettings.builder()
-                .failureReaction(RETRY_FOREVER)
+//                .failureReaction(RETRY_FOREVER)
+                .maxRetries(1)
+                .failureReaction(RETRY_UP_TO_MAX_RETRIES)
                 .build();
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)

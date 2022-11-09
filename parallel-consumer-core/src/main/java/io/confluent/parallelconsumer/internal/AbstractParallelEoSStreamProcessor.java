@@ -679,7 +679,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Main control loop
      */
     protected <R> void controlLoop(Function<PollContextInternal<K, V>, List<R>> userFunction,
-                                   Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
+                                   Consumer<R> callback) throws
+            TimeoutException, // java.util.concurrent.TimeoutException
+            InterruptedException,
+            PCTimeoutException {
         maybeWakeupPoller();
 
         //
@@ -1125,7 +1128,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Visible for testing
      */
-    protected void commitOffsetsThatAreReady() throws TimeoutException, InterruptedException {
+    protected void commitOffsetsThatAreReady() throws TimeoutException, InterruptedException, PCTimeoutException {
         log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");

@@ -322,7 +322,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Will silently skip if not configured with a committer
      */
-    private void maybeDoCommit() throws TimeoutException, InterruptedException {
+    private void maybeDoCommit() throws
+            InterruptedException,
+            TimeoutException // java.util.concurrent.TimeoutException
+    {
         if (committer.isPresent()) {
             committer.get().maybeDoCommit();
         }

@@ -26,7 +26,11 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
      * Get offsets from {@link WorkManager} that are ready to commit
      */
     @Override
-    public void retrieveOffsetsAndCommit() throws TimeoutException, InterruptedException {
+    public void retrieveOffsetsAndCommit() throws
+            PCTimeoutException,
+            InterruptedException,
+            TimeoutException // java.util.concurrent.TimeoutException
+    {
         log.debug("Find completed work to commit offsets");
         preAcquireOffsetsToCommit();
         try {
@@ -60,6 +64,6 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         wm.onOffsetCommitSuccess(committed);
     }
 
-    protected abstract void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata);
+    protected abstract void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) throws PCTimeoutException;
 
 }
