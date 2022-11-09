@@ -79,4 +79,16 @@ public class JavaUtils {
         return Collectors.toCollection(TreeSet::new);
     }
 
+    /**
+     * Work around for - Reconsider the “avoid the expensive and useless stack trace for api exceptions” practice
+     *
+     * @see https://issues.apache.org/jira/browse/KAFKA-7016
+     */
+    public static void catchAndWrap(Runnable runnable) {
+        try {
+            runnable.run();
+        } catch (Exception e) {
+            throw new InternalRuntimeException(e);
+        }
+    }
 }

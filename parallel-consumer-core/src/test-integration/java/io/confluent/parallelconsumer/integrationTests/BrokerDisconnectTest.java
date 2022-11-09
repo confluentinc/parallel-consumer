@@ -122,7 +122,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         // need ot start
         KafkaContainer finickyKafka = getKafkaContainer();
 
-        KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finickyKafka, getToxiproxy());
+        KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finickyKafka, getBrokerProxy());
 
         setupAndWarmUp(kafkaClientUtils);
 

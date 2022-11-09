@@ -84,11 +84,15 @@ public class ModelUtils {
         return createProducerRecords(topicName, numberToSend, "");
     }
 
+    int globalSentCounter = 0;
+
     public List<ProducerRecord<String, String>> createProducerRecords(String topicName, long numberToSend, String prefix) {
         List<ProducerRecord<String, String>> recs = new ArrayList<>();
         for (int i = 0; i < numberToSend; i++) {
             String key = prefix + "key-" + i;
-            ProducerRecord<String, String> record = new ProducerRecord<>(topicName, key, "value-" + i);
+            var recordNumber = i + globalSentCounter;
+            ProducerRecord<String, String> record = new ProducerRecord<>(topicName, key, "value-" + recordNumber);
+            globalSentCounter++;
             recs.add(record);
         }
         return recs;

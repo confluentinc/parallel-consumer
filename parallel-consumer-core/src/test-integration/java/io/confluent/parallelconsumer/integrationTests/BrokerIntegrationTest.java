@@ -31,7 +31,9 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
+import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 
 /**
@@ -44,6 +46,8 @@ public abstract class BrokerIntegrationTest {
     // An alias that can be used to resolve the Toxiproxy container by name in the network it is connected to.
     // It can be used as a hostname of the Toxiproxy container by other containers in the same network.
     private static final String TOXIPROXY_NETWORK_ALIAS = "toxiproxy";
+    public static final int KAFKA_INTERNAL_PORT = KAFKA_PORT - 1;
+    public static final int KAFKA_PROXY_PORT = KAFKA_PORT + 1;
 
     // Create a common docker network so that containers can communicate
 //    @Rule
@@ -58,7 +62,9 @@ public abstract class BrokerIntegrationTest {
     @Getter(AccessLevel.PROTECTED)
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
-    //advertised.listeners
+    /**
+     * @see #updateAdvertisedListenersToProxy()
+     */
     public static KafkaContainer createKafkaContainer(String logSegmentSize) {
         KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
@@ -68,6 +74,17 @@ public abstract class BrokerIntegrationTest {
                 // default produce batch size is - must be at least higher than it: 16KB
                 // try to speed up initial consumer group formation
                 .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "500") // group.initial.rebalance.delay.ms default: 3000
+                .withEnv("KAFKA_GROUP_MAX_SESSION_TIMEOUT_MS", "5000") // group.max.session.timeout.ms default: 300000
+                .withEnv("KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS", "5000") // group.min.session.timeout.ms default: 6000
+                //
+                .withEnv("KAFKA_LISTENERS", msg("BROKER://0.0.0.0:{},PLAINTEXT://0.0.0.0:{},LISTENER_PROXY://0.0.0.0:{}",
+                        KAFKA_INTERNAL_PORT, KAFKA_PORT, KAFKA_PROXY_PORT
+                )) // BROKER listener is implicit
+                .withEnv("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "BROKER:PLAINTEXT,PLAINTEXT:PLAINTEXT,LISTENER_PROXY:PLAINTEXT")
+                .withEnv("KAFKA_ADVERTISED_LISTENERS", msg("BROKER://localhost:{},PLAINTEXT://localhost:{},LISTENER_PROXY://localhost:{}",
+                        KAFKA_INTERNAL_PORT, KAFKA_PORT, KAFKA_PROXY_PORT
+                )) // gets updated later
+
                 //
                 .withNetwork(network)
                 .withReuse(true);
@@ -81,6 +98,7 @@ public abstract class BrokerIntegrationTest {
 
     static {
         kafkaContainer.start();
+        log.debug("Kafka container started");
     }
 
 
@@ -114,7 +132,7 @@ public abstract class BrokerIntegrationTest {
 
     // Starting proxying connections to a target container
     @Getter
-    private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(kafkaContainer, KAFKA_PORT);
+    private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(kafkaContainer, KAFKA_PROXY_PORT);
 
     {
         updateAdvertisedListenersToProxy();
@@ -124,35 +142,49 @@ public abstract class BrokerIntegrationTest {
      * After the proxy is started, we need to update the advertised listeners to point to the proxy, otherwise the
      * clients will try to connect directly, bypassing the proxy.
      *
+     * <pre>
+     * LISTENERS: LISTENER_DIRECT://localhost:9093,LISTENER_PROXY://localhost:9094
+     * LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_DIRECT:PLAINTEXT,LISTENER_PROXY:PLAINTEXT
+     * ADVERTISED_LISTENERS: LISTENER_DIRECT://localhost:9092,LISTENER_PROXY://localhost:${PROXY_PORT}
+     * </pre>
+     *
      * @see KafkaContainer#containerIsStarted
      */
     @SneakyThrows
     private void updateAdvertisedListenersToProxy() {
-        final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, null);
+        final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, null); // todo fix smell
         var toxiPort = getBrokerProxy().getProxyPort();
 
         log.debug("Updating advertised listeners to point to toxi proxy: {}", toxiPort);
 
         //
         ConfigResource configResource = new ConfigResource(ConfigResource.Type.BROKER, "1");
+
         // as we only have a single node cluster, only need something here which will satisfy config validation - although
         //  internally the KafkaContainer actually sets the broker to broker listener to something else
-        var brokerBs = String.format("BROKER://%s:%s", kafkaContainer.getHost(), "9092");
-        var bs = String.format("PLAINTEXT://%s:%s", "localhost", brokerProxy.getProxyPort());
-        String value = String.join(",", brokerBs, bs);
+        var broker = String.format("BROKER://%s:%s", kafkaContainer.getHost(), KAFKA_INTERNAL_PORT);
+        var direct = String.format("PLAINTEXT://%s:%s", "localhost", getKafkaContainer().getMappedPort(KAFKA_PORT));
+        var proxy = String.format("LISTENER_PROXY://%s:%s", "localhost", brokerProxy.getProxyPort());
+
+        String value = String.join(",", broker, direct, proxy);
+        log.debug("Setting LISTENERS to: {}", value);
+
         ConfigEntry toxiAdvertListener = new ConfigEntry("advertised.listeners", value);
+
         AlterConfigOp op = new AlterConfigOp(toxiAdvertListener, AlterConfigOp.OpType.SET);
 
         //
-        // fix - reuse existing admin client? or refactor to make construction nicer
+        // todo fix - reuse existing admin client? or refactor to make construction nicer
         var p = new Properties();
-        p.put("bootstrap.servers", bs);
+        // Kafka Container overrides our env with it's configure method, so have to do some gymnastics
+        var boostrapForAdmin = String.format("PLAINTEXT://%s:%s", "localhost", getKafkaContainer().getMappedPort(KAFKA_PORT));
+        p.put(BOOTSTRAP_SERVERS_CONFIG, boostrapForAdmin);
         AdminClient admin = AdminClient.create(p);
         admin.incrementalAlterConfigs(Map.of(configResource, List.of(op))).all().get();
         admin.close();
 
         //
-        log.debug("Updated advertised listeners to point to toxi proxy: {}", toxiPort);
+        log.debug("Updated advertised listeners to point to toxi proxy port: {}, advertised listeners: {}", toxiPort, value);
     }
 
     int numPartitions = 1;
@@ -162,7 +194,7 @@ public abstract class BrokerIntegrationTest {
     String topic;
 
     @Getter(AccessLevel.PROTECTED)
-    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, toxiproxy);
+    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, brokerProxy);
 
     @BeforeAll
     static void followKafkaLogs() {

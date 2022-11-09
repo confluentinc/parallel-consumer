@@ -15,6 +15,7 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.IntStreamEx;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -44,7 +45,9 @@ import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUt
 import static java.time.Duration.ofSeconds;
 import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
+import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 
 /**
  * Utilities for creating and manipulating clients
@@ -61,13 +64,14 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public static final String GROUP_ID_PREFIX = "group-1-";
 
-    private final ToxiproxyContainer toxiproxyContainer;
+    @Getter
+    private final ToxiproxyContainer.ContainerProxy brokerProxy;
 
     class PCVersion {
         public static final String V051 = "0.5.1";
     }
 
-    private final KafkaContainer kContainer;
+    private final KafkaContainer kafkaContainer;
 
     @Getter
     private KafkaConsumer<String, String> consumer;
@@ -90,36 +94,44 @@ public class KafkaClientUtils implements AutoCloseable {
      */
     private KafkaConsumer<String, String> lastConsumerConstructed;
 
-    public KafkaClientUtils(KafkaContainer kafkaContainer, ToxiproxyContainer toxiproxyContainer) {
-        this.toxiproxyContainer = toxiproxyContainer;
-        kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
-        kafkaContainer.addEnv("KAFKA_transaction_state_log_min_isr", "1");
-        kafkaContainer.start();
-        this.kContainer = kafkaContainer;
+    public KafkaClientUtils(KafkaContainer kafkaContainer, ToxiproxyContainer.ContainerProxy brokerProxy) {
+        this.brokerProxy = brokerProxy;
+        //todo fix
+//        kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
+//        kafkaContainer.addEnv("KAFKA_transaction_state_log_min_isr", "1");
+//        kafkaContainer.start();
+        this.kafkaContainer = kafkaContainer;
     }
 
     private Properties createCommonProperties() {
         var commonProps = new Properties();
-        String servers = getBootstrapServers();
-        commonProps.put("bootstrap.servers", servers);
+        String servers = getDirectBootstrapServers();
+        commonProps.put(BOOTSTRAP_SERVERS_CONFIG, servers);
+        commonProps.put(CommonClientConfigs.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000");
+        commonProps.put(CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG, "5000");
         return commonProps;
     }
 
-    private String getBootstrapServers() {
-        var bootstraps = String.format("PLAINTEXT://%s:%s", getHost(), getProxiedKafkaPort());
+    public String getProxiedBootstrapServers() {
+        var bootstraps = String.format("PLAINTEXT://%s:%s", getProxiedHost(), getProxiedKafkaPort());
+        return bootstraps;
+    }
+
+    public String getDirectBootstrapServers() {
+        var bootstraps = String.format("PLAINTEXT://%s:%s", getDirectHost(), kafkaContainer.getMappedPort(KAFKA_PORT));
         return bootstraps;
     }
 
     private int getProxiedKafkaPort() {
-        return getProxy().getProxyPort();
+        return brokerProxy.getProxyPort();
     }
 
-    private ToxiproxyContainer.ContainerProxy getProxy() {
-        return toxiproxyContainer.getProxy(kContainer, KafkaContainer.KAFKA_PORT);
+    private String getProxiedHost() {
+        return brokerProxy.getContainerIpAddress();
     }
 
-    private String getHost() {
-        return getProxy().getContainerIpAddress();
+    private String getDirectHost() {
+        return kafkaContainer.getHost();
     }
 
     private Properties setupProducerProps() {
@@ -151,6 +163,9 @@ public class KafkaClientUtils implements AutoCloseable {
         // make sure we can download lots of records if they're small. Default is 500
 //        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1_000_000);
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+
+
+        consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 5000);
 
         return consumerProps;
     }
@@ -210,12 +225,11 @@ public class KafkaClientUtils implements AutoCloseable {
         return createNewConsumer(this.groupId, options);
     }
 
-    @Deprecated
-    public <K, V> KafkaConsumer<K, V> createNewConsumer(String groupId, Properties options) {
+    public <K, V> KafkaConsumer<K, V> createNewConsumer(String groupId, Properties overridingOptions) {
         Properties properties = setupConsumerProps(groupId);
 
         // override with custom
-        properties.putAll(options);
+        properties.putAll(overridingOptions);
 
         KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(properties);
         log.debug("New consumer {}", kvKafkaConsumer);
@@ -294,13 +308,14 @@ public class KafkaClientUtils implements AutoCloseable {
         return produceMessages(topicName, numberToSend, "");
     }
 
+    ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
+
     public List<String> produceMessages(String topicName, long numberToSend, String prefix) throws InterruptedException, ExecutionException {
         log.info("Producing {} messages to {}", numberToSend, topicName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
 
-            var mu = new ModelUtils(new PCModuleTestEnv());
             List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend, prefix);
 
             for (var record : recs) {
