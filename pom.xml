@@ -10,7 +10,7 @@
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-parent</artifactId>
     <name>Confluent Parallel Consumer</name>
-    <version>0.5.2.4-SNAPSHOT</version>
+    <version>0.5.2.5-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
     <url>http://confluent.io</url>
