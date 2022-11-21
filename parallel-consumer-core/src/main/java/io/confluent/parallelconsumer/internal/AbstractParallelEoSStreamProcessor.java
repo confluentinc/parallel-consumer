@@ -37,6 +37,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
+import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -424,12 +425,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 autoCommitEnabledField.setAccessible(true);
                 Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
 
-                if (isAutoCommitEnabled)
+                if (TRUE.equals(isAutoCommitEnabled))
                     throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
             } else if (consumer instanceof MockConsumer) {
                 log.debug("Detected MockConsumer class which doesn't do auto commits");
             } else {
-                throw new UnsupportedOperationException("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
+                // Probably Mockito
+                log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
             }
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
