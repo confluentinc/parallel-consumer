@@ -15,8 +15,6 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.clients.producer.MockProducer;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
@@ -70,11 +68,6 @@ class ReactorAppTest {
             mockConsumer.updateBeginningOffsets(beginningOffsets);
             Mockito.when(mockConsumer.groupMetadata()).thenReturn(new ConsumerGroupMetadata("groupid")); // todo fix AK mock consumer
             return mockConsumer;
-        }
-
-        @Override
-        Producer<String, String> getKafkaProducer() {
-            return new MockProducer<>(true, null, null);
         }
 
         @Override

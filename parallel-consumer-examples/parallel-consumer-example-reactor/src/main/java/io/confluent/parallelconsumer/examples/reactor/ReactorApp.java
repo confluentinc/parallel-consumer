@@ -10,8 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.Producer;
 import pl.tlinkowski.unij.api.UniMaps;
 import reactor.core.publisher.Mono;
 
@@ -29,20 +27,14 @@ public class ReactorApp {
         return new KafkaConsumer<>(new Properties());
     }
 
-    Producer<String, String> getKafkaProducer() {
-        return new KafkaProducer<>(new Properties());
-    }
-
     ReactorProcessor<String, String> parallelConsumer;
 
 
     void run() {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
-        Producer<String, String> kafkaProducer = getKafkaProducer();
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .consumer(kafkaConsumer)
-                .producer(kafkaProducer)
                 .build();
 
         this.parallelConsumer = new ReactorProcessor<>(options);
