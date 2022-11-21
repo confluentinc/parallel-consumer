@@ -4,12 +4,10 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.errors.WakeupException;
 import pl.tlinkowski.unij.api.UniMaps;
 
@@ -58,28 +56,30 @@ public class ConsumerManager<K, V> {
 
     ConsumerRecords<K, V> poll(Duration requestedLongPollTimeout) {
         Duration timeoutToUse = requestedLongPollTimeout;
-        ConsumerRecords<K, V> records;
+
         if (commitRequested) {
             log.debug("Commit requested, so will not long poll as need to perform the commit");
             timeoutToUse = Duration.ofMillis(1);// disable long poll, as commit needs performing
             commitRequested = false;
         }
+
         pollingBroker.set(true);
         updateMetadataCache();
+
         log.debug("Poll starting with timeout: {}", timeoutToUse);
         try {
-            records = consumer.poll(timeoutToUse);
+            var records = consumer.poll(timeoutToUse);
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
             updateMetadataCache();
+            return records;
         } catch (WakeupException w) {
             correctPollWakeups++;
-            log.debug("Awoken from broker poll");
+            log.debug("Awoken from broker poll, returning early with empty poll set");
             log.trace("Wakeup caller is:", w);
-            records = new ConsumerRecords<>(UniMaps.of());
+            return new ConsumerRecords<>(UniMaps.of());
         } finally {
             pollingBroker.set(false);
         }
-        return records;
     }
 
     protected void updateMetadataCache() {
@@ -100,11 +100,13 @@ public class ConsumerManager<K, V> {
         }
     }
 
+    /**
+     * Any failures are bubbled up to the caller
+     */
     public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) throws PCTimeoutException {
         // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
-        int failedCommitAttempts = 0;
         while (inProgress) {
             Duration timeout = DEFAULT_API_TIMEOUT;
             try {
@@ -114,36 +116,23 @@ public class ConsumerManager<K, V> {
             } catch (org.apache.kafka.common.errors.TimeoutException e) { // distinguish from java.util.TimeoutException
                 throw new PCTimeoutException("Timeout committing offsets from KafkaConsumer", e);
             } catch (WakeupException w) {
-                failedCommitAttempts++;
+                // todo remove after actor system merged
                 log.debug(msg("Got woken up, retry. errors: {} none: {} correct: {}", erroneousWakups, noWakeups, correctPollWakeups), w);
                 erroneousWakups++;
             }
         }
     }
 
-    public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets, OffsetCommitCallback callback) {
-        // we don't want to be woken up during a commit, only polls
-        boolean inProgress = true;
-        noWakeups++;
-        int failedCommitAttempts = 0;
-        while (inProgress) {
-            try {
-                consumer.commitAsync(offsets, callback);
-                inProgress = false;
-            } catch (TimeoutException e) {
-                failedCommitAttempts++;
-                if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
-                    throw new ParallelConsumerException("Timeout committing offsets", e);
-                }
-            } catch (WakeupException w) {
-                log.debug(msg("Got woken up, retry. errors: {}, none: {} correct: {}",
-                                erroneousWakups,
-                                noWakeups,
-                                correctPollWakeups),
-                        w);
-                erroneousWakups++;
+    /**
+     * Fire and forget
+     */
+    public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets) {
+        OffsetCommitCallback offsetCommitCallback = (failedOffsets, exception) -> {
+            if (exception != null) {
+                log.error(msg("Error committing offsets in async mode. Offset: {}", failedOffsets), exception);
             }
-        }
+        };
+        consumer.commitAsync(offsets, offsetCommitCallback);
     }
 
     public ConsumerGroupMetadata groupMetadata() {

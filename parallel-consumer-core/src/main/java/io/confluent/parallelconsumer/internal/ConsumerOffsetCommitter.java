@@ -103,11 +103,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //
                 log.debug("Committing offsets Async");
-                consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
-                    if (exception != null) {
-                        log.error("Error committing offsets", exception);
-                    }
-                });
+                consumerMgr.commitAsync(offsetsToSend);
             }
             default -> {
                 throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
@@ -185,6 +181,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             // wait
             try {
                 log.debug("Waiting on a commit response");
+                // add some extra time to the timeout, to allow for the commit to be requested and responded to
                 final Duration timeoutWithBuffer = commitTimeout.plus(commitTimeout);
                 CommitResponse commitResponse = commitResponseQueue.poll(timeoutWithBuffer.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
 

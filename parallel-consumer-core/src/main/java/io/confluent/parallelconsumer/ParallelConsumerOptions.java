@@ -336,21 +336,36 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Duration offsetCommitTimeout = ConsumerManager.DEFAULT_API_TIMEOUT;
 
+    /**
+     * Settings for how to react to failure
+     */
     @Builder.Default
     private final RetrySettings retrySettings = RetrySettings.builder().build();
 
+    /**
+     * Settings for retry upon time-outs
+     */
     @Value
     @Builder
     public static class RetrySettings {
 
         public static final int DEFAULT_MAX_RETRIES = 5;
 
+        /**
+         * How many times to retry, when using {@link FailureReaction#RETRY_UP_TO_MAX_RETRIES}
+         */
         @Builder.Default
         int maxRetries = DEFAULT_MAX_RETRIES;
 
+        /**
+         * The main settings, how to react to failures
+         */
         @Builder.Default
         FailureReaction failureReaction = FAIL_FAST;
 
+        /**
+         * Check the settings are valid
+         */
         public void validate() {
             if (maxRetries != DEFAULT_MAX_RETRIES && failureReaction != RETRY_UP_TO_MAX_RETRIES) {
                 throw new IllegalArgumentException("If you set maxRetries, you must also set failureReaction to " +
@@ -358,20 +373,34 @@ public class ParallelConsumerOptions<K, V> {
             }
         }
 
+        /**
+         * For a given number of failures, should we either fail fast or stop retrying
+         */
         public boolean isFailFastOrRetryExhausted(int failedCommitAttempts) {
             final boolean failFast = getFailureReaction().equals(FAIL_FAST);
             final boolean retryLimitExhausted = getFailureReaction().equals(RETRY_UP_TO_MAX_RETRIES) && failedCommitAttempts >= getMaxRetries();
             return failFast || retryLimitExhausted;
         }
 
+        /**
+         * How to react to failure
+         */
         public enum FailureReaction {
             /**
              * Retry forever
              */
             RETRY_FOREVER,
 
+            /**
+             * Give up immediately
+             */
             FAIL_FAST,
 
+            /**
+             * Retry, up to a limit
+             *
+             * @see #maxRetries
+             */
             RETRY_UP_TO_MAX_RETRIES
         }
     }
