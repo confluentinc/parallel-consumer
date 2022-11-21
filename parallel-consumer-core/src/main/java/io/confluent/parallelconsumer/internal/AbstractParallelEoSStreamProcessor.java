@@ -44,7 +44,8 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.*;
+import static lombok.AccessLevel.PROTECTED;
+import static lombok.AccessLevel.PUBLIC;
 
 /**
  * @see ParallelConsumer
@@ -103,7 +104,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Actor for accepting messages closures form other threads.
      */
-    @Getter(PRIVATE)
+    // todo make private
+    @Getter(PUBLIC)
     private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
 
     @Getter(PROTECTED)
@@ -1035,7 +1037,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Visible for testing
      */
-    protected void commitOffsetsThatAreReady() {
+    protected void commitOffsetsThatAreReady() throws InterruptedException, TimeoutException {
         log.debug("Committing offsets that are ready...");
         committer.retrieveOffsetsAndCommit();
         updateLastCommitCheckTime();
@@ -1187,7 +1189,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void requestCommitAsap() {
         log.debug("Registering command to commit next chance");
         // if want immediate commit, need to wake up poller here too - call #commitOffsetsThatAreReadyImmediately instead
-        getMyActor().tell(AbstractParallelEoSStreamProcessor::commitOffsetsThatAreReady);
+        getMyActor().tell(this::commitOffsetsThatAreReadyWrapped);
+    }
+
+    @SneakyThrows
+    private void commitOffsetsThatAreReadyWrapped(AbstractParallelEoSStreamProcessor<K, V> controller) {
+        controller.commitOffsetsThatAreReady();
     }
 
     @Override

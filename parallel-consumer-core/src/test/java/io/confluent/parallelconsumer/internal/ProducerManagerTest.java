@@ -319,7 +319,7 @@ class ProducerManagerTest {
             {
                 var msg = "wait for first record to finish";
                 log.debug(msg);
-                await(msg).untilAsserted(() -> assertThat(pc.getWorkMailBox()).hasSize(1));
+                await(msg).untilAsserted(() -> assertThat(pc.getMyActor()).hasSize(1));
             }
 
             // send another record, register the work
