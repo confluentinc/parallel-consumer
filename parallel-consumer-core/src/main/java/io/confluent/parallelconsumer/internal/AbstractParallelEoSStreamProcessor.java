@@ -187,7 +187,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Instant lastCommitTime;
 
     public boolean isClosedOrFailed() {
-        boolean closed = state == State.closed;
+        boolean closed = state == State.CLOSED;
         boolean doneOrCancelled = false;
         if (this.controlThreadFuture.isPresent()) {
             Future<Boolean> threadFuture = controlThreadFuture.get();
@@ -209,7 +209,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see State
      */
     @Setter
-    private State state = State.unused;
+    private State state = State.UNUSED;
 
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
@@ -441,7 +441,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Close the system, without draining.
      *
-     * @see State#draining
+     * @see State#DRAINING
      */
     @Override
     public void close() {
@@ -453,7 +453,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     @SneakyThrows
     public void close(Duration timeout, DrainingMode drainMode) {
-        if (state == closed) {
+        if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
             log.info("Signaling to close...");
@@ -483,7 +483,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
-        while (!state.equals(closed)) {
+        while (!state.equals(CLOSED)) {
             try {
                 Future<Boolean> booleanFuture = this.controlThreadFuture.get();
                 log.debug("Blocking on control future");
@@ -544,7 +544,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         producerManager.ifPresent(x -> x.close(timeout));
 
         log.debug("Close complete.");
-        this.state = closed;
+        this.state = CLOSED;
 
         if (this.getFailureCause() != null) {
             log.error("PC closed due to error: {}", getFailureCause(), null);
@@ -574,7 +574,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
-        this.state = State.draining;
+        this.state = State.DRAINING;
         notifySomethingToDo();
     }
 
@@ -613,11 +613,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
-        if (state != State.unused) {
+        if (state != State.UNUSED) {
             throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
                     "more than once (they are asynchronous) (current state is {})", state));
         } else {
-            state = running;
+            state = RUNNING;
         }
 
         // broker poll subsystem
@@ -639,7 +639,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
             this.blockableControlThread = controlThread;
-            while (state != closed) {
+            while (state != CLOSED) {
                 log.debug("Control loop start");
                 try {
                     controlLoop(userFunctionWrapped, callback);
@@ -696,10 +696,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.trace("Current state: {}", state);
         switch (state) {
-            case draining -> {
+            case DRAINING -> {
                 drain();
             }
-            case closing -> {
+            case CLOSING -> {
                 doClose(DrainingCloseable.DEFAULT_TIMEOUT);
             }
         }
@@ -726,7 +726,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * todo move into {@link WorkManager} as it's specific to WM having enough work?
      */
     private void maybeWakeupPoller() {
-        if (state == running) {
+        if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -763,7 +763,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int gotWorkCount = 0;
 
         //
-        if (state == running || state == draining) {
+        if (state == RUNNING || state == DRAINING) {
             int delta = calculateQuantityToRequest();
             var records = wm.getWorkIfAvailable(delta);
 
@@ -948,10 +948,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void transitionToClosing() {
         log.debug("Transitioning to closing...");
-        if (state == State.unused) {
-            state = closed;
+        if (state == State.UNUSED) {
+            state = CLOSED;
         } else {
-            state = State.closing;
+            state = State.CLOSING;
         }
         notifySomethingToDo();
     }
@@ -1041,7 +1041,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private boolean isIdlingOrRunning() {
-        return state == running || state == draining || state == paused;
+        return state == RUNNING || state == DRAINING || state == PAUSED;
     }
 
     protected boolean isTimeToCommitNow() {
@@ -1104,7 +1104,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
             return minus;
         } else {
-            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
+            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", RUNNING, state);
             return Duration.ZERO;
         }
     }
@@ -1283,9 +1283,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void pauseIfRunning() {
-        if (this.state == State.running) {
+        if (this.state == State.RUNNING) {
             log.info("Transitioning parallel consumer to state paused.");
-            this.state = State.paused;
+            this.state = State.PAUSED;
         } else {
             log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
         }
@@ -1293,9 +1293,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void resumeIfPaused() {
-        if (this.state == State.paused) {
+        if (this.state == State.PAUSED) {
             log.info("Transitioning parallel consumer to state running.");
-            this.state = State.running;
+            this.state = State.RUNNING;
             notifySomethingToDo();
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
