@@ -223,7 +223,7 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
         log.debug("Sending {} messages to {}", quantity, topic);
         var futures = new ArrayList<Future<RecordMetadata>>();
         // async
-        for (Integer index : Range.range(quantity)) {
+        for (Long index : Range.range(quantity)) {
             Future<RecordMetadata> send = getKcu().getProducer().send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
             futures.add(send);
         }
