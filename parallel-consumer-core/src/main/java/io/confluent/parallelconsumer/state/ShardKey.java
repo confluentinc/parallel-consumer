@@ -45,11 +45,6 @@ public class ShardKey {
     @EqualsAndHashCode(callSuper = true)
     public static class KeyOrderedKey extends ShardKey {
 
-        // todo resolve javadoc inconsistency?
-        /**
-         * Note: We use just the topic name here, and not the partition, so that if we were to receive records from the
-         * same key from the partitions we're assigned, they will be put into the same queue.
-         */
         TopicPartition topicName;
 
         /**

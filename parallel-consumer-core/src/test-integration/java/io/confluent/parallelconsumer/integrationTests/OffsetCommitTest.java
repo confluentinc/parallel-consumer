@@ -46,7 +46,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 class OffsetCommitTest extends BrokerIntegrationTest {
 
     KafkaClientUtils kcu = getKcu();
-    int numPartitions = 1;
     String topicName = getClass().getName() + "-" + System.currentTimeMillis();
     List<String> topicList = of(topicName);
     TopicPartition tp = new TopicPartition(topicName, 0);
@@ -72,7 +71,6 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             log.info("Config: {} = {}", e.name(), e.value());
         });
 
-//        killFirstConsumerConnection();
 
         {
             send(numberToSend);
@@ -80,7 +78,6 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             assertThat(poll).hasSize(numberToSend);
         }
 
-//        killFirstConsumerConnection();
         reduceConnectionToZero();
 
         {
@@ -89,7 +86,6 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             assertThat(poll).hasSize(0);
         }
 
-//        restoreFirstConsumerConnection();
         restoreConnectionBandwidth();
 
         {
@@ -115,7 +111,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
      */
     @SneakyThrows
     @Test
-    void consumerOffsetCommitter() {
+    void consumerOffsetCommitterConnectionLoss() {
         kcu.getAdmin().createTopics(of(newTopic)).all().get();
 
         proxiedConsumer = createProxiedConsumer();
@@ -323,9 +319,6 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         send(1);
 
         await().untilAsserted(() -> Truth.assertThat(processedCount.get()).isEqualTo(1));
-
-        //
-//        killFirstConsumerConnection();
 
         // send some messages
         send(numberToSend);

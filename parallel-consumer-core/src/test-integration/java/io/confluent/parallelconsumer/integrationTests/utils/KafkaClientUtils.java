@@ -64,6 +64,8 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public static final String GROUP_ID_PREFIX = "group-1-";
 
+    private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
+
     @Getter
     private final ToxiproxyContainer.ContainerProxy brokerProxy;
 
@@ -96,10 +98,6 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public KafkaClientUtils(KafkaContainer kafkaContainer, ToxiproxyContainer.ContainerProxy brokerProxy) {
         this.brokerProxy = brokerProxy;
-        //todo fix
-//        kafkaContainer.addEnv("KAFKA_transaction_state_log_replication_factor", "1");
-//        kafkaContainer.addEnv("KAFKA_transaction_state_log_min_isr", "1");
-//        kafkaContainer.start();
         this.kafkaContainer = kafkaContainer;
     }
 
@@ -274,6 +272,7 @@ public class KafkaClientUtils implements AutoCloseable {
             txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
         }
 
+        // todo remove?
         txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
 
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
@@ -307,8 +306,6 @@ public class KafkaClientUtils implements AutoCloseable {
     public List<String> produceMessages(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
         return produceMessages(topicName, numberToSend, "");
     }
-
-    ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
     public List<String> produceMessages(String topicName, long numberToSend, String prefix) throws InterruptedException, ExecutionException {
         log.info("Producing {} messages to {}", numberToSend, topicName);

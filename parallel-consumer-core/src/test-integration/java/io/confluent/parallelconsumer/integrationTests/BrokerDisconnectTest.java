@@ -29,9 +29,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 @Slf4j
 class BrokerDisconnectTest extends BrokerIntegrationTest {
 
-    //        int recordsProduced = 10_000;
     int recordsProduced = 100;
-//        int recordsProduced = 10;
 
     AtomicInteger processedCount = new AtomicInteger();
 
@@ -53,7 +51,6 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
 
         //
         var retrySettings = ParallelConsumerOptions.RetrySettings.builder()
-//                .failureReaction(RETRY_FOREVER)
                 .maxRetries(1)
                 .failureReaction(RETRY_UP_TO_MAX_RETRIES)
                 .build();
@@ -65,7 +62,6 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         pc = kcu.buildPc(options, NEW_GROUP, 1);
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
-//            ThreadUtils.sleepSecondsLog(1);
             processedCount.incrementAndGet();
         });
 

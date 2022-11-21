@@ -25,6 +25,15 @@ import java.util.List;
 public class ModelUtils {
 
     @Getter
+    final String topic = "topic";
+
+    private long nextOffset = 0L;
+
+    final String groupId = "cg-1";
+
+    int globalSentCounter = 0;
+
+    @Getter
     private final PCModuleTestEnv module;
 
     public ModelUtils() {
@@ -48,9 +57,6 @@ public class ModelUtils {
         )));
     }
 
-    @Getter
-    final String topic = "topic";
-
     @NonNull
     public TopicPartition getPartition() {
         return new TopicPartition(topic, 0);
@@ -61,7 +67,6 @@ public class ModelUtils {
         return UniLists.of(new TopicPartition(topic, 0));
     }
 
-    private long nextOffset = 0L;
 
     @NonNull
     private ConsumerRecord<String, String> createConsumerRecord(String topic) {
@@ -74,7 +79,6 @@ public class ModelUtils {
         return new ProducerRecord<>(topic, "a-key", "a-value");
     }
 
-    final String groupId = "cg-1";
 
     public ConsumerGroupMetadata consumerGroupMeta() {
         return new ConsumerGroupMetadata(groupId);
@@ -84,7 +88,6 @@ public class ModelUtils {
         return createProducerRecords(topicName, numberToSend, "");
     }
 
-    int globalSentCounter = 0;
 
     public List<ProducerRecord<String, String>> createProducerRecords(String topicName, long numberToSend, String prefix) {
         List<ProducerRecord<String, String>> recs = new ArrayList<>();

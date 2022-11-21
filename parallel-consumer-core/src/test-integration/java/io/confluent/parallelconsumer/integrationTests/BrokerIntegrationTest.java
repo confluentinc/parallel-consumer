@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import com.github.dockerjava.api.DockerClient;
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.AccessLevel;
@@ -37,21 +36,31 @@ import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CON
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 
 /**
+ * Adding {@link Container} to the containers causes them to be closed after the test, which we don't want if we're
+ * sharing kafka instances between tests for performance.
+ *
  * @author Antony Stubbs
  */
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest {
 
-    // An alias that can be used to resolve the Toxiproxy container by name in the network it is connected to.
-    // It can be used as a hostname of the Toxiproxy container by other containers in the same network.
     private static final String TOXIPROXY_NETWORK_ALIAS = "toxiproxy";
+
     public static final int KAFKA_INTERNAL_PORT = KAFKA_PORT - 1;
+
     public static final int KAFKA_PROXY_PORT = KAFKA_PORT + 1;
 
-    // Create a common docker network so that containers can communicate
-//    @Rule
-//    @Container
+    int numPartitions = 1;
+
+    int partitionNumber = 0;
+
+    @Getter
+    String topic;
+
+    /**
+     * Create a common docker network so that containers can communicate with each other
+     */
     public static Network network = Network.newNetwork();
 
     /**
@@ -106,19 +115,12 @@ public abstract class BrokerIntegrationTest {
         System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
     }
 
-
-    private static final DockerImageName REDIS_IMAGE = DockerImageName.parse("redis:5.0.4");
-//
-//    // The target container - this could be anything
-////    @Rule
-//    public GenericContainer<?> redis = new GenericContainer<>(REDIS_IMAGE)
-//            .withExposedPorts(6379)
-//            .withNetwork(network);
-
     private static final DockerImageName TOXIPROXY_IMAGE = DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.5.0");
 
-    // Toxiproxy container, which will be used as a TCP proxy
-//    @Rule
+
+    /**
+     * Toxiproxy container, which will be used as a TCP proxy
+     */
     @Getter
     @Container
     private final ToxiproxyContainer toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
@@ -130,7 +132,9 @@ public abstract class BrokerIntegrationTest {
     }
 
 
-    // Starting proxying connections to a target container
+    /**
+     * Starting proxying connections to a target container
+     */
     @Getter
     private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(kafkaContainer, KAFKA_PROXY_PORT);
 
@@ -173,8 +177,7 @@ public abstract class BrokerIntegrationTest {
 
         AlterConfigOp op = new AlterConfigOp(toxiAdvertListener, AlterConfigOp.OpType.SET);
 
-        //
-        // todo fix - reuse existing admin client? or refactor to make construction nicer
+        // todo reuse existing admin client? or refactor to make construction nicer
         var p = new Properties();
         // Kafka Container overrides our env with it's configure method, so have to do some gymnastics
         var boostrapForAdmin = String.format("PLAINTEXT://%s:%s", "localhost", getKafkaContainer().getMappedPort(KAFKA_PORT));
@@ -186,12 +189,6 @@ public abstract class BrokerIntegrationTest {
         //
         log.debug("Updated advertised listeners to point to toxi proxy port: {}, advertised listeners: {}", toxiPort, value);
     }
-
-    int numPartitions = 1;
-    int partitionNumber = 0;
-
-    @Getter
-    String topic;
 
     @Getter(AccessLevel.PROTECTED)
     private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, brokerProxy);
@@ -254,8 +251,6 @@ public abstract class BrokerIntegrationTest {
         return getKcu().produceMessages(getTopic(), quantity, prefix);
     }
 
-    int outPort = -1;
-
     protected void simulateBrokerResume() {
         log.warn("Simulating broker connection recovery");
         brokerProxy.setConnectionCut(false);
@@ -266,50 +261,4 @@ public abstract class BrokerIntegrationTest {
         brokerProxy.setConnectionCut(true);
     }
 
-    protected void terminateBrokerWithDockerNetwork() {
-        log.warn(kafkaContainer.getPortBindings().toString());
-        log.warn(kafkaContainer.getExposedPorts().toString());
-        log.warn(kafkaContainer.getBoundPortNumbers().toString());
-        log.warn(kafkaContainer.getLivenessCheckPortNumbers().toString());
-
-        outPort = kafkaContainer.getMappedPort(9093);
-
-        log.debug("Test step: Terminating broker");
-//        getKafkaContainer().getDockerClient()
-//        String containerId = getKafkaContainer().getContainerId();
-//        getKafkaContainer().getDockerClient().killContainerCmd(containerId).exec();
-//        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isFalse());
-
-
-        Network network = kafkaContainer.getNetwork();
-        DockerClient client = kafkaContainer.getDockerClient();
-        List<com.github.dockerjava.api.model.Network> exec1 = client.listNetworksCmd().exec();
-//        com.github.dockerjava.api.model.Network exec = client.inspectNetworkCmd().exec();
-        List<String> networkAliases = kafkaContainer.getNetworkAliases();
-        String networkId = networkAliases.stream().findFirst().get();
-        client.disconnectFromNetworkCmd()
-                .withContainerId(kafkaContainer.getContainerId())
-                .withNetworkId(networkId)
-                .exec();
-    }
-
-    protected void startNewBroker() {
-        log.debug("Test step: Starting a new broker");
-
-        String mapping = "9093:" + outPort;
-//        BrokerIntegrationTest.kafkaContainer = BrokerIntegrationTest.createKafkaContainer();
-//        kafkaContainer.setPortBindings(UniLists.of(mapping));
-//        kafkaContainer.start();
-
-//        BrokerIntegrationTest.followKafkaLogs();
-//        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
-//        Awaitility.await().untilAsserted(() -> assertThat(kafkaContainer.isRunning()).isTrue());
-
-        getKafkaContainer().getDockerClient().connectToNetworkCmd().exec();
-
-        log.warn(kafkaContainer.getLivenessCheckPortNumbers().toString());
-        log.warn(kafkaContainer.getPortBindings().toString());
-        log.warn(kafkaContainer.getPortBindings().toString());
-
-    }
 }
