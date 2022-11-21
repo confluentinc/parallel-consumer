@@ -5,6 +5,7 @@ import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.NonNull;
@@ -17,6 +18,8 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -40,6 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
+ * Various tests around disconnects and reconnects
+ *
  * @author Antony Stubbs
  */
 @Slf4j
@@ -58,6 +63,9 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     KafkaConsumer<String, String> secondConsumer;
 
 
+    /**
+     * Tests directly how the {@link KafkaConsumer} handles disconnects and reconnects
+     */
     @SneakyThrows
     @Test
     void canTerminateConsumerConnection() {
@@ -107,7 +115,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     }
 
     /**
-     * Assert the behaviour of the consumer when connection goes down and up
+     * Assert the behaviour of the KafkaConsumer when connection goes down and up
      */
     @SneakyThrows
     @Test
@@ -288,17 +296,22 @@ class OffsetCommitTest extends BrokerIntegrationTest {
      * Test Parallel Consumers behaviour in the same way - what happens when the broker connection goes down and up
      */
     @SneakyThrows
-    @Test
-    void parallelConsumerBrokerReconnectionTest() {
+    @ParameterizedTest
+    @EnumSource
+    void parallelConsumerBrokerReconnectionTest(CommitMode commitMode) {
         proxiedConsumer = createProxiedConsumer();
         var processedCount = new AtomicInteger();
+
+        final ParallelConsumerOptions.RetrySettings retrySettings = ParallelConsumerOptions.RetrySettings.builder()
+                .failureReaction(RETRY_FOREVER)
+                .build();
+
         var options = ParallelConsumerOptions.<String, String>builder()
                 .consumer(proxiedConsumer)
-                .commitMode(ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC) // todo test async too
-                .retrySettings(ParallelConsumerOptions.RetrySettings.builder()
-                        .failureReaction(RETRY_FOREVER)
-                        .build())
+                .commitMode(commitMode)
+                .retrySettings(retrySettings)
                 .build();
+
         var pc = kcu.buildPc(options, null, 1);
         pc.subscribe(topicList);
         pc.poll(recordContexts -> {

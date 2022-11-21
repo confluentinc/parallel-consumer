@@ -3,11 +3,13 @@ package io.confluent.parallelconsumer.integrationTests;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.containers.KafkaContainer;
 
 import java.time.Duration;
@@ -15,7 +17,6 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
@@ -36,16 +37,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     ParallelEoSStreamProcessor<String, String> pc;
 
     @SneakyThrows
-    @Test
-    void proxyTest() {
-        simulateBrokerUnreachable();
-        String topicName = setupTopic();
-        getKcu().produceMessages(topicName, 1);
-        Truth.assertThat(false).isTrue();
-    }
-
-    @SneakyThrows
-    void setupAndWarmUp(KafkaClientUtils kcu) {
+    void setupAndWarmUp(KafkaClientUtils kcu, CommitMode commitMode) {
         String topicName = setupTopic();
         kcu.produceMessages(topicName, recordsProduced);
 
@@ -54,11 +46,13 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
                 .maxRetries(1)
                 .failureReaction(RETRY_UP_TO_MAX_RETRIES)
                 .build();
+
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .commitMode(PERIODIC_CONSUMER_SYNC)
+                .commitMode(commitMode)
                 .retrySettings(retrySettings)
                 .build();
+
         pc = kcu.buildPc(options, NEW_GROUP, 1);
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
@@ -70,11 +64,11 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         log.debug("Consumed 100");
     }
 
-    // todo test for all commit modes
     @SneakyThrows
-    @Test
-    void brokerConnectionInterruption() {
-        setupAndWarmUp(getKcu());
+    @ParameterizedTest
+    @EnumSource
+    void brokerConnectionInterruption(CommitMode commitMode) {
+        setupAndWarmUp(getKcu(), commitMode);
 
         //
         simulateBrokerUnreachable();
@@ -108,19 +102,19 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     }
 
     private void checkPCState() {
-        // todo check state
         assertThat(pc).isNotClosedOrFailed();
     }
 
     @SneakyThrows
-    @Test
-    void brokerShutdown() {
+    @ParameterizedTest
+    @EnumSource
+    void brokerShutdown(CommitMode commitMode) {
         // need ot start
         KafkaContainer finickyKafka = getKafkaContainer();
 
         KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finickyKafka, getBrokerProxy());
 
-        setupAndWarmUp(kafkaClientUtils);
+        setupAndWarmUp(kafkaClientUtils, commitMode);
 
         //
         brokerDies(finickyKafka);
@@ -159,19 +153,11 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         getToxiproxy().close();
     }
 
-    /**
-     * test against multiple brokers, against a topic that's on both
-     */
-    @Test
-    void multiBroker() {
-        // todo
-    }
-
-    // todo test for all commit modes
     @SneakyThrows
-    @Test
-    void brokerRestartTest() {
-        setupAndWarmUp(getKcu());
+    @ParameterizedTest
+    @EnumSource
+    void brokerRestartTest(CommitMode commitMode) {
+        setupAndWarmUp(getKcu(), commitMode);
 
         //
         restartBroker();
