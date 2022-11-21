@@ -33,9 +33,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.JavaUtils.catchAndWrap;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.BOTH;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.FIRST;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
 import static java.time.Duration.ofSeconds;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
@@ -309,10 +311,16 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                 .failureReaction(RETRY_FOREVER)
                 .build();
 
-        var options = ParallelConsumerOptions.<String, String>builder()
+        final ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> preSettings = ParallelConsumerOptions.<String, String>builder()
                 .consumer(proxiedConsumer)
                 .commitMode(commitMode)
-                .retrySettings(retrySettings)
+                .retrySettings(retrySettings);
+
+        if (commitMode == PERIODIC_TRANSACTIONAL_PRODUCER) {
+            preSettings.producer(kcu.createNewProducer(TRANSACTIONAL));
+        }
+
+        var options = preSettings
                 .build();
 
         var pc = kcu.buildPc(options, null, 1);

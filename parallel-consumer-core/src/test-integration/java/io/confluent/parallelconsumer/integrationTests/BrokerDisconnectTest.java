@@ -54,6 +54,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
                 .ordering(UNORDERED)
                 .commitMode(commitMode)
                 .retrySettings(retrySettings)
+//                .producer(kcu.getProducer())
                 .build();
 
         pc = kcu.buildPc(options, NEW_GROUP, 1);
