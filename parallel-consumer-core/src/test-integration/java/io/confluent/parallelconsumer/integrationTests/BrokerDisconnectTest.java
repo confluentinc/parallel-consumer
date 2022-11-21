@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.containers.KafkaContainer;
@@ -27,6 +28,8 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 /**
  * Exercises PC's reaction to the broker connection being lost of the broker being restarted
  */
+@Tag("disconnect")
+@Tag("toxiproxy")
 @Slf4j
 class BrokerDisconnectTest extends BrokerIntegrationTest {
 
