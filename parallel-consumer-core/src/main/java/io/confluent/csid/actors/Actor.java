@@ -4,7 +4,7 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
@@ -114,7 +114,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
 
     private void checkState(State targetState) {
         if (!state.equals(targetState)) {
-            throw new InternalRuntimeError(msg("Actor in {} state, not {} target state", state, targetState));
+            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state, targetState));
         }
     }
 
