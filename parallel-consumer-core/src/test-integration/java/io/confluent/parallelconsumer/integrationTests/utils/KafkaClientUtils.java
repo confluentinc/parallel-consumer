@@ -109,7 +109,7 @@ public class KafkaClientUtils implements AutoCloseable {
         return producerProps;
     }
 
-    private Properties setupConsumerProps(String groupIdToUse) {
+    public Properties setupConsumerProps(String groupIdToUse) {
         var consumerProps = setupCommonProps();
 
         //

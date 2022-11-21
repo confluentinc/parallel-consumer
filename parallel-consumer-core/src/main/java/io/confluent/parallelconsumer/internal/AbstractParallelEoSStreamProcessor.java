@@ -37,6 +37,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
+import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -406,28 +407,34 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Nasty reflection to check if auto commit is disabled.
      * <p>
      * Other way would be to politely request the user also include their consumer properties when construction, but
-     * this is more reliable in a correctness sense, but britle in terms of coupling to internal implementation.
+     * this is more reliable in a correctness sense, but brittle in terms of coupling to internal implementation.
      * Consider requesting ability to inspect configuration at runtime.
      */
-    @SneakyThrows
     private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        if (consumer instanceof KafkaConsumer) {
-            // Commons lang FieldUtils#readField - avoid needing commons lang
-            Field coordinatorField = consumer.getClass().getDeclaredField("coordinator"); //NoSuchFieldException
-            coordinatorField.setAccessible(true);
-            ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
+        try {
+            if (consumer instanceof KafkaConsumer) {
+                // Could use Commons Lang FieldUtils#readField - but, avoid needing commons lang
+                Field coordinatorField = KafkaConsumer.class.getDeclaredField("coordinator");
+                coordinatorField.setAccessible(true);
+                ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
 
-            if (coordinator == null)
-                throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
+                if (coordinator == null)
+                    throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
 
-            Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
-            autoCommitEnabledField.setAccessible(true);
-            Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
+                Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
+                autoCommitEnabledField.setAccessible(true);
+                Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
 
-            if (isAutoCommitEnabled)
-                throw new IllegalArgumentException("Consumer auto commit must be disabled, as commits are handled by the library.");
-        } else {
-            // noop - probably MockConsumer being used in testing - which doesn't do auto commits
+                if (TRUE.equals(isAutoCommitEnabled))
+                    throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+            } else if (consumer instanceof MockConsumer) {
+                log.debug("Detected MockConsumer class which doesn't do auto commits");
+            } else {
+                // Probably Mockito
+                log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
         }
     }
 
