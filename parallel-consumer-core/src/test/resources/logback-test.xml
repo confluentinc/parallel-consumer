@@ -40,12 +40,18 @@
 
     <logger name="org.apache.kafka" level="warn"/>
 
-    <!-- docker logs -->
+    <!-- docker logs: must be debug to work, and FilteredTestContainerSlf4jLogConsumer turned on to debug -->
+    <logger name="io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="debug"/>
+
+
+    <!-- tests -->
     <logger name="io.confluent.parallelconsumer.integrationTests.BrokerDisconnectTest" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.integrationTests.OffsetCommitTest" level="debug"/>
 
 
-    <!--    <logger name="org.apache.kafka.clients.producer.KafkaProducer" level="trace"/>-->
-    <!--    <logger name="org.apache.kafka.clients.consumer.KafkaConsumer" level="debug"/>-->
+    <!--    <logger name="org.apache.kafka.clients.producer" level="trace"/>-->
+    <logger name="org.apache.kafka.clients.consumer" level="info"/>
 
 
     <!--    <logger name="io.confluent.csid.utils.LatchTestUtils" level="trace"/>-->

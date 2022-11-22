@@ -67,7 +67,8 @@ public abstract class BrokerIntegrationTest {
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
      * https://github.com/testcontainers/testcontainers-java/pull/1781
      */
-    @Container
+    // todo resolve
+//    @Container
     @Getter(AccessLevel.PROTECTED)
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
@@ -117,7 +118,6 @@ public abstract class BrokerIntegrationTest {
 
     private static final DockerImageName TOXIPROXY_IMAGE = DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.5.0");
 
-
     /**
      * Toxiproxy container, which will be used as a TCP proxy
      */
@@ -129,8 +129,12 @@ public abstract class BrokerIntegrationTest {
 
     {
         toxiproxy.start();
+        if (log.isDebugEnabled()) {
+            FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
+            logConsumer.withPrefix("TOXIPROXY");
+            toxiproxy.followOutput(logConsumer);
+        }
     }
-
 
     /**
      * Starting proxying connections to a target container
@@ -197,6 +201,7 @@ public abstract class BrokerIntegrationTest {
     static void followKafkaLogs() {
         if (log.isDebugEnabled()) {
             FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
+            logConsumer.withPrefix("KAFKA");
             kafkaContainer.followOutput(logConsumer);
         }
     }

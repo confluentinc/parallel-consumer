@@ -63,6 +63,7 @@ public class KafkaClientUtils implements AutoCloseable {
     public static final int MAX_POLL_RECORDS = 10_000;
 
     public static final String GROUP_ID_PREFIX = "group-1-";
+    public static final int GROUP_SESSION_TIMEOUT_MS = 5000;
 
     private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
@@ -163,7 +164,7 @@ public class KafkaClientUtils implements AutoCloseable {
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
 
 
-        consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 5000);
+        consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, GROUP_SESSION_TIMEOUT_MS);
 
         return consumerProps;
     }
