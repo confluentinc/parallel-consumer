@@ -39,7 +39,14 @@ public enum OffsetEncoding {
      * switch from encoding run lengths as Shorts to Integers
      */
     RunLengthV2(v2, (byte) 'e'),
-    RunLengthV2Compressed(v2, (byte) 'p');
+    RunLengthV2Compressed(v2, (byte) 'p'),
+
+    /**
+     * checks for pre-existing Kafka Streams metadata
+     */
+    KafkaStreams(v1, (byte) 1),
+    KafkaStreamsV2(v2, (byte) 2);
+
 
     public enum Version {
         v1, v2
