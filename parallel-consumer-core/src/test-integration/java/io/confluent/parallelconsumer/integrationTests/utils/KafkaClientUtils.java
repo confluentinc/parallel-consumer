@@ -257,7 +257,12 @@ public class KafkaClientUtils implements AutoCloseable {
         return createNewProducer(ProducerMode.matching(commitMode));
     }
 
-    public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode mode) {
+
+    public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode transactional) {
+        return createNewProducer(transactional, new Properties());
+    }
+
+    public <K, V> KafkaProducer<K, V> createNewProducer(ProducerMode mode, Properties overridingOptions) {
         Properties properties = setupProducerProps();
 
         var txProps = new Properties();
@@ -272,6 +277,8 @@ public class KafkaClientUtils implements AutoCloseable {
             txProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, this.getClass().getSimpleName() + ":" + nextInt()); // required for tx
             txProps.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, (int) ofSeconds(10).toMillis()); // speed things up
         }
+
+        txProps.putAll(overridingOptions);
 
         // todo remove?
         txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);

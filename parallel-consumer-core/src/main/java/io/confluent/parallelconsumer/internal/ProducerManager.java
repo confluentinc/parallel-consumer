@@ -11,6 +11,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.CommitFailedException;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.*;
@@ -226,7 +227,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see KafkaProducer#commitTransaction()
      */
     @Override
-    protected void commitOffsets(@NonNull Map<TopicPartition, OffsetAndMetadata> offsetsToSend, @NonNull ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(@NonNull Map<TopicPartition, OffsetAndMetadata> offsetsToSend, @NonNull ConsumerGroupMetadata groupMetadata) throws PCCommitFailedException {
         log.debug("Transactional offset commit starting");
         if (!options.isUsingTransactionalProducer()) {
             throw new IllegalStateException("Bug: cannot use if not using transactional producer");
@@ -241,10 +242,10 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         lazyMaybeBeginTransaction(); // if not using a produce flow or if no records sent yet, a tx will need to be started here (as no records are being produced)
         try {
             producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
-        } catch (ProducerFencedException e) {
+        } catch (ProducerFencedException | CommitFailedException e) {
             // todo consider wrapping all client calls with a catch and new exception in the ProducerWrapper, so can get stack traces
             //  see APIException#fillInStackTrace
-            throw new InternalRuntimeException(e);
+            throw new InternalRuntimeException("Error sending offsets to transaction, cannot recover - Producer needs to be reinitialised", e);
         }
 
         // see {@link KafkaProducer#commit} this can be interrupted and is safe to retry

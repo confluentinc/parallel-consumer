@@ -7,6 +7,7 @@ import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import io.confluent.parallelconsumer.internal.ConsumerManager;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.NonNull;
 import lombok.SneakyThrows;
@@ -15,6 +16,7 @@ import one.util.streamex.StreamEx;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
 import org.junit.jupiter.api.Tag;
@@ -52,7 +54,6 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  *
  * @author Antony Stubbs
  */
-//todo disconnected long enough for a group rebalance
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
@@ -145,7 +146,8 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     }
 
     /**
-     * Assert the behaviour of the KafkaConsumer when connection goes down and up
+     * Assert the behaviour of the KafkaConsumer when connection goes down and up, when there are two consumers in a
+     * group
      */
     @SneakyThrows
     @Test
@@ -254,6 +256,13 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         return kcu.createNewConsumer(topicName, overridingOptions);
     }
 
+    private KafkaProducer<String, String> createProxiedTransactionalProducer() {
+        var overridingOptions = new Properties();
+        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
+        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
+        return kcu.createNewProducer(TRANSACTIONAL, overridingOptions);
+    }
+
     enum AssignmentState {
         FIRST,
         SECOND,
@@ -342,7 +351,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                 .retrySettings(retrySettings);
 
         if (commitMode == PERIODIC_TRANSACTIONAL_PRODUCER) {
-            preSettings.producer(kcu.createNewProducer(TRANSACTIONAL));
+            preSettings.producer(createProxiedTransactionalProducer());
         }
 
         var options = preSettings
@@ -354,45 +363,70 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             log.debug("{}", recordContexts);
             processedCount.incrementAndGet();
 
-            //
-            killFirstConsumerConnection();
+            if (processedCount.get() == 1) {
+                log.debug("kill connection after first poll result");
+                killFirstConsumerConnection();
 
-            log.warn("Making PC try to commit the dirty state while the connection is closed...");
-            pc.requestCommitAsap();
+                log.debug("Making PC try to commit the dirty state while the connection is closed...");
+                pc.requestCommitAsap();
+            }
         });
 
-        // allow time for pc to start polling before killing connection
+        //
+        log.debug("allow time for pc to start polling before killing connection");
         ThreadUtils.sleepSecondsLog(1);
 
-        // to make the state dirty, so we can try committing
+        //
+        log.debug("to make the state dirty, so we can try committing");
         send(1);
 
+        //
+        log.debug("wait until the consumer has processed the first message");
         await().untilAsserted(() -> Truth.assertThat(processedCount.get()).isEqualTo(1));
 
-        // send some messages
+        //
+        log.debug("send some more messages which won't be able to be consumed due to being disconnected");
         send(numberToSend);
 
-        // wait for a while, making sure none of the extra 5 records make it through
+        //
+        log.debug("wait for a while, making sure none of the extra 5 records make it through");
         var delay = TIMEOUT;
-        await().failFast(pc::isClosedOrFailed)
+        await().failFast(() -> pc.isClosedOrFailed() || processedCount.get() > 1)
                 .pollDelay(ofSeconds(delay))
                 .timeout(ofSeconds(delay + DEFAULT_API_TIMEOUT.toSeconds() * 2)) // longer than the commit timeout
                 .untilAsserted(() -> {
-                    Truth.assertThat(processedCount.get()).isEqualTo(1);
+                    Truth.assertWithMessage("should still only be one record processed")
+                            .that(processedCount.get()).isEqualTo(1);
                 });
 
         //
         restoreFirstConsumerConnection();
 
-        //
-        await().failFast(pc::isClosedOrFailed)
-                .untilAsserted(() -> {
-                    Truth.assertThat(processedCount.get()).isAtLeast(numberToSend);
-                });
+        if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
+            // system does not recover from this state
+            await().untilAsserted(() -> {
+                Truth.assertWithMessage("should have crashed")
+                        .that(pc.isClosedOrFailed()).isTrue();
+            });
+            var throwableThat = assertThat(pc).getFailureCause().hasCauseThat();
+            throwableThat.isInstanceOf(InternalRuntimeException.class);
+            var messageThat = throwableThat.hasMessageThat();
+            messageThat.contains("offsets to transaction");
+            messageThat.contains("Producer");
+            messageThat.contains("reinitialised");
+        } else {
+            //
+            log.debug("Now connection is open again, wait for all records to get processed");
+            await().failFast(pc::isClosedOrFailed)
+                    .atMost(ConsumerManager.DEFAULT_API_TIMEOUT.multipliedBy(2))
+                    .untilAsserted(() -> {
+                        Truth.assertThat(processedCount.get()).isAtLeast(numberToSend);
+                    });
 
-        //
-        pc.close();
-
+            //
+            pc.close();
+            assertThat(pc).getFailureCause().isNull();
+        }
         //
         log.debug("Processed: {}", processedCount.get());
     }

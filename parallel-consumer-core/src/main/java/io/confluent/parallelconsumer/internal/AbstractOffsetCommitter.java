@@ -29,7 +29,8 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
     public void retrieveOffsetsAndCommit() throws
             PCTimeoutException,
             InterruptedException,
-            TimeoutException // java.util.concurrent.TimeoutException
+            TimeoutException, // java.util.concurrent.TimeoutException
+            PCCommitFailedException
     {
         log.debug("Find completed work to commit offsets");
         preAcquireOffsetsToCommit();
@@ -64,6 +65,6 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         wm.onOffsetCommitSuccess(committed);
     }
 
-    protected abstract void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) throws PCTimeoutException;
+    protected abstract void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) throws PCTimeoutException, PCCommitFailedException;
 
 }

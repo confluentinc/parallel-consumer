@@ -190,6 +190,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         for (TopicPartition removedPartition : allRemovedPartitions) {
             // by replacing with a no op implementation, we protect for stale messages still in queues which reference it
             // however it means the map will only grow, but only it's key set
+            log.debug("Removing partition state for {}", removedPartition);
             var partition = this.partitionStates.get(removedPartition);
             partitionStates.put(removedPartition, RemovedPartitionState.getSingleton());
 

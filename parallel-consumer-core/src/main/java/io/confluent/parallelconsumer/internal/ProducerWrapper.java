@@ -101,6 +101,7 @@ public class ProducerWrapper<K, V> implements Producer<K, V> {
 
     public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
                                          ConsumerGroupMetadata groupMetadata) throws ProducerFencedException {
+        log.debug("Sending offsets to transaction...");
         producer.sendOffsetsToTransaction(offsets, groupMetadata);
     }
 
@@ -174,12 +175,14 @@ public class ProducerWrapper<K, V> implements Producer<K, V> {
 
     @Override
     public void initTransactions() {
+        log.debug("Init transaction...");
         producer.initTransactions();
         this.producerState = INIT;
     }
 
     @Override
     public void beginTransaction() throws ProducerFencedException {
+        log.debug("Beginning transaction...");
         producer.beginTransaction();
         this.producerState = BEGIN;
     }
@@ -193,6 +196,7 @@ public class ProducerWrapper<K, V> implements Producer<K, V> {
 
     @Override
     public void abortTransaction() throws ProducerFencedException {
+        log.debug("Aborting transaction...");
         producer.abortTransaction();
         this.producerState = ABORT;
     }

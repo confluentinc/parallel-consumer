@@ -1140,7 +1140,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");
-            committer.retrieveOffsetsAndCommit();
+            try {
+                committer.retrieveOffsetsAndCommit();
+            } catch (PCCommitFailedException e) {
+                log.error("Commit failed, cannot retry. Need to wait for rebalance.", e);
+            }
             clearCommitCommand();
             this.lastCommitTime = Instant.now();
         }

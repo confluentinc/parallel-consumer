@@ -103,16 +103,18 @@ public class ConsumerManager<K, V> {
     /**
      * Any failures are bubbled up to the caller
      */
-    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) throws PCTimeoutException {
+    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) throws PCTimeoutException, PCCommitFailedException {
         // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {
             Duration timeout = DEFAULT_API_TIMEOUT;
             try {
-                log.debug("Committing offsets Sync");
+                log.debug("Committing offsets Sync with timeout: {}", timeout);
                 consumer.commitSync(offsetsToSend, timeout);
                 inProgress = false;
+            } catch (CommitFailedException e) {
+                throw new PCCommitFailedException(e);
             } catch (org.apache.kafka.common.errors.TimeoutException e) { // distinguish from java.util.TimeoutException
                 throw new PCTimeoutException("Timeout committing offsets from KafkaConsumer", e);
             } catch (WakeupException w) {

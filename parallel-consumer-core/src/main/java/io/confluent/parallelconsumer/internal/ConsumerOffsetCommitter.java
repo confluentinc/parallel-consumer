@@ -75,7 +75,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     void commit() throws
             TimeoutException, // java.util.concurrent.TimeoutException
             InterruptedException,
-            PCTimeoutException {
+            PCTimeoutException,
+            PCCommitFailedException {
         if (isOwner()) {
             retrieveOffsetsAndCommit();
         } else if (isSync()) {
@@ -91,7 +92,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     @Override
-    protected void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) throws PCTimeoutException {
+    protected void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) throws PCTimeoutException, PCCommitFailedException {
         if (offsetsToSend.isEmpty()) {
             log.trace("Nothing to commit");
             return;
@@ -139,9 +140,9 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     public static class CommitResponse {
         CommitRequest request;
 
-        Optional<PCTimeoutException> exception;
+        Optional<InternalException> exception;
 
-        public CommitResponse(CommitRequest poll, PCTimeoutException e) {
+        public CommitResponse(CommitRequest poll, InternalException e) {
             this.request = poll;
             this.exception = Optional.ofNullable(e);
         }
@@ -164,7 +165,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     // todo replace with actor framework once merged
-    private void commitAndWait() {
+    private void commitAndWait() throws PCCommitFailedException {
         boolean waitingOnCommitResponse = true;
         int failedCommitAttempts = 0;
         int attempts = 0;
@@ -180,9 +181,10 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
             // wait
             try {
-                log.debug("Waiting on a commit response");
                 // add some extra time to the timeout, to allow for the commit to be requested and responded to
-                final Duration timeoutWithBuffer = commitTimeout.plus(commitTimeout);
+                var buffer = Duration.ofSeconds(10);
+                final Duration timeoutWithBuffer = commitTimeout.plus(buffer);
+                log.debug("Waiting on a commit response with timeout {} (base: {}, buffer: {})", timeoutWithBuffer, commitTimeout, buffer);
                 CommitResponse commitResponse = commitResponseQueue.poll(timeoutWithBuffer.toMillis(), TimeUnit.MILLISECONDS); // blocks, drain until we find our response
 
                 // guard
@@ -199,7 +201,10 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                 if (responseMatchesRequestWaitingOn && commitResponse.hasException()) {
                     failedCommitAttempts++;
                     var error = commitResponse.getException().get();
-                    if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
+
+                    if (error instanceof PCCommitFailedException pcCommitFailedException) {
+                        throw pcCommitFailedException;
+                    } else if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
                         throw new ParallelConsumerException("Timeout committing offsets", error);
                     } else {
                         Duration commitTimeout = DEFAULT_API_TIMEOUT;
@@ -232,6 +237,12 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             log.debug("Commit requested, performing...");
             try {
                 retrieveOffsetsAndCommit();
+            } catch (PCCommitFailedException e) {
+                // only need to send a response if someone will be waiting
+                if (isSync()) {
+                    log.warn("Commit failed exception - cannot retry. Adding commit response to response queue...", e);
+                    commitResponseQueue.add(new CommitResponse(poll, e));
+                }
             } catch (PCTimeoutException e) {
                 // only need to send a response if someone will be waiting
                 if (isSync()) {
