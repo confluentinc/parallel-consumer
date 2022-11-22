@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.offsets.OffsetSimultaneousEncoder;
@@ -12,19 +13,24 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniSets;
 
+import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NORMAL;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
 import static java.lang.Integer.MAX_VALUE;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
@@ -35,8 +41,9 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
  * @see PartitionState#getOffsetHighestSequentialSucceeded()
  * @see OffsetSimultaneousEncoder#OffsetSimultaneousEncoder
  */
+@Tag("transactions")
 @Slf4j
-class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
+public class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
 
     /**
      * Block all records beyond the second record
@@ -51,7 +58,8 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
     Producer<String, String> txProducerThree;
     Producer<String, String> normalProducer;
     Consumer<String, String> consumer;
-    ParallelEoSStreamProcessor<String, String> pc;
+
+    protected ParallelEoSStreamProcessor<String, String> pc;
 
     @BeforeEach
         // todo move to super?
@@ -59,11 +67,11 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         setupTopic();
         consumer = getKcu().getConsumer();
 
-        txProducer = getKcu().createNewTransactionalProducer();
-        txProducerTwo = getKcu().createNewTransactionalProducer();
-        txProducerThree = getKcu().createNewTransactionalProducer();
+        txProducer = getKcu().createAndInitNewTransactionalProducer();
+        txProducerTwo = getKcu().createAndInitNewTransactionalProducer();
+        txProducerThree = getKcu().createAndInitNewTransactionalProducer();
 
-        normalProducer = getKcu().createNewProducer(NORMAL);
+        normalProducer = getKcu().createNewProducer(NOT_TRANSACTIONAL);
         pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                 .consumer(consumer)
                 .ordering(PARTITION) // just so we dont need to use keys
@@ -85,8 +93,8 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
      * <p>
      * todo can these gaps also be created by log compaction? If so, is the solution the same?
      *
-     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/329">Github issue #329</a> the original
-     *         reported issue
+     * @see <a href="https://github.com/confluentinc/parallel-consumer/issues/329">Github issue #329</a> the
+     *         original reported issue
      */
     @Test
     void single() {
@@ -150,7 +158,7 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
                     log.debug(msg("{} over block limit of {}, blocking...", index, blockOver));
                     Thread.sleep(Long.MAX_VALUE);
                 } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                    throw new FakeRuntimeException(e);
                 }
             }
         });
@@ -167,8 +175,10 @@ class TransactionMarkersTest extends BrokerIntegrationTest<String, String> {
         return new ProducerRecord<>(topic, "");
     }
 
-    private void sendRecordsNonTransactionally(int count) {
-        IntStream.of(count).forEach(i -> normalProducer.send(createRecordToSend()));
+    protected List<Future<RecordMetadata>> sendRecordsNonTransactionally(int count) {
+        return IntStream.of(count).mapToObj(ignored
+                        -> normalProducer.send(createRecordToSend()))
+                .collect(Collectors.toList());
     }
 
     /**

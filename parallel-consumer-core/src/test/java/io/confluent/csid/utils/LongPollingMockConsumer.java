@@ -21,13 +21,13 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Used in tests to stub out the behaviour of the real Broker and Client's long polling system (the mock Kafka Consumer
  * doesn't have this behaviour).
  *
- * @param <K>
- * @param <V>
+ * @author Antony Stubbs
  */
 @ToString
 @Slf4j
@@ -174,7 +174,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
     public void subscribeWithRebalanceAndAssignment(final List<String> topics, int partitions) {
         List<TopicPartition> topicPartitions = topics.stream()
-                .flatMap(y -> Range.rangeStream(partitions).boxed()
+                .flatMap(y -> IntStream.range(0, partitions).boxed()
                         .map(x -> new TopicPartition(y, x)))
                 .collect(Collectors.toList());
         rebalance(topicPartitions);

@@ -8,8 +8,8 @@ import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashSet;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static io.confluent.csid.utils.Range.range;
 
@@ -47,14 +47,14 @@ public class OffsetCodecTestUtils {
      * <p>
      * o is incomplete
      */
-    static Set<Long> bitmapStringToIncomplete(final long baseOffset, final String inputBitmapString) {
-        final Set<Long> incompleteOffsets = new HashSet<>();
+    static TreeSet<Long> bitmapStringToIncomplete(final long baseOffset, final String inputBitmapString) {
+        var incompleteOffsets = new TreeSet<Long>();
 
         final long longLength = inputBitmapString.length();
-        range(longLength).forEach(i -> {
-            var bit = inputBitmapString.charAt(i);
+        range(longLength).forEach(index -> {
+            var bit = inputBitmapString.charAt(Math.toIntExact(index));
             if (bit == 'o') {
-                incompleteOffsets.add(baseOffset + i);
+                incompleteOffsets.add(baseOffset + index);
             } else if (bit == 'x') {
                 log.trace("Dropping completed offset");
             } else {

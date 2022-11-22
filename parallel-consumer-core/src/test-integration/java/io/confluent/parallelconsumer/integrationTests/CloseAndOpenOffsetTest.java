@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.csid.utils.Range;
-import io.confluent.parallelconsumer.FakeRuntimeError;
+import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
@@ -58,7 +58,7 @@ import static org.junit.jupiter.api.parallel.ResourceAccessMode.READ;
  */
 @Timeout(value = 60)
 @Slf4j
-public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
+class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
 
     Duration normalTimeout = ofSeconds(5);
     Duration debugTimeout = Duration.ofMinutes(1);
@@ -105,8 +105,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         }
 
         //
-        KafkaConsumer<String, String> newConsumerOne = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+        KafkaConsumer<String, String> newConsumerOne = getKcu().createNewConsumer();
+        KafkaProducer<String, String> producerOne = getKcu().createNewProducer(true);
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
@@ -128,11 +128,11 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
                 log.info("Read by consumer ONE: {}", x);
                 if (x.value().equals("4")) {
                     log.info("Throwing fake error for message 4");
-                    throw new FakeRuntimeError("Fake error - Message 4");
+                    throw new FakeRuntimeException("Fake error - Message 4");
                 }
                 if (x.value().equals("2")) {
                     log.info("Throwing fake error for message 2");
-                    throw new FakeRuntimeError("Fake error - Message 2");
+                    throw new FakeRuntimeException("Fake error - Message 2");
                 }
                 successfullInOne.add(x.getSingleConsumerRecord());
             });
@@ -183,8 +183,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         // second client
         {
             //
-            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
-            KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+            KafkaConsumer<String, String> newConsumerThree = getKcu().createNewConsumer(customClientId("THREE-my-client"));
+            KafkaProducer<String, String> producerThree = getKcu().createNewProducer(true);
             var optionsThree = options.toBuilder().consumer(newConsumerThree).producer(producerThree).build();
             try (var asyncThree = new ParallelEoSStreamProcessor<String, String>(optionsThree)) {
                 asyncThree.subscribe(UniLists.of(rebalanceTopic));
@@ -216,15 +216,15 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
     }
 
     private void send(String topic, int partition, Integer value) throws InterruptedException, ExecutionException {
-        RecordMetadata recordMetadata = kcu.getProducer().send(new ProducerRecord<>(topic, partition, value.toString(), value.toString())).get();
+        RecordMetadata recordMetadata = getKcu().getProducer().send(new ProducerRecord<>(topic, partition, value.toString(), value.toString())).get();
     }
 
     private void send(int quantity, String topic, int partition) throws InterruptedException, ExecutionException {
         log.debug("Sending {} messages to {}", quantity, topic);
         var futures = new ArrayList<Future<RecordMetadata>>();
         // async
-        for (Integer index : Range.range(quantity)) {
-            Future<RecordMetadata> send = kcu.getProducer().send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
+        for (Long index : Range.range(quantity)) {
+            Future<RecordMetadata> send = getKcu().getProducer().send(new ProducerRecord<>(topic, partition, index.toString(), index.toString()));
             futures.add(send);
         }
         // block until finished
@@ -245,10 +245,10 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
         // send a single message
         String expectedPayload = "0";
-        kcu.getProducer().send(new ProducerRecord<>(topic, expectedPayload, expectedPayload));
+        getKcu().getProducer().send(new ProducerRecord<>(topic, expectedPayload, expectedPayload));
 
-        KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
-        KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+        KafkaConsumer<String, String> consumer = getKcu().createNewConsumer();
+        KafkaProducer<String, String> producerOne = getKcu().createNewProducer(true);
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
                 .consumer(consumer)
@@ -277,8 +277,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
         //
         log.debug("Starting up new client");
-        KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
-        KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+        KafkaConsumer<String, String> newConsumerThree = getKcu().createNewConsumer(customClientId("THREE-my-client"));
+        KafkaProducer<String, String> producerThree = getKcu().createNewProducer(true);
         ParallelConsumerOptions<String, String> optionsThree = options.toBuilder()
                 .consumer(newConsumerThree)
                 .producer(producerThree)
@@ -330,8 +330,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
 
         // step 1
         {
-            KafkaConsumer<String, String> consumer = kcu.createNewConsumer();
-            KafkaProducer<String, String> producerOne = kcu.createNewProducer(true);
+            KafkaConsumer<String, String> consumer = getKcu().createNewConsumer();
+            KafkaProducer<String, String> producerOne = getKcu().createNewProducer(true);
             var options = baseOptions.toBuilder()
                     .consumer(consumer)
                     .producer(producerOne)
@@ -344,7 +344,7 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
             asyncOne.poll(x -> {
                 String value = x.value();
                 if (failingMessages.contains(value)) {
-                    throw new FakeRuntimeError("Fake error for message " + value);
+                    throw new FakeRuntimeException("Fake error for message " + value);
                 }
                 readByOne.add(value);
             });
@@ -365,8 +365,8 @@ public class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String
         // step 2
         {
             //
-            KafkaConsumer<String, String> newConsumerThree = kcu.createNewConsumer(customClientId("THREE-my-client"));
-            KafkaProducer<String, String> producerThree = kcu.createNewProducer(true);
+            KafkaConsumer<String, String> newConsumerThree = getKcu().createNewConsumer(customClientId("THREE-my-client"));
+            KafkaProducer<String, String> producerThree = getKcu().createNewProducer(true);
             var optionsThree = baseOptions.toBuilder()
                     .consumer(newConsumerThree)
                     .producer(producerThree)

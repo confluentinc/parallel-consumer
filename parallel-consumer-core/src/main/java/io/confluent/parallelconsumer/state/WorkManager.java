@@ -4,12 +4,8 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.*;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +14,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
@@ -29,7 +24,7 @@ import static lombok.AccessLevel.PUBLIC;
 /**
  * Sharded, prioritised, offset managed, order controlled, delayed work queue.
  * <p>
- * Low Water Mark - the highest offset (continuously successful) with all it's previous messages succeeded (the offset
+ * Low Watermark - the highest offset (continuously successful) with all it's previous messages succeeded (the offset
  * one commits to broker)
  * <p>
  * High Water Mark - the highest offset which has succeeded (previous may be incomplete)
@@ -38,8 +33,7 @@ import static lombok.AccessLevel.PUBLIC;
  * <p>
  * This state is shared between the {@link BrokerPollSystem} thread and the {@link AbstractParallelEoSStreamProcessor}.
  *
- * @param <K>
- * @param <V>
+ * @author Antony Stubbs
  */
 @Slf4j
 public class WorkManager<K, V> implements ConsumerRebalanceListener {
@@ -76,23 +70,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        this(options, consumer, new DynamicLoadFactor(), TimeUtils.getClock());
-    }
-
-    /**
-     * Use a private {@link DynamicLoadFactor}, useful for testing.
-     */
-    public WorkManager(ParallelConsumerOptions<K, V> options, org.apache.kafka.clients.consumer.Consumer<K, V> consumer, Clock clock) {
-        this(options, consumer, new DynamicLoadFactor(), clock);
-    }
-
-    public WorkManager(final ParallelConsumerOptions<K, V> newOptions, final org.apache.kafka.clients.consumer.Consumer<K, V> consumer,
-                       final DynamicLoadFactor dynamicExtraLoadFactor, Clock clock) {
-        this.options = newOptions;
+    public WorkManager(PCModule<K, V> module,
+                       DynamicLoadFactor dynamicExtraLoadFactor) {
+        this.options = module.options();
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
-        this.sm = new ShardManager<>(options, this, clock);
-        this.pm = new PartitionStateManager<>(consumer, sm, options, clock);
+        this.sm = new ShardManager<>(module, this);
+        this.pm = new PartitionStateManager<>(module, sm);
     }
 
     /**
@@ -143,7 +126,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 work.size(),
                 requestedMaxWorkToRetrieve,
                 getNumberRecordsOutForProcessing(),
-                getNumberOfEntriesInPartitionQueues());
+                getNumberOfIncompleteOffsets());
         numberRecordsOutForProcessing += work.size();
 
         return work;
@@ -181,8 +164,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         numberRecordsOutForProcessing--;
     }
 
-    public long getNumberOfEntriesInPartitionQueues() {
-        return pm.getNumberOfEntriesInPartitionQueues();
+    public long getNumberOfIncompleteOffsets() {
+        return pm.getNumberOfIncompleteOffsets();
     }
 
     public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
@@ -207,8 +190,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @return true if epoch doesn't match, false if ok
      */
-    public boolean checkIfWorkIsStale(final WorkContainer<K, V> workContainer) {
-        return pm.checkIfWorkIsStale(workContainer);
+    public boolean checkIfWorkIsStale(WorkContainer<K, V> workContainer) {
+        return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
     }
 
     public boolean shouldThrottle() {
@@ -243,18 +226,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
 
-    public boolean hasWorkInCommitQueues() {
-        return pm.hasWorkInCommitQueues();
+    public boolean hasIncompleteOffsets() {
+        return pm.hasIncompleteOffsets();
     }
 
     public boolean isRecordsAwaitingProcessing() {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
-    }
-
-    public boolean isRecordsAwaitingToBeCommitted() {
-        // todo could be improved - shouldn't need to count all entries if we simply want to know if there's > 0
-        var partitionWorkRemainingCount = getNumberOfEntriesInPartitionQueues();
-        return partitionWorkRemainingCount > 0;
     }
 
     public void handleFutureResult(WorkContainer<K, V> wc) {
@@ -283,4 +260,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getLowestRetryTime();
     }
 
+    public boolean isDirty() {
+        return pm.isDirty();
+    }
 }

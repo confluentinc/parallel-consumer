@@ -63,7 +63,7 @@ class MultiTopicTest extends BrokerIntegrationTest<String, String> {
         pc.close();
 
         //
-        Consumer<?, ?> assertingConsumer = kcu.createNewConsumer(false);
+        Consumer<?, ?> assertingConsumer = getKcu().createNewConsumer(false);
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> {
                     assertSeparateConsumerCommit(assertingConsumer, new HashSet<>(multiTopics), recordsPerTopic);

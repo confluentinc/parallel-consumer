@@ -16,8 +16,14 @@ import java.util.function.Function;
  * @author Antony Stubbs
  */
 // todo remove?
+// todo rename
 public interface IActor<T> {
 
+    /**
+     * Exceptions in execution will be logged
+     *
+     * @param action
+     */
     void tell(Consumer<T> action);
 
     /**
@@ -25,6 +31,7 @@ public interface IActor<T> {
      */
     void tellImmediately(Consumer<T> action);
 
+    // todo use CompletableFuture instead of Future
     <R> Future<R> askImmediately(Function<T, R> action);
 
     <R> Future<R> ask(Function<T, R> action);

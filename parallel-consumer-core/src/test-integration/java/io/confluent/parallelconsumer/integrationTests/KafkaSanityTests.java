@@ -38,7 +38,7 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
     public void pausedConsumerStillLongPollsForNothing() {
         log.info("Setup topic");
         setupTopic();
-        KafkaConsumer<String, String> consumer = kcu.getConsumer();
+        KafkaConsumer<String, String> consumer = getKcu().getConsumer();
         log.info("Subscribe to topic");
         consumer.subscribe(UniLists.of(topic));
         Set<TopicPartition> assignment = consumer.assignment();
@@ -78,7 +78,7 @@ public class KafkaSanityTests extends BrokerIntegrationTest<String, String> {
                 .as("approximate sanity - ensure start state settings (shared static state :`( )")
                 .isGreaterThan(3000);
 
-        KafkaConsumer<String, String> consumer = kcu.getConsumer();
+        KafkaConsumer<String, String> consumer = getKcu().getConsumer();
         TopicPartition tpOne = new TopicPartition(topic, 0);
         TopicPartition tpTwo = new TopicPartition(topic, 1);
         HashMap<TopicPartition, OffsetAndMetadata> map = new HashMap<>();

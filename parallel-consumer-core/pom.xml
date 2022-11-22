@@ -27,7 +27,7 @@
         <dependency>
             <groupId>com.github.luben</groupId>
             <artifactId>zstd-jni</artifactId>
-            <version>1.5.2-3</version>
+            <version>1.5.2-4</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -86,18 +86,18 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.4.0</version>
+            <version>42.5.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.github.tomakehurst</groupId>
-            <artifactId>wiremock</artifactId>
+            <artifactId>wiremock-jre8</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threeten-extra</artifactId>
-            <version>1.7.0</version>
+            <version>1.7.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -109,7 +109,7 @@
         <dependency>
             <groupId>uk.co.jemos.podam</groupId>
             <artifactId>podam</artifactId>
-            <version>7.2.9.RELEASE</version>
+            <version>7.2.10.RELEASE</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -129,9 +129,10 @@
                         <package>io.confluent.csid</package>
                     </packages>
                     <classes>
-<!--                        <class>io.confluent.csid.actors.Greeter</class>-->
+                        <class>io.confluent.csid.actors.Actor</class>
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
+                        <class>io.confluent.parallelconsumer.internal.ProducerManager</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>

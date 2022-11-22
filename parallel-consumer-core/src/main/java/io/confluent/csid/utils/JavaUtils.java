@@ -4,31 +4,34 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.InternalRuntimeError;
+import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.experimental.UtilityClass;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.time.Duration.ofMillis;
 
 @UtilityClass
 public class JavaUtils {
 
-    public static <T> Optional<T> getLast(final List<T> commitHistory) {
-        if (commitHistory.isEmpty()) return Optional.empty();
-        return Optional.of(commitHistory.get(commitHistory.size() - 1));
+    public static <T> Optional<T> getLast(final List<T> someList) {
+        if (someList.isEmpty()) return Optional.empty();
+        return Optional.of(someList.get(someList.size() - 1));
+    }
+
+    public static <T> Optional<T> getFirst(final List<T> someList) {
+        return someList.isEmpty() ? Optional.empty() : Optional.of(someList.get(0));
     }
 
     public static <T> Optional<T> getOnlyOne(final Map<String, T> stringMapMap) {
         if (stringMapMap.isEmpty()) return Optional.empty();
         Collection<T> values = stringMapMap.values();
-        if (values.size() > 1) throw new InternalRuntimeError("More than one element");
+        if (values.size() > 1) throw new InternalRuntimeException("More than one element");
         return Optional.of(values.iterator().next());
     }
 
@@ -54,6 +57,26 @@ public class JavaUtils {
                         Map.Entry::getKey,
                         e -> function.apply(e.getValue())
                 ));
+    }
+
+    public static List<String> getRandom(List<String> list, int quantity) {
+        if (list.size() < quantity) {
+            throw new IllegalArgumentException("List size is less than quantity");
+        }
+
+        return createRandomIntStream(list.size())
+                .limit(quantity)
+                .map(list::get)
+                .collect(Collectors.toList());
+    }
+
+    private static Stream<Integer> createRandomIntStream(int range) {
+        final Random random = new Random();
+        return Stream.generate(() -> random.nextInt(range));
+    }
+
+    public static <T> Collector<T, ?, TreeSet<T>> toTreeSet() {
+        return Collectors.toCollection(TreeSet::new);
     }
 
 }
