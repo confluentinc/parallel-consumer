@@ -37,8 +37,10 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.BOTH;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.FIRST;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GROUP_SESSION_TIMEOUT_MS;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
+import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.awaitility.Awaitility.await;
@@ -50,11 +52,14 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  *
  * @author Antony Stubbs
  */
+//todo disconnected long enough for a group rebalance
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
 class OffsetCommitTest extends BrokerIntegrationTest {
 
+    public static final int TIMEOUT = 30;
+    public static final Duration TIMEOUT_DURATION = ofSeconds(TIMEOUT);
     KafkaClientUtils kcu = getKcu();
     String topicName = getClass().getName() + "-" + System.currentTimeMillis();
     List<String> topicList = of(topicName);
@@ -70,20 +75,17 @@ class OffsetCommitTest extends BrokerIntegrationTest {
 
     /**
      * Tests directly how the {@link KafkaConsumer} handles disconnects and reconnects
+     * <p>
+     * Most basic version
      */
     @SneakyThrows
     @Test
     void canTerminateConsumerConnection() {
         proxiedConsumer = createProxiedConsumer();
         proxiedConsumer.subscribe(topicList);
-        proxiedConsumer.enforceRebalance(); // todo remove
+        proxiedConsumer.enforceRebalance(); // todo remove?
 
-
-        var configResourceConfigMap = kcu.getAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
-        configResourceConfigMap.values().stream().findFirst().get().entries().stream().filter(x -> x.name().contains("advertise")).forEach(e -> {
-            log.info("Config: {} = {}", e.name(), e.value());
-        });
-
+        logAdvertisedListeners();
 
         {
             send(numberToSend);
@@ -91,27 +93,50 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             assertThat(poll).hasSize(numberToSend);
         }
 
-        reduceConnectionToZero();
+        killFirstConsumerConnection();
 
         {
             send(numberToSend);
-            ConsumerRecords<String, String> poll = getPoll();
-            assertThat(poll).hasSize(0);
+            var groupSessionTimeout = ofMillis(GROUP_SESSION_TIMEOUT_MS);
+            await()
+                    .pollDelay(groupSessionTimeout)
+                    .atMost(ofMillis(GROUP_SESSION_TIMEOUT_MS * 2))
+                    .untilAsserted(() -> {
+                        var poll = getPoll(groupSessionTimeout); // moderate poll timeout
+                        assertThat(poll).hasSize(0);
+                    });
         }
 
-        restoreConnectionBandwidth();
+        restoreFirstConsumerConnection();
 
         {
             send(numberToSend);
-            ConsumerRecords<String, String> poll = getPoll();
-            assertThat(poll).hasSize(numberToSend * 2);
+            await().untilAsserted(() -> {
+                ConsumerRecords<String, String> poll = getPoll(TIMEOUT_DURATION); // should return very quickly once connection reestablished
+                assertThat(poll).hasSize(numberToSend * 2);
+            });
         }
     }
 
+    /**
+     * debug info - describe the clusters advertised listeners
+     */
+    @SneakyThrows
+    private void logAdvertisedListeners() {
+        var configResourceConfigMap = kcu.getAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
+        configResourceConfigMap.values().stream().findFirst().get().entries().stream().filter(x -> x.name().contains("advertise")).forEach(e -> {
+            log.info("Config: {} = {}", e.name(), e.value());
+        });
+    }
+
     private ConsumerRecords<String, String> getPoll() {
+        return getPoll(TIMEOUT_DURATION);
+    }
+
+    private ConsumerRecords<String, String> getPoll(Duration timeout) {
         log.debug("Polling");
-        ConsumerRecords<String, String> poll = proxiedConsumer.poll(ofSeconds(30));
-        log.debug("Polled");
+        ConsumerRecords<String, String> poll = proxiedConsumer.poll(timeout);
+        log.debug("Polled, returned {} records", poll.count());
         return poll;
     }
 
@@ -348,7 +373,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         send(numberToSend);
 
         // wait for a while, making sure none of the extra 5 records make it through
-        var delay = 30;
+        var delay = TIMEOUT;
         await().failFast(pc::isClosedOrFailed)
                 .pollDelay(ofSeconds(delay))
                 .timeout(ofSeconds(delay + DEFAULT_API_TIMEOUT.toSeconds() * 2)) // longer than the commit timeout
