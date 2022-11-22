@@ -51,7 +51,7 @@ import static lombok.AccessLevel.PUBLIC;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
+public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerRebalanceHandler<K, V> implements
         ParallelConsumer<K, V>,
         ControllerPackageAPI<K, V>,
         ControllerInternalAPI<K, V>,
@@ -231,7 +231,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
         this.brokerPollSubsystem = module.brokerPoller(this);
 
-        this.rebalanceHandler = new ConsumerRebalanceHandler(this);
+        this.rebalanceHandler = module.parallelEoSStreamProcessor;
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(module.producerManager());
@@ -320,7 +320,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
-    public void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
         getMyActor().tell(controller -> controller.onPartitionsRevokedInternal(partitions));
     }
 
@@ -349,7 +349,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         }
     }
 
-    public void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
+    protected void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
         getMyActor().tell(controller -> controller.onPartitionsAssignedInternal(partitions));
     }
 

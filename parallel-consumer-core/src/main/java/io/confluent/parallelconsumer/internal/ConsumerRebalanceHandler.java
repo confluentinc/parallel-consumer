@@ -6,32 +6,30 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 
-
-// todo inline into controller
+/**
+ * Separate out concerns from the Controller, and so the user doesn't have access to the public rebalance interface
+ * methods.
+ *
+ * @author Antony Stubbs
+ */
+// todo inline into controller? or keep seperate so user doesnt
 @RequiredArgsConstructor
-public class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
+public abstract class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 
-    private final AbstractParallelEoSStreamProcessor<K, V> controller;
+//    private final AbstractParallelEoSStreamProcessor<K, V> controller;
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        controller.onPartitionsRevokedTellAsync(partitions);
-//        controller.sendPartitionEvent(REVOKED, partitions);
+        onPartitionsRevokedTellAsync(partitions);
     }
+
+    protected abstract void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions);
 
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        controller.onPartitionsAssignedTellAsync(partitions);
-//        controller.sendPartitionEvent(ASSIGNED, partitions);
+        onPartitionsAssignedTellAsync(partitions);
     }
 
-//    enum PartitionEventType {
-//        ASSIGNED, REVOKED
-//    }
+    protected abstract void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions);
 
-//    @Value
-//    protected static class PartitionEventMessage {
-//        PartitionEventType type;
-//        Collection<TopicPartition> partitions;
-//    }
 }
