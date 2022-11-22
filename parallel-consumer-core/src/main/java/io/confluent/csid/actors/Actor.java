@@ -74,7 +74,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actorRef;
 
-    private volatile State state = State.ACCEPTING_MESSAGES;
+    private volatile ActorState state = ActorState.ACCEPTING_MESSAGES;
 
     /**
      * Single queueing point for all messages to the actor.
@@ -87,19 +87,19 @@ public class Actor<T> implements IActor<T>, Interruptible {
 
     @Override
     public void tell(final Consumer<T> action) {
-        checkState(State.ACCEPTING_MESSAGES);
+        checkState(ActorState.ACCEPTING_MESSAGES);
         getActionMailbox().add(() -> action.accept(actorRef));
     }
 
     @Override
     public void tellImmediately(final Consumer<T> action) {
-        checkState(State.ACCEPTING_MESSAGES);
+        checkState(ActorState.ACCEPTING_MESSAGES);
         getActionMailbox().addFirst(() -> action.accept(actorRef));
     }
 
     @Override
     public <R> Future<R> ask(final Function<T, R> action) {
-        checkState(State.ACCEPTING_MESSAGES);
+        checkState(ActorState.ACCEPTING_MESSAGES);
 
         /*
          * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
@@ -112,7 +112,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
         return task;
     }
 
-    private void checkState(State targetState) {
+    private void checkState(ActorState targetState) {
         if (!state.equals(targetState)) {
             throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state, targetState));
         }
@@ -127,7 +127,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     @Override
     public <R> Future<R> askImmediately(final Function<T, R> action) {
-        checkState(State.ACCEPTING_MESSAGES);
+        checkState(ActorState.ACCEPTING_MESSAGES);
 
         FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
         getActionMailbox().addFirst(task);
@@ -143,6 +143,12 @@ public class Actor<T> implements IActor<T>, Interruptible {
         return this.getActionMailbox().isEmpty();
     }
 
+    /**
+     * @return the number of actions in the queue
+     */
+    public int getSize() {
+        return this.getActionMailbox().size();
+    }
 
     /**
      * Processes the closures in the queued, in bounded element space.
@@ -233,7 +239,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     @Override
     public void close() {
-        state = State.CLOSED;
+        state = ActorState.CLOSED;
         process();
     }
 
@@ -247,7 +253,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
         log.debug("Interruption signal processed: {}", reason);
     }
 
-    public enum State {
+    public enum ActorState {
         ACCEPTING_MESSAGES,
         CLOSED
     }

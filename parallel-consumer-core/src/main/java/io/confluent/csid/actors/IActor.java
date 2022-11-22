@@ -16,6 +16,7 @@ import java.util.function.Function;
  * @author Antony Stubbs
  */
 // todo remove?
+// todo rename
 public interface IActor<T> {
 
     /**

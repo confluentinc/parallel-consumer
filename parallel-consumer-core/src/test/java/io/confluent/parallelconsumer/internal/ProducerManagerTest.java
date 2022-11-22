@@ -264,7 +264,7 @@ class ProducerManagerTest {
 
             // "send" one record
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
-            pc.registerWork(freshWork);
+            pc.sendNewPolledRecordsAsync(freshWork);
 
             assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
@@ -319,12 +319,12 @@ class ProducerManagerTest {
             {
                 var msg = "wait for first record to finish";
                 log.debug(msg);
-                await(msg).untilAsserted(() -> assertThat(pc.getMyActor()).hasSize(1));
+                await(msg).untilAsserted(() -> assertThat(pc.getMyActor()).hasSizeEqualTo(1));
             }
 
             // send another record, register the work
             freshWork = mu.createFreshWork();
-            pc.registerWork(freshWork);
+            pc.sendNewPolledRecordsAsync(freshWork);
 
             // will first try to commit - which will work fine, as there's no produce lock isn't held yet (off 0 goes through fine)
             // then it will get the work, distributes it

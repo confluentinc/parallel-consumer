@@ -51,7 +51,12 @@ import static lombok.AccessLevel.PUBLIC;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
+        ParallelConsumer<K, V>,
+        ControllerPackageAPI<K, V>,
+        ControllerInternalAPI<K, V>,
+        ConsumerRebalanceListener,
+        Closeable {
 
     /*
      * This is a bit of a GOD class now, and so care should be taken not to expand it's scope furhter. Where possible,
@@ -1134,14 +1139,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         wc.onUserFunctionSuccess();
     }
 
-    // todo extract controller api? - improvements/lambda-api
-    protected void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
+    // todo make protected
+    @Override
+    public void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         log.trace("Sending new work result to controller {}", wc);
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
 
         wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
+    @Override
     public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
         log.trace("Sending new polled records signal to controller - total partitions: {} records: {}",
                 polledRecords.partitions().size(),
