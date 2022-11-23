@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.integrationTests;
 import io.confluent.parallelconsumer.integrationTests.utils.ChaosBroker;
 import lombok.AccessLevel;
 import lombok.Getter;
+import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
@@ -15,6 +16,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest {
 
+    @Container
     @Getter(AccessLevel.PROTECTED)
     private final ChaosBroker chaosBroker;
 

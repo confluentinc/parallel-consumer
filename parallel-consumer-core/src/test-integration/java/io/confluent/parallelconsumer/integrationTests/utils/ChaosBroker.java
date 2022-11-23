@@ -15,13 +15,12 @@ import org.apache.kafka.clients.admin.ConfigEntry;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.config.ConfigResource;
+import org.jetbrains.annotations.Nullable;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.ToxiproxyContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.utility.DockerImageName;
 
 import java.io.IOException;
@@ -30,6 +29,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
+import static lombok.AccessLevel.PRIVATE;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 import static org.testcontainers.containers.KafkaContainer.ZOOKEEPER_PORT;
@@ -57,65 +57,64 @@ public class ChaosBroker extends PCTestBroker {
     /**
      * Create a common docker network so that containers can communicate with each other
      */
-    public final Network network = Network.newNetwork();
+    public Network network;
 
-    private final GenericContainer<?> zookeeperContainer = new GenericContainer<>(DockerImageName.parse("confluentinc/cp-zookeeper"))
-            .withNetwork(network)
-            .withNetworkAliases(ZOOKEEPER_NETWORK_ALIAS)
-            .withExposedPorts(ZOOKEEPER_PORT)
-//            .addExposedPort()
-            .withEnv("ZOOKEEPER_CLIENT_PORT", ZOOKEEPER_PORT + "")
-//            .withReuse(false)
-            .withReuse(true);
+    private GenericContainer<?> zookeeperContainer;
 
 //    /**
 //     * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
 //     * https://github.com/testcontainers/testcontainers-java/pull/1781
 //     */
-//    @Container
 //    @Getter(AccessLevel.PRIVATE)
 //    public KafkaContainer kafkaContainer = createKafkaContainer();
 
     /**
      * Toxiproxy container, which will be used as a TCP proxy
      */
-    @Getter
-    @Container
-    private final ToxiproxyContainer toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
-            .withNetwork(network)
-            .withNetworkAliases(TOXIPROXY_NETWORK_ALIAS)
-            .dependsOn(kafkaContainer);
+    @Getter(PRIVATE)
+    private ToxiproxyContainer toxiproxy;
 
     /**
      * Starting proxying connections to a target container
      */
-    @Getter
-    private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(KAFKA_NETWORK_ALIAS, KAFKA_PROXY_PORT);
+    @Getter(PRIVATE)
+    private ToxiproxyContainer.ContainerProxy brokerProxy;
 
     @Getter(AccessLevel.PUBLIC)
-    private final AdminClient proxiedAdmin;
+    private AdminClient proxiedAdmin;
 
     @SneakyThrows
     public ChaosBroker() {
-        this.proxiedAdmin = createProxiedAdminClient();
+        super();
+
+        initToxiproxy();
     }
 
-    @SneakyThrows
+    private void initToxiproxy() {
+        toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
+                .withNetwork(network)
+                .withNetworkAliases(TOXIPROXY_NETWORK_ALIAS)
+                .dependsOn(kafkaContainer);
+    }
+
+    private void initZookeeper() {
+        zookeeperContainer = new GenericContainer<>(DockerImageName.parse("confluentinc/cp-zookeeper"))
+                .withNetwork(network)
+                .withNetworkAliases(ZOOKEEPER_NETWORK_ALIAS)
+                .withExposedPorts(ZOOKEEPER_PORT)
+//            .addExposedPort()
+                .withEnv("ZOOKEEPER_CLIENT_PORT", ZOOKEEPER_PORT + "")
+//            .withReuse(false)
+                .withReuse(false);
+    }
+
+    /**
+     * Change to not be reusable and use an external zk.
+     */
     @Override
-    public void start() {
-        Startables.deepStart(zookeeperContainer, kafkaContainer, toxiproxy).get();
-        updateAdvertisedListenersToProxy();
-        followLogs();
-    }
+    public KafkaContainer createKafkaContainer(@Nullable String logSegmentSize) {
+        preKafkaInit();
 
-    @Override
-    public void stop() {
-        toxiproxy.stop();
-        kafkaContainer.stop();
-        zookeeperContainer.stop();
-    }
-
-    private KafkaContainer createKafkaContainer() {
         return super.createKafkaContainer(null)
                 .withReuse(false)
 
@@ -127,6 +126,49 @@ public class ChaosBroker extends PCTestBroker {
                 //
                 .withNetwork(network)
                 .withNetworkAliases(KAFKA_NETWORK_ALIAS);
+    }
+
+    private void preKafkaInit() {
+        initNetwork();
+        initZookeeper();
+    }
+
+    private void initNetwork() {
+        network = Network.newNetwork();
+    }
+
+    @SneakyThrows
+    @Override
+    public void start() {
+        zookeeperContainer.start();
+        try {
+            kafkaContainer.start();
+        } catch (Exception e) {
+            log.error("Failed to start Kafka container", e);
+            throw e;
+        }
+        toxiproxy.start();
+
+        followLogs();
+
+        postStart();
+    }
+
+    private void postStart() {
+        setupBrokerProxyAndClients();
+        updateAdvertisedListenersToProxy();
+    }
+
+    private void setupBrokerProxyAndClients() {
+        this.brokerProxy = toxiproxy.getProxy(KAFKA_NETWORK_ALIAS, KAFKA_PROXY_PORT);
+        this.proxiedAdmin = createProxiedAdminClient();
+    }
+
+    @Override
+    public void stop() {
+        toxiproxy.stop();
+        kafkaContainer.stop();
+        zookeeperContainer.stop();
     }
 
     private String getZookeeperConnectionString() {
