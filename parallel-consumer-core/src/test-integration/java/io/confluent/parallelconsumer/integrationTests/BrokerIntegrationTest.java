@@ -4,7 +4,10 @@ package io.confluent.parallelconsumer.integrationTests;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import eu.rekawek.toxiproxy.Proxy;
+import eu.rekawek.toxiproxy.ToxiproxyClient;
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
+import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -12,18 +15,21 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.config.ConfigResource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.testcontainers.DockerClientFactory;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.ToxiproxyContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import pl.tlinkowski.unij.api.UniLists;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -31,9 +37,12 @@ import java.util.concurrent.TimeUnit;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
+import static org.testcontainers.containers.KafkaContainer.ZOOKEEPER_PORT;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
  * Adding {@link Container} to the containers causes them to be closed after the test, which we don't want if we're
@@ -50,6 +59,7 @@ public abstract class BrokerIntegrationTest {
     public static final int KAFKA_INTERNAL_PORT = KAFKA_PORT - 1;
 
     public static final int KAFKA_PROXY_PORT = KAFKA_PORT + 1;
+    public static final String KAFKA_NETWORK_ALIAS = "kafka";
 
     int numPartitions = 1;
 
@@ -62,6 +72,28 @@ public abstract class BrokerIntegrationTest {
      * Create a common docker network so that containers can communicate with each other
      */
     public static Network network = Network.newNetwork();
+
+    public static final String ZOOKEEPER_NETWORK_ALIAS = "zookeeper";
+    private static final GenericContainer<?> zookeeperContainer = new GenericContainer<>(DockerImageName.parse("confluentinc/cp-zookeeper"))
+            .withNetwork(network)
+            .withNetworkAliases(ZOOKEEPER_NETWORK_ALIAS)
+            .withExposedPorts(ZOOKEEPER_PORT)
+//            .addExposedPort()
+            .withReuse(true)
+            .withEnv("ZOOKEEPER_CLIENT_PORT", ZOOKEEPER_PORT + "")
+//            .withReuse(false)
+            ;
+
+    static {
+        zookeeperContainer.start();
+    }
+
+    static {
+        FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
+        logConsumer.withPrefix("ZOOKEEPER");
+        zookeeperContainer.followOutput(logConsumer);
+    }
+
 
     /**
      * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
@@ -95,8 +127,15 @@ public abstract class BrokerIntegrationTest {
                         KAFKA_INTERNAL_PORT, KAFKA_PORT, KAFKA_PROXY_PORT
                 )) // gets updated later
 
+                // so we can restart the broker without restarting zookeeper
+                // todo switch to KRAFT instead
+                .dependsOn(zookeeperContainer)
+                .withExternalZookeeper(getZookeeperConnection())
+
+
                 //
                 .withNetwork(network)
+                .withNetworkAliases(KAFKA_NETWORK_ALIAS)
                 .withReuse(true);
 
         if (StringUtils.isNotBlank(logSegmentSize)) {
@@ -106,8 +145,21 @@ public abstract class BrokerIntegrationTest {
         return base;
     }
 
+    private static String getZookeeperConnection() {
+//        return StringUtils.joinWith(":", zookeeperContainer.getNetworkAliases().get(0), zookeeperContainer.getFirstMappedPort());
+//        return StringUtils.joinWith(":", zookeeperContainer.getHost(), zookeeperContainer.getFirstMappedPort());
+//        return StringUtils.joinWith(":", zookeeperContainer.getHost(), 2181);
+        return StringUtils.joinWith(":", ZOOKEEPER_NETWORK_ALIAS, ZOOKEEPER_PORT);
+    }
+
     static {
+        startKafkaContainer();
+    }
+
+    private static void startKafkaContainer() {
+        log.warn("Starting broker...");
         kafkaContainer.start();
+        followKafkaLogs();
         log.debug("Kafka container started");
     }
 
@@ -125,7 +177,8 @@ public abstract class BrokerIntegrationTest {
     @Container
     private final ToxiproxyContainer toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
             .withNetwork(network)
-            .withNetworkAliases(TOXIPROXY_NETWORK_ALIAS);
+            .withNetworkAliases(TOXIPROXY_NETWORK_ALIAS)
+            .dependsOn(kafkaContainer);
 
     {
         toxiproxy.start();
@@ -140,7 +193,7 @@ public abstract class BrokerIntegrationTest {
      * Starting proxying connections to a target container
      */
     @Getter
-    private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(kafkaContainer, KAFKA_PROXY_PORT);
+    private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(KAFKA_NETWORK_ALIAS, KAFKA_PROXY_PORT);
 
     {
         updateAdvertisedListenersToProxy();
@@ -160,7 +213,6 @@ public abstract class BrokerIntegrationTest {
      */
     @SneakyThrows
     private void updateAdvertisedListenersToProxy() {
-        final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, null); // todo fix smell
         var toxiPort = getBrokerProxy().getProxyPort();
 
         log.debug("Updating advertised listeners to point to toxi proxy: {}", toxiPort);
@@ -197,13 +249,217 @@ public abstract class BrokerIntegrationTest {
     @Getter(AccessLevel.PROTECTED)
     private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, brokerProxy);
 
-    @BeforeAll
     static void followKafkaLogs() {
         if (log.isDebugEnabled()) {
             FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
             logConsumer.withPrefix("KAFKA");
             kafkaContainer.followOutput(logConsumer);
         }
+    }
+
+    /**
+     * Poor man's version of restarting the actual broker. Actually restarting the broker inside docker is difficult.
+     */
+    protected void restartBrokerConnectionUsingProxy() {
+        killProxyConnection();
+        ThreadUtils.sleepLog(20); // long enough to session time out
+        restoreProxyConnection();
+    }
+
+    /**
+     * To maintain a client connection to the broker across the restarts, you need to have connected the client through
+     * thr proxy.
+     * <p>
+     * This is because TestContainers doesn't let use specify the port binding on the host, so we can't bind to the same
+     * port again. Instead, we utilise network aliases for the broker, and have the proxy point to the alias. The alias
+     * remains constant across restarts, even though the hostname and port changes. And because the proxy shares the
+     * same network as the broker, it is able to connect directly to the brokers exposed port (which is also constant),
+     * instead of the mapping of it to the host (which changes every start, in order to avoid potential collisions).
+     */
+    @SneakyThrows
+    protected void restartDockerUsingCommandsAndProxy() {
+        log.debug("Restarting docker container");
+//        var oldMapping = StringUtils.joinWith(":", kafkaContainer.getMappedPort(KAFKA_PORT), KAFKA_PORT);
+//        var oldMapping = StringUtils.joinWith(":", KAFKA_PORT, kafkaContainer.getMappedPort(KAFKA_PORT));
+
+        var dockerClient = DockerClientFactory.lazyClient();
+
+//        var portBindings = kafkaContainer.getPortBindings();
+//
+//        String tag = "tag-" + System.currentTimeMillis();
+//        var repo = "tmp-kafka-delete-me";
+        var kafkaId = kafkaContainer.getContainerId();
+//        dockerClient.commitCmd(kafkaId)
+//                .withRepository(repo)
+//                .withTag(tag)
+//                .withPause(true)
+////                .withPortSpecs(oldMapping)
+////                .withExposedPorts(new ExposedPorts(ExposedPort.parse(KAFKA_PORT + "")))
+////                .withVolumes(new Volumes())
+//                .exec();
+
+        log.debug("Sending container stop command");
+        dockerClient.stopContainerCmd(kafkaId).exec();
+
+
+//        ThreadUtils.sleepLog(5);
+
+        // zookeeper.session.timeout.ms is 18 seconds by default
+//        ThreadUtils.sleepLog(20);
+
+//        var imageNameToUse = StringUtils.joinWith(":", repo, tag);
+
+//        kafkaContainer.setVolumesFroms(List.of());
+//        startKafkaContainer();
+
+        //
+//        dockerClient.startContainerCmd(kafkaId).exec();
+
+
+        // have to create a new container
+//        kafkaContainer = createKafkaContainer(null);
+
+//        kafkaContainer.setDockerImageName(imageNameToUse);
+
+//        kafkaContainer.setExposedPorts(of()); // remove dynamic mapping in favour of static one
+
+
+//        kafkaContainer.setPortBindings(of(oldMapping));
+//        kafkaContainer.withCreateContainerCmdModifier(cmd -> {
+//            var parse = PortBinding.parse(oldMapping);
+//            cmd.getHostConfig().withPortBindings(parse);
+//        });
+
+        log.debug("Sending container start command");
+        dockerClient.startContainerCmd(kafkaId).exec();
+//        startKafkaContainer();
+
+        // update proxy upstream
+//        updateProxyUpstream();
+
+        //
+        log.debug("Finished restarting container: {}", kafkaId);
+    }
+
+    private void updateProxyUpstream() throws IOException {
+        var alias = kafkaContainer.getNetworkAliases().get(0);
+        log.debug("Updating proxy upstream to point to new container: {} to new alias: {}", kafkaContainer.getContainerId(), alias);
+        //        var newProxyUpstream = StringUtils.joinWith(":", kafkaContainer.getNetworkAliases().get(0), kafkaContainer.getMappedPort(KAFKA_PORT));
+        var newProxyUpstream = StringUtils.joinWith(":", alias, KAFKA_PROXY_PORT);
+        var proxy = getProxy();
+        proxy.disable();
+        proxy.setUpstream(newProxyUpstream);
+        proxy.enable();
+    }
+
+    protected KafkaConsumer<String, String> createProxiedConsumer(String groupId) {
+        var overridingOptions = new Properties();
+        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
+        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
+        return kcu.createNewConsumer(groupId, overridingOptions);
+    }
+
+    protected KafkaProducer<String, String> createProxiedTransactionalProducer() {
+        var overridingOptions = new Properties();
+        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
+        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
+        return kcu.createNewProducer(TRANSACTIONAL, overridingOptions);
+    }
+
+    /**
+     * Restart the actual broker process inside the docker container
+     */
+    @SuppressWarnings("resource")
+//    @SneakyThrows
+    protected void restartBrokerInDocker() {
+        log.warn("Restarting broker: Closing broker...");
+
+
+        var dockerClient = DockerClientFactory.lazyClient();
+
+//        dockerClient.killContainerCmd(kafkaContainer.getContainerId())
+
+//                .withCmd("bash", "-c", "echo 'c' | /opt/kafka/bin/kafka-server-stop.sh")
+//                .withAttachStdout(true)
+//                .withAttachStderr(true)
+//                .exec();
+
+//        dockerClient.execStartCmd(kafkaContainer.getContainerId())
+//                .withCmd("bash", "-c", "echo 'c' | /opt/kafka/bin/kafka-server-stop.sh")
+//                .withAttachStdout(true)
+//                .withAttachStderr(true)
+//                .exec(new ExecStartResultCallback(System.out, System.err))
+//                .awaitCompletion();
+//
+//        try {
+//            dockerClient.execCreateCmd(kafkaContainer.getContainerId())
+////                .withDetach(false)
+//                    .withCmd("bash", "-c", "echo 'c' | /usr/bin/kafka-server-stop")
+//                    .withAttachStderr(true)
+//                    .withAttachStdout(true)
+//                    .exec();
+////
+//            ThreadUtils.sleepLog(1);
+//
+//            dockerClient.execCreateCmd(kafkaContainer.getContainerId())
+////                .withDetach(false)
+//                    .withCmd("bash", "-c", "echo 'c' | /etc/confluent/docker/run")
+//                    .withAttachStderr(true)
+//                    .withAttachStdout(true)
+//                    .exec();
+//        } catch (Exception e) {
+//            log.error("Failed to restart broker", e);
+//        }
+
+    }
+
+
+    /**
+     * Restart the docker container such that it starts up with the same ports again
+     */
+    @SuppressWarnings("resource")
+    protected void restartBrokerWithSamePorts() {
+        kafkaContainer.setPortBindings(List.of(
+                String.format("%s:%s", KAFKA_PORT, KAFKA_PORT),
+                String.format("%s:%s", KAFKA_PROXY_PORT, KAFKA_PROXY_PORT),
+                String.format("%s:%s", KAFKA_INTERNAL_PORT, KAFKA_INTERNAL_PORT)
+        ));
+    }
+
+    @SneakyThrows
+    protected void killProxyConnection() {
+        log.warn("Killing first consumer connection via proxy disable"); // todo debug
+        Proxy proxy = getProxy();
+        proxy.disable();
+        Thread.sleep(1000);
+    }
+
+    protected void reduceConnectionToZero() {
+        log.debug("Reducing connection to zero");
+        getBrokerProxy().setConnectionCut(true);
+    }
+
+    protected Proxy getProxy() throws IOException {
+        var port = getToxiproxy().getControlPort();
+        var host = getToxiproxy().getHost();
+        ToxiproxyClient client = new ToxiproxyClient(host, port);
+        var proxies = client.getProxies();
+        var proxy = proxies.stream().findFirst().get();
+        return proxy;
+    }
+
+    @SneakyThrows
+    protected void restoreProxyConnection() {
+        log.warn("Restore first consumer connection via proxy enable");
+
+        Proxy proxy = getProxy();
+        proxy.enable();
+        Thread.sleep(1000);
+    }
+
+    protected void restoreConnectionBandwidth() {
+        log.warn("Restore first consumer bandwidth via proxy");
+        getBrokerProxy().setConnectionCut(false);
     }
 
     @BeforeEach
@@ -238,7 +494,7 @@ public abstract class BrokerIntegrationTest {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         AdminClient admin = kcu.getAdmin();
 
-        CreateTopicsResult topics = admin.createTopics(UniLists.of(e1));
+        CreateTopicsResult topics = admin.createTopics(of(e1));
         try {
             Void all = topics.all().get(1, TimeUnit.SECONDS);
         } catch (Exception e) {

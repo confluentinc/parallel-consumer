@@ -205,10 +205,13 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                     if (error instanceof PCCommitFailedException pcCommitFailedException) {
                         throw pcCommitFailedException;
                     } else if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
-                        throw new ParallelConsumerException("Timeout committing offsets", error);
+                        throw new ParallelConsumerException(msg("Timeout committing offsets - failed commit attempts: {}", failedCommitAttempts), error);
                     } else {
                         Duration commitTimeout = DEFAULT_API_TIMEOUT;
-                        log.warn("Timeout ({}) committing offsets, will retry (failed {} times)", commitTimeout, failedCommitAttempts);
+                        log.warn("Timeout ({}) committing offsets, will retry (failed {} times, {})",
+                                commitTimeout,
+                                failedCommitAttempts,
+                                options.getRetrySettings());
                         // request again
                         commitRequest = requestCommitInternal();
                         waitingOnCommitResponse = true;

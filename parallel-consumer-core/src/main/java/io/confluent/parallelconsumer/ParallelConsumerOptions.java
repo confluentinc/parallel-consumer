@@ -15,6 +15,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.annotation.InterfaceStability;
+import org.apache.kafka.common.errors.ProducerFencedException;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -387,7 +388,8 @@ public class ParallelConsumerOptions<K, V> {
          */
         public enum FailureReaction {
             /**
-             * Retry forever
+             * Retry forever. Note that some situations cannot be retried, for example - {@link ProducerFencedException}
+             * when using the {@link CommitMode#PERIODIC_TRANSACTIONAL_PRODUCER} commit-mode.
              */
             RETRY_FOREVER,
 

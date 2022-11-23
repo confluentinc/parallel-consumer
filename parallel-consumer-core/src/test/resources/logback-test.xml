@@ -36,7 +36,8 @@
     <logger name="io.confluent.parallelconsumer" level="debug"/>
     <!--        <logger name="io.confluent.parallelconsumer" level="trace"/>-->
 
-    <!--    <logger name="io.confluent.csid" level="trace"/>-->
+    <logger name="io.confluent.csid" level="debug"/>
+    <logger name="io.confluent.csid.utils.ThreadUtils" level="trace"/>
 
     <logger name="org.apache.kafka" level="warn"/>
 
@@ -45,6 +46,7 @@
     <!-- for debugging container logging -->
     <logger name="io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer" level="debug"/>
 
+    <logger name="org.testcontainers.shaded.com.github.dockerjava" level="debug"/>"
 
     <!-- tests -->
     <logger name="io.confluent.parallelconsumer.integrationTests.BrokerDisconnectTest" level="debug"/>

@@ -7,21 +7,29 @@ package io.confluent.csid.utils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
+
+import static io.confluent.csid.utils.StringUtils.msg;
+
 @Slf4j
 public class ThreadUtils {
 
     @SneakyThrows
-    public static void sleepQuietly(final int ms) {
-        log.debug("Sleeping for {}", ms);
-        Thread.sleep(ms);
-        log.debug("Woke up (slept for {})", ms);
+    public static void sleepQuietly(Duration duration) {
+        log.debug("Sleeping for {}", duration);
+        Thread.sleep(duration.toMillis());
+        log.debug("Woke up (slept for {})", duration);
     }
 
-    public static void sleepLog(final int ms) {
+    public static void sleepLog(long seconds) {
+        sleepLog(Duration.ofSeconds(seconds));
+    }
+
+    public static void sleepLog(Duration duration) {
         try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            log.error("Sleep of {} interrupted", e, ms);
+            sleepQuietly(duration);
+        } catch (Exception e) {
+            log.error(msg("Sleep of {} interrupted", duration), e);
         }
     }
 
@@ -30,7 +38,8 @@ public class ThreadUtils {
         sleepQuietly((int) ms);
     }
 
-    public static void sleepSecondsLog(int seconds) {
-        sleepLog(seconds * 1000);
+    public static void sleepSecondsLog(long seconds) {
+        sleepLog(Duration.ofSeconds(seconds));
     }
+
 }

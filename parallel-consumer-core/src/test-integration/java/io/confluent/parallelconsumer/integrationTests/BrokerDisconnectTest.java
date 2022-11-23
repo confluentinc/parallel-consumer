@@ -19,21 +19,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 
 /**
- * Exercises PC's reaction to the broker connection being lost of the broker being restarted
+ * Exercises PC's reaction to the broker connection being lost of the broker being restarted, by stopping and starting
+ * the broker container. The reaction is controlled by the
+ * {@link ParallelConsumerOptions.RetrySettings.FailureReaction}
  */
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
 class BrokerDisconnectTest extends BrokerIntegrationTest {
 
-    int recordsProduced = 100;
+    int numberOfRecordsToProduce = 100;
 
     AtomicInteger processedCount = new AtomicInteger();
 
@@ -42,20 +44,27 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     @SneakyThrows
     void setupAndWarmUp(KafkaClientUtils kcu, CommitMode commitMode) {
         String topicName = setupTopic();
-        kcu.produceMessages(topicName, recordsProduced);
+        kcu.produceMessages(topicName, numberOfRecordsToProduce);
 
         //
         var retrySettings = ParallelConsumerOptions.RetrySettings.builder()
-                .maxRetries(1)
-                .failureReaction(RETRY_UP_TO_MAX_RETRIES)
+//                .maxRetries(1)
+//                .failureReaction(RETRY_UP_TO_MAX_RETRIES)
+                .failureReaction(RETRY_FOREVER)
                 .build();
 
-        var options = ParallelConsumerOptions.<String, String>builder()
+        var preOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
+                .consumer(createProxiedConsumer(getTopic()))
                 .commitMode(commitMode)
-                .retrySettings(retrySettings)
-//                .producer(kcu.getProducer())
-                .build();
+                .retrySettings(retrySettings);
+
+        if (commitMode == CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER) {
+            preOptions.producer(kcu.createAndInitNewTransactionalProducer());
+
+        }
+
+        var options = preOptions.build();
 
         pc = kcu.buildPc(options, NEW_GROUP, 1);
         pc.subscribe(topicName);
@@ -68,6 +77,9 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         log.debug("Consumed 100");
     }
 
+    /**
+     * Interrupts the connection to the broker by pausing the proxy and resuming, making sure PC can recover
+     */
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
@@ -81,7 +93,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         checkPCState();
 
         log.debug("Stay disconnected for a while...");
-        Truth.assertThat(processedCount.get()).isLessThan(recordsProduced);
+        Truth.assertThat(processedCount.get()).isLessThan(numberOfRecordsToProduce);
         // todo how long to test we can recover from?
         // 10 seconds, doesn't notice
         // 120 unknown error
@@ -98,17 +110,21 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
 
         //
         await()
-                .atMost(Duration.ofMinutes(60))
+                .atMost(Duration.ofMinutes(1))
                 .failFast("pc has crashed", () -> pc.isClosedOrFailed())
                 .untilAsserted(() -> Truth
                         .assertThat(processedCount.get())
-                        .isAtLeast(recordsProduced));
+                        .isAtLeast(numberOfRecordsToProduce));
     }
 
     private void checkPCState() {
         assertThat(pc).isNotClosedOrFailed();
     }
 
+    /**
+     * Stops the broker container, and waits for the broker to be unreachable. Checks that it retries for a while, then
+     * gives up
+     */
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
@@ -135,11 +151,11 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
 
         //
         await()
-                .atMost(Duration.ofMinutes(60))
+                .atMost(Duration.ofMinutes(1))
                 .failFast("pc has crashed", () -> pc.isClosedOrFailed())
                 .untilAsserted(() -> Truth
                         .assertThat(processedCount.get())
-                        .isAtLeast(recordsProduced));
+                        .isAtLeast(numberOfRecordsToProduce));
     }
 
     private void sleepUnlessCrashed(int secondsToWait) {
@@ -157,6 +173,9 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         getToxiproxy().close();
     }
 
+    /**
+     * Stops, then starts the broker container again. Makes sure PC can recover
+     */
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
@@ -164,35 +183,34 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         setupAndWarmUp(getKcu(), commitMode);
 
         //
-        restartBroker();
+//        restartBrokerConnectionUsingProxy();
+        restartDockerUsingCommandsAndProxy();
+
 
         //
         checkPCState();
 
         log.debug("Stay disconnected for a while...");
-        Truth.assertThat(processedCount.get()).isLessThan(recordsProduced);
+        Truth.assertThat(processedCount.get()).isLessThan(numberOfRecordsToProduce);
+
+
         // todo how long to test we can recover from?
         // 10 seconds, doesn't notice
         // 120 unknown error
-        ThreadUtils.sleepSecondsLog(180);
+        ThreadUtils.sleepLog(Duration.ofMinutes(1));
 
         //
         checkPCState();
 
         //
+        var timeout = Duration.ofMinutes(1);
+        log.debug("Waiting {} for PC to recover", timeout);
         await()
-                .atMost(Duration.ofMinutes(60))
+                .atMost(timeout)
                 .failFast("pc has crashed", () -> pc.isClosedOrFailed())
                 .untilAsserted(() -> Truth
                         .assertThat(processedCount.get())
-                        .isAtLeast(recordsProduced));
-    }
-
-    private void restartBroker() {
-        log.error("Closing broker...");
-        kafkaContainer.stop();
-        log.error("Starting broker...");
-        kafkaContainer.start();
+                        .isAtLeast(numberOfRecordsToProduce));
     }
 
 }

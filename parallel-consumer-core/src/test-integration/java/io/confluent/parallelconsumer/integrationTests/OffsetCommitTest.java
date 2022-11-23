@@ -1,22 +1,18 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import com.google.common.truth.Truth;
-import eu.rekawek.toxiproxy.Proxy;
-import eu.rekawek.toxiproxy.ToxiproxyClient;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.internal.ConsumerManager;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
-import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.StreamEx;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.*;
-import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
 import org.junit.jupiter.api.Tag;
@@ -24,12 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -40,11 +34,9 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySetting
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.BOTH;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.FIRST;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GROUP_SESSION_TIMEOUT_MS;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
-import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -82,7 +74,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     @SneakyThrows
     @Test
     void canTerminateConsumerConnection() {
-        proxiedConsumer = createProxiedConsumer();
+        proxiedConsumer = createProxiedConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
         proxiedConsumer.enforceRebalance(); // todo remove?
 
@@ -94,7 +86,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             assertThat(poll).hasSize(numberToSend);
         }
 
-        killFirstConsumerConnection();
+        killProxyConnection();
 
         {
             send(numberToSend);
@@ -108,7 +100,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                     });
         }
 
-        restoreFirstConsumerConnection();
+        restoreProxyConnection();
 
         {
             send(numberToSend);
@@ -154,7 +146,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     void consumerOffsetCommitterConnectionLoss() {
         kcu.getAdmin().createTopics(of(newTopic)).all().get();
 
-        proxiedConsumer = createProxiedConsumer();
+        proxiedConsumer = createProxiedConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
         proxiedConsumer.enforceRebalance(); // todo remove
 
@@ -188,7 +180,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertThat(secondConsumer.assignment()).isEmpty();
 
         //
-        killFirstConsumerConnection();
+        killProxyConnection();
 
         // commit first - should fail as connection closed
         assertThrows(InternalRuntimeException.class, () -> catchAndWrap(() -> proxiedConsumer.commitSync(offsetZeroMetaTp)));
@@ -227,7 +219,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertAssignment(BOTH);
 
         // restore broker connection for first consumer
-        restoreFirstConsumerConnection();
+        restoreProxyConnection();
 
         // try to commit both
         assertThrows(CommitFailedException.class, () -> proxiedConsumer.commitSync(offsetZeroMetaTp));
@@ -247,20 +239,6 @@ class OffsetCommitTest extends BrokerIntegrationTest {
 
         // check assignment
         assertAssignment(FIRST);
-    }
-
-    private KafkaConsumer<String, String> createProxiedConsumer() {
-        var overridingOptions = new Properties();
-        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return kcu.createNewConsumer(topicName, overridingOptions);
-    }
-
-    private KafkaProducer<String, String> createProxiedTransactionalProducer() {
-        var overridingOptions = new Properties();
-        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return kcu.createNewProducer(TRANSACTIONAL, overridingOptions);
     }
 
     enum AssignmentState {
@@ -294,43 +272,6 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         }
     }
 
-    @SneakyThrows
-    private void killFirstConsumerConnection() {
-        log.warn("Killing first consumer connection via proxy disable"); // todo debug
-        Proxy proxy = getProxy();
-        proxy.disable();
-        Thread.sleep(1000);
-    }
-
-    private void reduceConnectionToZero() {
-        log.debug("Reducing connection to zero");
-        getBrokerProxy().setConnectionCut(true);
-    }
-
-    @NonNull
-    private Proxy getProxy() throws IOException {
-        var port = getToxiproxy().getControlPort();
-        var host = getToxiproxy().getHost();
-        ToxiproxyClient client = new ToxiproxyClient(host, port);
-        var proxies = client.getProxies();
-        var proxy = proxies.stream().findFirst().get();
-        return proxy;
-    }
-
-    @SneakyThrows
-    private void restoreFirstConsumerConnection() {
-        log.warn("Restore first consumer connection via proxy enable");
-
-        Proxy proxy = getProxy();
-        proxy.enable();
-        Thread.sleep(1000);
-    }
-
-    private void restoreConnectionBandwidth() {
-        log.warn("Restore first consumer bandwidth via proxy");
-        getBrokerProxy().setConnectionCut(false);
-    }
-
     /**
      * Test Parallel Consumers behaviour in the same way - what happens when the broker connection goes down and up
      */
@@ -338,7 +279,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void parallelConsumerBrokerReconnectionTest(CommitMode commitMode) {
-        proxiedConsumer = createProxiedConsumer();
+        proxiedConsumer = createProxiedConsumer(topicName);
         var processedCount = new AtomicInteger();
 
         final ParallelConsumerOptions.RetrySettings retrySettings = ParallelConsumerOptions.RetrySettings.builder()
@@ -365,7 +306,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
 
             if (processedCount.get() == 1) {
                 log.debug("kill connection after first poll result");
-                killFirstConsumerConnection();
+                killProxyConnection();
 
                 log.debug("Making PC try to commit the dirty state while the connection is closed...");
                 pc.requestCommitAsap();
@@ -400,7 +341,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                 });
 
         //
-        restoreFirstConsumerConnection();
+        restoreProxyConnection();
 
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             // system does not recover from this state
