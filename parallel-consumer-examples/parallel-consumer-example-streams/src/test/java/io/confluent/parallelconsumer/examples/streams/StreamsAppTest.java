@@ -56,7 +56,7 @@ public class StreamsAppTest extends BrokerIntegrationTest {
 
         @Override
         String getServerConfig() {
-            return BrokerIntegrationTest.kafkaContainer.getBootstrapServers();
+            return getKafkaContainer().getDirectBootstrapServers();
         }
     }
 }

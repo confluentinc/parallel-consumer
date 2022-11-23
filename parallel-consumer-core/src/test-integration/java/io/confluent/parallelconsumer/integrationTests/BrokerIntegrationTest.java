@@ -5,88 +5,43 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
-import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.CreateTopicsResult;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
-import static org.apache.commons.lang3.RandomUtils.nextInt;
-import static pl.tlinkowski.unij.api.UniLists.of;
+import static io.confluent.parallelconsumer.integrationTests.CommonBrokerIntegrationTest.INTEGRATION_TEST_BASE;
 
 /**
  * Adding {@link Container} to the containers causes them to be closed after the test, which we don't want if we're
  * sharing kafka instances between tests for performance.
  *
  * @author Antony Stubbs
+ * @see DedicatedBrokerIntegrationTest
  */
+// first integration test to make sure integration tests infrastructure is working
+@Order(INTEGRATION_TEST_BASE)
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest {
 
-    int numPartitions = 1;
+    private static final PCTestBroker kafkaContainer = new PCTestBroker();
 
-    int partitionNumber = 0;
+//    @Getter(AccessLevel.PROTECTED)
+//    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
-    @Getter
-    String topic;
-
-    static {
-        System.setProperty("flogger.backend_factory", "com.google.common.flogger.backend.slf4j.Slf4jBackendFactory#getInstance");
-    }
-
-    @Getter(AccessLevel.PROTECTED)
-    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, brokerProxy);
-
-    @BeforeEach
-    void open() {
-        kcu.open();
-    }
-
-    @AfterEach
-    void close() {
-        kcu.close();
-    }
-
-    protected String setupTopic() {
-        String name = getClass().getSimpleName();
-        setupTopic(name);
-        return name;
-    }
-
-    protected String setupTopic(String name) {
-        assertThat(kafkaContainer.isRunning()).isTrue(); // sanity
-
-        topic = name + "-" + nextInt();
-
-        ensureTopic(topic, numPartitions);
-
-        return topic;
-    }
-
-    @SneakyThrows
-    protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
-        log.debug("Ensuring topic exists on broker: {}...", topic);
-        NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
-        AdminClient admin = kcu.getAdmin();
-
-        CreateTopicsResult topics = admin.createTopics(of(e1));
-        try {
-            Void all = topics.all().get(1, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        return topics;
-    }
+//    @BeforeEach
+//    void open() {
+//        kcu.open();
+//    }
+//
+//    @AfterEach
+//    void close() {
+//        kcu.close();
+//    }
 
     protected List<String> produceMessages(int quantity) {
         return produceMessages(quantity, "");
@@ -94,7 +49,15 @@ public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest 
 
     @SneakyThrows
     protected List<String> produceMessages(int quantity, String prefix) {
-        return getKcu().produceMessages(getTopic(), quantity, prefix);
+        return kafkaContainer.getKcu().produceMessages(getTopic(), quantity, prefix);
     }
 
+    @Override
+    protected PCTestBroker getKafkaContainer() {
+        return kafkaContainer;
+    }
+
+    protected KafkaClientUtils getKcu() {
+        return kafkaContainer.getKcu();
+    }
 }

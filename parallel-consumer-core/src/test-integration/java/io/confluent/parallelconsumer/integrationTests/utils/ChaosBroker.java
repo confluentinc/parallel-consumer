@@ -68,13 +68,13 @@ public class ChaosBroker extends PCTestBroker {
 //            .withReuse(false)
             .withReuse(true);
 
-    /**
-     * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
-     * https://github.com/testcontainers/testcontainers-java/pull/1781
-     */
-    @Container
-    @Getter(AccessLevel.PRIVATE)
-    public KafkaContainer kafkaContainer = createKafkaContainer();
+//    /**
+//     * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
+//     * https://github.com/testcontainers/testcontainers-java/pull/1781
+//     */
+//    @Container
+//    @Getter(AccessLevel.PRIVATE)
+//    public KafkaContainer kafkaContainer = createKafkaContainer();
 
     /**
      * Toxiproxy container, which will be used as a TCP proxy
@@ -92,10 +92,15 @@ public class ChaosBroker extends PCTestBroker {
     @Getter
     private final ToxiproxyContainer.ContainerProxy brokerProxy = toxiproxy.getProxy(KAFKA_NETWORK_ALIAS, KAFKA_PROXY_PORT);
 
+    @Getter(AccessLevel.PUBLIC)
+    private final AdminClient proxiedAdmin;
+
     @SneakyThrows
     public ChaosBroker() {
+        this.proxiedAdmin = createProxiedAdminClient();
     }
 
+    @SneakyThrows
     @Override
     public void start() {
         Startables.deepStart(zookeeperContainer, kafkaContainer, toxiproxy).get();
@@ -171,11 +176,7 @@ public class ChaosBroker extends PCTestBroker {
         AlterConfigOp op = new AlterConfigOp(toxiAdvertListener, AlterConfigOp.OpType.SET);
 
         // todo reuse existing admin client? or refactor to make construction nicer
-        var p = new Properties();
-        // Kafka Container overrides our env with it's configure method, so have to do some gymnastics
-        var boostrapForAdmin = String.format("PLAINTEXT://%s:%s", "localhost", getKafkaContainer().getMappedPort(KAFKA_PORT));
-        p.put(BOOTSTRAP_SERVERS_CONFIG, boostrapForAdmin);
-        AdminClient admin = AdminClient.create(p);
+        AdminClient admin = createDirectAdminClient();
         admin.incrementalAlterConfigs(Map.of(configResource, List.of(op))).all().get();
         admin.close();
 
@@ -183,6 +184,18 @@ public class ChaosBroker extends PCTestBroker {
         log.debug("Updated advertised listeners to point to toxi proxy port: {}, advertised listeners: {}", toxiPort, value);
     }
 
+    public String getProxiedBootstrapServers() {
+        var bootstraps = String.format("PLAINTEXT://%s:%s", getProxiedHost(), getProxiedKafkaPort());
+        return bootstraps;
+    }
+
+    private int getProxiedKafkaPort() {
+        return brokerProxy.getProxyPort();
+    }
+
+    private String getProxiedHost() {
+        return brokerProxy.getContainerIpAddress();
+    }
 
     /**
      * Poor man's version of restarting the actual broker. Actually restarting the broker inside docker is difficult.
@@ -204,7 +217,7 @@ public class ChaosBroker extends PCTestBroker {
      * instead of the mapping of it to the host (which changes every start, in order to avoid potential collisions).
      */
     @SneakyThrows
-    protected void restartDockerUsingCommandsAndProxy() {
+    public void restart() {
         log.debug("Restarting docker container");
 //        var oldMapping = StringUtils.joinWith(":", kafkaContainer.getMappedPort(KAFKA_PORT), KAFKA_PORT);
 //        var oldMapping = StringUtils.joinWith(":", KAFKA_PORT, kafkaContainer.getMappedPort(KAFKA_PORT));
@@ -334,24 +347,31 @@ public class ChaosBroker extends PCTestBroker {
      * @see #restoreProxyConnection
      */
     @SneakyThrows
-    protected void killProxyConnection() {
+    public void killProxyConnection() {
         log.warn("Killing first consumer connection via proxy disable"); // todo debug
         Proxy proxy = createProxyControlClient();
         proxy.disable();
     }
 
-    protected KafkaConsumer<String, String> createProxiedConsumer(String groupId) {
-        var overridingOptions = new Properties();
-        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return kcu.createNewConsumer(groupId, overridingOptions);
+    public AdminClient createProxiedAdminClient() {
+        var proxiedBootstrapServers = getProxiedBootstrapServers();
+        var properties = new Properties();
+        properties.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
+        return AdminClient.create(properties);
     }
 
-    protected KafkaProducer<String, String> createProxiedTransactionalProducer() {
+    public KafkaConsumer<String, String> createProxiedConsumer(String groupId) {
         var overridingOptions = new Properties();
-        var proxiedBootstrapServers = kcu.getProxiedBootstrapServers();
+        var proxiedBootstrapServers = getProxiedBootstrapServers();
         overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return kcu.createNewProducer(TRANSACTIONAL, overridingOptions);
+        return getKcu().createNewConsumer(groupId, overridingOptions);
+    }
+
+    public KafkaProducer<String, String> createProxiedTransactionalProducer() {
+        var overridingOptions = new Properties();
+        var proxiedBootstrapServers = getProxiedBootstrapServers();
+        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
+        return getKcu().createNewProducer(TRANSACTIONAL, overridingOptions);
     }
 
     protected Proxy createProxyControlClient() throws IOException {
@@ -367,7 +387,7 @@ public class ChaosBroker extends PCTestBroker {
      * @see #killProxyConnection
      */
     @SneakyThrows
-    protected void restoreProxyConnection() {
+    public void restoreProxyConnection() {
         log.warn("Restore first consumer connection via proxy enable");
         Proxy proxy = createProxyControlClient();
         proxy.enable();
@@ -393,7 +413,7 @@ public class ChaosBroker extends PCTestBroker {
     /**
      * @see #simulateBrokerReachable()
      */
-    protected void simulateBrokerUnreachable() {
+    public void simulateBrokerUnreachable() {
         log.warn("Simulating broker connection cut");
         reduceConnectionBandwidthToZero();
     }
@@ -401,7 +421,7 @@ public class ChaosBroker extends PCTestBroker {
     /**
      * @see #simulateBrokerUnreachable()
      */
-    protected void simulateBrokerReachable() {
+    public void simulateBrokerReachable() {
         log.warn("Simulating broker connection recovery");
         restoreConnectionBandwidth();
     }

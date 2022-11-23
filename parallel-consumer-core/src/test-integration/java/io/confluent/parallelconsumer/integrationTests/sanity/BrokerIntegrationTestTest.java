@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests.sanity;
 
 import com.google.common.truth.Truth;
-import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
+import io.confluent.parallelconsumer.integrationTests.DedicatedBrokerIntegrationTest;
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.junit.jupiter.api.Order;
@@ -9,10 +9,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.Properties;
 
 import static io.confluent.parallelconsumer.integrationTests.sanity.BrokerIntegrationTestTest.INTEGRATION_TEST_BASE;
-import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -20,20 +18,19 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Antony Stubbs
  */
-// first integration test to make sure integration tests infrastructure is working
-@Order(INTEGRATION_TEST_BASE)
+@Order(INTEGRATION_TEST_BASE - 10)
 @Tag("toxiproxy")
-class BrokerIntegrationTestTest extends BrokerIntegrationTest {
+class BrokerIntegrationTestTest extends DedicatedBrokerIntegrationTest {
 
     String clusterId;
 
     @SneakyThrows
     @Test
     void restartingBroker() {
-        try (AdminClient admin = createAdmin()) {
+        try (AdminClient admin = getChaosBroker().createProxiedAdminClient()) {
 
             testConnection(admin);
-            restartDockerUsingCommandsAndProxy();
+            getChaosBroker().restart();
             testConnection(admin);
         }
     }
@@ -60,13 +57,6 @@ class BrokerIntegrationTestTest extends BrokerIntegrationTest {
             clusterId = id;
         else
             Truth.assertThat(id).isEqualTo(clusterId);
-    }
-
-    private AdminClient createAdmin() {
-        var proxiedBootstrapServers = getKcu().getProxiedBootstrapServers();
-        var properties = new Properties();
-        properties.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return AdminClient.create(properties);
     }
 
 }

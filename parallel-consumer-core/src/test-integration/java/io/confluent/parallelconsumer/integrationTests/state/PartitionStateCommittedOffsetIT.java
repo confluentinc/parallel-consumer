@@ -12,29 +12,23 @@ import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
+import io.confluent.parallelconsumer.integrationTests.PCTestBroker;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption;
-import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.apache.kafka.clients.admin.AlterConfigOp;
-import org.apache.kafka.clients.admin.ConfigEntry;
 import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.config.ConfigResource;
-import org.apache.kafka.common.config.TopicConfig;
 import org.awaitility.Awaitility;
 import org.awaitility.core.TerminalFailureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.testcontainers.containers.KafkaContainer;
 import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
@@ -87,7 +81,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
      */
     @Test
     void compactedTopic() {
-        try (KafkaContainer compactingBroker = setupCompactingKafkaBroker();) {
+        try (PCTestBroker compactingBroker = setupCompactingKafkaBroker();) {
 
             var TO_PRODUCE = this.TO_PRODUCE / 10; // local override, produce less
 
@@ -154,18 +148,12 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
     /**
      * Set up our extra special compacting broker
      */
-    @NonNull
-    private KafkaContainer setupCompactingKafkaBroker() {
-        KafkaContainer compactingBroker = null;
-        {
-            // set up new broker
-            compactingBroker = BrokerIntegrationTest.createKafkaContainer("40000");
-            compactingBroker.start();
+    private PCTestBroker setupCompactingKafkaBroker() {
+        PCTestBroker compactingBroker = new PCTestBroker("40000");
+        compactingBroker.start();
+        setup();
 
-            setup();
-        }
-
-        setupCompactedEnvironment();
+        getKafkaContainer().setupCompactedEnvironment(getTopic());
 
         return compactingBroker;
     }
@@ -184,24 +172,6 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
 
     private static long getOffsetFromKey(String key) {
         return Long.parseLong(key.substring(key.indexOf("-") + 1));
-    }
-
-    @SneakyThrows
-    private void setupCompactedEnvironment() {
-        log.debug("Setting up aggressive compaction...");
-        ConfigResource topicConfig = new ConfigResource(ConfigResource.Type.TOPIC, getTopic());
-
-        Collection<AlterConfigOp> alterConfigOps = new ArrayList<>();
-
-        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT), AlterConfigOp.OpType.SET));
-        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MAX_COMPACTION_LAG_MS_CONFIG, "1"), AlterConfigOp.OpType.SET));
-        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, "0"), AlterConfigOp.OpType.SET));
-
-        var configs = UniMaps.of(topicConfig, alterConfigOps);
-        KafkaFuture<Void> all = getKcu().getAdmin().incrementalAlterConfigs(configs).all();
-        all.get(5, SECONDS);
-
-        log.debug("Compaction setup complete");
     }
 
     @SneakyThrows
@@ -442,11 +412,9 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
     void committedOffsetRemoved(OffsetResetStrategy offsetResetPolicy) {
         this.offsetResetStrategy = offsetResetPolicy;
         try (
-                KafkaContainer compactingKafkaBroker = setupCompactingKafkaBroker();
-                KafkaClientUtils clientUtils = new KafkaClientUtils(compactingKafkaBroker, getBrokerProxy());
+                PCTestBroker compactingKafkaBroker = setupCompactingKafkaBroker();
+                KafkaClientUtils clientUtils = compactingKafkaBroker.getKcu();
         ) {
-            log.debug("Compacting broker started {}", compactingKafkaBroker.getBootstrapServers());
-
             clientUtils.setOffsetResetPolicy(offsetResetPolicy);
             clientUtils.open();
 
@@ -544,7 +512,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
     void noOffsetPolicyOnStartup() {
         this.offsetResetStrategy = NONE;
         try (
-                KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer, getBrokerProxy());
+                KafkaClientUtils clientUtils = getKcu();
         ) {
             clientUtils.setOffsetResetPolicy(offsetResetStrategy);
             clientUtils.open();

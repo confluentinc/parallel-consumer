@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.testcontainers.containers.KafkaContainer;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -60,7 +59,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
         var preOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .consumer(createProxiedConsumer(getTopic()))
+                .consumer(getChaosBroker().createProxiedConsumer(getTopic()))
                 .commitMode(commitMode)
                 .retrySettings(retrySettings);
 
@@ -88,10 +87,10 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void brokerConnectionInterruption(CommitMode commitMode) {
-        setupAndWarmUp(getKcu(), commitMode);
+        setupAndWarmUp(getChaosBroker().getKcu(), commitMode);
 
         //
-        simulateBrokerUnreachable();
+        getChaosBroker().simulateBrokerUnreachable();
 
         //
         checkPCState();
@@ -107,7 +106,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         checkPCState();
 
         //
-        simulateBrokerResume();
+        getChaosBroker().simulateBrokerReachable();
 
         //
         checkPCState();
@@ -133,17 +132,10 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void brokerShutdown(CommitMode commitMode) {
-        // need ot start
-        KafkaContainer finickyKafka = createKafkaContainer(null);
-        finickyKafka.start();
-        BrokerIntegrationTest.followKafkaLogs(finickyKafka);
-
-        KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finickyKafka, getBrokerProxy());
-
-        setupAndWarmUp(kafkaClientUtils, commitMode);
+        setupAndWarmUp(getChaosBroker().getKcu(), commitMode);
 
         //
-        brokerDies(finickyKafka);
+        getChaosBroker().stop();
 
         //
         checkPCState();
@@ -173,12 +165,6 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
                         assertThat(Instant.now()).isAtLeast(start.plusSeconds(secondsToWait)));
     }
 
-    private void brokerDies(KafkaContainer finickyKafka) {
-        log.error("Making broker unavailable");
-        finickyKafka.close();
-        getToxiproxy().close();
-    }
-
     /**
      * Stops, then starts the broker container again. Makes sure PC can recover
      */
@@ -188,10 +174,10 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @Order(1)
     // simplest
     void brokerRestartTest(CommitMode commitMode) {
-        setupAndWarmUp(getKcu(), commitMode);
+        setupAndWarmUp(getChaosBroker().getKcu(), commitMode);
 
         //
-        restartDockerUsingCommandsAndProxy();
+        getChaosBroker().restart();
 
         //
         checkPCState();

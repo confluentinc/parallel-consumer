@@ -1,20 +1,36 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer;
+import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.common.KafkaFuture;
+import org.apache.kafka.common.config.ConfigResource;
+import org.apache.kafka.common.config.TopicConfig;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.lifecycle.Startable;
 import org.testcontainers.utility.DockerImageName;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
+import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Reusable by default, but can be made non-reusable by setting {@link #setReuse(boolean)} to false.
+ * Reusable by default, but can be made non-reusable by setting {@link KafkaContainer#withReuse} to false.
  *
  * @author Antony Stubbs
  */
@@ -25,7 +41,19 @@ public class PCTestBroker implements Startable {
 
     public static final int KAFKA_PROXY_PORT = KAFKA_PORT + 1;
 
-    private final KafkaContainer kafkaContainer = createKafkaContainer(null);
+    @Getter(AccessLevel.PROTECTED)
+    protected final KafkaContainer kafkaContainer;
+
+    private KafkaClientUtils kcu;
+
+    public PCTestBroker() {
+        this(null);
+    }
+
+    public PCTestBroker(@Nullable String logSegmentSize) {
+        kafkaContainer = createKafkaContainer(logSegmentSize);
+        kcu = new KafkaClientUtils(this);
+    }
 
     /**
      * @param logSegmentSize if null, will use default
@@ -60,15 +88,45 @@ public class PCTestBroker implements Startable {
         return base;
     }
 
+    /**
+     * tood docs
+     */
+    @SneakyThrows
+    public void setupCompactedEnvironment(String topicToCompact) {
+        log.debug("Setting up aggressive compaction...");
+        ConfigResource topicConfig = new ConfigResource(ConfigResource.Type.TOPIC, topicToCompact);
+
+        Collection<AlterConfigOp> alterConfigOps = new ArrayList<>();
+
+        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT), AlterConfigOp.OpType.SET));
+        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MAX_COMPACTION_LAG_MS_CONFIG, "1"), AlterConfigOp.OpType.SET));
+        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, "0"), AlterConfigOp.OpType.SET));
+
+        var configs = UniMaps.of(topicConfig, alterConfigOps);
+        KafkaFuture<Void> all = getKcu().getAdmin().incrementalAlterConfigs(configs).all();
+        all.get(5, SECONDS);
+
+        log.debug("Compaction setup complete");
+    }
+
+    protected AdminClient createDirectAdminClient() {
+        var p = new Properties();
+        // Kafka Container overrides our env with it's configure method, so have to do some gymnastics
+        var boostrapForAdmin = String.format("PLAINTEXT://%s:%s", "localhost", getKafkaContainer().getMappedPort(KAFKA_PORT));
+        p.put(BOOTSTRAP_SERVERS_CONFIG, boostrapForAdmin);
+        AdminClient admin = AdminClient.create(p);
+        return admin;
+    }
+
     protected void followContainerLogs(GenericContainer containerToFollow, String prefix) {
         FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
         logConsumer.withPrefix(prefix);
         containerToFollow.followOutput(logConsumer);
     }
 
-
     @Override
     public void start() {
+        log.debug("Compacting broker started {}", getDirectBootstrapServers());
         kafkaContainer.start();
         followContainerLogs(kafkaContainer, "KAFKA");
     }
@@ -77,4 +135,37 @@ public class PCTestBroker implements Startable {
     public void stop() {
         kafkaContainer.stop();
     }
+
+    @SneakyThrows
+    protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
+        log.debug("Ensuring topic exists on broker: {}...", topic);
+        NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
+        AdminClient admin = kcu.getAdmin();
+
+        CreateTopicsResult topics = admin.createTopics(of(e1));
+        try {
+            Void all = topics.all().get(1, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return topics;
+    }
+
+    public boolean isRunning() {
+        return kafkaContainer.isRunning();
+    }
+
+    public KafkaClientUtils getKcu() {
+        return kcu;
+    }
+
+    public String getDirectBootstrapServers() {
+        var bootstraps = String.format("PLAINTEXT://%s:%s", getDirectHost(), kafkaContainer.getMappedPort(KAFKA_PORT));
+        return bootstraps;
+    }
+
+    private String getDirectHost() {
+        return kafkaContainer.getHost();
+    }
+
 }

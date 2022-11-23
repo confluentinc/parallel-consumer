@@ -49,11 +49,11 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
-class OffsetCommitTest extends BrokerIntegrationTest {
+class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
     public static final int TIMEOUT = 30;
     public static final Duration TIMEOUT_DURATION = ofSeconds(TIMEOUT);
-    KafkaClientUtils kcu = getKcu();
+    KafkaClientUtils kcu = getChaosBroker().getKcu();
     String topicName = getClass().getName() + "-" + System.currentTimeMillis();
     List<String> topicList = of(topicName);
     TopicPartition tp = new TopicPartition(topicName, 0);
@@ -74,7 +74,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     @SneakyThrows
     @Test
     void canTerminateConsumerConnection() {
-        proxiedConsumer = createProxiedConsumer(topicName);
+        proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
         proxiedConsumer.enforceRebalance(); // todo remove?
 
@@ -86,7 +86,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
             assertThat(poll).hasSize(numberToSend);
         }
 
-        killProxyConnection();
+        getChaosBroker().killProxyConnection();
 
         {
             send(numberToSend);
@@ -100,7 +100,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                     });
         }
 
-        restoreProxyConnection();
+        getChaosBroker().restoreProxyConnection();
 
         {
             send(numberToSend);
@@ -116,7 +116,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
      */
     @SneakyThrows
     private void logAdvertisedListeners() {
-        var configResourceConfigMap = kcu.getAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
+        var configResourceConfigMap = getChaosBroker().getProxiedAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
         configResourceConfigMap.values().stream().findFirst().get().entries().stream().filter(x -> x.name().contains("advertise")).forEach(e -> {
             log.info("Config: {} = {}", e.name(), e.value());
         });
@@ -146,7 +146,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     void consumerOffsetCommitterConnectionLoss() {
         kcu.getAdmin().createTopics(of(newTopic)).all().get();
 
-        proxiedConsumer = createProxiedConsumer(topicName);
+        proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
         proxiedConsumer.enforceRebalance(); // todo remove
 
@@ -180,7 +180,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertThat(secondConsumer.assignment()).isEmpty();
 
         //
-        killProxyConnection();
+        getChaosBroker().killProxyConnection();
 
         // commit first - should fail as connection closed
         assertThrows(InternalRuntimeException.class, () -> catchAndWrap(() -> proxiedConsumer.commitSync(offsetZeroMetaTp)));
@@ -219,7 +219,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
         assertAssignment(BOTH);
 
         // restore broker connection for first consumer
-        restoreProxyConnection();
+        getChaosBroker().restoreProxyConnection();
 
         // try to commit both
         assertThrows(CommitFailedException.class, () -> proxiedConsumer.commitSync(offsetZeroMetaTp));
@@ -279,7 +279,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void parallelConsumerBrokerReconnectionTest(CommitMode commitMode) {
-        proxiedConsumer = createProxiedConsumer(topicName);
+        proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
         var processedCount = new AtomicInteger();
 
         final ParallelConsumerOptions.RetrySettings retrySettings = ParallelConsumerOptions.RetrySettings.builder()
@@ -292,7 +292,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                 .retrySettings(retrySettings);
 
         if (commitMode == PERIODIC_TRANSACTIONAL_PRODUCER) {
-            preSettings.producer(createProxiedTransactionalProducer());
+            preSettings.producer(getChaosBroker().createProxiedTransactionalProducer());
         }
 
         var options = preSettings
@@ -306,7 +306,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
 
             if (processedCount.get() == 1) {
                 log.debug("kill connection after first poll result");
-                killProxyConnection();
+                getChaosBroker().killProxyConnection();
 
                 log.debug("Making PC try to commit the dirty state while the connection is closed...");
                 pc.requestCommitAsap();
@@ -341,7 +341,7 @@ class OffsetCommitTest extends BrokerIntegrationTest {
                 });
 
         //
-        restoreProxyConnection();
+        getChaosBroker().restoreProxyConnection();
 
         if (commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)) {
             // system does not recover from this state

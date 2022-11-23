@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.integrationTests.PCTestBroker;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
@@ -27,8 +28,6 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.containers.ToxiproxyContainer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +46,6 @@ import static java.util.Optional.empty;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 
 /**
  * Utilities for creating and manipulating clients
@@ -63,18 +61,16 @@ public class KafkaClientUtils implements AutoCloseable {
     public static final int MAX_POLL_RECORDS = 10_000;
 
     public static final String GROUP_ID_PREFIX = "group-1-";
+
     public static final int GROUP_SESSION_TIMEOUT_MS = 5000;
 
     private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
-
-    @Getter
-    private final ToxiproxyContainer.ContainerProxy brokerProxy;
 
     class PCVersion {
         public static final String V051 = "0.5.1";
     }
 
-    private final KafkaContainer kafkaContainer;
+    private final PCTestBroker kafkaContainer;
 
     @Getter
     private KafkaConsumer<String, String> consumer;
@@ -97,40 +93,17 @@ public class KafkaClientUtils implements AutoCloseable {
      */
     private KafkaConsumer<String, String> lastConsumerConstructed;
 
-    public KafkaClientUtils(KafkaContainer kafkaContainer, ToxiproxyContainer.ContainerProxy brokerProxy) {
-        this.brokerProxy = brokerProxy;
+    public KafkaClientUtils(PCTestBroker kafkaContainer) {
         this.kafkaContainer = kafkaContainer;
     }
 
     private Properties createCommonProperties() {
         var commonProps = new Properties();
-        String servers = getDirectBootstrapServers();
+        String servers = kafkaContainer.getDirectBootstrapServers();
         commonProps.put(BOOTSTRAP_SERVERS_CONFIG, servers);
         commonProps.put(CommonClientConfigs.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000");
         commonProps.put(CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG, "5000");
         return commonProps;
-    }
-
-    public String getProxiedBootstrapServers() {
-        var bootstraps = String.format("PLAINTEXT://%s:%s", getProxiedHost(), getProxiedKafkaPort());
-        return bootstraps;
-    }
-
-    public String getDirectBootstrapServers() {
-        var bootstraps = String.format("PLAINTEXT://%s:%s", getDirectHost(), kafkaContainer.getMappedPort(KAFKA_PORT));
-        return bootstraps;
-    }
-
-    private int getProxiedKafkaPort() {
-        return brokerProxy.getProxyPort();
-    }
-
-    private String getProxiedHost() {
-        return brokerProxy.getContainerIpAddress();
-    }
-
-    private String getDirectHost() {
-        return kafkaContainer.getHost();
     }
 
     private Properties setupProducerProps() {
