@@ -24,6 +24,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
@@ -37,7 +38,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 @Tag("toxiproxy")
 @Slf4j
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class BrokerDisconnectTest extends BrokerIntegrationTest {
+class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
     int numberOfRecordsToProduce = 100;
 
@@ -64,7 +65,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
                 .retrySettings(retrySettings);
 
         if (commitMode == CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER) {
-            preOptions.producer(kcu.createAndInitNewTransactionalProducer());
+            preOptions.producer(kcu.createNewProducer(TRANSACTIONAL));
         }
 
         var options = preOptions.build();

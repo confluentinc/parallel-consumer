@@ -38,6 +38,12 @@ class BrokerIntegrationTestTest extends BrokerIntegrationTest {
         }
     }
 
+    @Test
+    void testConsumerOffsetsPersistAcrossRestartsWhenCommitted() {
+        // todo
+        throw new UnsupportedOperationException();
+    }
+
     private void testConnection(AdminClient admin) {
         await()
                 .ignoreExceptions()
