@@ -4,11 +4,14 @@ import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.admin.AdminClient;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Properties;
 
+import static io.confluent.parallelconsumer.integrationTests.sanity.BrokerIntegrationTestTest.INTEGRATION_TEST_BASE;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.awaitility.Awaitility.await;
 
@@ -17,23 +20,25 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Antony Stubbs
  */
+// first integration test to make sure integration tests infrastructure is working
+@Order(INTEGRATION_TEST_BASE)
+@Tag("toxiproxy")
 class BrokerIntegrationTestTest extends BrokerIntegrationTest {
-
-    AdminClient admin;
 
     String clusterId;
 
     @SneakyThrows
     @Test
     void restartingBroker() {
-        admin = createAdmin();
+        try (AdminClient admin = createAdmin()) {
 
-        testConnection();
-        restartDockerUsingCommandsAndProxy();
-        testConnection();
+            testConnection(admin);
+            restartDockerUsingCommandsAndProxy();
+            testConnection(admin);
+        }
     }
 
-    private void testConnection() {
+    private void testConnection(AdminClient admin) {
         await()
                 .ignoreExceptions()
                 .atMost(Duration.ofSeconds(30))
@@ -57,4 +62,5 @@ class BrokerIntegrationTestTest extends BrokerIntegrationTest {
         properties.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
         return AdminClient.create(properties);
     }
+
 }

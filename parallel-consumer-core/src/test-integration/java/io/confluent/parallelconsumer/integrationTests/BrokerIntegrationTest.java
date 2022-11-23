@@ -29,6 +29,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,12 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Testcontainers
 @Slf4j
 public abstract class BrokerIntegrationTest {
+
+    /**
+     * When using {@link org.junit.jupiter.api.Order} to order tests, this is the prefix to use to ensure integration
+     * tests run after unit tests.
+     */
+    public static final int INTEGRATION_TEST_BASE = 100;
 
     private static final String TOXIPROXY_NETWORK_ALIAS = "toxiproxy";
 
@@ -101,13 +108,13 @@ public abstract class BrokerIntegrationTest {
      */
     // todo resolve
 //    @Container
-    @Getter(AccessLevel.PROTECTED)
+    @Getter(AccessLevel.PRIVATE)
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
     /**
      * @see #updateAdvertisedListenersToProxy()
      */
-    public static KafkaContainer createKafkaContainer(String logSegmentSize) {
+    public static KafkaContainer createKafkaContainer(@Nullable String logSegmentSize) {
         KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.2"))
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
@@ -159,7 +166,7 @@ public abstract class BrokerIntegrationTest {
     private static void startKafkaContainer() {
         log.warn("Starting broker...");
         kafkaContainer.start();
-        followKafkaLogs();
+        followKafkaLogs(kafkaContainer);
         log.debug("Kafka container started");
     }
 
@@ -249,7 +256,7 @@ public abstract class BrokerIntegrationTest {
     @Getter(AccessLevel.PROTECTED)
     private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer, brokerProxy);
 
-    static void followKafkaLogs() {
+    static void followKafkaLogs(KafkaContainer kafkaContainer) {
         if (log.isDebugEnabled()) {
             FilteredTestContainerSlf4jLogConsumer logConsumer = new FilteredTestContainerSlf4jLogConsumer(log);
             logConsumer.withPrefix("KAFKA");

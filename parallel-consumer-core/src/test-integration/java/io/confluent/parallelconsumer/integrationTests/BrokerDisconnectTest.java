@@ -8,7 +8,10 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.containers.KafkaContainer;
@@ -33,6 +36,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class BrokerDisconnectTest extends BrokerIntegrationTest {
 
     int numberOfRecordsToProduce = 100;
@@ -61,7 +65,6 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
 
         if (commitMode == CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER) {
             preOptions.producer(kcu.createAndInitNewTransactionalProducer());
-
         }
 
         var options = preOptions.build();
@@ -97,7 +100,7 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         // todo how long to test we can recover from?
         // 10 seconds, doesn't notice
         // 120 unknown error
-        ThreadUtils.sleepSecondsLog(180);
+        ThreadUtils.sleepSecondsLog(120);
 
         //
         checkPCState();
@@ -130,7 +133,9 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     @EnumSource
     void brokerShutdown(CommitMode commitMode) {
         // need ot start
-        KafkaContainer finickyKafka = getKafkaContainer();
+        KafkaContainer finickyKafka = createKafkaContainer(null);
+        finickyKafka.start();
+        BrokerIntegrationTest.followKafkaLogs(finickyKafka);
 
         KafkaClientUtils kafkaClientUtils = new KafkaClientUtils(finickyKafka, getBrokerProxy());
 
@@ -179,25 +184,13 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
+    @Order(1)
+    // simplest
     void brokerRestartTest(CommitMode commitMode) {
         setupAndWarmUp(getKcu(), commitMode);
 
         //
-//        restartBrokerConnectionUsingProxy();
         restartDockerUsingCommandsAndProxy();
-
-
-        //
-        checkPCState();
-
-        log.debug("Stay disconnected for a while...");
-        Truth.assertThat(processedCount.get()).isLessThan(numberOfRecordsToProduce);
-
-
-        // todo how long to test we can recover from?
-        // 10 seconds, doesn't notice
-        // 120 unknown error
-        ThreadUtils.sleepLog(Duration.ofMinutes(1));
 
         //
         checkPCState();
@@ -205,12 +198,13 @@ class BrokerDisconnectTest extends BrokerIntegrationTest {
         //
         var timeout = Duration.ofMinutes(1);
         log.debug("Waiting {} for PC to recover", timeout);
+        var expectedNumberToConsumer = numberOfRecordsToProduce * 2; // record get replayed because we couldn't commit because broker "died"
         await()
                 .atMost(timeout)
                 .failFast("pc has crashed", () -> pc.isClosedOrFailed())
                 .untilAsserted(() -> Truth
                         .assertThat(processedCount.get())
-                        .isAtLeast(numberOfRecordsToProduce));
+                        .isAtLeast(expectedNumberToConsumer));
     }
 
 }
