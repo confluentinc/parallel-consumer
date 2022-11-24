@@ -164,7 +164,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         }
     }
 
-    // todo replace with actor framework once merged
+    // todo replace with actor framework once merged improvements/lambda-actor-bus pr#325
     private void commitAndWait() throws PCCommitFailedException {
         boolean waitingOnCommitResponse = true;
         int failedCommitAttempts = 0;
@@ -204,17 +204,24 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
                     if (error instanceof PCCommitFailedException pcCommitFailedException) {
                         throw pcCommitFailedException;
-                    } else if (options.getRetrySettings().isFailFastOrRetryExhausted(failedCommitAttempts)) {
-                        throw new ParallelConsumerException(msg("Timeout committing offsets - failed commit attempts: {}", failedCommitAttempts), error);
                     } else {
-                        Duration commitTimeout = DEFAULT_API_TIMEOUT;
-                        log.warn("Timeout ({}) committing offsets, will retry (failed {} times, {})",
-                                commitTimeout,
-                                failedCommitAttempts,
-                                options.getRetrySettings());
-                        // request again
-                        commitRequest = requestCommitInternal();
-                        waitingOnCommitResponse = true;
+                        var retrySettings = options.getRetrySettings();
+                        if (retrySettings.isFailFastOrRetryExhausted(failedCommitAttempts)) {
+                            throw new ParallelConsumerException(
+                                    msg("Timeout committing offsets and retry exhausted - failed commit attempts: {} settings: {}",
+                                            failedCommitAttempts,
+                                            retrySettings),
+                                    error);
+                        } else {
+                            Duration commitTimeout = DEFAULT_API_TIMEOUT;
+                            log.warn("Timeout ({}) committing offsets, will retry (failed: {} times, settings: {})",
+                                    commitTimeout,
+                                    failedCommitAttempts,
+                                    retrySettings);
+                            // request again
+                            commitRequest = requestCommitInternal();
+                            waitingOnCommitResponse = true;
+                        }
                     }
                 }
             } catch (InterruptedException e) {
@@ -247,13 +254,13 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                     commitResponseQueue.add(new CommitResponse(poll, e));
                 }
             } catch (PCTimeoutException e) {
-                // only need to send a response if someone will be waiting
+                // only need to send a response if controller thread is waiting
                 if (isSync()) {
                     log.warn("Adding commit response with the timeout exception to response queue...");
                     commitResponseQueue.add(new CommitResponse(poll, e));
                 }
             }
-            // only need to send a response if someone will be waiting
+            // only need to send a response if controller thread is waiting
             if (isSync()) {
                 log.debug("Adding commit response to queue...");
                 commitResponseQueue.add(new CommitResponse(poll));

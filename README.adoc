@@ -1316,6 +1316,8 @@ endif::[]
 === Fixes
 
 * fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
+* fixes #203: Broker disconnect testing and ChaosBroker (#345)
+** Tweaks to timeout management around offset committing
 
 == 0.5.2.4
 
