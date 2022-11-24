@@ -48,12 +48,6 @@ class ChaosBrokerTest extends DedicatedBrokerIntegrationTest {
         assertThat(containerName).startsWith("/" + CONTAINER_PREFIX);
     }
 
-    @Test
-    void testConsumerOffsetsPersistAcrossRestartsWhenCommitted() {
-        // todo
-        throw new UnsupportedOperationException();
-    }
-
     private void testConnection(AdminClient admin) {
         await()
                 .ignoreExceptions()
