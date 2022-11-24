@@ -114,10 +114,9 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrapToIncompletes(BitSetV2, baseOffset, decompressZstd(data));
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
-            case KafkaStreams ->
-                    throw new KafkaStreamsV1EncodingNotSupported("Kafka Streams offset metadata V1 not supported");
-            case KafkaStreamsV2 ->
-                    throw new KafkaStreamsV2EncodingNotSupported("Kafka Streams offset metadata V2 not supported");
+            case KafkaStreams, KafkaStreamsV2 ->
+                    throw new KafkaStreamsEncodingNotSupported(
+                            "It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
             default ->
                     throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };

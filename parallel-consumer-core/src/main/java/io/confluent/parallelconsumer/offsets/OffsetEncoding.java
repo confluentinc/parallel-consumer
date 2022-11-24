@@ -43,6 +43,7 @@ public enum OffsetEncoding {
 
     /**
      * checks for pre-existing Kafka Streams metadata
+     * https://github.com/apache/kafka/blob/cc77a38d280657a0e3969b255f103af4d11c7914/streams/src/main/java/org/apache/kafka/streams/processor/internals/TopicPartitionMetadata.java#L33
      */
     KafkaStreams(v1, (byte) 1),
     KafkaStreamsV2(v2, (byte) 2);
