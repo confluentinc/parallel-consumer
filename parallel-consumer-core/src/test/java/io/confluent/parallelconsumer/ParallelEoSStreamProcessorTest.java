@@ -8,7 +8,6 @@ import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -271,7 +270,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         Assumptions.assumeThat(parallelConsumer)
                 .as("Should only test on core PC - this test is very complicated to get to work with vert.x " +
                         "thread system, as the event and locking system needed is quite different")
-                .isExactlyInstanceOf(AbstractParallelEoSStreamProcessor.class);
+                .isInstanceOf(ParallelEoSStreamProcessor.class);
 
         setupParallelConsumerInstance(getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)
