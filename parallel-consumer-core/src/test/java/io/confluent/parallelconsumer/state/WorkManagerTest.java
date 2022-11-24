@@ -26,6 +26,7 @@ import org.assertj.core.api.ObjectAssert;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -420,7 +421,17 @@ public class WorkManagerTest {
         wc.onUserFunctionFailure(null);
         wm.onFailureResult(wc);
     }
-=
+
+    @Test
+    @Disabled
+    public void maxPerPartition() {
+    }
+
+    @Test
+    @Disabled
+    public void maxPerTopic() {
+    }
+
     @Test
     public void maxInFlight() {
         //
