@@ -17,7 +17,6 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serdes;
 import org.assertj.core.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -179,7 +178,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 assertCommits(of(2), "Only one of the two offsets committed, as they were coalesced for efficiency"));
     }
 
-    @Disabled
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void offsetsAreNeverCommittedForMessagesStillInFlightLong(CommitMode commitMode) {
@@ -449,7 +447,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
-    @Disabled
     public void processInKeyOrder(CommitMode commitMode) {
         setupParallelConsumerInstance(ParallelConsumerOptions.builder()
                 .commitMode(commitMode)
