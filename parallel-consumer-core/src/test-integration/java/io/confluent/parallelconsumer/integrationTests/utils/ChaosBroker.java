@@ -90,6 +90,11 @@ public class ChaosBroker extends PCTestBroker {
         initToxiproxy();
     }
 
+    @Override
+    protected String getContainerPrefix() {
+        return CONTAINER_PREFIX + "chaos-";
+    }
+
     private void initToxiproxy() {
         toxiproxy = new ToxiproxyContainer(TOXIPROXY_IMAGE)
                 .withNetwork(network)
@@ -157,6 +162,9 @@ public class ChaosBroker extends PCTestBroker {
     private void postStart() {
         setupBrokerProxyAndClients();
         updateAdvertisedListenersToProxy();
+        injectContainerPrefix(zookeeperContainer);
+        injectContainerPrefix(kafkaContainer);
+        injectContainerPrefix(toxiproxy);
     }
 
     private void setupBrokerProxyAndClients() {

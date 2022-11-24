@@ -7,9 +7,12 @@ import org.apache.kafka.clients.admin.AdminClient;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.DockerClientFactory;
 
 import java.time.Duration;
 
+import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static io.confluent.parallelconsumer.integrationTests.PCTestBroker.CONTAINER_PREFIX;
 import static io.confluent.parallelconsumer.integrationTests.sanity.BrokerIntegrationTestTest.INTEGRATION_TEST_BASE;
 import static org.awaitility.Awaitility.await;
 
@@ -28,11 +31,17 @@ class BrokerIntegrationTestTest extends DedicatedBrokerIntegrationTest {
     @Test
     void restartingBroker() {
         try (AdminClient admin = getChaosBroker().createProxiedAdminClient()) {
-
             testConnection(admin);
             getChaosBroker().restart();
             testConnection(admin);
         }
+    }
+
+    @Test
+    void containerPrefixInjection() {
+        var details = DockerClientFactory.lazyClient().inspectContainerCmd(getChaosBroker().getKafkaContainerId()).exec();
+        var containerName = details.getName();
+        assertThat(containerName).startsWith("/" + CONTAINER_PREFIX);
     }
 
     @Test

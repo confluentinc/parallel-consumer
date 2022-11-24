@@ -35,6 +35,7 @@ public class DbTest extends BrokerIntegrationTest {
         dbc = new PostgreSQLContainer<>()
                 .withReuse(true);
         dbc.start();
+
     }
 
     Connection connection;
