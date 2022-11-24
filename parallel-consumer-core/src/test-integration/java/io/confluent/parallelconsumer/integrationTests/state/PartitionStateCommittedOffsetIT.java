@@ -11,10 +11,10 @@ import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
-import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
-import io.confluent.parallelconsumer.integrationTests.PCTestBroker;
+import io.confluent.parallelconsumer.integrationTests.DedicatedBrokerIntegrationTest;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption;
+import io.confluent.parallelconsumer.integrationTests.utils.PCTestBroker;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -57,7 +57,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see io.confluent.parallelconsumer.state.PartitionStateCommittedOffsetTest
  */
 @Slf4j
-class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
+class PartitionStateCommittedOffsetIT extends DedicatedBrokerIntegrationTest {
 
     public static final OffsetResetStrategy DEFAULT_OFFSET_RESET_POLICY = OffsetResetStrategy.EARLIEST;
 
@@ -149,13 +149,12 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
      * Set up our extra special compacting broker
      */
     private PCTestBroker setupCompactingKafkaBroker() {
-        PCTestBroker compactingBroker = new PCTestBroker("40000");
-        compactingBroker.start();
         setup();
 
-        getKafkaContainer().setupCompactedEnvironment(getTopic());
+        var kafkaContainer = getKafkaContainer();
+        kafkaContainer.setupCompactedEnvironment(getTopic());
 
-        return compactingBroker;
+        return kafkaContainer;
     }
 
     private List<PollContext<String, String>> runPcUntilOffset(int offset) {
@@ -413,7 +412,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest {
         this.offsetResetStrategy = offsetResetPolicy;
         try (
                 PCTestBroker compactingKafkaBroker = setupCompactingKafkaBroker();
-                KafkaClientUtils clientUtils = compactingKafkaBroker.getKcu();
+                KafkaClientUtils clientUtils = compactingKafkaBroker.createKcu();
         ) {
             clientUtils.setOffsetResetPolicy(offsetResetPolicy);
             clientUtils.open();

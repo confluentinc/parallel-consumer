@@ -37,13 +37,17 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 class MultiInstanceHighVolumeTest extends BrokerIntegrationTest {
 
     public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
+
     public List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());
+
     public AtomicInteger processedCount = new AtomicInteger(0);
+
     public AtomicInteger producedCount = new AtomicInteger(0);
 
     int maxPoll = 500; // 500 is the kafka default
 
     CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_SYNC;
+
     ProcessingOrder order = ProcessingOrder.KEY;
 
 
@@ -113,13 +117,13 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest {
         return pc;
     }
 
-    Integer barId = 0;
+    int progressBarId = 0;
 
     private ProgressBar run(final int expectedMessageCount, final ParallelEoSStreamProcessor<String, String> pc, List<ConsumerRecord<?, ?>> consumed) {
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
-        bar.setExtraMessage("#" + barId);
-        pc.setMyId(Optional.of("id: " + barId));
-        barId++;
+        bar.setExtraMessage("#" + progressBarId);
+        pc.setMyId(Optional.of("id: " + progressBarId));
+        progressBarId++;
         pc.poll(record -> {
                     processRecord(bar, record.getSingleConsumerRecord(), consumed);
                 }

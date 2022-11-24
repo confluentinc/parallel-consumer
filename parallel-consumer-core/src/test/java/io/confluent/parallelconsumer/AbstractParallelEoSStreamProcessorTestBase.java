@@ -22,6 +22,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.Serdes;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
@@ -38,6 +39,7 @@ import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
+import static io.confluent.parallelconsumer.integrationTests.CommonBrokerIntegrationTest.UNIT_TEST_BASE;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -52,6 +54,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @see AbstractParallelEoSStreamProcessor
  */
 // todo migrate commit assertion methods in to a Truth Subject
+@Order(UNIT_TEST_BASE)
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
 

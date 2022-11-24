@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.integrationTests.PCTestBroker;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
@@ -65,6 +64,10 @@ public class KafkaClientUtils implements AutoCloseable {
 
     private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
+    public AdminClient getAdmin() {
+        return admin;
+    }
+
     class PCVersion {
         public static final String V051 = "0.5.1";
     }
@@ -80,7 +83,6 @@ public class KafkaClientUtils implements AutoCloseable {
     @Getter
     private KafkaProducer<String, String> producer;
 
-    @Getter
     private AdminClient admin;
 
     @Getter
@@ -139,7 +141,7 @@ public class KafkaClientUtils implements AutoCloseable {
 
         // make sure we can download lots of records if they're small. Default is 500
 //        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1_000_000);
-        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+//        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
 
 
         consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, GROUP_SESSION_TIMEOUT_MS);
@@ -148,10 +150,11 @@ public class KafkaClientUtils implements AutoCloseable {
     }
 
     public void open() {
-        log.info("Setting up clients using {}...", createCommonProperties());
+        var commonProperties = createCommonProperties();
+        log.info("Setting up clients using {}...", commonProperties);
         consumer = this.createNewConsumer();
         producer = this.createNewProducer(false);
-        admin = AdminClient.create(createCommonProperties());
+        admin = AdminClient.create(commonProperties);
     }
 
     public void close() {
@@ -265,8 +268,9 @@ public class KafkaClientUtils implements AutoCloseable {
 
         txProps.putAll(overridingOptions);
 
-        // todo remove?
-        txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
+        // needed by what test?
+//         todo remove?
+//        txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
 
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
         clientsCreated.add(kvKafkaProducer);

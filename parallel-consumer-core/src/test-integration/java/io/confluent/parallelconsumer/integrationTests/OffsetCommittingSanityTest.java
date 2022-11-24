@@ -47,17 +47,18 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest {
         List<Long> producedOffsets = new ArrayList<>();
         List<Long> consumedOffsets = new ArrayList<>();
 
-        KafkaProducer<String, String> kafkaProducer = getKcu().createNewProducer(false);
+        try (KafkaProducer<String, String> kafkaProducer = getKcu().createNewProducer(false);) {
 
-        // offset 0
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", true);
+            // offset 0
+            sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", true);
 
-        assertCommittedOffset(topicNameForTest, 1);
+            assertCommittedOffset(topicNameForTest, 1);
 
-        // offset 1
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-1", "value-1", true);
+            // offset 1
+            sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-1", "value-1", true);
 
-        assertCommittedOffset(topicNameForTest, 2);
+            assertCommittedOffset(topicNameForTest, 2);
+        }
 
         // sanity
         assertThat(producedOffsets).containsExactly(0L, 1L);
@@ -70,19 +71,20 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest {
         List<Long> producedOffsets = new ArrayList<>();
         List<Long> consumedOffsets = new ArrayList<>();
 
-        KafkaProducer<String, String> kafkaProducer = getKcu().createNewProducer(NOT_TRANSACTIONAL);
+        try (KafkaProducer<String, String> kafkaProducer = getKcu().createNewProducer(NOT_TRANSACTIONAL);) {
 
-        // offset 0
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", CheckMode.CHECK_CONSUMED);
+            // offset 0
+            sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-0", "value-0", CheckMode.CHECK_CONSUMED);
 
-        //
-        assertCommittedOffset(topicNameForTest, 1);
+            //
+            assertCommittedOffset(topicNameForTest, 1);
 
-        // offset 1
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-1", "value-1", CheckMode.JUST_SLEEP);
+            // offset 1
+            sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-1", "value-1", CheckMode.JUST_SLEEP);
 
-        // offset 2
-        sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-2", "value-2", CheckMode.CHECK_CONSUMED);
+            // offset 2
+            sendCheckClose(topicNameForTest, producedOffsets, consumedOffsets, kafkaProducer, "key-2", "value-2", CheckMode.CHECK_CONSUMED);
+        }
     }
 
     private void sendCheckClose(String topic,

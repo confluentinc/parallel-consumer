@@ -5,13 +5,12 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
-import lombok.SneakyThrows;
+import io.confluent.parallelconsumer.integrationTests.utils.PCTestBroker;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Order;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-
-import java.util.List;
 
 import static io.confluent.parallelconsumer.integrationTests.CommonBrokerIntegrationTest.INTEGRATION_TEST_BASE;
 
@@ -26,7 +25,7 @@ import static io.confluent.parallelconsumer.integrationTests.CommonBrokerIntegra
 @Order(INTEGRATION_TEST_BASE)
 @Testcontainers
 @Slf4j
-public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest {
+public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest<PCTestBroker> {
 
     private static final PCTestBroker kafkaContainer = new PCTestBroker();
 
@@ -38,23 +37,12 @@ public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest 
         kafkaContainer.start();
     }
 
-    protected List<String> produceMessages(int quantity) {
-        return produceMessages(quantity, "");
-    }
-
-    @SneakyThrows
-    protected List<String> produceMessages(int quantity, String prefix) {
-        return kafkaContainer.getKcu().produceMessages(getTopic(), quantity, prefix);
-    }
+    @Getter
+    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
     @Override
     protected PCTestBroker getKafkaContainer() {
         return kafkaContainer;
-    }
-
-    @Override
-    protected KafkaClientUtils getKcu() {
-        return kafkaContainer.getKcu();
     }
 
 }

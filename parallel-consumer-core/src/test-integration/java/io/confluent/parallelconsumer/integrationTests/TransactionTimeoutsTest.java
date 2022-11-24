@@ -158,7 +158,9 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest {
 
         // wait until pc dies from commit timeout
         await().untilAsserted(() -> assertThat(pc).isClosedOrFailed());
-        assertThat(pc).getFailureCause().hasMessageThat().contains("timeout");
+        var failureCause = assertThat(pc).getFailureCause();
+        failureCause.isNotNull();
+        failureCause.hasMessageThat().contains("timeout");
 
         // check what was committed at shutdown to the input topic, re-using same group id as PC, to access what was committed at shutdown commit attempt
         // 2nd commit attempt during shutdown will have succeeded

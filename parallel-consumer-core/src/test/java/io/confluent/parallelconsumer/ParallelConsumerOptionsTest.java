@@ -5,14 +5,17 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static org.apache.kafka.clients.consumer.OffsetResetStrategy.EARLIEST;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
 
 /**
  * Check that various validation and combinations of {@link ParallelConsumerOptions} works.
@@ -23,6 +26,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @Tag("transactions")
 @Tag("#355")
 class ParallelConsumerOptionsTest {
+
+    @Test
+    void testProducerRequired() {
+        assertThrows(IllegalArgumentException.class, () ->
+                ParallelConsumerOptions.builder()
+                        .consumer(mock(Consumer.class))
+                        .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
+                        .build()
+                        .validate());
+
+
+        assertThrows(IllegalArgumentException.class, () ->
+                ParallelConsumerOptions.builder()
+                        .consumer(mock(Consumer.class))
+                        .allowEagerProcessingDuringTransactionCommit(true)
+                        .build()
+                        .validate());
+    }
 
     /**
      * Test the deprecation phase of commit frequency

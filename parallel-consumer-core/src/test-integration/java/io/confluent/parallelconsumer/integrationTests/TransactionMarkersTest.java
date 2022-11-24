@@ -80,6 +80,16 @@ public class TransactionMarkersTest extends BrokerIntegrationTest {
     }
 
     @AfterEach
+    void tearDown() {
+        pc.close();
+        consumer.close();
+        txProducer.close();
+        txProducerTwo.close();
+        txProducerThree.close();
+        normalProducer.close();
+    }
+
+    @AfterEach
     void close() {
         pc.close();
     }

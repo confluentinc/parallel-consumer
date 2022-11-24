@@ -7,7 +7,6 @@ package io.confluent.parallelconsumer.integrationTests.utils;
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
 import io.confluent.csid.utils.ThreadUtils;
-import io.confluent.parallelconsumer.integrationTests.PCTestBroker;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -18,7 +17,9 @@ import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.clients.admin.ConfigEntry;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.config.ConfigResource;
+import org.apache.kafka.common.config.TopicConfig;
 import org.jetbrains.annotations.Nullable;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
@@ -26,13 +27,13 @@ import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.ToxiproxyContainer;
 import org.testcontainers.utility.DockerImageName;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
 import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
@@ -86,6 +87,15 @@ public class ChaosBroker extends PCTestBroker {
     @Getter(AccessLevel.PUBLIC)
     private AdminClient proxiedAdmin;
 
+    public ChaosBroker(String logSegmentBytes) {
+        super(logSegmentBytes);
+    }
+
+    @Override
+    protected AdminClient getAdmin() {
+        return getProxiedAdmin();
+    }
+
     @SneakyThrows
     public ChaosBroker() {
         super();
@@ -132,6 +142,27 @@ public class ChaosBroker extends PCTestBroker {
                 //
                 .withNetwork(network)
                 .withNetworkAliases(KAFKA_NETWORK_ALIAS);
+    }
+
+    /**
+     * tood docs
+     */
+    @SneakyThrows
+    public void setupCompactedEnvironment(String topicToCompact) {
+        log.debug("Setting up aggressive compaction...");
+        ConfigResource topicConfig = new ConfigResource(ConfigResource.Type.TOPIC, topicToCompact);
+
+        Collection<AlterConfigOp> alterConfigOps = new ArrayList<>();
+
+        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT), AlterConfigOp.OpType.SET));
+        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MAX_COMPACTION_LAG_MS_CONFIG, "1"), AlterConfigOp.OpType.SET));
+        alterConfigOps.add(new AlterConfigOp(new ConfigEntry(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, "0"), AlterConfigOp.OpType.SET));
+
+        var configs = UniMaps.of(topicConfig, alterConfigOps);
+        KafkaFuture<Void> all = getKcu().getAdmin().incrementalAlterConfigs(configs).all();
+        all.get(5, SECONDS);
+
+        log.debug("Compaction setup complete");
     }
 
     private void preKafkaInit() {

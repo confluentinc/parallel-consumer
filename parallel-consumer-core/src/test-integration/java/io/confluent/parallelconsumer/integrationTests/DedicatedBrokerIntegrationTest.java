@@ -19,7 +19,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * @see BrokerIntegrationTest for tests which can use a shared, reusable broker
  */
 @Testcontainers
-public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest {
+public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest<ChaosBroker> {
+
+    @Getter
+    private final KafkaClientUtils kcu;
 
     @Container
     @Getter(AccessLevel.PROTECTED)
@@ -27,16 +30,12 @@ public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest 
 
     public DedicatedBrokerIntegrationTest() {
         this.chaosBroker = new ChaosBroker();
+        this.kcu = new KafkaClientUtils(chaosBroker);
     }
 
     @Override
-    protected PCTestBroker getKafkaContainer() {
+    protected ChaosBroker getKafkaContainer() {
         return chaosBroker;
-    }
-
-    @Override
-    protected KafkaClientUtils getKcu() {
-        return getChaosBroker().getKcu();
     }
 
 }

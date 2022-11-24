@@ -313,9 +313,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void checkNotSubscribed(org.apache.kafka.clients.consumer.Consumer<K, V> consumerToCheck) {
-        if (consumerToCheck instanceof MockConsumer)
+        if (consumerToCheck instanceof MockConsumer) {
             // disabled for unit tests which don't test rebalancing
             return;
+        }
+
         Set<String> subscription = consumerToCheck.subscription();
         Set<TopicPartition> assignment = consumerToCheck.assignment();
         if (!subscription.isEmpty() || !assignment.isEmpty()) {

@@ -16,8 +16,8 @@ import org.testcontainers.DockerClientFactory;
 import java.time.Duration;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
-import static io.confluent.parallelconsumer.integrationTests.PCTestBroker.CONTAINER_PREFIX;
 import static io.confluent.parallelconsumer.integrationTests.sanity.ChaosBrokerTest.INTEGRATION_TEST_BASE;
+import static io.confluent.parallelconsumer.integrationTests.utils.PCTestBroker.CONTAINER_PREFIX;
 import static org.awaitility.Awaitility.await;
 
 /**

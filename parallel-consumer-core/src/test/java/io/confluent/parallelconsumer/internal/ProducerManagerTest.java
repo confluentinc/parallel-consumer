@@ -14,7 +14,6 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -42,7 +41,6 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerState.*;
 import static java.time.Duration.ofSeconds;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -379,24 +377,6 @@ class ProducerManagerTest {
 
             }
         }
-    }
-
-    @Test
-    void testOptions() {
-        assertThrows(IllegalArgumentException.class, () ->
-                ParallelConsumerOptions.builder()
-                        .consumer(mock(Consumer.class))
-                        .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER)
-                        .build()
-                        .validate());
-
-
-        assertThrows(IllegalArgumentException.class, () ->
-                ParallelConsumerOptions.builder()
-                        .consumer(mock(Consumer.class))
-                        .allowEagerProcessingDuringTransactionCommit(true)
-                        .build()
-                        .validate());
     }
 
 }

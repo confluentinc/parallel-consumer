@@ -17,7 +17,6 @@ import me.tongfei.progressbar.ProgressBar;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -110,7 +109,6 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest {
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = getKcu().createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
@@ -119,7 +117,7 @@ public class VeryLargeMessageVolumeTest extends BrokerIntegrationTest {
         var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .consumer(newConsumer)
-                .producer(newProducer)
+                .producer(getKcu().createNewProducer(commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER)))
                 .commitMode(commitMode)
                 .maxConcurrency(1000)
                 .build());

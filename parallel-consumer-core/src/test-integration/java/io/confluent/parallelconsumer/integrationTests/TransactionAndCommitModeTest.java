@@ -64,7 +64,9 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 class TransactionAndCommitModeTest extends BrokerIntegrationTest {
 
     int LOW_MAX_POLL_RECORDS_CONFIG = 1;
+
     int DEFAULT_MAX_POLL_RECORDS_CONFIG = 500;
+
     int HIGH_MAX_POLL_RECORDS_CONFIG = 10_000;
 
     // is sensitive to changes in metadata size
@@ -151,7 +153,6 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest {
 
         // run parallel-consumer
         log.debug("Starting test");
-        KafkaProducer<String, String> newProducer = getKcu().createNewProducer(commitMode);
 
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
@@ -163,7 +164,7 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest {
         var pc = new ParallelEoSStreamProcessor<String, String>(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .consumer(newConsumer)
-                .producer(newProducer)
+                .producer(getKcu().createNewProducer(commitMode))
                 .commitMode(commitMode)
 //                .numberOfThreads(1000)
 //                .numberOfThreads(100)
