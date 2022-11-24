@@ -781,7 +781,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
         assertThat(catchThrowable(() -> parallelConsumer = initPollingAsyncConsumer(optionsBuilder.build())))
                 .as("Should error on auto commit enabled by default")
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ParallelConsumerException.class)
                 .hasMessageContainingAll("auto", "commit", "disabled");
 
         // fail auto commit disabled
@@ -789,7 +789,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         optionsBuilder.consumer(new KafkaConsumer<>(properties, deserializer, deserializer));
         assertThat(catchThrowable(() -> parallelConsumer = initPollingAsyncConsumer(optionsBuilder.build())))
                 .as("Should error on auto commit enabled")
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ParallelConsumerException.class)
                 .hasMessageContainingAll("auto", "commit", "disabled");
 
         // set missing auto commit

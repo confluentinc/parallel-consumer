@@ -5,9 +5,11 @@
 
 `release:prepare -DautoVersionSubmodules=true -DpushChanges=false -Darguments=-DskipTests -Pci`
 
-- Push the plugin's commits one at a time (otherwise need to request Jenkins to build the release tag - so this is a minor shortcut)
+- Push the master branch with release and tag
+- Trigger master builder to build the tag (this is needed to trigger the deployment flow)
 - Wait for Jenkins to finish running the build (~15 minutes)
-- Wait for Sonatype to publish from it's staging area (~15 minutes)
+- Wait for Sonatype to publish from it's staging area (~15 minutes) https://repo1.maven.org/maven2/io/confluent/parallelconsumer/parallel-consumer-parent/[repo1 link]
+- Verify the release is available on Maven Central https://repo1.maven.org/maven2/io/confluent/parallelconsumer/parallel-consumer-parent/[repo1 link]
 - Create the release on GH from the tag
 - Paste in the details from the changelog, save, share as discussion
-- Announce on slack(s), mailing list,
+- Announce on slack (community #clients and internal channels), mailing list, twitter
