@@ -250,6 +250,10 @@ class ProducerManagerTest {
         }
     }
 
+    /**
+     * Has seen to be a bit flaky, when run in the whole suite in parallel mode - could be due to the test running
+     * slightly slower in that mode
+     */
     @SneakyThrows
     @Test
     void producedRecordsCantBeInTransactionWithoutItsOffsetDirect() {

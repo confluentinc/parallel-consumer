@@ -683,7 +683,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         //
-        Duration expectedDurationOfClose = JavaUtils.max(timeBetweenCommits, ofSeconds(1)); // wait at least 1 second
+        // wait at least X seconds, or double the commit interval, to allow time for the commit to happen
+        Duration expectedDurationOfClose = JavaUtils.max(timeBetweenCommits.multipliedBy(2), ofSeconds(2));
         assertThat(durationOfCloseOperation).as("Should be fast").isLessThan(expectedDurationOfClose);
     }
 
