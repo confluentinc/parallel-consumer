@@ -420,7 +420,7 @@ public class WorkManagerTest {
         wc.onUserFunctionFailure(null);
         wm.onFailureResult(wc);
     }
-=
+
     @Test
     public void maxInFlight() {
         //
@@ -435,6 +435,7 @@ public class WorkManagerTest {
         assertThat(wm.getWorkIfAvailable()).isEmpty();
     }
 
+    // todo delete?
     public static class FluentQueue<T> implements Iterable<T> {
         ArrayDeque<T> work = new ArrayDeque<>();
 

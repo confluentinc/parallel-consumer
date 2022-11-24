@@ -35,7 +35,7 @@ public class ThreadUtils {
 
     @SneakyThrows
     public static void sleepQuietly(long ms) {
-        sleepQuietly((int) ms);
+        sleepQuietly(Duration.ofMillis(ms));
     }
 
     public static void sleepSecondsLog(long seconds) {
