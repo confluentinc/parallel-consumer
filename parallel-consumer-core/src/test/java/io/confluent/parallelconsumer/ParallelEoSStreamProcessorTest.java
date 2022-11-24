@@ -345,17 +345,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 assertCommitLists(of(of(2), of(2, 3, 4))));
     }
 
-    @Test
-    @Disabled
-    public void avro() {
-        // send three messages - 0,1,2
-        // finish processing 1
-        // make sure no offsets are committed
-        // finish 0
-        // make sure offset 1, not 0 is committed
-        assertThat(false).isTrue();
-    }
-
     @ParameterizedTest
     @EnumSource(CommitMode.class)
     void controlFlowException(CommitMode commitMode) {
@@ -412,38 +401,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             verify(producerSpy, atLeastOnce()).commitTransaction();
             verify(producerSpy, atLeastOnce()).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
         }
-    }
-
-    @Test
-    @Disabled
-    public void userSucceedsButProduceToBrokerFails() {
-    }
-
-    @Test
-    @Disabled
-    public void poisonPillGoesToDeadLetterQueue() {
-    }
-
-    @Test
-    @Disabled
-    public void failingMessagesDontBreakCommitOrders() {
-        assertThat(false).isTrue();
-    }
-
-    @Test
-    @Disabled
-    public void messagesCanBeProcessedOptionallyPartitionOffsetOrder() {
-    }
-
-    @Test
-    @Disabled
-    public void failingMessagesThatAreRetriedDontBreakProcessingOrders() {
-        assertThat(false).isTrue();
-    }
-
-    @Test
-    @Disabled
-    public void ifTooManyMessagesAreInFlightDontPollBrokerForMore() {
     }
 
     @ParameterizedTest()
