@@ -4,21 +4,16 @@ package io.confluent.csid.testcontainers;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.event.Level;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /**
  * Filters out some log levels from the test container (e.g. Kafka's container has TRACE level set by default).
@@ -32,12 +27,6 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
      * Logger to send followed logs to
      */
     private final Logger loggerToUse;
-
-
-    @Getter
-    @Setter
-//    private List<Level> filteredLevels = UniLists.of(TRACE, DEBUG);
-    private List<Level> filteredLevels = UniLists.of();
 
     private String prefix;
 
@@ -60,20 +49,11 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
     @Override
     public void accept(OutputFrame outputFrame) {
         if (loggerToUse.isDebugEnabled()) {
-//            String utf8String = outputFrame.getUtf8String();
-
             try {
                 logWithLevelPassThrough(outputFrame);
             } catch (Exception e) {
                 log.error("Failed to log output frame", e);
             }
-//
-//            boolean isFilteredOut = filteredLevels.stream().anyMatch(level -> utf8String.contains(level.toString()));
-//            if (!isFilteredOut) {
-//                super.accept(outputFrame);
-//            } else {
-//                // ignoring trace level logging
-//            }
         }
     }
 
@@ -96,9 +76,6 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
             case STDERR:
                 loggerToUse.atLevel(level.get()).log("{}{}", prefix.isEmpty() ? "" : (prefix + ": "), StringUtils.chomp(utf8String));
                 break;
-//
-//                loggerToUse.atLevel(level.get()).log("{} {}", utf8String);
-//                break;
             default:
                 throw new IllegalArgumentException("Unexpected outputType " + outputType);
         }
@@ -113,10 +90,6 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
 
         for (Level l : Level.values()) {
             levelScores.put(l, findIndexOfLevel(logString, l));
-//            if (levelFoundInLogString(logString, l)) {
-//                level = l;
-//                break;
-//            }
         }
 
         // lowest score wins, unless it's less than zero
@@ -136,16 +109,4 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
         return logString.toLowerCase().indexOf(levelString);
     }
 
-    private boolean levelFoundInLogString(String logString, Level l) {
-        return logStringContainsLevelSurroundedByNonLetterCharacters(logString, l);
-        //            if (logString.toLowerCase().contains(l.toString().toLowerCase())) {
-//                level = l;
-//                break;
-//            }
-    }
-
-
-    private boolean logStringContainsLevelSurroundedByNonLetterCharacters(String logString, Level level) {
-        return Pattern.compile("\\b" + level.toString() + "\\b").matcher(logString).find();
-    }
 }

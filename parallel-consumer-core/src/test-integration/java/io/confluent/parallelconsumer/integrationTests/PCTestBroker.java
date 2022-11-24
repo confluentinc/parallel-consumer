@@ -32,6 +32,8 @@ import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
+ * Our wrapper for {@link KafkaContainer}, which is a TestContainer for Kafka.
+ * <p>
  * Reusable by default, but can be made non-reusable by setting {@link KafkaContainer#withReuse} to false.
  *
  * @author Antony Stubbs

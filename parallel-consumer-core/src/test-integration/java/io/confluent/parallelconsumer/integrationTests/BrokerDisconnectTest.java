@@ -35,7 +35,6 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
-//@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
     int numberOfRecordsToProduce = 1000;

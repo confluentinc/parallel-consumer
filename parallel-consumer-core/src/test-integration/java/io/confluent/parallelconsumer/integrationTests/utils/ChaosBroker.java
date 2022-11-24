@@ -59,6 +59,9 @@ public class ChaosBroker extends PCTestBroker {
      */
     public Network network;
 
+    /**
+     * External Zookeeper which Broker will keep stable across Broker restarts
+     */
     private GenericContainer<?> zookeeperContainer;
 
     /**
@@ -73,6 +76,9 @@ public class ChaosBroker extends PCTestBroker {
     @Getter(PRIVATE)
     private ToxiproxyContainer.ContainerProxy brokerProxy;
 
+    /**
+     * An admin client that goes through the proxy, and so will automatically reconnect after restarts.
+     */
     @Getter(AccessLevel.PUBLIC)
     private AdminClient proxiedAdmin;
 
@@ -100,9 +106,7 @@ public class ChaosBroker extends PCTestBroker {
                 .withNetwork(network)
                 .withNetworkAliases(ZOOKEEPER_NETWORK_ALIAS)
                 .withExposedPorts(ZOOKEEPER_PORT)
-//            .addExposedPort()
                 .withEnv("ZOOKEEPER_CLIENT_PORT", ZOOKEEPER_PORT + "")
-//            .withReuse(false)
                 .withReuse(false);
     }
 
