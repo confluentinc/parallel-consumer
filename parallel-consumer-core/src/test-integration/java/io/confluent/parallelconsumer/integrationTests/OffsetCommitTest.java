@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.integrationTests;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;

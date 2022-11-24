@@ -1,7 +1,7 @@
 package io.confluent.csid.testcontainers;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import lombok.extern.slf4j.Slf4j;

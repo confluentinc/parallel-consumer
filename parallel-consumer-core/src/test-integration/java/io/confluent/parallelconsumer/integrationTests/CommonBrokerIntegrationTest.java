@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.integrationTests;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.Getter;
 

@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.integrationTests.utils;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
 import io.confluent.csid.utils.ThreadUtils;
