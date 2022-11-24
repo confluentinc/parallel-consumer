@@ -30,18 +30,13 @@ public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest 
 
     private static final PCTestBroker kafkaContainer = new PCTestBroker();
 
-//    @Getter(AccessLevel.PROTECTED)
-//    private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
-
-//    @BeforeEach
-//    void open() {
-//        kcu.open();
-//    }
-//
-//    @AfterEach
-//    void close() {
-//        kcu.close();
-//    }
+    /**
+     * Not using {@link Container} lifecycle, as we want to reuse the container between tests - the Container lifecycle
+     * plugin closes the container, regardless of whether it's marked for reuse or not.
+     */
+    static {
+        kafkaContainer.start();
+    }
 
     protected List<String> produceMessages(int quantity) {
         return produceMessages(quantity, "");

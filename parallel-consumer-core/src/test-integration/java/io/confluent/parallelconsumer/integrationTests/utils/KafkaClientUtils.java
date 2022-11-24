@@ -27,6 +27,7 @@ import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -87,6 +88,11 @@ public class KafkaClientUtils implements AutoCloseable {
     private String groupId = GROUP_ID_PREFIX + nextInt();
 
     /**
+     * Track all created clients, so they can all be closed
+     */
+    private final List<Closeable> clientsCreated = new ArrayList<>();
+
+    /**
      * todo docs
      */
     private KafkaConsumer<String, String> lastConsumerConstructed;
@@ -101,6 +107,7 @@ public class KafkaClientUtils implements AutoCloseable {
         commonProps.put(BOOTSTRAP_SERVERS_CONFIG, servers);
         commonProps.put(CommonClientConfigs.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000");
         commonProps.put(CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG, "5000");
+        commonProps.put(CommonClientConfigs.CLIENT_ID_CONFIG, getClass().getSimpleName() + "-client-" + System.currentTimeMillis());
         return commonProps;
     }
 
@@ -154,6 +161,14 @@ public class KafkaClientUtils implements AutoCloseable {
             consumer.close();
         if (admin != null)
             admin.close();
+
+        for (Closeable client : clientsCreated) {
+            try {
+                client.close();
+            } catch (Exception e) {
+                log.error("Error closing client", e);
+            }
+        }
     }
 
     public enum GroupOption {
@@ -200,6 +215,7 @@ public class KafkaClientUtils implements AutoCloseable {
         properties.putAll(overridingOptions);
 
         KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(properties);
+        clientsCreated.add(kvKafkaConsumer);
         log.debug("New consumer {}", kvKafkaConsumer);
         return kvKafkaConsumer;
     }
@@ -253,7 +269,7 @@ public class KafkaClientUtils implements AutoCloseable {
         txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
 
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
-
+        clientsCreated.add(kvKafkaProducer);
         log.debug("New producer {}", kvKafkaProducer);
         return kvKafkaProducer;
     }

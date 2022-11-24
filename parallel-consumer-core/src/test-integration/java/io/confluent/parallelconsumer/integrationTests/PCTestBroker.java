@@ -118,6 +118,7 @@ public class PCTestBroker implements Startable {
         // Kafka Container overrides our env with it's configure method, so have to do some gymnastics
         var boostrapForAdmin = String.format("PLAINTEXT://%s:%s", "localhost", getKafkaContainer().getMappedPort(KAFKA_PORT));
         p.put(BOOTSTRAP_SERVERS_CONFIG, boostrapForAdmin);
+        p.put(CommonClientConfigs.CLIENT_ID_CONFIG, getClass().getSimpleName() + "-admin-" + System.currentTimeMillis());
         AdminClient admin = AdminClient.create(p);
         return admin;
     }

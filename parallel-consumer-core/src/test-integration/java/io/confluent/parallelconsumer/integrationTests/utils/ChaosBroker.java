@@ -61,13 +61,6 @@ public class ChaosBroker extends PCTestBroker {
 
     private GenericContainer<?> zookeeperContainer;
 
-//    /**
-//     * https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
-//     * https://github.com/testcontainers/testcontainers-java/pull/1781
-//     */
-//    @Getter(AccessLevel.PRIVATE)
-//    public KafkaContainer kafkaContainer = createKafkaContainer();
-
     /**
      * Toxiproxy container, which will be used as a TCP proxy
      */
@@ -175,8 +168,10 @@ public class ChaosBroker extends PCTestBroker {
 
     @Override
     public void stop() {
+        // in reverse dependence order
+        proxiedAdmin.close();
         toxiproxy.stop();
-        kafkaContainer.stop();
+        super.stop();
         zookeeperContainer.stop();
     }
 
@@ -227,9 +222,9 @@ public class ChaosBroker extends PCTestBroker {
         AlterConfigOp op = new AlterConfigOp(toxiAdvertListener, AlterConfigOp.OpType.SET);
 
         // todo reuse existing admin client? or refactor to make construction nicer
-        AdminClient admin = createDirectAdminClient();
-        admin.incrementalAlterConfigs(Map.of(configResource, List.of(op))).all().get();
-        admin.close();
+        try (AdminClient admin = createDirectAdminClient()) {
+            admin.incrementalAlterConfigs(Map.of(configResource, List.of(op))).all().get();
+        }
 
         //
         log.debug("Updated advertised listeners to point to toxi proxy port: {}, advertised listeners: {}", toxiPort, value);

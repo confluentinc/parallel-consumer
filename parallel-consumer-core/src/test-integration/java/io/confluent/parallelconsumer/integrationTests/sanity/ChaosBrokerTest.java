@@ -13,7 +13,7 @@ import java.time.Duration;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.integrationTests.PCTestBroker.CONTAINER_PREFIX;
-import static io.confluent.parallelconsumer.integrationTests.sanity.BrokerIntegrationTestTest.INTEGRATION_TEST_BASE;
+import static io.confluent.parallelconsumer.integrationTests.sanity.ChaosBrokerTest.INTEGRATION_TEST_BASE;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -23,7 +23,7 @@ import static org.awaitility.Awaitility.await;
  */
 @Order(INTEGRATION_TEST_BASE - 10)
 @Tag("toxiproxy")
-class BrokerIntegrationTestTest extends DedicatedBrokerIntegrationTest {
+class ChaosBrokerTest extends DedicatedBrokerIntegrationTest {
 
     String clusterId;
 
