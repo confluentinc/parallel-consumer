@@ -371,8 +371,8 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
         assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
-                .isInstanceOf(KafkaStreamsV1EncodingNotSupported.class)
-                .hasMessage("Kafka Streams offset metadata V1 not supported");
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
+                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
     }
 
     @SneakyThrows
@@ -395,8 +395,8 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
         assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
-                .isInstanceOf(KafkaStreamsV2EncodingNotSupported.class)
-                .hasMessage("Kafka Streams offset metadata V2 not supported");
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
+                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
     }
 
     @SneakyThrows
