@@ -26,8 +26,6 @@ import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,7 +140,6 @@ public class KafkaClientUtils implements AutoCloseable {
         return consumerProps;
     }
 
-    @BeforeEach
     public void open() {
         log.info("Setting up clients using {}...", createCommonProperties());
         consumer = this.createNewConsumer();
@@ -150,7 +147,6 @@ public class KafkaClientUtils implements AutoCloseable {
         admin = AdminClient.create(createCommonProperties());
     }
 
-    @AfterEach
     public void close() {
         if (producer != null)
             producer.close();

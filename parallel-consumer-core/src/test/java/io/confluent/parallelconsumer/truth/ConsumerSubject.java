@@ -53,6 +53,10 @@ public class ConsumerSubject extends ConsumerParentSubject {
 
     private final Duration timeout = Duration.ofSeconds(10);
 
+    public CommitHistorySubject hasCommittedToPartition(String topic) {
+        return hasCommittedToPartition(topic, 0);
+    }
+
     public CommitHistorySubject hasCommittedToPartition(String topic, int partition) {
         TopicPartition topicPartition = new TopicPartition(topic, partition);
         return hasCommittedToPartition(topicPartition);

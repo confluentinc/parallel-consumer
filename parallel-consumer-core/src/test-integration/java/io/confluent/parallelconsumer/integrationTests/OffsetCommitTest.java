@@ -4,7 +4,6 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
-import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.internal.ConsumerManager;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.SneakyThrows;
@@ -53,7 +52,6 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
     public static final int TIMEOUT = 30;
     public static final Duration TIMEOUT_DURATION = ofSeconds(TIMEOUT);
-    KafkaClientUtils kcu = getChaosBroker().getKcu();
     String topicName = getClass().getName() + "-" + System.currentTimeMillis();
     List<String> topicList = of(topicName);
     TopicPartition tp = new TopicPartition(topicName, 0);
@@ -134,7 +132,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     }
 
     private void send(int numberToSend) throws InterruptedException, ExecutionException {
-        kcu.produceMessages(topicName, numberToSend);
+        getKcu().produceMessages(topicName, numberToSend);
     }
 
     /**
@@ -144,7 +142,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     @SneakyThrows
     @Test
     void consumerOffsetCommitterConnectionLoss() {
-        kcu.getAdmin().createTopics(of(newTopic)).all().get();
+        getKcu().getAdmin().createTopics(of(newTopic)).all().get();
 
         proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
@@ -164,7 +162,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
         assertThat(all).hasSize(numberToSend); // todo remove?
 
         // create second consumer and being polling
-        secondConsumer = kcu.createNewConsumer(topicName);
+        secondConsumer = getKcu().createNewConsumer(topicName);
         secondConsumer.subscribe(topicList);
         ConsumerRecords<String, String> poll1 = secondConsumer.poll(timeout);
 
@@ -298,7 +296,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
         var options = preSettings
                 .build();
 
-        var pc = kcu.buildPc(options, null, 1);
+        var pc = getKcu().buildPc(options, null, 1);
         pc.subscribe(topicList);
         pc.poll(recordContexts -> {
             log.debug("{}", recordContexts);

@@ -112,6 +112,7 @@ public class ConsumerManager<K, V> {
             try {
                 log.debug("Committing offsets Sync with timeout: {}", timeout);
                 consumer.commitSync(offsetsToSend, timeout);
+                log.debug("Commit completed");
                 inProgress = false;
             } catch (CommitFailedException e) {
                 throw new PCCommitFailedException(e);
@@ -129,9 +130,11 @@ public class ConsumerManager<K, V> {
      * Fire and forget
      */
     public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets) {
-        OffsetCommitCallback offsetCommitCallback = (failedOffsets, exception) -> {
+        OffsetCommitCallback offsetCommitCallback = (callbackOffsets, exception) -> {
             if (exception != null) {
-                log.error(msg("Error committing offsets in async mode. Offset: {}", failedOffsets), exception);
+                log.error(msg("Error committing offsets in async mode. Offset: {}", callbackOffsets), exception);
+            } else {
+                log.debug("Offsets committed successfully: {}", callbackOffsets);
             }
         };
         consumer.commitAsync(offsets, offsetCommitCallback);

@@ -1,6 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.integrationTests.utils.ChaosBroker;
+import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.AccessLevel;
 import lombok.Getter;
 import org.testcontainers.junit.jupiter.Container;
@@ -27,6 +28,11 @@ public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest 
     @Override
     protected PCTestBroker getKafkaContainer() {
         return chaosBroker;
+    }
+
+    @Override
+    protected KafkaClientUtils getKcu() {
+        return getChaosBroker().getKcu();
     }
 
 }

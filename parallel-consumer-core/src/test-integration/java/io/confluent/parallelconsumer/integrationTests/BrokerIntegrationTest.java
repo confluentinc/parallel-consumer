@@ -57,7 +57,9 @@ public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest 
         return kafkaContainer;
     }
 
+    @Override
     protected KafkaClientUtils getKcu() {
         return kafkaContainer.getKcu();
     }
+
 }

@@ -162,6 +162,7 @@ public class ChaosBroker extends PCTestBroker {
     private void setupBrokerProxyAndClients() {
         this.brokerProxy = toxiproxy.getProxy(KAFKA_NETWORK_ALIAS, KAFKA_PROXY_PORT);
         this.proxiedAdmin = createProxiedAdminClient();
+        getKcu().open();
     }
 
     @Override
@@ -260,67 +261,30 @@ public class ChaosBroker extends PCTestBroker {
      */
     @SneakyThrows
     public void restart() {
-        log.debug("Restarting docker container");
-//        var oldMapping = StringUtils.joinWith(":", kafkaContainer.getMappedPort(KAFKA_PORT), KAFKA_PORT);
-//        var oldMapping = StringUtils.joinWith(":", KAFKA_PORT, kafkaContainer.getMappedPort(KAFKA_PORT));
+        log.warn("Restarting docker container");
+        sendStop();
+        sendStart();
+        log.warn("Finished restarting container");
+    }
 
+    /**
+     * Stops the docker container, without "stopping" the {@link KafkaContainer}.
+     */
+    public void sendStop() {
         var dockerClient = DockerClientFactory.lazyClient();
-
-//        var portBindings = kafkaContainer.getPortBindings();
-//
-//        String tag = "tag-" + System.currentTimeMillis();
-//        var repo = "tmp-kafka-delete-me";
         var kafkaId = kafkaContainer.getContainerId();
-//        dockerClient.commitCmd(kafkaId)
-//                .withRepository(repo)
-//                .withTag(tag)
-//                .withPause(true)
-////                .withPortSpecs(oldMapping)
-////                .withExposedPorts(new ExposedPorts(ExposedPort.parse(KAFKA_PORT + "")))
-////                .withVolumes(new Volumes())
-//                .exec();
-
-        log.debug("Sending container stop command");
+        log.warn("Sending container stop command");
         dockerClient.stopContainerCmd(kafkaId).exec();
+    }
 
-
-//        ThreadUtils.sleepLog(5);
-
-        // zookeeper.session.timeout.ms is 18 seconds by default
-//        ThreadUtils.sleepLog(20);
-
-//        var imageNameToUse = StringUtils.joinWith(":", repo, tag);
-
-//        kafkaContainer.setVolumesFroms(List.of());
-//        startKafkaContainer();
-
-        //
-//        dockerClient.startContainerCmd(kafkaId).exec();
-
-
-        // have to create a new container
-//        kafkaContainer = createKafkaContainer(null);
-
-//        kafkaContainer.setDockerImageName(imageNameToUse);
-
-//        kafkaContainer.setExposedPorts(of()); // remove dynamic mapping in favour of static one
-
-
-//        kafkaContainer.setPortBindings(of(oldMapping));
-//        kafkaContainer.withCreateContainerCmdModifier(cmd -> {
-//            var parse = PortBinding.parse(oldMapping);
-//            cmd.getHostConfig().withPortBindings(parse);
-//        });
-
-        log.debug("Sending container start command");
+    /**
+     * Starts the docker container, without "starting" the {@link KafkaContainer}.
+     */
+    public void sendStart() {
+        var dockerClient = DockerClientFactory.lazyClient();
+        var kafkaId = kafkaContainer.getContainerId();
+        log.warn("Sending container start command");
         dockerClient.startContainerCmd(kafkaId).exec();
-//        startKafkaContainer();
-
-        // update proxy upstream
-//        updateProxyUpstream();
-
-        //
-        log.debug("Finished restarting container: {}", kafkaId);
     }
 
     /**
@@ -334,55 +298,7 @@ public class ChaosBroker extends PCTestBroker {
         log.debug("Updating proxy upstream to point to new container: {} to new alias: {}", kafkaContainer.getContainerId(), alias);
         var newProxyUpstream = StringUtils.joinWith(":", alias, KAFKA_PROXY_PORT);
         var proxy = createProxyControlClient();
-//        proxy.disable();
         proxy.setUpstream(newProxyUpstream);
-//        proxy.enable();
-    }
-
-    /**
-     * Restart the actual broker process inside the docker container
-     */
-    @SuppressWarnings("resource")
-//    @SneakyThrows
-    protected void restartBrokerInDocker() {
-        log.warn("Restarting broker: Closing broker...");
-
-        var dockerClient = DockerClientFactory.lazyClient();
-
-//        dockerClient.killContainerCmd(kafkaContainer.getContainerId())
-
-//                .withCmd("bash", "-c", "echo 'c' | /opt/kafka/bin/kafka-server-stop.sh")
-//                .withAttachStdout(true)
-//                .withAttachStderr(true)
-//                .exec();
-
-//        dockerClient.execStartCmd(kafkaContainer.getContainerId())
-//                .withCmd("bash", "-c", "echo 'c' | /opt/kafka/bin/kafka-server-stop.sh")
-//                .withAttachStdout(true)
-//                .withAttachStderr(true)
-//                .exec(new ExecStartResultCallback(System.out, System.err))
-//                .awaitCompletion();
-//
-//        try {
-//            dockerClient.execCreateCmd(kafkaContainer.getContainerId())
-////                .withDetach(false)
-//                    .withCmd("bash", "-c", "echo 'c' | /usr/bin/kafka-server-stop")
-//                    .withAttachStderr(true)
-//                    .withAttachStdout(true)
-//                    .exec();
-////
-//            ThreadUtils.sleepLog(1);
-//
-//            dockerClient.execCreateCmd(kafkaContainer.getContainerId())
-////                .withDetach(false)
-//                    .withCmd("bash", "-c", "echo 'c' | /etc/confluent/docker/run")
-//                    .withAttachStderr(true)
-//                    .withAttachStdout(true)
-//                    .exec();
-//        } catch (Exception e) {
-//            log.error("Failed to restart broker", e);
-//        }
-
     }
 
     /**

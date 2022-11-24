@@ -2,16 +2,16 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -22,49 +22,55 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 
 /**
  * Exercises PC's reaction to the broker connection being lost of the broker being restarted, by stopping and starting
- * the broker container. The reaction is controlled by the
- * {@link ParallelConsumerOptions.RetrySettings.FailureReaction}
+ * the broker container. The reaction is controlled by the {@link RetrySettings.FailureReaction}
  */
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+//@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
-    int numberOfRecordsToProduce = 100;
+    int numberOfRecordsToProduce = 1000;
 
     AtomicInteger processedCount = new AtomicInteger();
 
     ParallelEoSStreamProcessor<String, String> pc;
 
-    @SneakyThrows
-    void setupAndWarmUp(KafkaClientUtils kcu, CommitMode commitMode) {
-        String topicName = setupTopic();
-        kcu.produceMessages(topicName, numberOfRecordsToProduce);
+    String groupId;
 
-        //
-        var retrySettings = ParallelConsumerOptions.RetrySettings.builder()
-//                .maxRetries(1)
-//                .failureReaction(RETRY_UP_TO_MAX_RETRIES)
-                .failureReaction(RETRY_FOREVER)
-                .build();
+    String topicName;
+
+
+    /**
+     * Retry forever by default
+     */
+    private void setupAndWarmUp(KafkaClientUtils kcu, CommitMode commitMode) {
+        setupAndWarmUp(kcu, commitMode, RetrySettings.builder().failureReaction(RETRY_FOREVER).build());
+    }
+
+    @SneakyThrows
+    void setupAndWarmUp(KafkaClientUtils kcu, CommitMode commitMode, RetrySettings retrySettings) {
+        topicName = setupTopic();
+        groupId = getTopic();
+        kcu.produceMessages(topicName, numberOfRecordsToProduce);
 
         var preOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .consumer(getChaosBroker().createProxiedConsumer(getTopic()))
+                .consumer(getChaosBroker().createProxiedConsumer(groupId))
                 .commitMode(commitMode)
                 .retrySettings(retrySettings);
 
         if (commitMode == CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER) {
-            preOptions.producer(kcu.createNewProducer(TRANSACTIONAL));
+            var prod = getChaosBroker().createProxiedTransactionalProducer();
+            preOptions.producer(prod);
         }
 
         var options = preOptions.build();
@@ -72,12 +78,13 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         pc = kcu.buildPc(options, NEW_GROUP, 1);
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
-            processedCount.incrementAndGet();
+            var count = processedCount.incrementAndGet();
+            log.info("Processed: offset: {} count: {}", recordContexts.offset(), count);
         });
 
         // make sure we've started consuming already before disconnecting the broker
         await().untilAtomic(processedCount, is(greaterThan(10)));
-        log.debug("Consumed 100");
+        log.debug("Consumed {}", processedCount.get());
     }
 
     /**
@@ -132,7 +139,12 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void brokerShutdown(CommitMode commitMode) {
-        setupAndWarmUp(getChaosBroker().getKcu(), commitMode);
+        var giveUpAfter3 = RetrySettings.builder()
+                .maxRetries(3)
+                .failureReaction(RETRY_UP_TO_MAX_RETRIES)
+                .build();
+
+        setupAndWarmUp(getChaosBroker().getKcu(), commitMode, giveUpAfter3);
 
         //
         getChaosBroker().stop();
@@ -156,6 +168,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
                         .isAtLeast(numberOfRecordsToProduce));
     }
 
+
     private void sleepUnlessCrashed(int secondsToWait) {
         var start = Instant.now();
         await()
@@ -177,7 +190,18 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         setupAndWarmUp(getChaosBroker().getKcu(), commitMode);
 
         //
-        getChaosBroker().restart();
+        log.debug("Restarting broker - consumed so far: {}", processedCount.get());
+
+        getChaosBroker().sendStop();
+
+        // sleep long enough that the commit timeout triggers
+        ThreadUtils.sleepLog(70);
+
+        //
+        getChaosBroker().sendStart();
+
+        //
+        pc.requestCommitAsap();
 
         //
         checkPCState();
@@ -185,13 +209,24 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         //
         var timeout = Duration.ofMinutes(1);
         log.debug("Waiting {} for PC to recover", timeout);
-        var expectedNumberToConsumer = numberOfRecordsToProduce * 2; // record get replayed because we couldn't commit because broker "died"
+
+        // will be exact if no replay, otherwise will be more
+        // as pc is not crashing - it doesn't lose any state - i.e. per rec acks
+        // we're just testing that it can recover from a broker restart
+        var expectedNumberToConsumer = numberOfRecordsToProduce;
+
         await()
                 .atMost(timeout)
                 .failFast("pc has crashed", () -> pc.isClosedOrFailed())
                 .untilAsserted(() -> Truth
                         .assertThat(processedCount.get())
                         .isAtLeast(expectedNumberToConsumer));
+
+        pc.closeDrainFirst();
+
+        ManagedTruth.assertThat(getChaosBroker().createProxiedConsumer(groupId))
+                .hasCommittedToPartition(topicName)
+                .offset(expectedNumberToConsumer);
     }
 
 }

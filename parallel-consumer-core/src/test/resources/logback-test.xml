@@ -33,24 +33,24 @@
 
     <!-- primary -->
     <logger name="io.confluent.parallelconsumer" level="info"/>
-    <logger name="io.confluent.parallelconsumer" level="debug"/>
+    <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer" level="trace"/>-->
 
-    <logger name="io.confluent.csid" level="debug"/>
-    <logger name="io.confluent.csid.utils.ThreadUtils" level="trace"/>
+    <!--    <logger name="io.confluent.csid" level="debug"/>-->
+    <!--    <logger name="io.confluent.csid.utils.ThreadUtils" level="trace"/>-->
 
     <logger name="org.apache.kafka" level="warn"/>
 
     <!-- docker logs: must be debug to get info level from containers (by design) -->
-    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="debug"/>
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest" level="debug"/>-->
     <!-- for debugging container logging -->
-    <logger name="io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer" level="debug"/>
+    <!--    <logger name="io.confluent.csid.testcontainers.FilteredTestContainerSlf4jLogConsumer" level="debug"/>-->
 
-    <logger name="org.testcontainers.shaded.com.github.dockerjava" level="debug"/>"
+    <!--    <logger name="org.testcontainers.shaded.com.github.dockerjava" level="debug"/>"-->
 
     <!-- tests -->
-    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerDisconnectTest" level="debug"/>
-    <logger name="io.confluent.parallelconsumer.integrationTests.OffsetCommitTest" level="debug"/>
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.BrokerDisconnectTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.integrationTests.OffsetCommitTest" level="debug"/>-->
 
 
     <!--    <logger name="org.apache.kafka.clients.producer" level="trace"/>-->

@@ -44,7 +44,7 @@ public class PCTestBroker implements Startable {
     @Getter(AccessLevel.PROTECTED)
     protected final KafkaContainer kafkaContainer;
 
-    private KafkaClientUtils kcu;
+    private final KafkaClientUtils kcu;
 
     public PCTestBroker() {
         this(null);
@@ -126,23 +126,25 @@ public class PCTestBroker implements Startable {
 
     @Override
     public void start() {
-        log.debug("Compacting broker started {}", getDirectBootstrapServers());
+        log.debug("Broker starting {}", getDirectBootstrapServers());
         kafkaContainer.start();
         followContainerLogs(kafkaContainer, "KAFKA");
+        kcu.open();
+        log.debug("Broker started {}", getDirectBootstrapServers());
     }
 
     @Override
     public void stop() {
         kafkaContainer.stop();
+        kcu.close();
     }
 
     @SneakyThrows
     protected CreateTopicsResult ensureTopic(String topic, int numPartitions) {
         log.debug("Ensuring topic exists on broker: {}...", topic);
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
-        AdminClient admin = kcu.getAdmin();
 
-        CreateTopicsResult topics = admin.createTopics(of(e1));
+        CreateTopicsResult topics = getKcu().getAdmin().createTopics(of(e1));
         try {
             Void all = topics.all().get(1, TimeUnit.SECONDS);
         } catch (Exception e) {

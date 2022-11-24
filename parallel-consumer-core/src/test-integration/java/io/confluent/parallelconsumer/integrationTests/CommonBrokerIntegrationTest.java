@@ -1,5 +1,6 @@
 package io.confluent.parallelconsumer.integrationTests;
 
+import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import lombok.Getter;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -52,5 +53,7 @@ public abstract class CommonBrokerIntegrationTest {
     }
 
     protected abstract PCTestBroker getKafkaContainer();
+
+    protected abstract KafkaClientUtils getKcu();
 
 }
