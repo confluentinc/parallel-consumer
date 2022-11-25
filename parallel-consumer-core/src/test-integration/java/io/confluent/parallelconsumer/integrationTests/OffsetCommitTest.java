@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import com.google.common.truth.Truth;
+import io.confluent.csid.utils.BackportUtils;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
@@ -336,7 +337,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
         var delay = TIMEOUT;
         await().failFast(() -> pc.isClosedOrFailed() || processedCount.get() > 1)
                 .pollDelay(ofSeconds(delay))
-                .timeout(ofSeconds(delay + DEFAULT_API_TIMEOUT.toSeconds() * 2)) // longer than the commit timeout
+                .timeout(ofSeconds(delay + BackportUtils.toSeconds(DEFAULT_API_TIMEOUT) * 2)) // longer than the commit timeout
                 .untilAsserted(() -> {
                     Truth.assertWithMessage("should still only be one record processed")
                             .that(processedCount.get()).isEqualTo(1);

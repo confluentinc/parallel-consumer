@@ -27,10 +27,13 @@ import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.ToxiproxyContainer;
 import org.testcontainers.utility.DockerImageName;
+import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Properties;
 
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -262,7 +265,7 @@ public class ChaosBroker extends PCTestBroker {
 
         // todo reuse existing admin client? or refactor to make construction nicer
         try (AdminClient admin = createDirectAdminClient()) {
-            admin.incrementalAlterConfigs(Map.of(configResource, List.of(op))).all().get();
+            admin.incrementalAlterConfigs(UniMaps.of(configResource, UniLists.of(op))).all().get();
         }
 
         //

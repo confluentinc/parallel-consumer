@@ -64,7 +64,7 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
 
         var level = extractLevelFromLogString(utf8String);
 
-        if (level.isEmpty()) {
+        if (!level.isPresent()) {
             super.accept(outputFrame);
             return;
         }
@@ -74,7 +74,7 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
                 break;
             case STDOUT:
             case STDERR:
-                loggerToUse.atLevel(level.get()).log("{}{}", prefix.isEmpty() ? "" : (prefix + ": "), StringUtils.chomp(utf8String));
+                loggerToUse.atLevel(level.get()).log("{}{}", StringUtils.isEmpty(prefix) ? "" : (prefix + ": "), StringUtils.chomp(utf8String));
                 break;
             default:
                 throw new IllegalArgumentException("Unexpected outputType " + outputType);
@@ -82,7 +82,7 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
     }
 
     private Optional<Level> extractLevelFromLogString(String logString) {
-        if (logString.isBlank())
+        if (StringUtils.isBlank(logString))
             return Optional.empty();
 
         Map<Level, Integer> levelScores = new HashMap<>();
@@ -97,7 +97,7 @@ public class FilteredTestContainerSlf4jLogConsumer extends Slf4jLogConsumer {
                 .filter(levelIntegerEntry -> levelIntegerEntry.getValue() >= 0)
                 .min(Map.Entry.comparingByValue()); // first position is lowest
 
-        if (maxEntry.isEmpty()) {
+        if (!maxEntry.isPresent()) {
             return Optional.empty();
         }
 
