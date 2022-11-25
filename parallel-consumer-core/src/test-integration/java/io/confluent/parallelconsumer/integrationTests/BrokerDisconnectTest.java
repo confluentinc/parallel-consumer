@@ -167,7 +167,10 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     }
 
     private void checkPCState() {
-        assertThat(pc).isNotClosedOrFailed();
+        if (pc.isClosedOrFailed()) {
+            assertThat(pc).getFailureCause().isNull();
+            assertThat(pc).isNotClosedOrFailed();
+        }
     }
 
     /**
@@ -178,7 +181,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void brokerShutdown(CommitMode commitMode) {
-        processDelay = Duration.ofMillis(100);
+        processDelay = Duration.ofMillis(1000);
 
         var giveUpAfter3 = RetrySettings.builder()
                 .maxRetries(3)
