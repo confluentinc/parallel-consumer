@@ -412,7 +412,7 @@ class PartitionStateCommittedOffsetIT extends DedicatedBrokerIntegrationTest {
         this.offsetResetStrategy = offsetResetPolicy;
         try (
                 PCTestBroker compactingKafkaBroker = setupCompactingKafkaBroker();
-                KafkaClientUtils clientUtils = compactingKafkaBroker.createKcu();
+                KafkaClientUtils clientUtils = compactingKafkaBroker.createKcuAndOpen();
         ) {
             clientUtils.setOffsetResetPolicy(offsetResetPolicy);
             clientUtils.open();

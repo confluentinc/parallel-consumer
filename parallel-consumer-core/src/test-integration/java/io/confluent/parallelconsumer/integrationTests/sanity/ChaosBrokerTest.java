@@ -34,7 +34,7 @@ class ChaosBrokerTest extends DedicatedBrokerIntegrationTest {
     @SneakyThrows
     @Test
     void restartingBroker() {
-        try (AdminClient admin = getChaosBroker().createProxiedAdminClient()) {
+        try (AdminClient admin = getKcu().createAdmin()) {
             testConnection(admin);
             getChaosBroker().restart();
             testConnection(admin);

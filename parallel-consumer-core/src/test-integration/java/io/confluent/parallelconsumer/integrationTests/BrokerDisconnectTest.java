@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.net.ConnectException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,6 +29,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_FOREVER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
@@ -68,12 +70,12 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
         var preOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .consumer(getChaosBroker().createProxiedConsumer(groupId))
+                .consumer(getKcu().createNewConsumer(groupId))
                 .commitMode(commitMode)
                 .retrySettings(retrySettings);
 
         if (commitMode == CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER) {
-            var prod = getChaosBroker().createProxiedTransactionalProducer();
+            var prod = getKcu().<String, String>createNewProducer(TRANSACTIONAL);
             preOptions.producer(prod);
         }
 
@@ -228,7 +230,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
         pc.closeDrainFirst();
 
-        try (var proxiedConsumer = getChaosBroker().createProxiedConsumer(groupId)) {
+        try (var proxiedConsumer = getKcu().createNewConsumer(groupId)) {
             ManagedTruth.assertThat(proxiedConsumer)
                     .hasCommittedToPartition(topicName)
                     .offset(expectedNumberToConsumer);

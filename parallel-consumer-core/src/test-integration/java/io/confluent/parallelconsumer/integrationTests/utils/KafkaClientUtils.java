@@ -159,14 +159,14 @@ public class KafkaClientUtils implements AutoCloseable {
     }
 
     public void open() {
-        var commonProperties = createCommonProperties();
-        log.info("Setting up clients using {}...", commonProperties);
+        log.info("Setting up clients...");
         consumer = this.createNewConsumer();
         producer = this.createNewProducer(false);
-        admin = createAdmin(commonProperties);
+        admin = createAdmin();
     }
 
-    private AdminClient createAdmin(Properties commonProperties) {
+    public AdminClient createAdmin() {
+        var commonProperties = createCommonProperties();
         injectClientName(commonProperties, "admin");
         return AdminClient.create(commonProperties);
     }
@@ -183,13 +183,14 @@ public class KafkaClientUtils implements AutoCloseable {
         if (admin != null)
             admin.close();
 
-        for (Closeable client : clientsCreated) {
-            try {
-                client.close();
-            } catch (Exception e) {
-                log.error("Error closing client", e);
-            }
-        }
+        // todo resolve
+//        for (Closeable client : clientsCreated) {
+//            try {
+//                client.close();
+//            } catch (Exception e) {
+//                log.error("Error closing client", e);
+//            }
+//        }
     }
 
     public enum GroupOption {

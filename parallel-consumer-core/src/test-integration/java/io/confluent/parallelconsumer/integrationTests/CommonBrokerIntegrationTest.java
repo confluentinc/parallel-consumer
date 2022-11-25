@@ -18,12 +18,15 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.apache.commons.lang3.RandomUtils.nextInt;
 
 /**
+ * Common base for all Broker related integration tests
+ *
+ * @param <BROKER_TYPE> The type of PCTestBroker to use
  * @author Antony Stubbs
  * @see DedicatedBrokerIntegrationTest
  * @see BrokerIntegrationTest
  */
 @Timeout(120)
-public abstract class CommonBrokerIntegrationTest<BROKER extends PCTestBroker> {
+public abstract class CommonBrokerIntegrationTest<BROKER_TYPE extends PCTestBroker> {
 
     /**
      * When using {@link org.junit.jupiter.api.Order} to order tests, this is the prefix to use to ensure integration
@@ -76,7 +79,7 @@ public abstract class CommonBrokerIntegrationTest<BROKER extends PCTestBroker> {
         getKafkaContainer().ensureTopic(name, numPartitionsToUse);
     }
 
-    protected abstract BROKER getKafkaContainer();
+    protected abstract BROKER_TYPE getKafkaContainer();
 
     protected abstract KafkaClientUtils getKcu();
 

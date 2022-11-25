@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.integrationTests;
  */
 
 import io.confluent.parallelconsumer.integrationTests.utils.ChaosBroker;
-import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
+import io.confluent.parallelconsumer.integrationTests.utils.ProxiedKafkaClientUtils;
 import lombok.AccessLevel;
 import lombok.Getter;
 import org.testcontainers.junit.jupiter.Container;
@@ -22,7 +22,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest<ChaosBroker> {
 
     @Getter
-    private final KafkaClientUtils kcu;
+    private final ProxiedKafkaClientUtils kcu;
 
     @Container
     @Getter(AccessLevel.PROTECTED)
@@ -30,7 +30,7 @@ public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest<
 
     public DedicatedBrokerIntegrationTest() {
         this.chaosBroker = new ChaosBroker();
-        this.kcu = new KafkaClientUtils(chaosBroker);
+        this.kcu = new ProxiedKafkaClientUtils(chaosBroker);
     }
 
     @Override

@@ -19,6 +19,7 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,6 +40,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySetting
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.BOTH;
 import static io.confluent.parallelconsumer.integrationTests.OffsetCommitTest.AssignmentState.FIRST;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GROUP_SESSION_TIMEOUT_MS;
+import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
@@ -67,7 +69,17 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     Duration timeout = ofSeconds(1);
     int numberToSend = 5;
     KafkaConsumer<String, String> proxiedConsumer;
-    KafkaConsumer<String, String> secondConsumer;
+    KafkaConsumer<String, String> directConsumer;
+
+    @AfterEach
+    void tearDown() {
+        if (proxiedConsumer != null) {
+            proxiedConsumer.close();
+        }
+        if (directConsumer != null) {
+            directConsumer.close();
+        }
+    }
 
 
     /**
@@ -78,7 +90,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     @SneakyThrows
     @Test
     void canTerminateConsumerConnection() {
-        proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
+        proxiedConsumer = getKcu().createNewConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
         proxiedConsumer.enforceRebalance(); // todo remove?
 
@@ -120,7 +132,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
      */
     @SneakyThrows
     private void logAdvertisedListeners() {
-        var configResourceConfigMap = getChaosBroker().getProxiedAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
+        var configResourceConfigMap = getKcu().getAdmin().describeConfigs(of(new ConfigResource(ConfigResource.Type.BROKER, "1"))).all().get();
         configResourceConfigMap.values().stream().findFirst().get().entries().stream().filter(x -> x.name().contains("advertise")).forEach(e -> {
             log.info("Config: {} = {}", e.name(), e.value());
         });
@@ -150,7 +162,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     void consumerOffsetCommitterConnectionLoss() {
         getKcu().getAdmin().createTopics(of(newTopic)).all().get();
 
-        proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
+        proxiedConsumer = getKcu().createNewConsumer(topicName);
         proxiedConsumer.subscribe(topicList);
         proxiedConsumer.enforceRebalance(); // todo remove
 
@@ -168,9 +180,9 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
         assertThat(all).hasSize(numberToSend); // todo remove?
 
         // create second consumer and being polling
-        secondConsumer = getKcu().createNewConsumer(topicName);
-        secondConsumer.subscribe(topicList);
-        ConsumerRecords<String, String> poll1 = secondConsumer.poll(timeout);
+        directConsumer = getKcu().createNewDirectConsumer(topicName);
+        directConsumer.subscribe(topicList);
+        ConsumerRecords<String, String> poll1 = directConsumer.poll(timeout);
 
         // check assignment
         assertAssignment(FIRST);
@@ -181,7 +193,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
         // check assignment
         assertAssignment(FIRST);
         assertThat(proxiedConsumer.assignment()).containsExactly(tp);
-        assertThat(secondConsumer.assignment()).isEmpty();
+        assertThat(directConsumer.assignment()).isEmpty();
 
         //
         getChaosBroker().killProxyConnection();
@@ -191,11 +203,11 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
         // check assignment
         assertThat(proxiedConsumer.assignment()).containsExactly(tp);
-        assertThat(secondConsumer.assignment()).isEmpty();
+        assertThat(directConsumer.assignment()).isEmpty();
 
         // commit second
         try {
-            catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
+            catchAndWrap(() -> directConsumer.commitSync(offsetZeroMetaTp));
         } catch (Exception e) {
             log.error("{}", ExceptionUtils.getStackTrace(e));
         }
@@ -205,7 +217,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
         // try poll
         var poll3 = proxiedConsumer.poll(timeout);
-        var poll4 = secondConsumer.poll(timeout);
+        var poll4 = directConsumer.poll(timeout);
         assertThat(poll3).isEmpty();
         assertThat(poll4).hasSize(numberToSend);
 
@@ -217,7 +229,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
         // try to commit both
         assertThrows(org.apache.kafka.common.errors.TimeoutException.class, () -> proxiedConsumer.commitSync(offsetZeroMetaTp));
-        catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
+        catchAndWrap(() -> directConsumer.commitSync(offsetZeroMetaTp));
 
         // check assignment
         assertAssignment(BOTH);
@@ -227,19 +239,19 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
         // try to commit both
         assertThrows(CommitFailedException.class, () -> proxiedConsumer.commitSync(offsetZeroMetaTp));
-        catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
+        catchAndWrap(() -> directConsumer.commitSync(offsetZeroMetaTp));
 
         // rebalance has occurred - moves back to first consumer
         await().atMost(Duration.ofMinutes(1))
                 .untilAsserted(() -> {
                     proxiedConsumer.poll(timeout);
-                    secondConsumer.poll(timeout);
+                    directConsumer.poll(timeout);
                     assertAssignment(FIRST);
                 });
 
         // commit both
         catchAndWrap(() -> proxiedConsumer.commitSync(offsetZeroMetaTp));
-        catchAndWrap(() -> secondConsumer.commitSync(offsetZeroMetaTp));
+        catchAndWrap(() -> directConsumer.commitSync(offsetZeroMetaTp));
 
         // check assignment
         assertAssignment(FIRST);
@@ -254,7 +266,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
 
     private void assertAssignment(AssignmentState assignment) {
         var firstAssignment = proxiedConsumer.assignment();
-        var secondAssignment = secondConsumer.assignment();
+        var secondAssignment = directConsumer.assignment();
         log.debug("firstAssignment: {}, secondAssignment: {}", firstAssignment, secondAssignment);
         switch (assignment) {
             case FIRST -> {
@@ -283,7 +295,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void parallelConsumerBrokerReconnectionTest(CommitMode commitMode) {
-        proxiedConsumer = getChaosBroker().createProxiedConsumer(topicName);
+        proxiedConsumer = getKcu().createNewConsumer(topicName);
         var processedCount = new AtomicInteger();
 
         final ParallelConsumerOptions.RetrySettings retrySettings = ParallelConsumerOptions.RetrySettings.builder()
@@ -296,7 +308,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
                 .retrySettings(retrySettings);
 
         if (commitMode == PERIODIC_TRANSACTIONAL_PRODUCER) {
-            preSettings.producer(getChaosBroker().createProxiedTransactionalProducer());
+            preSettings.producer(getKcu().createNewProducer(TRANSACTIONAL));
         }
 
         var options = preSettings

@@ -15,8 +15,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.clients.admin.ConfigEntry;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
@@ -33,12 +31,9 @@ import pl.tlinkowski.unij.api.UniMaps;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Properties;
 
-import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
-import static org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG;
 import static org.testcontainers.containers.KafkaContainer.KAFKA_PORT;
 import static org.testcontainers.containers.KafkaContainer.ZOOKEEPER_PORT;
 
@@ -52,7 +47,7 @@ import static org.testcontainers.containers.KafkaContainer.ZOOKEEPER_PORT;
  * @see #killProxyConnectionForSomeTime
  */
 @Slf4j
-public class ChaosBroker extends PCTestBroker {
+public class ChaosBroker extends PCTestBroker<ProxiedKafkaClientUtils> {
 
     public static final String ZOOKEEPER_NETWORK_ALIAS = "zookeeper";
 
@@ -87,7 +82,7 @@ public class ChaosBroker extends PCTestBroker {
     /**
      * An admin client that goes through the proxy, and so will automatically reconnect after restarts.
      */
-    @Getter(AccessLevel.PUBLIC)
+    @Getter(AccessLevel.PROTECTED)
     private AdminClient proxiedAdmin;
 
     public ChaosBroker(String logSegmentBytes) {
@@ -104,6 +99,11 @@ public class ChaosBroker extends PCTestBroker {
         super();
 
         initToxiproxy();
+    }
+
+    @Override
+    protected ProxiedKafkaClientUtils createClientUtils() {
+        return new ProxiedKafkaClientUtils(this);
     }
 
     @Override
@@ -204,8 +204,9 @@ public class ChaosBroker extends PCTestBroker {
 
     private void setupBrokerProxyAndClients() {
         this.brokerProxy = toxiproxy.getProxy(KAFKA_NETWORK_ALIAS, KAFKA_PROXY_PORT);
-        this.proxiedAdmin = createProxiedAdminClient();
-        getKcu().open();
+        var kcu = getKcu();
+        this.proxiedAdmin = kcu.createAdmin();
+        kcu.open();
     }
 
     @Override
@@ -354,27 +355,6 @@ public class ChaosBroker extends PCTestBroker {
         log.warn("Killing first consumer connection via proxy disable"); // todo debug
         Proxy proxy = createProxyControlClient();
         proxy.disable();
-    }
-
-    public AdminClient createProxiedAdminClient() {
-        var proxiedBootstrapServers = getProxiedBootstrapServers();
-        var properties = new Properties();
-        properties.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return AdminClient.create(properties);
-    }
-
-    public KafkaConsumer<String, String> createProxiedConsumer(String groupId) {
-        var overridingOptions = new Properties();
-        var proxiedBootstrapServers = getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return getKcu().createNewConsumer(groupId, overridingOptions);
-    }
-
-    public KafkaProducer<String, String> createProxiedTransactionalProducer() {
-        var overridingOptions = new Properties();
-        var proxiedBootstrapServers = getProxiedBootstrapServers();
-        overridingOptions.put(BOOTSTRAP_SERVERS_CONFIG, proxiedBootstrapServers);
-        return getKcu().createNewProducer(TRANSACTIONAL, overridingOptions);
     }
 
     protected Proxy createProxyControlClient() throws IOException {

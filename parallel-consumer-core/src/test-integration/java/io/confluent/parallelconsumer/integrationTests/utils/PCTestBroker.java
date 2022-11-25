@@ -37,7 +37,7 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  * @author Antony Stubbs
  */
 @Slf4j
-public class PCTestBroker implements Startable {
+public class PCTestBroker<UTILS_TYPE extends KafkaClientUtils> implements Startable {
 
     public static final int KAFKA_INTERNAL_PORT = KAFKA_PORT - 1;
 
@@ -48,7 +48,7 @@ public class PCTestBroker implements Startable {
     @Getter(AccessLevel.PROTECTED)
     protected final KafkaContainer kafkaContainer;
 
-    private KafkaClientUtils kcu;
+    private final UTILS_TYPE kcu;
 
     public PCTestBroker() {
         this(null);
@@ -56,7 +56,23 @@ public class PCTestBroker implements Startable {
 
     public PCTestBroker(@Nullable String logSegmentSize) {
         kafkaContainer = createKafkaContainer(logSegmentSize);
-        kcu = new KafkaClientUtils(this);
+        kcu = createClientUtils();
+    }
+
+    protected UTILS_TYPE createClientUtils() {
+        // todo remove cast
+        return (UTILS_TYPE) new KafkaClientUtils(this);
+//        return new KafkaClientUtils(this);
+    }
+
+    public UTILS_TYPE createKcuAndOpen() {
+        var kafkaClientUtils = createClientUtils();
+        kafkaClientUtils.open();
+        return kafkaClientUtils;
+    }
+
+    protected UTILS_TYPE getKcu() {
+        return kcu;
     }
 
     /**
@@ -174,15 +190,6 @@ public class PCTestBroker implements Startable {
         return kafkaContainer.isRunning();
     }
 
-    protected KafkaClientUtils getKcu() {
-        return kcu;
-    }
-
-    public KafkaClientUtils createKcu() {
-        var kafkaClientUtils = new KafkaClientUtils(this);
-        kafkaClientUtils.open();
-        return kafkaClientUtils;
-    }
 
     public String getDirectBootstrapServers() {
         var bootstraps = String.format("PLAINTEXT://%s:%s", getDirectHost(), kafkaContainer.getMappedPort(KAFKA_PORT));
