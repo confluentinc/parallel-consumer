@@ -47,6 +47,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest {
     int maxPoll = 500; // 500 is the kafka default
 
     CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_SYNC;
+//    CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 
     ProcessingOrder order = ProcessingOrder.KEY;
 
@@ -84,7 +85,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest {
                         "(expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(60))
+            waitAtMost(ofSeconds(40)) // 25 seconds on M1 dedicated run
                     // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
                     // .failFast( () -> pcThree.getFailureCause(), () -> pcThree.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .failFast("PC died - check logs", () -> pcThree.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761

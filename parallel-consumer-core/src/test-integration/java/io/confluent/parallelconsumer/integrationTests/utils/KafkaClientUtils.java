@@ -139,9 +139,9 @@ public class KafkaClientUtils implements AutoCloseable {
         //    consumerProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10);
         //    consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 100);
 
-        // make sure we can download lots of records if they're small. Default is 500
+        // make sure we can download lots of records if they're small. Default is 500 (too few)
 //        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1_000_000);
-//        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+        consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
 
 
         consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, GROUP_SESSION_TIMEOUT_MS);
@@ -349,7 +349,9 @@ public class KafkaClientUtils implements AutoCloseable {
     public ParallelEoSStreamProcessor<String, String> buildPc(ParallelConsumerOptions<String, String> options, GroupOption groupOption, int maxPoll) {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
-        consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 1);
+
+        // todo test is this needed for? make specific to that test
+        //consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 1);
 
         if (options.getConsumer() == null) {
             boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);

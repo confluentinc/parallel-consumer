@@ -112,7 +112,7 @@ public class PCTestBroker implements Startable {
     public void start() {
         log.debug("Broker starting...");
         kafkaContainer.start();
-        followContainerLogs(kafkaContainer, "KAFKA");
+//        followContainerLogs(kafkaContainer, "KAFKA");
         injectContainerPrefix(kafkaContainer);
         kcu.open();
         log.debug("Broker started {}", getDirectBootstrapServers());
