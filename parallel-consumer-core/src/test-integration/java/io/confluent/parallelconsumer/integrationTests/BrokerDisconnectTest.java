@@ -178,7 +178,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void brokerShutdown(CommitMode commitMode) {
-        processDelay = Duration.ofMillis(10);
+        processDelay = Duration.ofMillis(100);
 
         var giveUpAfter3 = RetrySettings.builder()
                 .maxRetries(3)
