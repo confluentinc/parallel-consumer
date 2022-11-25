@@ -339,6 +339,9 @@ public class KafkaClientUtils implements AutoCloseable {
         return buildPc(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .commitMode(commitMode)
+                // todo resolve - magic number
+                // 100 27s, 200 23s
+                .maxConcurrency(100)
                 .build(), groupOption, maxPoll);
     }
 
