@@ -170,26 +170,25 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         //
         checkPCState();
 
-//        // wait a while
-//        int secondsToWait = 120;
-//        sleepUnlessCrashed(secondsToWait);
-//
-//        //
-//        checkPCState();
-
         // should crash itself after giving up offset commit
         await()
-//                .atMost(Duration.ofMinutes(1))
-//                .pollInterval(Duration.ofSeconds(1))
-//                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                .atMost(Duration.ofMinutes(1))
                 .untilAsserted(() ->
-//                        Truth.assertThat(processedCount.get())
-//                        .isAtLeast(numberOfRecordsToProduce)
                         {
                             var failureCause = assertThat(pc).getFailureCause();
                             failureCause.isNotNull();
                             failureCause.isInstanceOf(ParallelConsumerException.class);
-                            failureCause.hasCauseThat().hasCauseThat().hasMessageThat().contains("Retries exhausted");
+                            switch (commitMode) {
+                                case PERIODIC_TRANSACTIONAL_PRODUCER -> {
+                                    failureCause.hasMessageThat().contains("while awaiting AddOffsetsToTxn");
+                                }
+                                case PERIODIC_CONSUMER_SYNC -> {
+                                    failureCause.hasMessageThat().contains("Timeout committing offsets");
+                                }
+                                case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
+                                    failureCause.hasCauseThat().hasCauseThat().hasMessageThat().contains("Retries exhausted");
+                                }
+                            }
                         }
                 );
     }

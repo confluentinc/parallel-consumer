@@ -24,7 +24,6 @@ import java.util.concurrent.*;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
-import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
 
 /**
  * Committer that uses the Kafka Consumer to commit either synchronously or asynchronously
@@ -213,7 +212,6 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                                             retrySettings),
                                     error);
                         } else {
-                            Duration commitTimeout = DEFAULT_API_TIMEOUT;
                             log.warn("Timeout ({}) committing offsets, will retry (failed: {} times, settings: {})",
                                     commitTimeout,
                                     failedCommitAttempts,

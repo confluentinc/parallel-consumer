@@ -115,7 +115,7 @@ public class ConsumerManager<K, V> {
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {
-            Duration timeout = DEFAULT_API_TIMEOUT;
+            Duration timeout = options.getOffsetCommitTimeout();
             try {
                 log.debug("Committing offsets Sync with timeout: {}", timeout);
                 consumer.commitSync(offsetsToSend, timeout);
