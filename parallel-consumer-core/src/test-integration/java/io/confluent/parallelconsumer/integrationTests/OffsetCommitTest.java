@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -62,7 +63,7 @@ class OffsetCommitTest extends DedicatedBrokerIntegrationTest {
     TopicPartition tp = new TopicPartition(topicName, 0);
     OffsetAndMetadata offsetZeroMeta = new OffsetAndMetadata(0);
     NewTopic newTopic = new NewTopic(topicName, numPartitions, (short) 1);
-    Map<TopicPartition, OffsetAndMetadata> offsetZeroMetaTp = Map.of(tp, offsetZeroMeta);
+    Map<TopicPartition, OffsetAndMetadata> offsetZeroMetaTp = UniMaps.of(tp, offsetZeroMeta);
     Duration timeout = ofSeconds(1);
     int numberToSend = 5;
     KafkaConsumer<String, String> proxiedConsumer;
