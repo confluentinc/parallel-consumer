@@ -151,6 +151,7 @@ public class ConsumerManager<K, V> {
                             offsets,
                             sequentialAsyncCommitFailures,
                             retrySettings);
+                    sequentialAsyncCommitFailures = 0; // reset
                     throw new InternalRuntimeException(new PCCommitFailedException(msg, exception));
                 } else {
                     log.error(msg("Error committing offsets in async mode, failure count: {}. Offset: {}",

@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.net.ConnectException;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -29,6 +28,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySetting
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings.FailureReaction.RETRY_UP_TO_MAX_RETRIES;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.TRANSACTIONAL;
+import static io.confluent.parallelconsumer.internal.ConsumerManager.DEFAULT_API_TIMEOUT;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.greaterThan;
 import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
@@ -43,6 +43,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 @Timeout(180)
 class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
+    public static final Duration TEST_COMMIT_TIMEOUT = Duration.ofSeconds(10);
     int numberOfRecordsToProduce = 1000;
 
     AtomicInteger processedCount = new AtomicInteger();
@@ -79,7 +80,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
         var preOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .offsetCommitTimeout(Duration.ofSeconds(10)) // aggressive to speed up tests
+                .offsetCommitTimeout(TEST_COMMIT_TIMEOUT) // aggressive to speed up tests
                 .consumer(getKcu().createNewConsumer(groupId))
                 .commitMode(commitMode)
                 .retrySettings(retrySettings);
@@ -218,12 +219,16 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     /**
      * Stops, then starts the broker container again. Makes sure PC can recover, unless using transactional mode, in
      * which case PC will crash as the Transactional Producer needs to be reinitialised across a broker restart.
+     * <p>
+     * {@link CommitMode#PERIODIC_CONSUMER_ASYNCHRONOUS} version of this test might sensitive to timing, as we have to
+     * get it right, so it continues trying to commit as state becomes dirty, long enough so that it lasts over the
+     * restart sleep.
      */
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
     void brokerRestartTest(CommitMode commitMode) {
-        processDelay = Duration.ofSeconds(1);
+        processDelay = Duration.ofMillis(1000);
 
         setupAndWarmUp(commitMode);
 
@@ -233,7 +238,12 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         getChaosBroker().sendStop();
 
         // sleep long enough that the commit timeout triggers
-        ThreadUtils.sleepLog(70);
+        var duration = switch (commitMode) {
+            // TX producer can't have its timeouts easily changed
+            case PERIODIC_TRANSACTIONAL_PRODUCER -> DEFAULT_API_TIMEOUT.plusSeconds(10);
+            default -> TEST_COMMIT_TIMEOUT.multipliedBy(3);
+        };
+        ThreadUtils.sleepLog(duration);
 
         //
         getChaosBroker().sendStart();
@@ -257,7 +267,9 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
                                 {
                                     var failureCause = assertThat(pc).getFailureCause();
                                     failureCause.isNotNull();
-                                    failureCause.isInstanceOf(ConnectException.class);
+                                    failureCause.isInstanceOf(ParallelConsumerException.class);
+                                    failureCause.hasMessageThat().contains("Timeout expired");
+                                    failureCause.hasMessageThat().contains("awaiting AddOffsetsToTxn");
                                 }
                         );
             }
