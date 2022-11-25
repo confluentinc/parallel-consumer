@@ -66,6 +66,7 @@ public class KafkaClientUtils implements AutoCloseable {
      * @see PCTestBroker#createKafkaContainer
      */
     public static final int GROUP_SESSION_TIMEOUT_MS = 6000;
+    public static final int DEFAULT_MAX_CONCURRENCY = 100;
 
     private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
@@ -356,9 +357,7 @@ public class KafkaClientUtils implements AutoCloseable {
         return buildPc(ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .commitMode(commitMode)
-                // todo resolve - magic number
-                // 100 27s, 200 23s
-                .maxConcurrency(100)
+                .maxConcurrency(DEFAULT_MAX_CONCURRENCY)
                 .build(), groupOption, maxPoll);
     }
 
