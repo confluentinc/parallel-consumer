@@ -60,7 +60,12 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public static final String GROUP_ID_PREFIX = "group-1-";
 
-    public static final int GROUP_SESSION_TIMEOUT_MS = 5000;
+    /**
+     * Default min is 6000
+     *
+     * @see PCTestBroker#createKafkaContainer
+     */
+    public static final int GROUP_SESSION_TIMEOUT_MS = 6000;
 
     private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
 
@@ -109,12 +114,13 @@ public class KafkaClientUtils implements AutoCloseable {
         commonProps.put(BOOTSTRAP_SERVERS_CONFIG, servers);
         commonProps.put(CommonClientConfigs.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000");
         commonProps.put(CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG, "5000");
-        commonProps.put(CommonClientConfigs.CLIENT_ID_CONFIG, getClass().getSimpleName() + "-client-" + System.currentTimeMillis());
         return commonProps;
     }
 
     private Properties setupProducerProps() {
         var producerProps = createCommonProperties();
+
+        injectClientName(producerProps, "producer");
 
         producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
@@ -124,6 +130,8 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public Properties setupConsumerProps(String groupIdToUse) {
         var consumerProps = createCommonProperties();
+
+        injectClientName(consumerProps, "consumer");
 
         //
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupIdToUse);
@@ -154,7 +162,16 @@ public class KafkaClientUtils implements AutoCloseable {
         log.info("Setting up clients using {}...", commonProperties);
         consumer = this.createNewConsumer();
         producer = this.createNewProducer(false);
-        admin = AdminClient.create(commonProperties);
+        admin = createAdmin(commonProperties);
+    }
+
+    private AdminClient createAdmin(Properties commonProperties) {
+        injectClientName(commonProperties, "admin");
+        return AdminClient.create(commonProperties);
+    }
+
+    private void injectClientName(Properties commonProperties, String name) {
+        commonProperties.put(CommonClientConfigs.CLIENT_ID_CONFIG, getClass().getSimpleName() + "-" + name + "-" + System.currentTimeMillis());
     }
 
     public void close() {

@@ -15,6 +15,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -38,6 +39,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 @Tag("disconnect")
 @Tag("toxiproxy")
 @Slf4j
+@Timeout(180)
 class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
     int numberOfRecordsToProduce = 1000;
@@ -81,7 +83,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         pc.subscribe(topicName);
         pc.poll(recordContexts -> {
             var count = processedCount.incrementAndGet();
-            log.info("Processed: offset: {} count: {}", recordContexts.offset(), count);
+            log.debug("Processed: offset: {} count: {}", recordContexts.offset(), count);
         });
 
         // make sure we've started consuming already before disconnecting the broker

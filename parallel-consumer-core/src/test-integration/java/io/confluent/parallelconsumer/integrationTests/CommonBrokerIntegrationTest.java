@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
 
@@ -21,6 +22,7 @@ import static org.apache.commons.lang3.RandomUtils.nextInt;
  * @see DedicatedBrokerIntegrationTest
  * @see BrokerIntegrationTest
  */
+@Timeout(120)
 public abstract class CommonBrokerIntegrationTest<BROKER extends PCTestBroker> {
 
     /**
