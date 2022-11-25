@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.integrationTests;
 
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.ThreadUtils;
-import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
@@ -14,7 +13,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,7 +20,6 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 import java.net.ConnectException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -55,6 +52,8 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     String groupId;
 
     String topicName;
+
+    private Duration processDelay;
 
     /**
      * Test is designed to use a slow consume rate, so that the broker can be stopped and started before the consumer
@@ -97,7 +96,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         pc.poll(recordContexts -> {
             var count = processedCount.incrementAndGet();
             log.debug("Processed: offset: {} count: {}", recordContexts.offset(), count);
-            ThreadUtils.sleepLog(1); // slow down processing, causing state to continue to be dirty
+            ThreadUtils.sleepLog(processDelay); // slow down processing, causing state to continue to be dirty
         });
 
         // make sure we've started consuming already before disconnecting the broker
@@ -106,12 +105,16 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     }
 
     /**
-     * Interrupts the connection to the broker by pausing the proxy and resuming, making sure PC can recover
+     * Interrupts the connection to the broker by pausing the proxy and resuming, making sure PC can recover. Unless
+     * using transaction mode, in which case the PC will crash as Producer needs to be reinitialised if a timeout occurs
+     * with the broker.
      */
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
     void brokerConnectionInterruption(CommitMode commitMode) {
+        processDelay = Duration.ofMillis(10);
+
         setupAndWarmUp(commitMode);
 
         //
@@ -122,9 +125,11 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
         log.debug("Stay disconnected for a while...");
         Truth.assertThat(processedCount.get()).isLessThan(numberOfRecordsToProduce);
-        // todo how long to test we can recover from?
-        // 10 seconds, doesn't notice
-        // 120 unknown error
+
+        /**
+         * producer transactions use {@link io.confluent.parallelconsumer.internal.ConsumerManager#DEFAULT_API_TIMEOUT},
+         * so have to more than that, unless we can change it
+         * */
         ThreadUtils.sleepSecondsLog(120);
 
         //
@@ -136,13 +141,28 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         //
         checkPCState();
 
-        // all commit modes should recover
-        await()
-                .atMost(Duration.ofMinutes(1))
-                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
-                .untilAsserted(() -> Truth
-                        .assertThat(processedCount.get())
-                        .isAtLeast(numberOfRecordsToProduce));
+        switch (commitMode) {
+            case PERIODIC_TRANSACTIONAL_PRODUCER -> {
+                await()
+                        .atMost(Duration.ofMinutes(1))
+                        .untilAsserted(() -> {
+                            assertThat(pc).isClosedOrFailed();
+                            var throwableSubject = assertThat(pc).getFailureCause();
+                            throwableSubject.hasMessageThat().contains("Timeout expired");
+                            throwableSubject.hasMessageThat().contains("while awaiting AddOffsetsToTxn");
+                        });
+            }
+            default -> {
+                // all commit modes should recover
+                await()
+                        .atMost(Duration.ofMinutes(1))
+                        .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                        .untilAsserted(() -> Truth
+                                .assertThat(processedCount.get())
+                                .isAtLeast(numberOfRecordsToProduce));
+            }
+        }
+
     }
 
     private void checkPCState() {
@@ -157,6 +177,8 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
     @ParameterizedTest
     @EnumSource
     void brokerShutdown(CommitMode commitMode) {
+        processDelay = Duration.ofMillis(10);
+
         var giveUpAfter3 = RetrySettings.builder()
                 .maxRetries(3)
                 .failureReaction(RETRY_UP_TO_MAX_RETRIES)
@@ -193,25 +215,16 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
                 );
     }
 
-
-    private void sleepUnlessCrashed(int secondsToWait) {
-        var start = Instant.now();
-        await()
-                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
-                .forever()
-                .untilAsserted(() ->
-                        assertThat(Instant.now()).isAtLeast(start.plusSeconds(secondsToWait)));
-    }
-
     /**
-     * Stops, then starts the broker container again. Makes sure PC can recover
+     * Stops, then starts the broker container again. Makes sure PC can recover, unless using transactional mode, in
+     * which case PC will crash as the Transactional Producer needs to be reinitialised across a broker restart.
      */
     @SneakyThrows
     @ParameterizedTest
     @EnumSource
-    @Order(1)
-    // simplest
     void brokerRestartTest(CommitMode commitMode) {
+        processDelay = Duration.ofSeconds(1);
+
         setupAndWarmUp(commitMode);
 
         //
@@ -248,7 +261,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
                                 }
                         );
             }
-            case PERIODIC_CONSUMER_ASYNCHRONOUS, PERIODIC_CONSUMER_SYNC -> {
+            default -> {
 
                 // will be exact if no replay, otherwise will be more
                 // as pc is not crashing - it doesn't lose any state - i.e. per rec acks
@@ -265,7 +278,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
                 pc.closeDrainFirst();
 
                 try (var proxiedConsumer = getKcu().createNewConsumer(groupId)) {
-                    ManagedTruth.assertThat(proxiedConsumer)
+                    assertThat(proxiedConsumer)
                             .hasCommittedToPartition(topicName)
                             .offset(expectedNumberToConsumer);
                 }
