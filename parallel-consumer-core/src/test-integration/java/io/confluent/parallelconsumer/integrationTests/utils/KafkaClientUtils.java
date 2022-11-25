@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -27,10 +28,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.io.Closeable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -69,6 +67,17 @@ public class KafkaClientUtils implements AutoCloseable {
     public static final int DEFAULT_MAX_CONCURRENCY = 100;
 
     private final ModelUtils mu = new ModelUtils(new PCModuleTestEnv());
+
+    /**
+     * {@link ConsumerConfig#FETCH_MAX_BYTES_CONFIG} override, so slow down consumption. Must have batches of a matching
+     * size of batches - {@link ProducerConfig#BATCH_SIZE_CONFIG}.
+     *
+     * @see ConsumerConfig#FETCH_MAX_BYTES_DOC
+     * @see ProducerConfig#BATCH_SIZE_DOC
+     */
+    @Setter
+    @NonNull
+    private Optional<Integer> fetchMaxBytes = empty();
 
     public AdminClient getAdmin() {
         return admin;
@@ -287,9 +296,9 @@ public class KafkaClientUtils implements AutoCloseable {
 
         txProps.putAll(overridingOptions);
 
-        // needed by what test?
-//         todo remove?
-//        txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
+        if (fetchMaxBytes.isPresent()) {
+            txProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 1);
+        }
 
         KafkaProducer<K, V> kvKafkaProducer = new KafkaProducer<>(txProps);
         clientsCreated.add(kvKafkaProducer);
@@ -370,8 +379,9 @@ public class KafkaClientUtils implements AutoCloseable {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
 
-        // todo test is this needed for? make specific to that test
-        //consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 1);
+        if (fetchMaxBytes.isPresent()) {
+            consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, fetchMaxBytes);
+        }
 
         if (options.getConsumer() == null) {
             boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);

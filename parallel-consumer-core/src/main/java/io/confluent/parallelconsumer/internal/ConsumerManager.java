@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
@@ -35,6 +36,12 @@ public class ConsumerManager<K, V> {
     private final Consumer<K, V> consumer;
 
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
+
+    /**
+     * Only for async mode, to trigger failure as per {@link RetrySettings}, asynchronously
+     */
+    private int sequentialAsyncCommitFailures = 0;
+
 
     /**
      * Since Kakfa 2.7, multi-threaded access to consumer group metadata was blocked, so before and after polling, save
@@ -127,14 +134,30 @@ public class ConsumerManager<K, V> {
     }
 
     /**
-     * Fire and forget
+     * Fire and forget, but if failures occur, abide by {@link RetrySettings} asynchronously
      */
     public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets) {
         OffsetCommitCallback offsetCommitCallback = (callbackOffsets, exception) -> {
-            if (exception != null) {
-                log.error(msg("Error committing offsets in async mode. Offset: {}", callbackOffsets), exception);
-            } else {
+            if (exception == null) {
                 log.debug("Offsets committed successfully: {}", callbackOffsets);
+                sequentialAsyncCommitFailures = 0; // reset
+            } else {
+                sequentialAsyncCommitFailures++;
+                var retrySettings = options.getRetrySettings();
+                if (retrySettings.isFailFastOrRetryExhausted(sequentialAsyncCommitFailures)) {
+                    // trigger failure
+                    // has to be a runtime exception, as the callback is not allowed to throw checked exceptions
+                    var msg = msg("Retries exhausted or fail fast, while asynchronously committing offsets: {}, failures: {} settings: {} ",
+                            offsets,
+                            sequentialAsyncCommitFailures,
+                            retrySettings);
+                    throw new InternalRuntimeException(new PCCommitFailedException(msg, exception));
+                } else {
+                    log.error(msg("Error committing offsets in async mode, failure count: {}. Offset: {}",
+                                    sequentialAsyncCommitFailures,
+                                    callbackOffsets),
+                            exception);
+                }
             }
         };
         consumer.commitAsync(offsets, offsetCommitCallback);

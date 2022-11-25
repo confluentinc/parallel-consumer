@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.integrationTests;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ManagedTruth;
+import io.confluent.parallelconsumer.ParallelConsumerException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.RetrySettings;
@@ -22,6 +23,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.net.ConnectException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -36,7 +38,7 @@ import static org.testcontainers.shaded.org.hamcrest.Matchers.is;
 
 /**
  * Exercises PC's reaction to the broker connection being lost of the broker being restarted, by stopping and starting
- * the broker container. The reaction is controlled by the {@link RetrySettings.FailureReaction}
+ * the broker container. The reaction is controlled by the {@link RetrySettings.FailureReaction}.
  */
 @Tag("disconnect")
 @Tag("toxiproxy")
@@ -54,6 +56,14 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
     String topicName;
 
+    /**
+     * Test is designed to use a slow consume rate, so that the broker can be stopped and started before the consumer
+     * finished consuming everything, or buffers too quickly.
+     */
+    @Override
+    protected Optional<Integer> withFetchMaxBytes() {
+        return Optional.of(1);
+    }
 
     /**
      * Retry forever by default
@@ -70,6 +80,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
 
         var preOptions = ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
+                .offsetCommitTimeout(Duration.ofSeconds(10)) // aggressive to speed up tests
                 .consumer(getKcu().createNewConsumer(groupId))
                 .commitMode(commitMode)
                 .retrySettings(retrySettings);
@@ -86,6 +97,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         pc.poll(recordContexts -> {
             var count = processedCount.incrementAndGet();
             log.debug("Processed: offset: {} count: {}", recordContexts.offset(), count);
+            ThreadUtils.sleepLog(1); // slow down processing, causing state to continue to be dirty
         });
 
         // make sure we've started consuming already before disconnecting the broker
@@ -124,7 +136,7 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         //
         checkPCState();
 
-        //
+        // all commit modes should recover
         await()
                 .atMost(Duration.ofMinutes(1))
                 .failFast("pc has crashed", () -> pc.isClosedOrFailed())
@@ -158,20 +170,28 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         //
         checkPCState();
 
-        // wait a while
-        int secondsToWait = 120;
-        sleepUnlessCrashed(secondsToWait);
+//        // wait a while
+//        int secondsToWait = 120;
+//        sleepUnlessCrashed(secondsToWait);
+//
+//        //
+//        checkPCState();
 
-        //
-        checkPCState();
-
-        //
+        // should crash itself after giving up offset commit
         await()
-                .atMost(Duration.ofMinutes(1))
-                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
-                .untilAsserted(() -> Truth
-                        .assertThat(processedCount.get())
-                        .isAtLeast(numberOfRecordsToProduce));
+//                .atMost(Duration.ofMinutes(1))
+//                .pollInterval(Duration.ofSeconds(1))
+//                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                .untilAsserted(() ->
+//                        Truth.assertThat(processedCount.get())
+//                        .isAtLeast(numberOfRecordsToProduce)
+                        {
+                            var failureCause = assertThat(pc).getFailureCause();
+                            failureCause.isNotNull();
+                            failureCause.isInstanceOf(ParallelConsumerException.class);
+                            failureCause.hasCauseThat().hasCauseThat().hasMessageThat().contains("Retries exhausted");
+                        }
+                );
     }
 
 
@@ -216,25 +236,43 @@ class BrokerDisconnectTest extends DedicatedBrokerIntegrationTest {
         var timeout = Duration.ofMinutes(1);
         log.debug("Waiting {} for PC to recover", timeout);
 
-        // will be exact if no replay, otherwise will be more
-        // as pc is not crashing - it doesn't lose any state - i.e. per rec acks
-        // we're just testing that it can recover from a broker restart
-        var expectedNumberToConsumer = numberOfRecordsToProduce;
+        switch (commitMode) {
+            case PERIODIC_TRANSACTIONAL_PRODUCER -> {
+                // should not recover, as a tx can't span a restarted broker
+                await()
+                        .atMost(Duration.ofMinutes(2))
+                        .untilAsserted(() ->
+                                {
+                                    var failureCause = assertThat(pc).getFailureCause();
+                                    failureCause.isNotNull();
+                                    failureCause.isInstanceOf(ConnectException.class);
+                                }
+                        );
+            }
+            case PERIODIC_CONSUMER_ASYNCHRONOUS, PERIODIC_CONSUMER_SYNC -> {
 
-        await()
-                .atMost(timeout)
-                .failFast("pc has crashed", () -> pc.isClosedOrFailed())
-                .untilAsserted(() -> Truth
-                        .assertThat(processedCount.get())
-                        .isAtLeast(expectedNumberToConsumer));
+                // will be exact if no replay, otherwise will be more
+                // as pc is not crashing - it doesn't lose any state - i.e. per rec acks
+                // we're just testing that it can recover from a broker restart
+                var expectedNumberToConsumer = numberOfRecordsToProduce;
 
-        pc.closeDrainFirst();
+                await()
+                        .atMost(timeout)
+                        .failFast("pc has crashed", () -> pc.isClosedOrFailed())
+                        .untilAsserted(() -> Truth
+                                .assertThat(processedCount.get())
+                                .isAtLeast(expectedNumberToConsumer));
 
-        try (var proxiedConsumer = getKcu().createNewConsumer(groupId)) {
-            ManagedTruth.assertThat(proxiedConsumer)
-                    .hasCommittedToPartition(topicName)
-                    .offset(expectedNumberToConsumer);
+                pc.closeDrainFirst();
+
+                try (var proxiedConsumer = getKcu().createNewConsumer(groupId)) {
+                    ManagedTruth.assertThat(proxiedConsumer)
+                            .hasCommittedToPartition(topicName)
+                            .offset(expectedNumberToConsumer);
+                }
+            }
         }
+
     }
 
 }

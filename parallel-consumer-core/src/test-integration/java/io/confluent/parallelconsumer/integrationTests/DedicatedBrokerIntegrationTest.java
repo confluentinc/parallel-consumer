@@ -11,6 +11,8 @@ import lombok.Getter;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.util.Optional;
+
 /**
  * For integration tests which need dedicated brokers, perhaps because they change the brokers state, or shut it down
  * etc.
@@ -19,7 +21,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * @see BrokerIntegrationTest for tests which can use a shared, reusable broker
  */
 @Testcontainers
-public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest<ChaosBroker> {
+public abstract class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest<ChaosBroker> {
 
     @Getter
     private final ProxiedKafkaClientUtils kcu;
@@ -30,7 +32,12 @@ public class DedicatedBrokerIntegrationTest extends CommonBrokerIntegrationTest<
 
     public DedicatedBrokerIntegrationTest() {
         this.chaosBroker = new ChaosBroker();
-        this.kcu = new ProxiedKafkaClientUtils(chaosBroker);
+        kcu = new ProxiedKafkaClientUtils(chaosBroker);
+        kcu.setFetchMaxBytes(withFetchMaxBytes());
+    }
+
+    protected Optional<Integer> withFetchMaxBytes() {
+        return Optional.empty();
     }
 
     @Override

@@ -25,9 +25,9 @@ import static io.confluent.parallelconsumer.integrationTests.CommonBrokerIntegra
 @Order(INTEGRATION_TEST_BASE)
 @Testcontainers
 @Slf4j
-public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest<PCTestBroker> {
+public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest<PCTestBroker<KafkaClientUtils>> {
 
-    private static final PCTestBroker kafkaContainer = new PCTestBroker();
+    private static final PCTestBroker<KafkaClientUtils> kafkaContainer = new PCTestBroker<>();
 
     /**
      * Not using {@link Container} lifecycle, as we want to reuse the container between tests - the Container lifecycle
@@ -41,7 +41,7 @@ public abstract class BrokerIntegrationTest extends CommonBrokerIntegrationTest<
     private final KafkaClientUtils kcu = new KafkaClientUtils(kafkaContainer);
 
     @Override
-    protected PCTestBroker getKafkaContainer() {
+    protected PCTestBroker<KafkaClientUtils> getKafkaContainer() {
         return kafkaContainer;
     }
 
