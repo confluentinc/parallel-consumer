@@ -51,7 +51,7 @@ class ChaosBrokerTest extends DedicatedBrokerIntegrationTest {
     private void testConnection(AdminClient admin) {
         await()
                 .ignoreExceptions()
-                .atMost(Duration.ofSeconds(30))
+                .atMost(Duration.ofSeconds(60))
                 .untilAsserted(() -> {
                     var id = admin.describeCluster().clusterId().get();
                     Truth.assertThat(id).isNotEmpty();
