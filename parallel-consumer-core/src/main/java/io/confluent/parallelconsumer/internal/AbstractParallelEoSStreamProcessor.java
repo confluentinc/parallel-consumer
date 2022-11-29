@@ -8,6 +8,8 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -101,6 +103,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * The pool which is used for running the users' supplied function
      */
     protected final ThreadPoolExecutor workerThreadPool;
+
+    private final PCWorkerPool<K, V> workerPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -228,6 +232,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
+    private final SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
+    private final Timer workRetrievalTimer = metricsRegistry.timer("user.function");
+
+
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
     }
@@ -256,6 +264,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
+        workerPool = new PCWorkerPool<K, V>(options.getMaxConcurrency());
 
         this.wm = module.workManager();
 
@@ -688,7 +697,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         // distribute more work
-        retrieveAndDistributeNewWork(userFunction, callback);
+        retrieveAndDistributeNewWorkNew(userFunction, callback);
 
         // run call back
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
@@ -756,7 +765,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return shouldTryCommitNow;
     }
 
-    private <R> int retrieveAndDistributeNewWork(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+    private <R> int retrieveAndDistributeNewWorkNew(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+        var capacity = workerPool.getCapacity(workRetrievalTimer);
+        var work = wm.getWorkIfAvailable(capacity);
+        workerPool.distribute(work);
+        return work.size();
+    }
+
+    private <R> int retrieveAndDistributeNewWorkOld(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
         checkPipelinePressure();
 
