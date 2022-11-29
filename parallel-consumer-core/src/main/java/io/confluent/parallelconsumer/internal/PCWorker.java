@@ -23,7 +23,7 @@ public class PCWorker<K, V> {
 
     WorkQueue<K, V> workQueue = new WorkQueue<>();
 
-    FunctionRunner<K, V> functionRunner;
+    PCWorkerPool<K, V> parentPool;
 
     public void loop() {
         while (true) {
@@ -48,7 +48,7 @@ public class PCWorker<K, V> {
             log.debug("Work completed");
         };
         userFunctionTimer.record(() ->
-                functionRunner.run(callback, work)
+                parentPool.getFunctionRunner().run(callback, work)
         );
     }
 

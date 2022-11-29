@@ -6,14 +6,15 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
@@ -33,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -42,7 +42,6 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 /**
@@ -60,7 +59,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<?, ?> options;
 
     /**
      * Injectable clock for testing
@@ -112,39 +111,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(AccessLevel.PUBLIC)
     protected final WorkManager<K, V> wm;
 
-    /**
-     * Collection of work waiting to be
-     */
-    @Getter(PROTECTED)
-    private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
-
-    /**
-     * An inbound message to the controller.
-     * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
-     */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
-        WorkContainer<K, V> workContainer;
-        EpochAndRecordsMap<K, V> consumerRecords;
-
-        private boolean isWorkResult() {
-            return workContainer != null;
-        }
-
-        private boolean isNewConsumerRecords() {
-            return !isWorkResult();
-        }
-
-        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords);
-        }
-
-        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<K, V>(work, null);
-        }
-    }
+    private WorkMailbox<K, V> workMailbox;
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
@@ -160,12 +127,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #processWorkCompleteMailBox
      */
     private Thread blockableControlThread;
-
-    /**
-     * @see #notifySomethingToDo
-     * @see #processWorkCompleteMailBox
-     */
-    private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
     private final OffsetCommitter committer;
 
@@ -629,6 +590,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             state = running;
         }
 
+        workerPool.setFunctionRunner(new FunctionRunner<>(userFunctionWrapped, callback));
+
         // broker poll subsystem
         brokerPollSubsystem.start(options.getManagedExecutorService());
 
@@ -772,169 +735,91 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return work.size();
     }
 
-    private <R> int retrieveAndDistributeNewWorkOld(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
-        // check queue pressure first before addressing it
-        checkPipelinePressure();
+//    private <R> int retrieveAndDistributeNewWorkOld(final Function<PollContextInternal<K, V>, List<R>> userFunction, final Consumer<R> callback) {
+//        // check queue pressure first before addressing it
+//        checkPipelinePressure();
+//
+//        int gotWorkCount = 0;
+//
+//        //
+//        if (state == running || state == draining) {
+//            int delta = calculateQuantityToRequest();
+//            var records = wm.getWorkIfAvailable(delta);
+//
+//            gotWorkCount = records.size();
+//            lastWorkRequestWasFulfilled = gotWorkCount >= delta;
+//
+//            log.trace("Loop: Submit to pool");
+//            submitWorkToPool(userFunction, callback, records);
+//        }
+//
+//        //
+//        queueStatsLimiter.performIfNotLimited(() -> {
+//            int queueSize = getNumberOfUserFunctionsQueued();
+//            log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
+//                    workerThreadPool.getActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+//        });
+//
+//        return gotWorkCount;
+//    }
 
-        int gotWorkCount = 0;
+//    /**
+//     * @return number of {@link WorkContainer} to try to get
+//     */
+//    protected int calculateQuantityToRequest() {
+//        int target = getTargetOutForProcessing();
+//        int current = wm.getNumberRecordsOutForProcessing();
+//        int delta = target - current;
+//
+//        // always round up to fill batches - get however extra are needed to fill a batch
+//        if (options.isUsingBatching()) {
+//            //noinspection OptionalGetWithoutIsPresent
+//            int batchSize = options.getBatchSize();
+//            int modulo = delta % batchSize;
+//            if (modulo > 0) {
+//                int extraToFillBatch = target - modulo;
+//                delta = delta + extraToFillBatch;
+//            }
+//        }
+//
+//        log.debug("Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
+//                target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
+//        return delta;
+//    }
 
-        //
-        if (state == running || state == draining) {
-            int delta = calculateQuantityToRequest();
-            var records = wm.getWorkIfAvailable(delta);
+//    protected int getTargetOutForProcessing() {
+//        return getQueueTargetLoaded();
+//    }
 
-            gotWorkCount = records.size();
-            lastWorkRequestWasFulfilled = gotWorkCount >= delta;
+//    protected int getQueueTargetLoaded() {
+//        //noinspection unchecked
+//        int batch = options.getBatchSize();
+//        return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
+//    }
 
-            log.trace("Loop: Submit to pool");
-            submitWorkToPool(userFunction, callback, records);
-        }
-
-        //
-        queueStatsLimiter.performIfNotLimited(() -> {
-            int queueSize = getNumberOfUserFunctionsQueued();
-            log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
-                    workerThreadPool.getActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
-        });
-
-        return gotWorkCount;
-    }
-
-    /**
-     * Submit a piece of work to the processing pool.
-     *
-     * @param workToProcess the polled records to process
-     */
-    protected <R> void submitWorkToPool(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                        Consumer<R> callback,
-                                        List<WorkContainer<K, V>> workToProcess) {
-        if (!workToProcess.isEmpty()) {
-            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
-
-            // perf: could inline makeBatches
-            var batches = makeBatches(workToProcess);
-
-            // debugging
-            if (log.isDebugEnabled()) {
-                var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
-                log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
-                List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize()).collect(Collectors.toList());
-                if (integerStream.size() > 1) {
-                    log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
-                }
-            }
-
-            // submit
-            for (var batch : batches) {
-                submitWorkToPoolInner(usersFunction, callback, batch);
-            }
-        }
-    }
-
-    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                           final Consumer<R> callback,
-                                           final List<WorkContainer<K, V>> batch) {
-        // for each record, construct dispatch to the executor and capture a Future
-        log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerThreadPool.submit(() -> {
-            addInstanceMDC();
-            return runUserFunction(usersFunction, callback, batch);
-        });
-        // for a batch, each message in the batch shares the same result
-        for (final WorkContainer<K, V> workContainer : batch) {
-            workContainer.setFuture(outputRecordFuture);
-        }
-    }
-
-    private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
-        int maxBatchSize = options.getBatchSize();
-        return partition(workToProcess, maxBatchSize);
-    }
-
-    private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
-        List<List<T>> listOfBatches = new ArrayList<>();
-        List<T> batchInConstruction = new ArrayList<>();
-
-        //
-        for (T item : sourceCollection) {
-            batchInConstruction.add(item);
-
-            //
-            if (batchInConstruction.size() == maxBatchSize) {
-                listOfBatches.add(batchInConstruction);
-                batchInConstruction = new ArrayList<>();
-            }
-        }
-
-        // add partial tail
-        if (!batchInConstruction.isEmpty()) {
-            listOfBatches.add(batchInConstruction);
-        }
-
-        log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
-                sourceCollection.size(),
-                listOfBatches.size(),
-                listOfBatches.stream().map(List::size).collect(Collectors.toList()));
-        return listOfBatches;
-    }
-
-    /**
-     * @return number of {@link WorkContainer} to try to get
-     */
-    protected int calculateQuantityToRequest() {
-        int target = getTargetOutForProcessing();
-        int current = wm.getNumberRecordsOutForProcessing();
-        int delta = target - current;
-
-        // always round up to fill batches - get however extra are needed to fill a batch
-        if (options.isUsingBatching()) {
-            //noinspection OptionalGetWithoutIsPresent
-            int batchSize = options.getBatchSize();
-            int modulo = delta % batchSize;
-            if (modulo > 0) {
-                int extraToFillBatch = target - modulo;
-                delta = delta + extraToFillBatch;
-            }
-        }
-
-        log.debug("Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
-                target, current, delta, dynamicExtraLoadFactor.getCurrentFactor());
-        return delta;
-    }
-
-    protected int getTargetOutForProcessing() {
-        return getQueueTargetLoaded();
-    }
-
-    protected int getQueueTargetLoaded() {
-        //noinspection unchecked
-        int batch = options.getBatchSize();
-        return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
-    }
-
-    /**
-     * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
-     */
-    protected void checkPipelinePressure() {
-        if (log.isTraceEnabled())
-            log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
-                            "if (isPoolQueueLow() {} && lastWorkRequestWasFulfilled {}))",
-                    getNumberOfUserFunctionsQueued(),
-                    getQueueTargetLoaded(),
-                    dynamicExtraLoadFactor.getCurrentFactor(),
-                    isPoolQueueLow(),
-                    lastWorkRequestWasFulfilled);
-
-        if (isPoolQueueLow() && lastWorkRequestWasFulfilled) {
-            boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
-            if (steppedUp) {
-                log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
-                        getNumberOfUserFunctionsQueued(), getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
-            } else if (dynamicExtraLoadFactor.isMaxReached()) {
-                log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
-            }
-        }
-    }
+//    /**
+//     * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
+//     */
+//    protected void checkPipelinePressure() {
+//        if (log.isTraceEnabled())
+//            log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
+//                            "if (isPoolQueueLow() {} && lastWorkRequestWasFulfilled {}))",
+//                    getNumberOfUserFunctionsQueued(),
+//                    getQueueTargetLoaded(),
+//                    dynamicExtraLoadFactor.getCurrentFactor(),
+//                    isPoolQueueLow(),
+//                    lastWorkRequestWasFulfilled);
+//
+//        if (isPoolQueueLow() && lastWorkRequestWasFulfilled) {
+//            boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
+//            if (steppedUp) {
+//                log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
+//                        getNumberOfUserFunctionsQueued(), getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+//            } else if (dynamicExtraLoadFactor.isMaxReached()) {
+//                log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
+//            }
+//        }
+//    }
 
     /**
      * @return aim to never have the pool queue drop below this
@@ -943,14 +828,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return options.getTargetAmountOfRecordsInFlight();
     }
 
-    private boolean isPoolQueueLow() {
-        int queueSize = getNumberOfUserFunctionsQueued();
-        int queueTarget = getPoolLoadTarget();
-        boolean workAmountBelowTarget = queueSize <= queueTarget;
-        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
-                workAmountBelowTarget, queueSize, queueTarget);
-        return workAmountBelowTarget;
-    }
+//    private boolean isPoolQueueLow() {
+//        int queueSize = getNumberOfUserFunctionsQueued();
+//        int queueTarget = getPoolLoadTarget();
+//        boolean workAmountBelowTarget = queueSize <= queueTarget;
+//        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
+//                workAmountBelowTarget, queueSize, queueTarget);
+//        return workAmountBelowTarget;
+//    }
 
     private void drain() {
         log.debug("Signaling to drain...");
@@ -970,60 +855,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             state = State.closing;
         }
         notifySomethingToDo();
-    }
-
-    /**
-     * Check the work queue for work to be done, potentially blocking.
-     * <p>
-     * Can be interrupted if something else needs doing.
-     * <p>
-     * Visible for testing.
-     */
-    protected void processWorkCompleteMailBox(final Duration timeToBlockFor) {
-        log.trace("Processing mailbox (might block waiting for results)...");
-        Queue<ControllerEventMessage<K, V>> results = new ArrayDeque<>();
-
-        if (timeToBlockFor.toMillis() > 0) {
-            currentlyPollingWorkCompleteMailBox.getAndSet(true);
-            if (log.isDebugEnabled()) {
-                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                        timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
-            }
-            // wait for work, with a timeToBlockFor for sanity
-            log.trace("Blocking poll {}", timeToBlockFor);
-            try {
-                var firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
-                if (firstBlockingPoll == null) {
-                    log.debug("Mailbox results returned null, indicating timeToBlockFor elapsed (which was set as {})", timeToBlockFor);
-                } else {
-                    log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeToBlockFor);
-                    results.add(firstBlockingPoll);
-                }
-            } catch (InterruptedException e) {
-                log.debug("Interrupted waiting on work results");
-            } finally {
-                currentlyPollingWorkCompleteMailBox.getAndSet(false);
-            }
-            log.trace("Blocking poll finish");
-        }
-
-        // check for more work to batch up, there may be more work queued up behind the head that we can also take
-        // see how big the queue is now, and poll that many times
-        int size = workMailBox.size();
-        log.trace("Draining {} more, got {} already...", size, results.size());
-        workMailBox.drainTo(results, size);
-
-        log.trace("Processing drained work {}...", results.size());
-        for (var action : results) {
-            if (action.isNewConsumerRecords()) {
-                wm.registerWork(action.getConsumerRecords());
-            } else {
-                WorkContainer<K, V> work = action.getWorkContainer();
-                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, work.toString());
-                wm.handleFutureResult(work);
-                MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
-            }
-        }
     }
 
     /**
@@ -1145,94 +976,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void updateLastCommitCheckTime() {
         lastCommitCheckTime = Instant.now();
-    }
-
-    /**
-     * Run the supplied function.
-     */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
-        // call the user's function
-        List<R> resultsFromUserFunction;
-        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
-
-        try {
-            if (log.isDebugEnabled()) {
-                // first offset of the batch
-                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
-            }
-            log.trace("Pool received: {}", workContainerBatch);
-
-            //
-            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
-            if (workIsStale) {
-                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
-                return null;
-            }
-
-            resultsFromUserFunction = usersFunction.apply(context);
-
-            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
-                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
-
-            // capture each result, against the input record
-            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {
-                log.trace("Running users call back...");
-                callback.accept(result);
-            }
-
-            // fail or succeed, either way we're done
-            for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
-            }
-            log.trace("User function future registered");
-
-            return intermediateResults;
-        } catch (Exception e) {
-            // handle fail
-            var cause = e.getCause();
-            String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
-                    " mailbox. Context: {}", context, e);
-            if (cause instanceof PCRetriableException) {
-                log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
-            } else {
-                log.error(msg, e);
-            }
-
-            for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure(e);
-                addToMailbox(context, wc); // always add on error
-            }
-            throw e; // trow again to make the future failed
-        } finally {
-            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
-        }
-    }
-
-    protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        addToMailbox(context, wc);
-    }
-
-    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        log.trace("User function success");
-        wc.onUserFunctionSuccess();
-    }
-
-    protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
-        String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
-        log.trace("Adding {} {} to mailbox...", state, wc);
-        workMailBox.add(ControllerEventMessage.of(wc));
-
-        wc.onPostAddToMailBox(pollContext, producerManager);
-    }
-
-    public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
-        log.trace("Adding {} to mailbox...", polledRecords);
-        workMailBox.add(ControllerEventMessage.of(polledRecords));
     }
 
     /**

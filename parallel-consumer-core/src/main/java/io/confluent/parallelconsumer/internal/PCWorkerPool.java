@@ -4,8 +4,8 @@ import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.lang.Nullable;
+import lombok.Data;
 import lombok.Setter;
-import lombok.Value;
 
 import java.util.ArrayDeque;
 import java.util.List;
@@ -13,14 +13,14 @@ import java.util.stream.Collectors;
 
 import static java.util.Optional.ofNullable;
 
-@Value
-public class PCWorkerPool<K, V> {
+@Data
+public class PCWorkerPool<K, V, R> {
 
     @Setter
     @Nullable
-    FunctionRunner<K, V> functionRunner = null;
+    FunctionRunner<K, V, R> functionRunner = null;
 
-    List<PCWorker<K, V>> workers;
+    final List<PCWorker<K, V>> workers;
 
     public PCWorkerPool(int poolSize) {
         workers = Range.range(poolSize).toStream().boxed()
