@@ -4,9 +4,16 @@ package io.confluent.parallelconsumer.examples.core;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.RecordContext;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
+import io.micrometer.prometheus.PrometheusConfig;
+import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
@@ -17,6 +24,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import pl.tlinkowski.unij.api.UniLists;
 
 import java.time.Duration;
 import java.util.List;
@@ -34,11 +42,11 @@ import static pl.tlinkowski.unij.api.UniLists.of;
  */
 @Slf4j
 public class CoreApp {
-
+    final MeterRegistry metricsRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
 
     String inputTopic = "input-topic-" + RandomUtils.nextInt();
     String outputTopic = "output-topic-" + RandomUtils.nextInt();
-
+    PCMetricsTracker pcMetricsTracker;
     Consumer<String, String> getKafkaConsumer() {
         return new KafkaConsumer<>(new Properties());
     }
@@ -72,6 +80,9 @@ public class CoreApp {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
+        new KafkaClientMetrics(kafkaConsumer).bindTo(metricsRegistry);
+        new KafkaClientMetrics(kafkaProducer).bindTo(metricsRegistry);
+
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
                 .maxConcurrency(1000) // <3>
@@ -82,14 +93,18 @@ public class CoreApp {
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
-        eosStreamProcessor.subscribe(of(inputTopic)); // <4>
 
+        eosStreamProcessor.subscribe(of(inputTopic)); // <4>
+        pcMetricsTracker = new PCMetricsTracker(((AbstractParallelEoSStreamProcessor)eosStreamProcessor)::calculateMetricsWithIncompletes,
+                            UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
+        pcMetricsTracker.bindTo(metricsRegistry);
         return eosStreamProcessor;
         // end::exampleSetup[]
     }
 
     void close() {
         this.parallelConsumer.close();
+        this.pcMetricsTracker.close();
     }
 
     void runPollAndProduce() {
