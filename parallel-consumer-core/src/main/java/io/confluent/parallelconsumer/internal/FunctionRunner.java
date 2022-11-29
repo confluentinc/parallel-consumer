@@ -25,11 +25,14 @@ import static io.confluent.csid.utils.StringUtils.msg;
 public class FunctionRunner<K, V, R> {
 
     PCModule<K, V> module;
+
     ParallelConsumerOptions<K, V> options;
 
     Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped;
 
     Consumer<R> callback;
+
+    WorkMailbox workMailbox;
 
     public void run(Consumer<Void> callback, WorkContainer<K, V> work) {
 
@@ -173,7 +176,7 @@ public class FunctionRunner<K, V, R> {
 
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                addToMailbox(context, wc); // always add on error
+                workMailbox.addToMailbox(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
         } finally {
@@ -187,7 +190,7 @@ public class FunctionRunner<K, V, R> {
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        addToMailbox(context, wc);
+        workMailbox.addToMailbox(context, wc);
     }
 
 }
