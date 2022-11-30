@@ -2,12 +2,20 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
 
+/**
+ * @author Antony Stubbs
+ */
+@Slf4j
 public class RebalanceHandler implements ConsumerRebalanceListener {
+
+    public RebalanceHandler() {
+    }
 
     /**
      * Commit our offsets
