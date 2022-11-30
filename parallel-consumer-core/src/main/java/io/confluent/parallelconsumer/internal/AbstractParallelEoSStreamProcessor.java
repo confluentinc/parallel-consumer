@@ -227,7 +227,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         this.wm = module.workManager();
 
-        this.brokerPollSubsystem = module.brokerPoller(this);
+        this.brokerPollSubsystem = module.brokerPoller();
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(module.producerManager());
@@ -583,18 +583,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     "more than once (they are asynchronous) (current state is {})", state));
         }
 
-        // todo casts
-        Function<PollContextInternal<K, V>, List<Object>> cast = (Function) userFunctionWrapped;
-        var runner = FunctionRunner.<K, V, Object>builder()
-                .userFunctionWrapped(cast)
-                .callback((Consumer<Object>) callback)
-                .options(options)
-                .module(module)
-                .workMailbox(workMailbox)
-                .workManager(wm)
-                .build();
-        workerPool = new PCWorkerPool<>(options.getMaxConcurrency(), runner, options);
-
         // broker poll subsystem
         brokerPollSubsystem.start(options.getManagedExecutorService());
 
@@ -608,31 +596,51 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
 
         // run main pool loop in thread
-        Callable<Boolean> controlTask = () -> { // todo refactor lambda
-            addInstanceMDC(options);
-            log.info("Control loop starting up...");
-            Thread controlThread = Thread.currentThread();
-            controlThread.setName("pc-control");
-            this.blockableControlThread = controlThread;
-            while (state != closed) {
-                log.debug("Control loop start");
-                try {
-                    controlLoop();
-                } catch (InterruptedException e) {
-                    log.debug("Control loop interrupted, closing");
-                    doClose(DrainingCloseable.DEFAULT_TIMEOUT);
-                } catch (Exception e) {
-                    log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
-                    failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
-                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
-                    throw failureReason;
-                }
-            }
-            log.info("Control loop ending clean (state:{})...", state);
-            return true;
-        };
+        Callable<Boolean> controlTask = () -> superviseControlLoop((Function) userFunctionWrapped, (Consumer<Object>) callback);
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+    }
+
+    // todo name
+    private <R> boolean superviseControlLoop(Function userFunctionWrapped, Consumer<Object> callback) throws Exception {
+        addInstanceMDC(options);
+        log.info("Control loop starting up...");
+
+        initWorkerPool(userFunctionWrapped, callback);
+
+        Thread controlThread = Thread.currentThread();
+        controlThread.setName("pc-control");
+        this.blockableControlThread = controlThread;
+        while (state != closed) {
+            log.debug("Control loop start");
+            try {
+                controlLoop();
+            } catch (InterruptedException e) {
+                log.debug("Control loop interrupted, closing");
+                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+            } catch (Exception e) {
+                log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+                failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
+                throw failureReason;
+            }
+        }
+        log.info("Control loop ending clean (state:{})...", state);
+        return true;
+    }
+
+    private static void initWorkerPool(Function userFunctionWrapped, Consumer<Object> callback) {
+        // todo casts
+        Function<PollContextInternal<K, V>, List<Object>> cast = userFunctionWrapped;
+        var runner = FunctionRunner.<K, V, Object>builder()
+                .userFunctionWrapped(cast)
+                .callback(callback)
+                .options(options)
+                .module(module)
+                .workMailbox(workMailbox)
+                .workManager(wm)
+                .build();
+        workerPool = new PCWorkerPool<>(options.getMaxConcurrency(), runner, options);
     }
 
     /**

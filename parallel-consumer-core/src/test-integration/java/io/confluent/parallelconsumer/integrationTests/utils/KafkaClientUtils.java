@@ -57,10 +57,7 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public static final int MAX_POLL_RECORDS = 10_000;
     public static final String GROUP_ID_PREFIX = "group-1-";
-
-    public ParallelEoSStreamProcessor<String, String> buildPc(ParallelConsumerOptions<Object, Object> options) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
+    public static final int MAX_POLL_DEFAULT = 500;
 
     class PCVersion {
         public static final String V051 = "0.5.1";
@@ -310,31 +307,38 @@ public class KafkaClientUtils implements AutoCloseable {
     }
 
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder order, CommitMode commitMode, int maxPoll, GroupOption groupOption) {
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(order)
+                .commitMode(commitMode)
+                .maxConcurrency(100)
+                .commitInterval(ofSeconds(1))
+                .build();
+
+        return buildPc(options, maxPoll, groupOption);
+    }
+
+
+    public ParallelEoSStreamProcessor<String, String> buildPc(ParallelConsumerOptions<String, String> options, int maxPoll, GroupOption groupOption) {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPoll);
         boolean newConsumerGroup = groupOption.equals(GroupOption.NEW_GROUP);
         KafkaConsumer<String, String> newConsumer = createNewConsumer(newConsumerGroup, consumerProps);
         lastConsumerConstructed = newConsumer;
 
-        var pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
-                .ordering(order)
-                .consumer(newConsumer)
-                .commitMode(commitMode)
-                .maxConcurrency(100)
-                .build());
-
-        pc.setTimeBetweenCommits(ofSeconds(1));
-
-        // sanity
-        return pc;
+        return new ParallelEoSStreamProcessor<>(options.toBuilder().consumer(newConsumer).build());
     }
 
+    public ParallelEoSStreamProcessor<String, String> buildPc(ParallelConsumerOptions<String, String> options) {
+        return buildPc(options, 500, GroupOption.REUSE_GROUP);
+    }
+
+
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key, GroupOption groupOption) {
-        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500, groupOption);
+        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, MAX_POLL_DEFAULT, groupOption);
     }
 
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key) {
-        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500);
+        return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, MAX_POLL_DEFAULT);
     }
 
     public KafkaConsumer<String, String> getLastConsumerConstructed() {

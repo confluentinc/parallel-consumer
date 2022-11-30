@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -64,20 +65,21 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
+    @NonNull
     private WorkMailbox<K, V> workMailbox;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr,
-                            WorkMailbox<K, V> workMailbox,
-                            WorkManager<K, V> wm,
-                            AbstractParallelEoSStreamProcessor<K, V> pc,
-                            ParallelConsumerOptions<K, V> options) {
-        this.wm = wm;
+    public BrokerPollSystem(@NonNull ConsumerManager<K, V> consumerMgr,
+                            @NonNull WorkMailbox<K, V> workMailbox,
+                            @NonNull WorkManager<K, V> workManager,
+                            @NonNull ParallelConsumerOptions<K, V> options) {
+        this.wm = workManager;
+        this.workMailbox = workMailbox;
         this.options = options;
         this.consumerManager = consumerMgr;
 
         switch (options.getCommitMode()) {
             case PERIODIC_CONSUMER_SYNC, PERIODIC_CONSUMER_ASYNCHRONOUS -> {
-                ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, wm, options);
+                ConsumerOffsetCommitter<K, V> consumerCommitter = new ConsumerOffsetCommitter<>(consumerMgr, workManager, options);
                 committer = Optional.of(consumerCommitter);
             }
         }

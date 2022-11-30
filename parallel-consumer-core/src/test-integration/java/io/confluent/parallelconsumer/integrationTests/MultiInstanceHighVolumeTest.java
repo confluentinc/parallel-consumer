@@ -110,7 +110,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
 
     private ParallelEoSStreamProcessor<String, String> buildPc(String inputTopicName, int maxPoll, ProcessingOrder order, CommitMode commitMode) {
         Optional<String> id = Optional.of("id: " + barId);
-        var options = ParallelConsumerOptions.builder()
+        var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(order)
                 .commitMode(commitMode)
                 .myId(id)
