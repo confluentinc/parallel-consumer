@@ -11,7 +11,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
-import static io.confluent.parallelconsumer.internal.State.closed;
+import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -141,6 +141,10 @@ public class StateMachine {
         if (this.getFailureCause() != null) {
             log.error("PC closed due to error: {}", getFailureCause(), null);
         }
+    }
+
+    private boolean isIdlingOrRunning() {
+        return state == running || state == draining || state == paused;
     }
 
     /**
