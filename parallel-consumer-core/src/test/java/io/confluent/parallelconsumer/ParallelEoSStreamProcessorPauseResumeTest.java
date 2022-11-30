@@ -73,12 +73,17 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
     }
 
     private ParallelConsumerOptions<String, String> getBaseOptions(final CommitMode commitMode, int maxConcurrency) {
+
+        // register unique ID on the parallel consumer
+        String myId = "p/r-test-" + MY_ID_GENERATOR.incrementAndGet();
+
         return ParallelConsumerOptions.<String, String>builder()
                 .commitMode(commitMode)
                 .consumer(consumerSpy)
                 // UNORDERED so that we get nice linear offsets in our processing order (PARTITION has no concurrency, KEY depends on your keys
                 .ordering(UNORDERED)
                 .maxConcurrency(maxConcurrency)
+                .myId(Optional.of(myId))
                 .build();
     }
 
@@ -92,11 +97,8 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
     }
 
     private void setupParallelConsumerInstance(final CommitMode commitMode, final int maxConcurrency) {
-        setupParallelConsumerInstance(getBaseOptions(commitMode, maxConcurrency));
-
-        // register unique ID on the parallel consumer
-        String myId = "p/r-test-" + MY_ID_GENERATOR.incrementAndGet();
-        parallelConsumer.setMyId(Optional.of(myId));
+        var baseOptions = getBaseOptions(commitMode, maxConcurrency);
+        setupParallelConsumerInstance(baseOptions);
     }
 
     private TestUserFunction createTestSetup(final CommitMode commitMode, final int maxConcurrency) {

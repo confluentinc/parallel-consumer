@@ -98,9 +98,13 @@ public class PCModule<K, V> {
 
     protected BrokerPollSystem<K, V> brokerPoller(AbstractParallelEoSStreamProcessor<K, V> pc) {
         if (brokerPollSystem == null) {
-            brokerPollSystem = new BrokerPollSystem<>(consumerManager(), workManager(), pc, options());
+            brokerPollSystem = new BrokerPollSystem<>(consumerManager(), workMailbox(), workManager(), pc, options());
         }
         return brokerPollSystem;
+    }
+
+    private WorkMailbox<K, V> workMailbox() {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     public Clock clock() {

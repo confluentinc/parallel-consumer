@@ -6,7 +6,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.function.Consumer;
+import java.util.List;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
@@ -15,7 +15,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
  */
 @Slf4j
 @Value
-public class PCWorker<K, V> {
+public class PCWorker<K, V, R> {
 
     SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
 
@@ -23,7 +23,7 @@ public class PCWorker<K, V> {
 
     WorkQueue<K, V> workQueue = new WorkQueue<>();
 
-    PCWorkerPool<K, V> parentPool;
+    PCWorkerPool<K, V, R> parentPool;
 
     public void loop() {
         while (true) {
@@ -43,16 +43,20 @@ public class PCWorker<K, V> {
         return (int) quantity * 2;
     }
 
-    private void process(WorkContainer<K, V> work) {
-        Consumer<Void> callback = ignore -> {
-            log.debug("Work completed");
-        };
-        userFunctionTimer.record(() ->
-                parentPool.getFunctionRunner().run(callback, work)
+    private void process(List<WorkContainer<K, V>> batch) {
+        userFunctionTimer.record(() -> {
+                    var functionRunner = parentPool.getRunner();
+//                    if (functionRunner.isPresent()) {
+//                        functionRunner.get().run(work);
+                    functionRunner.run(batch);
+//                    } else {
+//                        throw new IllegalStateException("Function runner not set");
+//                    }
+                }
         );
     }
 
-    public void enqueue(WorkContainer<K, V> work) {
+    public void enqueue(List<WorkContainer<K, V>> work) {
         workQueue.add(work);
     }
 }

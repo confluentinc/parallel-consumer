@@ -16,6 +16,7 @@ import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -35,6 +36,12 @@ import static java.time.Duration.ofMillis;
 @FieldNameConstants
 @InterfaceStability.Evolving
 public class ParallelConsumerOptions<K, V> {
+
+    /**
+     * Optional ID of this instance. Useful for testing.
+     */
+    @Builder.Default
+    private Optional<String> myId = Optional.empty();
 
     /**
      * Required parameter for all use.

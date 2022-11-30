@@ -5,125 +5,73 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
-import lombok.Value;
+import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.experimental.FieldDefaults;
+import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.MDC;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.addInstanceMDC;
+import static lombok.AccessLevel.PRIVATE;
+import static lombok.AccessLevel.PROTECTED;
 
 @Slf4j
-@Value
+@SuperBuilder
+@FieldDefaults(level = PRIVATE, makeFinal = true)
 public class FunctionRunner<K, V, R> {
 
+    /**
+     * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
+     * user function.
+     */
+    public static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
+
+    @NonNull
     PCModule<K, V> module;
 
+    @NonNull
     ParallelConsumerOptions<K, V> options;
 
+    @NonNull
     Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped;
 
+    @NonNull
     Consumer<R> callback;
 
-    WorkMailbox workMailbox;
+    @Getter(PROTECTED)
+    @NonNull
+    WorkMailbox<K, V> workMailbox;
 
-    public void run(Consumer<Void> callback, WorkContainer<K, V> work) {
+    @NonNull
+    WorkManager<K, V> workManager;
 
-    }
-
-
-    /**
-     * Submit a piece of work to the processing pool.
-     *
-     * @param workToProcess the polled records to process
-     */
-    protected <R> void submitWorkToPool(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                        Consumer<R> callback,
-                                        List<WorkContainer<K, V>> workToProcess) {
-        if (!workToProcess.isEmpty()) {
-            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
-
-            // perf: could inline makeBatches
-            var batches = makeBatches(workToProcess);
-
-            // debugging
-            if (log.isDebugEnabled()) {
-                var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
-                log.debug("Number batches: {}, smallest {}, sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
-                List<Integer> integerStream = sizes.stream().filter(x -> x < (int) options.getBatchSize()).collect(Collectors.toList());
-                if (integerStream.size() > 1) {
-                    log.warn("More than one batch isn't target size: {}. Input number of batches: {}", integerStream, batches.size());
-                }
-            }
-
-            // submit
-            for (var batch : batches) {
-                submitWorkToPoolInner(usersFunction, callback, batch);
-            }
-        }
-    }
-
-    private <R> void submitWorkToPoolInner(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                           final Consumer<R> callback,
-                                           final List<WorkContainer<K, V>> batch) {
+    protected void run(List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
         log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerThreadPool.submit(() -> {
-            addInstanceMDC();
-            return runUserFunction(usersFunction, callback, batch);
-        });
-        // for a batch, each message in the batch shares the same result
-        for (final WorkContainer<K, V> workContainer : batch) {
-            workContainer.setFuture(outputRecordFuture);
-        }
+
+        addInstanceMDC(options);
+        runUserFunction(batch);
+
+//        // for a batch, each message in the batch shares the same result
+//        for (WorkContainer<K, V> workContainer : batch) {
+//            workContainer.setFuture(tuples);
+//        }
     }
-
-    private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
-        int maxBatchSize = options.getBatchSize();
-        return partition(workToProcess, maxBatchSize);
-    }
-
-    private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
-        List<List<T>> listOfBatches = new ArrayList<>();
-        List<T> batchInConstruction = new ArrayList<>();
-
-        //
-        for (T item : sourceCollection) {
-            batchInConstruction.add(item);
-
-            //
-            if (batchInConstruction.size() == maxBatchSize) {
-                listOfBatches.add(batchInConstruction);
-                batchInConstruction = new ArrayList<>();
-            }
-        }
-
-        // add partial tail
-        if (!batchInConstruction.isEmpty()) {
-            listOfBatches.add(batchInConstruction);
-        }
-
-        log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
-                sourceCollection.size(),
-                listOfBatches.size(),
-                listOfBatches.stream().map(List::size).collect(Collectors.toList()));
-        return listOfBatches;
-    }
-
 
     /**
      * Run the supplied function.
      */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
+    // todo return value never used
+    private List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(List<WorkContainer<K, V>> workContainerBatch) {
         // call the user's function
         List<R> resultsFromUserFunction;
         PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
@@ -136,14 +84,14 @@ public class FunctionRunner<K, V, R> {
             log.trace("Pool received: {}", workContainerBatch);
 
             //
-            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
+            boolean workIsStale = workManager.checkIfWorkIsStale(workContainerBatch);
             if (workIsStale) {
                 // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
                 log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
                 return null;
             }
 
-            resultsFromUserFunction = usersFunction.apply(context);
+            resultsFromUserFunction = this.userFunctionWrapped.apply(context);
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
@@ -194,3 +142,4 @@ public class FunctionRunner<K, V, R> {
     }
 
 }
+

@@ -370,14 +370,12 @@ public class MultiInstanceRebalanceTest extends BrokerIntegrationTest<String, St
                     .consumer(newConsumer)
                     .commitMode(commitMode)
                     .maxConcurrency(10)
+                    .myId(Optional.of("PC-" + instanceId))
                     .build());
 
 
             // test was written with 1-second cycles in mind - in terms of expected progression
             this.parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
-
-
-            parallelConsumer.setMyId(Optional.of("PC-" + instanceId));
 
             parallelConsumer.subscribe(of(inputTopic));
 

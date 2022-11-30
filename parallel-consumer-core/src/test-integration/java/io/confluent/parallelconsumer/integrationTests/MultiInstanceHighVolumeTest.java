@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.integrationTests;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.csid.utils.TrimListRepresentation;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -108,7 +109,14 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
     }
 
     private ParallelEoSStreamProcessor<String, String> buildPc(String inputTopicName, int maxPoll, ProcessingOrder order, CommitMode commitMode) {
-        var pc = getKcu().buildPc(order, commitMode, maxPoll);
+        Optional<String> id = Optional.of("id: " + barId);
+        var options = ParallelConsumerOptions.builder()
+                .ordering(order)
+                .commitMode(commitMode)
+                .myId(id)
+                .build();
+        var pc = getKcu().buildPc(options);
+
         pc.subscribe(of(inputTopicName));
         return pc;
     }
@@ -118,7 +126,6 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
     private ProgressBar run(final int expectedMessageCount, final ParallelEoSStreamProcessor<String, String> pc, List<ConsumerRecord<?, ?>> consumed) {
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, expectedMessageCount);
         bar.setExtraMessage("#" + barId);
-        pc.setMyId(Optional.of("id: " + barId));
         barId++;
         pc.poll(record -> {
                     processRecord(bar, record.getSingleConsumerRecord(), consumed);

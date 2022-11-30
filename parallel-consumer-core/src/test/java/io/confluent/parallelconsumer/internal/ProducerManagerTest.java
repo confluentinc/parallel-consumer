@@ -264,7 +264,7 @@ class ProducerManagerTest {
 
             // "send" one record
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
-            pc.registerWork(freshWork);
+            pc.getWorkMailbox().registerWork(freshWork);
 
             assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
@@ -308,8 +308,7 @@ class ProducerManagerTest {
 
             // won't block because offset 0 goes through
             // distributes first work
-            pc.controlLoop(userFunc, o -> {
-            });
+            pc.controlLoop();
 
 
             // change to TM?
@@ -319,19 +318,19 @@ class ProducerManagerTest {
             {
                 var msg = "wait for first record to finish";
                 log.debug(msg);
-                await(msg).untilAsserted(() -> assertThat(pc.getWorkMailBox()).hasSize(1));
+                // todo clean up
+                await(msg).untilAsserted(() -> Truth.assertThat(pc.getWorkMailbox().getSize()).isEqualTo(1));
             }
 
             // send another record, register the work
             freshWork = mu.createFreshWork();
-            pc.registerWork(freshWork);
+            pc.getWorkMailbox().registerWork(freshWork);
 
             // will first try to commit - which will work fine, as there's no produce lock isn't held yet (off 0 goes through fine)
             // then it will get the work, distributes it
             // will then return
             // -- in the worker thread - will trigger the block and hold the produce lock
-            pc.controlLoop(userFunc, o -> {
-            });
+            pc.controlLoop();
 
             //
             assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
@@ -347,8 +346,7 @@ class ProducerManagerTest {
             commitBlocks.assertUnblocksAfter(() -> {
                 log.debug("Running control loop which should block until offset 1 is released by finishing produce");
                 try {
-                    pc.controlLoop(userFunc, o -> {
-                    });
+                    pc.controlLoop();
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }

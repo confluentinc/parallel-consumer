@@ -58,6 +58,10 @@ public class KafkaClientUtils implements AutoCloseable {
     public static final int MAX_POLL_RECORDS = 10_000;
     public static final String GROUP_ID_PREFIX = "group-1-";
 
+    public ParallelEoSStreamProcessor<String, String> buildPc(ParallelConsumerOptions<Object, Object> options) {
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
     class PCVersion {
         public static final String V051 = "0.5.1";
     }

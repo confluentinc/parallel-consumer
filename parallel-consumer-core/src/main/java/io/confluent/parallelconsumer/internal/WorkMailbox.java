@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
@@ -12,20 +11,21 @@ import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static io.confluent.parallelconsumer.internal.FunctionRunner.MDC_WORK_CONTAINER_DESCRIPTOR;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 @Slf4j
+@RequiredArgsConstructor
 public class WorkMailbox<K, V> {
 
-    // todo make package level
-    @Getter(AccessLevel.PUBLIC)
     protected final WorkManager<K, V> wm;
 
     /**
@@ -34,19 +34,20 @@ public class WorkMailbox<K, V> {
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
-
     /**
      * @see #notifySomethingToDo
      * @see #processWorkCompleteMailBox
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
+    private Optional<ProducerManager<K, V>> producerManager;
+
     public void registerWork(EpochAndRecordsMap<K, V> polledRecords) {
         log.trace("Adding {} to mailbox...", polledRecords);
         workMailBox.add(ControllerEventMessage.of(polledRecords));
     }
 
-    protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
+    public void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
         log.trace("Adding {} {} to mailbox...", state, wc);
         workMailBox.add(ControllerEventMessage.of(wc));
@@ -68,9 +69,10 @@ public class WorkMailbox<K, V> {
         if (timeToBlockFor.toMillis() > 0) {
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
             if (log.isDebugEnabled()) {
-                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                        timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
+                log.debug("Blocking poll on work until next scheduled offset commit attempt for {}",
+                        timeToBlockFor);
             }
+
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
             try {
@@ -106,6 +108,14 @@ public class WorkMailbox<K, V> {
                 MDC.remove(MDC_WORK_CONTAINER_DESCRIPTOR);
             }
         }
+    }
+
+    public boolean isEmpty() {
+        return workMailBox.isEmpty();
+    }
+
+    public int getSize() {
+        return this.workMailBox.size();
     }
 
 

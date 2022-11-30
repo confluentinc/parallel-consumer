@@ -272,7 +272,7 @@ public class KafkaTestUtils {
         FutureTask future = new FutureTask<>(() -> true);
         future.run();
         assertThat(future).isDone();
-        wc.setFuture(future);
+//        wc.setFuture(future);
         wc.onUserFunctionSuccess();
         wmm.onSuccessResult(wc);
         assertThat(wc.isUserFunctionComplete()).isTrue();

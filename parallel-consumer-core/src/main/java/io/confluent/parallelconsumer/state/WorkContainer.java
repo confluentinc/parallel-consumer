@@ -8,7 +8,10 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.RecordContext;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
-import lombok.*;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -16,9 +19,7 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
-import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Future;
 
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static java.util.Optional.of;
@@ -76,9 +77,9 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     @Getter
     private Optional<Boolean> maybeUserFunctionSucceeded = Optional.empty();
 
-    @Getter
-    @Setter(AccessLevel.PUBLIC)
-    private Future<List<?>> future;
+//    @Getter
+//    @Setter(PUBLIC)
+//    private Future<List<Object>> future;
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 

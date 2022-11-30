@@ -38,6 +38,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final ConsumerManager<K, V> consumerManager;
 
+    private final ParallelConsumerOptions<K, V> options;
+
     private State runState = running;
 
     private Optional<Future<Boolean>> pollControlThreadFuture = Optional.empty();
@@ -49,8 +51,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     @Getter
     private volatile boolean pausedForThrottling = false;
-
-    private final AbstractParallelEoSStreamProcessor<K, V> pc;
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
@@ -64,10 +64,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
-        this.wm = wm;
-        this.pc = pc;
+    private WorkMailbox<K, V> workMailbox;
 
+    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr,
+                            WorkMailbox<K, V> workMailbox,
+                            WorkManager<K, V> wm,
+                            AbstractParallelEoSStreamProcessor<K, V> pc,
+                            ParallelConsumerOptions<K, V> options) {
+        this.wm = wm;
+        this.options = options;
         this.consumerManager = consumerMgr;
 
         switch (options.getCommitMode()) {
@@ -108,7 +113,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     private boolean controlLoop() throws TimeoutException, InterruptedException {
         Thread.currentThread().setName("pc-broker-poll");
-        pc.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
+        options.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
         committer.ifPresent(ConsumerOffsetCommitter::claim);
         try {
@@ -143,7 +148,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
             if (count > 0) {
                 log.trace("Loop: Register work");
-                pc.registerWork(polledRecords);
+                workMailbox.registerWork(polledRecords);
             }
         }
     }

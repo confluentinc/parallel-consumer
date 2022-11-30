@@ -191,12 +191,12 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             send.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
                 wc.onUserFunctionSuccess();
-                addToMailbox(context, wc);
+                getWorkMailbox().addToMailbox(context, wc);
             });
             send.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
                 wc.onUserFunctionFailure(h);
-                addToMailbox(context, wc);
+                getWorkMailbox().addToMailbox(context, wc);
             });
 
             // add plugin callback hook
@@ -273,39 +273,6 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             this(host, DEFAULT_PORT, contextPath, UniMaps.of());
         }
 
-    }
-
-    @Override
-    protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
-        // logging
-        if (isAsyncFutureWork(resultsFromUserFunction)) {
-            log.debug("Vertx creation function success, user's function success");
-        } else {
-            super.onUserFunctionSuccess(wc, resultsFromUserFunction);
-        }
-    }
-
-    @Override
-    protected void addToMailBoxOnUserFunctionSuccess(final PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
-        // with vertx, a function hasn't succeeded until the inner vertx function has also succeeded
-        // no op
-        if (isAsyncFutureWork(resultsFromUserFunction)) {
-            log.debug("User function success but not adding vertx vertical to mailbox yet");
-        } else {
-            super.addToMailBoxOnUserFunctionSuccess(context, wc, resultsFromUserFunction);
-        }
-    }
-
-    /**
-     * Determines if any of the elements in the supplied list is a Vertx Future type
-     */
-    @Override
-    protected boolean isAsyncFutureWork(List<?> resultsFromUserFunction) {
-        for (Object object : resultsFromUserFunction) {
-            return (object instanceof Future);
-        }
-        return false;
     }
 
     /**
