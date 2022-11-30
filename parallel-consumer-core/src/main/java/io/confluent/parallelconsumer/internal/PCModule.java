@@ -27,6 +27,7 @@ public class PCModule<K, V> {
 
     @Setter
     protected AbstractParallelEoSStreamProcessor<K, V> parallelEoSStreamProcessor;
+    private WorkMailbox<K, V> workMailbox;
 
     public PCModule(ParallelConsumerOptions<K, V> options) {
         this.optionsInstance = options;
@@ -103,8 +104,11 @@ public class PCModule<K, V> {
         return brokerPollSystem;
     }
 
-    private WorkMailbox<K, V> workMailbox() {
-        throw new UnsupportedOperationException("Not implemented yet");
+    protected WorkMailbox<K, V> workMailbox() {
+        if (workMailbox == null) {
+            workMailbox = new WorkMailbox<>(workManager());
+        }
+        return workMailbox;
     }
 
     public Clock clock() {

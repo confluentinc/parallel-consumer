@@ -56,6 +56,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions<K, V> options;
 
+    private final PCModule<K, V> module;
+
     /**
      * Injectable clock for testing
      */
@@ -206,10 +208,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
+        this.module = module;
 
         options = newOptions;
         this.consumer = options.getConsumer();
-
         validateConfiguration();
 
         module.setParallelEoSStreamProcessor(this);
@@ -237,6 +239,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+
+        this.workMailbox = module.workMailbox();
     }
 
     private void validateConfiguration() {
@@ -585,6 +589,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 .userFunctionWrapped(cast)
                 .callback((Consumer<Object>) callback)
                 .options(options)
+                .module(module)
                 .workMailbox(workMailbox)
                 .workManager(wm)
                 .build();
