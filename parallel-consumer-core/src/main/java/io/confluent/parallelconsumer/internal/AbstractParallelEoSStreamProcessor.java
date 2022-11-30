@@ -14,16 +14,13 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.slf4j.MDC;
 
 import java.io.Closeable;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 import static lombok.AccessLevel.PROTECTED;
 import static lombok.AccessLevel.PUBLIC;
@@ -106,33 +103,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 newOptions.getConsumer().groupMetadata().groupId(),
                 newOptions);
     }
-
-    @Override
-    public void subscribe(Collection<String> topics) {
-        log.debug("Subscribing to {}", topics);
-        consumer.subscribe(topics, this);
-    }
-
-    @Override
-    public void subscribe(Pattern pattern) {
-        log.debug("Subscribing to {}", pattern);
-        consumer.subscribe(pattern, this);
-    }
-
-    @Override
-    public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
-        log.debug("Subscribing to {}", topics);
-        usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(topics, this);
-    }
-
-    @Override
-    public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
-        log.debug("Subscribing to {}", pattern);
-        usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(pattern, this);
-    }
-
 
     /**
      * Useful when testing with more than one instance

@@ -3,18 +3,49 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * @author Antony Stubbs
  */
 @Slf4j
-public class RebalanceHandler implements ConsumerRebalanceListener {
+public class RebalanceHandler<K, V> implements ConsumerRebalanceListener {
+
+    private final Consumer<K, V> consumer;
 
     public RebalanceHandler() {
+    }
+
+    @Override
+    public void subscribe(Collection<String> topics) {
+        log.debug("Subscribing to {}", topics);
+        consumer.subscribe(topics, this);
+    }
+
+    @Override
+    public void subscribe(Pattern pattern) {
+        log.debug("Subscribing to {}", pattern);
+        consumer.subscribe(pattern, this);
+    }
+
+    @Override
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
+        log.debug("Subscribing to {}", topics);
+        usersConsumerRebalanceListener = Optional.of(callback);
+        consumer.subscribe(topics, this);
+    }
+
+    @Override
+    public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
+        log.debug("Subscribing to {}", pattern);
+        usersConsumerRebalanceListener = Optional.of(callback);
+        consumer.subscribe(pattern, this);
     }
 
     /**
