@@ -297,7 +297,7 @@ class ProducerManagerTest {
                     return UniLists.of();
                 } finally {
                     // this unlocks the produce lock too early - should be after WC returned. Need a call back? plugin? Should refactor the wrapped user function to can construct it?
-                    // also without using wrapped user function- we're not testing something important
+                    // also without using wrapped user function - we're not testing something important
                     newValue.unlock();
                 }
             };
