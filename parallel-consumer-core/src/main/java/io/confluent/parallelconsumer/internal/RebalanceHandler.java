@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * @author Antony Stubbs
  */
 @Slf4j
-public class RebalanceHandler<K, V> implements ConsumerRebalanceListener {
+public class RebalanceHandler<K, V> implements ConsumerRebalanceListener, SubscriptionHandler {
 
     private final Consumer<K, V> consumer;
 

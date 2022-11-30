@@ -6,14 +6,14 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
+import io.confluent.parallelconsumer.internal.SubscriptionHandler;
 import lombok.Data;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 
-import java.util.Collection;
-import java.util.regex.Pattern;
+import java.util.function.Consumer;
 
 // tag::javadoc[]
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
@@ -25,27 +25,16 @@ import java.util.regex.Pattern;
  * @see AbstractParallelEoSStreamProcessor
  */
 // end::javadoc[]
-public interface ParallelConsumer<K, V> extends DrainingCloseable {
+public interface ParallelConsumer<K, V> extends SubscriptionHandler, DrainingCloseable {
 
     /**
-     * @see KafkaConsumer#subscribe(Collection)
+     * Register a function to be applied in parallel to each received message.
+     * <p>
+     * Throw a {@link PCRetriableException} to retry the message without the system logging an ERROR level message.
+     *
+     * @param usersVoidConsumptionFunction the function
      */
-    void subscribe(Collection<String> topics);
-
-    /**
-     * @see KafkaConsumer#subscribe(Pattern)
-     */
-    void subscribe(Pattern pattern);
-
-    /**
-     * @see KafkaConsumer#subscribe(Collection, ConsumerRebalanceListener)
-     */
-    void subscribe(Collection<String> topics, ConsumerRebalanceListener callback);
-
-    /**
-     * @see KafkaConsumer#subscribe(Pattern, ConsumerRebalanceListener)
-     */
-    void subscribe(Pattern pattern, ConsumerRebalanceListener callback);
+    void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
 
     /**
      * Pause this consumer (i.e. stop processing of messages).
