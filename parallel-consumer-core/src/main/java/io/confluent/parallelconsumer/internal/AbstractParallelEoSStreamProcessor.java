@@ -57,18 +57,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         options.setCommitInterval(timeBetweenCommits);
     }
 
-    /**
-     * Gets the time between commits.
-     *
-     * @deprecated use {@link ParallelConsumerOptions#setCommitInterval} instead. This will be deleted in the next major
-     *         version.
-     */
-    // todo delete in next major version
-    @Deprecated
-    public Duration getTimeBetweenCommits() {
-        return options.getCommitInterval();
-    }
-
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
