@@ -1,10 +1,13 @@
 package io.confluent.parallelconsumer.internal;
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.Consumer;
 
 import java.time.Duration;
 import java.util.List;
@@ -13,6 +16,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 
+import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
@@ -27,11 +31,21 @@ import static lombok.AccessLevel.PRIVATE;
 @FieldDefaults(makeFinal = true, level = PRIVATE)
 public class StateMachine implements DrainingCloseable {
 
+    PCModule<?, ?> module;
+
+    ParallelConsumerOptions<?, ?> options;
+
+    OffsetCommitter committer;
+
     WorkManager<?, ?> wm;
 
     Controller<?, ?> controller;
 
     Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
+
+    Consumer consumer;
+
+    BrokerPollSystem<?, ?> brokerPollSubsystem;
 
     /**
      * The run state of the controller.
@@ -40,6 +54,22 @@ public class StateMachine implements DrainingCloseable {
      */
     @NonFinal
     private State state = State.unused;
+
+    private PCWorkerPool<?, ?, ?> workerThreadPool;
+
+    private ControlLoop<?, ?> controllerLoop;
+
+    /**
+     * If the system failed with an exception, it is referenced here.
+     */
+    @NonFinal
+    private Exception failureReason;
+
+    public StateMachine(@NonNull PCModule module) {
+        committer = module.committer();
+        consumer = module.consumer();
+    }
+
 
     /**
      * Close the system, without draining.
@@ -138,7 +168,7 @@ public class StateMachine implements DrainingCloseable {
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
         this.state = State.draining;
-        notifySomethingToDo();
+        controller.notifySomethingToDo();
     }
 
     public boolean isOpen() {
@@ -152,7 +182,7 @@ public class StateMachine implements DrainingCloseable {
         } else {
             state = State.closing;
         }
-        notifySomethingToDo();
+        controller.notifySomethingToDo();
     }
 
     public boolean isClosedOrFailed() {
@@ -214,11 +244,34 @@ public class StateMachine implements DrainingCloseable {
         }
     }
 
+    private boolean isRecordsAwaitingProcessing() {
+        boolean isRecordsAwaitingProcessing = wm.isRecordsAwaitingProcessing();
+        boolean threadsDone = areMyThreadsDone();
+        log.trace("isRecordsAwaitingProcessing {} || threadsDone {}", isRecordsAwaitingProcessing, threadsDone);
+        return isRecordsAwaitingProcessing || threadsDone;
+    }
+
+    private boolean areMyThreadsDone() {
+        if (isEmpty(controlThreadFuture)) {
+            // not constructed yet, will become alive, unless #poll is never called
+            return false;
+        } else {
+            return controlThreadFuture.get().isDone();
+        }
+    }
+
+    protected Exception handleCrash(Exception e) throws TimeoutException, ExecutionException, InterruptedException {
+        log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+        failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+        doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
+        return failureReason;
+    }
+
     protected void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
-        List<Runnable> unfinished = workerThreadPool.shutdownNow();
+        List<Runnable> unfinished = workerThreadPool.close();
         if (!unfinished.isEmpty()) {
             log.warn("Threads not done count: {}", unfinished.size());
         }
@@ -241,10 +294,10 @@ public class StateMachine implements DrainingCloseable {
         log.debug("Worker pool terminated.");
 
         // last check to see if after worker pool closed, has any new work arrived?
-        workMailbox.processWorkCompleteMailBox(Duration.ZERO);
+        module.workMailbox().processWorkCompleteMailBox(Duration.ZERO);
 
         //
-        commitOffsetsThatAreReady();
+        controllerLoop.commitOffsetsThatAreReady();
 
         // only close consumer once producer has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
@@ -252,7 +305,7 @@ public class StateMachine implements DrainingCloseable {
 
         maybeCloseConsumer();
 
-        producerManager.ifPresent(x -> x.close(timeout));
+        module.producerManager().ifPresent(x -> x.close(timeout));
 
         log.debug("Close complete.");
         this.state = closed;

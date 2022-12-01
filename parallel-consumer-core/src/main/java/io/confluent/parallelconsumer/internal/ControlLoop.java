@@ -1,8 +1,13 @@
 package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.Getter;
+import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -11,9 +16,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static io.confluent.parallelconsumer.internal.State.running;
-import static lombok.AccessLevel.PUBLIC;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Main Control loop for the parallel consumer.
@@ -21,20 +29,69 @@ import static lombok.AccessLevel.PUBLIC;
  * @author Antony Stubbs
  */
 @Slf4j
+@FieldDefaults(level = PRIVATE, makeFinal = true)
 public class ControlLoop<K, V> {
+
+    PCModule<K, V> module;
 
     /**
      * Useful for testing async code
      */
-    private final List<Runnable> controlLoopHooks = new ArrayList<>();
+    List<Runnable> controlLoopHooks = new ArrayList<>();
+
+    ParallelConsumerOptions<?, ?> options;
+
+    PCWorkerPool<K, V, Object> workerPool;
 
     // todo make private
-    @Getter(PUBLIC)
-    private WorkMailbox<K, V> workMailbox;
+    @Getter(PRIVATE)
+    WorkMailbox<K, V> workMailbox;
 
-    private StateMachine state;
+    BrokerPollSystem<?, ?> brokerPollSubsystem;
+
+    @Getter(PRIVATE)
+    WorkManager<K, V> wm;
+
+    StateMachine state;
+
+    RateLimiter queueStatsLimiter = new RateLimiter();
+
+    // todo depends on MicroMeter pr
+    SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
+
+    Timer workRetrievalTimer = metricsRegistry.timer("user.function");
+
+    /**
+     * Used to request a commit asap
+     */
+    AtomicBoolean commitCommand = new AtomicBoolean(false);
+
+    /**
+     * Time of last successful commit
+     */
+    @NonFinal
+    Instant lastCommitTime;
+
+    @NonFinal
+    Instant lastCommitCheckTime = Instant.now();
 
     public ControlLoop() {
+    }
+
+    // todo make private
+    protected void initWorkerPool(Function userFunctionWrapped, Consumer<Object> callback) {
+        // todo casts
+        Function<PollContextInternal<K, V>, List<Object>> cast = userFunctionWrapped;
+        var runner = FunctionRunner.<K, V, Object>builder()
+                .userFunctionWrapped(cast)
+                .callback(callback)
+                .options(options)
+                .module(module)
+                .workMailbox(workMailbox)
+                .workManager(wm)
+                .build();
+
+        workerPool = new PCWorkerPool<>(options.getMaxConcurrency(), runner, options);
     }
 
     /**
@@ -80,7 +137,7 @@ public class ControlLoop<K, V> {
      * todo move into {@link WorkManager} as it's specific to WM having enough work?
      */
     private void maybeWakeupPoller() {
-        if (state == running) {
+        if (state.isRunning()) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -106,7 +163,7 @@ public class ControlLoop<K, V> {
             // get into write lock queue, so that no new work can be started from here on
             log.debug("Acquiring commit lock pessimistically, before we try to collect offsets for committing");
             //noinspection OptionalGetWithoutIsPresent - options will already be verified
-            producerManager.get().preAcquireOffsetsToCommit();
+            module.producerManager().get().preAcquireOffsetsToCommit();
         }
         return shouldTryCommitNow;
     }
@@ -135,6 +192,23 @@ public class ControlLoop<K, V> {
         }
 
         return shouldCommitNow;
+    }
+
+    /**
+     * Request a commit as soon as possible (ASAP), overriding other constraints.
+     */
+    public void requestCommitAsap() {
+        log.debug("Registering command to commit next chance");
+        synchronized (commitCommand) {
+            this.commitCommand.set(true);
+        }
+        module.controller().notifySomethingToDo();
+    }
+
+    private boolean isCommandedToCommit() {
+        synchronized (commitCommand) {
+            return this.commitCommand.get();
+        }
     }
 
     private void updateLastCommitCheckTime() {
@@ -208,7 +282,7 @@ public class ControlLoop<K, V> {
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
-        if (isIdlingOrRunning()) {
+        if (state.isIdlingOrRunning()) {
             Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
@@ -221,7 +295,7 @@ public class ControlLoop<K, V> {
     }
 
     private Duration getTimeSinceLastCheck() {
-        Instant now = clock.instant();
+        Instant now = module.clock().instant();
         return Duration.between(lastCommitCheckTime, now);
     }
 
@@ -232,7 +306,7 @@ public class ControlLoop<K, V> {
         log.trace("Synchronizing on commitCommand...");
         synchronized (commitCommand) {
             log.debug("Committing offsets that are ready...");
-            committer.retrieveOffsetsAndCommit();
+            module.committer().retrieveOffsetsAndCommit();
             clearCommitCommand();
             this.lastCommitTime = Instant.now();
         }
