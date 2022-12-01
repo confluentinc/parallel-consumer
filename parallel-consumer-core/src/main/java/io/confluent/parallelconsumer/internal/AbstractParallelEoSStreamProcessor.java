@@ -31,7 +31,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     protected ParallelConsumerOptions<K, V> options;
 
-    protected Controller<K, V> controller;
+    @Getter(PROTECTED)
+    private Controller<K, V> controller;
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -53,7 +54,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         module.setParallelEoSStreamProcessor(this);
 
-        controller = new Controller<>(module);
+        controller = module.controller();
 
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
                 newOptions.getConsumer().groupMetadata().groupId(),
