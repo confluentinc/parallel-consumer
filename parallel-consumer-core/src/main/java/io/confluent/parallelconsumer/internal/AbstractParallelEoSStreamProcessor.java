@@ -4,81 +4,34 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.state.WorkManager;
-import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import lombok.AccessLevel;
+import io.confluent.parallelconsumer.PollContextInternal;
 import lombok.Getter;
-import lombok.Setter;
+import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 
 import java.io.Closeable;
-import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
+import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
-import static lombok.AccessLevel.PUBLIC;
 
 /**
  * @see ParallelConsumer
  */
 @Slf4j
+@FieldDefaults(level = PRIVATE, makeFinal = true)
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
 
-    public static final String MDC_INSTANCE_ID = "pcId";
-
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions<K, V> options;
+    protected ParallelConsumerOptions<K, V> options;
 
-    /**
-     * Injectable clock for testing
-     */
-    @Setter(AccessLevel.PACKAGE)
-    private Clock clock = TimeUtils.getClock();
-
-    /**
-     * Sets the time between commits. Using a higher frequency will put more load on the brokers.
-     *
-     * @deprecated use {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval}} instead. This
-     *         will be deleted in the next major version.
-     */
-    // todo delete in next major version
-    @Deprecated
-    public void setTimeBetweenCommits(final Duration timeBetweenCommits) {
-        options.setCommitInterval(timeBetweenCommits);
-    }
-
-    /**
-     * Gets the time between commits.
-     *
-     * @deprecated use {@link ParallelConsumerOptions#setCommitInterval} instead. This will be deleted in the next major
-     *         version.
-     */
-    // todo delete in next major version
-    @Deprecated
-    public Duration getTimeBetweenCommits() {
-        return options.getCommitInterval();
-    }
-
-    @Getter(PROTECTED)
-    private final Optional<ProducerManager<K, V>> producerManager;
-
-    private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
-
-
-    // todo make package level
-    @Getter(PUBLIC)
-    protected final WorkManager<K, V> wm;
-
-    private final SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
-    private final Timer workRetrievalTimer = metricsRegistry.timer("user.function");
-
+    protected Controller<K, V> controller;
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -94,39 +47,41 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         options = newOptions;
-        this.consumer = options.getConsumer();
-        validateConfiguration();
+
+        var validator = new ConfigurationValidator<K, V>(options, options.getConsumer());
+        validator.validateConfiguration();
 
         module.setParallelEoSStreamProcessor(this);
+
+        controller = new Controller<>(module);
 
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
                 newOptions.getConsumer().groupMetadata().groupId(),
                 newOptions);
     }
 
+    protected void supervisorLoop(Function<PollContextInternal<K, V>, List<Object>> wrappedUserFunc, Consumer<Object> voidCallBack) {
+        controller.supervisorLoop(wrappedUserFunc, voidCallBack);
+    }
+
     /**
-     * Useful when testing with more than one instance
+     * @deprecated moving to Options
      */
-    public static void addInstanceMDC(ParallelConsumerOptions<?, ?> options) {
-        options.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
+    // todo move to options
+    @Deprecated
+    public void setLongPollTimeout(Duration ofMillis) {
+        BrokerPollSystem.setLongPollTimeout(ofMillis);
+    }
+
+
+    @Override
+    public void pauseIfRunning() {
+        controller.pauseIfRunning();
     }
 
     @Override
-    public long workRemaining() {
-        return wm.getNumberOfIncompleteOffsets();
-    }
-
-    /**
-     * Plugin a function to run at the end of each main loop.
-     * <p>
-     * Useful for testing and controlling loop progression.
-     */
-    public void addLoopEndCallBack(Runnable r) {
-        this.controlLoopHooks.add(r);
-    }
-
-    public void setLongPollTimeout(Duration ofMillis) {
-        BrokerPollSystem.setLongPollTimeout(ofMillis);
+    public void resumeIfPaused() {
+        controller.pauseIfRunning();
     }
 
 }

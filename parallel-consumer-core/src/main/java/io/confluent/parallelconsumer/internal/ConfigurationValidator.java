@@ -1,6 +1,10 @@
 package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerException;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
@@ -14,9 +18,15 @@ import static java.lang.Boolean.TRUE;
 /**
  * @author Antony Stubbs
  */
-public class ConfigurationValidator {
+@Slf4j
+@RequiredArgsConstructor
+public class ConfigurationValidator<K, V> {
 
-    private void validateConfiguration() {
+    protected final ParallelConsumerOptions<K, V> options;
+
+    private final Consumer<K, V> consumer;
+
+    protected void validateConfiguration() {
         options.validate();
 
         validateConsumer();
