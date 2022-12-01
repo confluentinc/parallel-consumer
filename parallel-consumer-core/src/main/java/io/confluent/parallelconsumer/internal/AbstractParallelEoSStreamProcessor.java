@@ -56,7 +56,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         module.setParallelEoSStreamProcessor(this);
 
-        controller = new Controller<>(module);
+        controller = module.controller();
         state = module.stateMachine();
 
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
@@ -76,7 +76,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void setLongPollTimeout(Duration ofMillis) {
         BrokerPollSystem.setLongPollTimeout(ofMillis);
     }
-
 
     @Override
     public void pauseIfRunning() {

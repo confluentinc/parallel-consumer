@@ -27,6 +27,7 @@ public class PCModule<K, V> {
 
     @Setter
     protected AbstractParallelEoSStreamProcessor<K, V> parallelEoSStreamProcessor;
+
     private WorkMailbox<K, V> workMailbox;
 
     public PCModule(ParallelConsumerOptions<K, V> options) {
@@ -116,6 +117,10 @@ public class PCModule<K, V> {
     }
 
     public StateMachine stateMachine() {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
+    public Controller<K, V> controller() {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 }
