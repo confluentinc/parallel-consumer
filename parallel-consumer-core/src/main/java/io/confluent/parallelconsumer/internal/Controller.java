@@ -260,7 +260,6 @@ public class Controller<K, V> implements DrainingCloseable {
         workerPool = new PCWorkerPool<>(options.getMaxConcurrency(), runner, options);
     }
 
-
     /**
      * Main control loop
      */
