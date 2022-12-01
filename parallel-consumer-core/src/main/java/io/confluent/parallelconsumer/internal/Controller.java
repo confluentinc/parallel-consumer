@@ -1,15 +1,21 @@
 package io.confluent.parallelconsumer.internal;
 
+import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import lombok.*;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
+import org.slf4j.MDC;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -19,7 +25,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
-import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.addInstanceMDC;
 import static io.confluent.parallelconsumer.internal.State.running;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -29,7 +34,9 @@ import static lombok.AccessLevel.PROTECTED;
  * @author Antony Stubbs
  */
 @Slf4j
-public class Controller<K, V> {
+public class Controller<K, V> implements DrainingCloseable {
+
+    public static final String MDC_INSTANCE_ID = "pcId";
 
     private final PCModule<K, V> module;
 
@@ -79,6 +86,9 @@ public class Controller<K, V> {
      */
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
 
+    @Getter(PROTECTED)
+    private final Optional<ProducerManager<K, V>> producerManager;
+
     /**
      * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
      * sure threads always have work to do.
@@ -92,15 +102,6 @@ public class Controller<K, V> {
 
     private Instant lastCommitCheckTime = Instant.now();
 
-
-    /**
-     * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
-     */
-    private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
-
-    @Getter
-    private int numberOfAssignedPartitions;
-
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
     /**
@@ -110,33 +111,42 @@ public class Controller<K, V> {
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
+    // todo depends on MicroMeter pr
+    private final SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
+
+    private final Timer workRetrievalTimer = metricsRegistry.timer("user.function");
+
 
     public Controller(@NonNull PCModule<K, V> module) {
         this.brokerPollSubsystem = module.brokerPoller();
         this.module = module;
         this.options = module.options();
-        this.workerThreadPool = setupWorkerPool(getOptions().getMaxConcurrency());
+        this.consumer = options.getConsumer();
+        this.workerThreadPool = createWorkerPool(options.getMaxConcurrency());
         this.workMailbox = module.workMailbox();
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
         this.wm = module.workManager();
 
-        initProducer(module);
+        producerManager = initProducerManager();
+        committer = getCommitter();
     }
 
-    private void initProducer(PCModule<K, V> module) {
+    private OffsetCommitter getCommitter() {
+        if (options.isUsingTransactionCommitMode())
+            return producerManager.get();
+        else
+            return brokerPollSubsystem;
+    }
+
+    private Optional<ProducerManager<K, V>> initProducerManager() {
         if (options.isProducerSupplied()) {
-            this.producerManager = Optional.of(module.producerManager());
-            if (options.isUsingTransactionalProducer())
-                this.committer = this.producerManager.get();
-            else
-                this.committer = this.brokerPollSubsystem;
+            return Optional.of(module.producerManager());
         } else {
-            this.producerManager = Optional.empty();
-            this.committer = this.brokerPollSubsystem;
+            return Optional.empty();
         }
     }
 
-    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+    protected ThreadPoolExecutor createWorkerPool(int poolSize) {
         ThreadFactory defaultFactory;
         try {
             defaultFactory = InitialContext.doLookup(options.getManagedThreadFactory());

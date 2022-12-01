@@ -2,12 +2,70 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ExceptionInUserFunctionException;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
-public class RebalanceHandler implements ConsumerRebalanceListener {
+/**
+ * @author Antony Stubbs
+ */
+@Slf4j
+@RequiredArgsConstructor
+@FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
+public class RebalanceHandler<K, V> implements ConsumerRebalanceListener, SubscriptionHandler {
+
+    public static final String SUBSCRIBING_TO_MSG = "Subscribing to {}";
+    @Getter
+    @NonFinal
+    int numberOfAssignedPartitions;
+
+    /**
+     * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
+     */
+    @NonFinal
+    private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
+
+    Consumer<K, V> consumer;
+
+    Controller<K, V> controller;
+
+    WorkManager<K, V> wm;
+
+    @Override
+    public void subscribe(Collection<String> topics) {
+        log.debug(SUBSCRIBING_TO_MSG, topics);
+        consumer.subscribe(topics, this);
+    }
+
+    @Override
+    public void subscribe(Pattern pattern) {
+        log.debug(SUBSCRIBING_TO_MSG, pattern);
+        consumer.subscribe(pattern, this);
+    }
+
+    @Override
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
+        log.debug(SUBSCRIBING_TO_MSG, topics);
+        usersConsumerRebalanceListener = Optional.of(callback);
+        consumer.subscribe(topics, this);
+    }
+
+    @Override
+    public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
+        log.debug(SUBSCRIBING_TO_MSG, pattern);
+        usersConsumerRebalanceListener = Optional.of(callback);
+        consumer.subscribe(pattern, this);
+    }
 
     /**
      * Commit our offsets
@@ -16,12 +74,12 @@ public class RebalanceHandler implements ConsumerRebalanceListener {
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        log.debug("Partitions revoked {}, state: {}", partitions, state);
+        log.debug("Partitions revoked {}, state: {}", partitions, controller.getState());
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
             // commit any offsets from revoked partitions BEFORE truncation
-            commitOffsetsThatAreReady();
+            controller.commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
             wm.onPartitionsRevoked(partitions);
@@ -48,7 +106,7 @@ public class RebalanceHandler implements ConsumerRebalanceListener {
         log.info("Assigned {} total ({} new) partition(s) {}", numberOfAssignedPartitions, partitions.size(), partitions);
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        notifySomethingToDo();
+        controller.notifySomethingToDo();
     }
 
     /**
@@ -65,3 +123,4 @@ public class RebalanceHandler implements ConsumerRebalanceListener {
     }
 
 }
+
