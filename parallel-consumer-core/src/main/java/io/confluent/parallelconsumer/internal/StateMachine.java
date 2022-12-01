@@ -41,18 +41,6 @@ public class StateMachine implements DrainingCloseable {
     @NonFinal
     private State state = State.unused;
 
-    void maybeTransitionState() {
-        log.trace("Current state: {}", state);
-        switch (state) {
-            case draining -> {
-                drain();
-            }
-            case closing -> {
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
-            }
-        }
-    }
-
     /**
      * Close the system, without draining.
      *
@@ -207,10 +195,6 @@ public class StateMachine implements DrainingCloseable {
         return this.failureReason;
     }
 
-
-    public boolean isOpen() {
-        return state != closed;
-    }
     public void transitionToRunning() {
         if (state == State.unused) {
             state = running;

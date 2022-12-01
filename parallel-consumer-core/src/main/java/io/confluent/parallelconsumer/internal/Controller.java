@@ -1,26 +1,18 @@
 package io.confluent.parallelconsumer.internal;
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import lombok.*;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.Setter;
 import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
-import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +22,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.running;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -180,6 +173,39 @@ public class Controller<K, V> implements DrainingCloseable {
      */
     public static void addInstanceMDC(ParallelConsumerOptions<?, ?> options) {
         options.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
+    }
+
+    /**
+     * Kicks off the control loop in the executor, with supervision and returns.
+     *
+     * @see #supervisorLoop(Function, Consumer)
+     */
+    // todo rename
+    protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
+                                      Consumer<R> callback) {
+        if (state == State.unused) {
+            state = running;
+        } else {
+            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
+                    "more than once (they are asynchronous) (current state is {})", state));
+        }
+
+        // broker poll subsystem
+        brokerPollSubsystem.start(options.getManagedExecutorService());
+
+        // todo shouldn't the worker pool use the same executor service?
+        ExecutorService executorService;
+        try {
+            executorService = InitialContext.doLookup(options.getManagedExecutorService());
+        } catch (NamingException e) {
+            log.debug("Using Java SE Thread", e);
+            executorService = Executors.newSingleThreadExecutor();
+        }
+
+        // run main pool loop in thread
+        Callable<Boolean> controlTask = () -> superviseControlLoop((Function) userFunctionWrapped, (Consumer<Object>) callback);
+        Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
+        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
     }
 
     // todo delete type param
