@@ -114,4 +114,8 @@ public class PCModule<K, V> {
     public Clock clock() {
         return TimeUtils.getClock();
     }
+
+    public StateMachine stateMachine() {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
 }

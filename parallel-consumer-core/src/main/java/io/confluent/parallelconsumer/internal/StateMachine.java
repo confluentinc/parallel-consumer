@@ -11,6 +11,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -228,4 +229,12 @@ public class StateMachine {
     }
 
 
+    public void transitionToRunning() {
+        if (state == State.unused) {
+            state = running;
+        } else {
+            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
+                    "more than once (they are asynchronous) (current state is {})", state));
+        }
+    }
 }

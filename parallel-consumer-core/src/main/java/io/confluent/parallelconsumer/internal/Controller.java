@@ -6,9 +6,11 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import lombok.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
+import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
@@ -26,9 +28,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
-import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.addInstanceMDC;
-import static io.confluent.csid.utils.BackportUtils.toSeconds;
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static lombok.AccessLevel.*;
@@ -45,6 +44,10 @@ public class Controller<K, V> implements DrainingCloseable {
 
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions<K, V> options;
+
+    // todo decide delegate or not
+    @Delegate
+    private final StateMachine state;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -133,6 +136,7 @@ public class Controller<K, V> implements DrainingCloseable {
         this.brokerPollSubsystem = module.brokerPoller();
         this.module = module;
         this.options = module.options();
+        this.state = module.stateMachine();
         this.consumer = options.getConsumer();
         this.workerThreadPool = createWorkerPool(options.getMaxConcurrency());
         this.workMailbox = module.workMailbox();
@@ -180,35 +184,10 @@ public class Controller<K, V> implements DrainingCloseable {
     }
 
     /**
-     * Kicks off the control loop in the executor, with supervision and returns.
-     *
-     * @see #supervisorLoop(Function, Consumer)
+     * Useful when testing with more than one instance
      */
-    protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
-                                      Consumer<R> callback) {
-        if (state == State.unused) {
-            state = running;
-        } else {
-            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
-                    "more than once (they are asynchronous) (current state is {})", state));
-        }
-
-        // broker poll subsystem
-        brokerPollSubsystem.start(options.getManagedExecutorService());
-
-        ExecutorService executorService;
-        try {
-            executorService = InitialContext.doLookup(options.getManagedExecutorService());
-        } catch (NamingException e) {
-            log.debug("Using Java SE Thread", e);
-            executorService = Executors.newSingleThreadExecutor();
-        }
-
-
-        // run main pool loop in thread
-        Callable<Boolean> controlTask = () -> superviseControlLoop((Function) userFunctionWrapped, (Consumer<Object>) callback);
-        Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
-        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+    public static void addInstanceMDC(ParallelConsumerOptions<?, ?> options) {
+        options.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
     }
 
     // todo name
@@ -574,6 +553,44 @@ public class Controller<K, V> implements DrainingCloseable {
         }
     }
 
+    /**
+     * Kicks off the control loop in the executor, with supervision and returns.
+     *
+     * @see #supervisorLoop(Function, Consumer)
+     */
+    protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
+                                      Consumer<R> callback) {
+        state.transitionToRunning();
 
+        // broker poll subsystem
+        brokerPollSubsystem.start(options.getManagedExecutorService());
+
+        ExecutorService executorService;
+        try {
+            executorService = InitialContext.doLookup(options.getManagedExecutorService());
+        } catch (NamingException e) {
+            log.debug("Using Java SE Thread", e);
+            executorService = Executors.newSingleThreadExecutor();
+        }
+
+        // run main pool loop in thread
+        Callable<Boolean> controlTask = () -> superviseControlLoop((Function) userFunctionWrapped, (Consumer<Object>) callback);
+        Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
+        this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+    }
+
+    /**
+     * Plugin a function to run at the end of each main loop.
+     * <p>
+     * Useful for testing and controlling loop progression.
+     */
+    public void addLoopEndCallBack(Runnable r) {
+        this.controlLoopHooks.add(r);
+    }
+
+    @Override
+    public long workRemaining() {
+        return wm.getNumberOfIncompleteOffsets();
+    }
 
 }

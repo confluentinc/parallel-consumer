@@ -31,7 +31,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     protected ParallelConsumerOptions<K, V> options;
 
-    protected Controller<K, V> controller;
+    private StateMachine state;
+
+    @Getter(PROTECTED)
+    private Controller<K, V> controller;
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -54,6 +57,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         module.setParallelEoSStreamProcessor(this);
 
         controller = new Controller<>(module);
+        state = module.stateMachine();
 
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
                 newOptions.getConsumer().groupMetadata().groupId(),
@@ -76,12 +80,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void pauseIfRunning() {
-        controller.pauseIfRunning();
+        state.pauseIfRunning();
     }
 
     @Override
     public void resumeIfPaused() {
-        controller.pauseIfRunning();
+        state.pauseIfRunning();
     }
 
 }
