@@ -74,7 +74,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         BrokerPollSystem.setLongPollTimeout(ofMillis);
     }
 
-
     @Override
     public void pauseIfRunning() {
         controller.pauseIfRunning();
