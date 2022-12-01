@@ -629,7 +629,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return true;
     }
 
-    private static void initWorkerPool(Function userFunctionWrapped, Consumer<Object> callback) {
+    private void initWorkerPool(Function userFunctionWrapped, Consumer<Object> callback) {
         // todo casts
         Function<PollContextInternal<K, V>, List<Object>> cast = userFunctionWrapped;
         var runner = FunctionRunner.<K, V, Object>builder()
