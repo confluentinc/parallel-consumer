@@ -2,14 +2,18 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import static io.confluent.parallelconsumer.internal.State.*;
+import static io.confluent.parallelconsumer.internal.State.running;
+import static lombok.AccessLevel.PUBLIC;
 
 /**
  * Main Control loop for the parallel consumer.
@@ -17,15 +21,26 @@ import static io.confluent.parallelconsumer.internal.State.*;
  * @author Antony Stubbs
  */
 @Slf4j
-public class Looper {
+public class ControlLoop<K, V> {
 
-    public Looper() {
+    /**
+     * Useful for testing async code
+     */
+    private final List<Runnable> controlLoopHooks = new ArrayList<>();
+
+    // todo make private
+    @Getter(PUBLIC)
+    private WorkMailbox<K, V> workMailbox;
+
+    private StateMachine state;
+
+    public ControlLoop() {
     }
 
     /**
      * Main control loop
      */
-    protected void controlLoop() throws TimeoutException, ExecutionException, InterruptedException {
+    protected void loop() throws TimeoutException, ExecutionException, InterruptedException {
         maybeWakeupPoller();
 
         //
@@ -48,18 +63,7 @@ public class Looper {
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
         this.controlLoopHooks.forEach(Runnable::run);
 
-        log.trace("Current state: {}", state);
-        switch (state) {
-            case draining -> {
-                drain();
-            }
-            case closing -> {
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
-            }
-        }
-
-        // sanity - supervise the poller
-        brokerPollSubsystem.supervise();
+        state.maybeTransitionState();
 
         // thread yield for spin lock avoidance
         Duration duration = Duration.ofMillis(1);
@@ -68,10 +72,6 @@ public class Looper {
         } catch (InterruptedException e) {
             log.trace("Woke up", e);
         }
-
-        // end of loop
-        log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     /**

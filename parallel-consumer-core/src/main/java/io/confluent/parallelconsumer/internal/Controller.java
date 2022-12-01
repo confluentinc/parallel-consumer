@@ -11,7 +11,6 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.*;
@@ -21,10 +20,10 @@ import java.util.function.Function;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.addInstanceMDC;
-import static io.confluent.parallelconsumer.internal.State.closed;
 import static io.confluent.parallelconsumer.internal.State.running;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static lombok.AccessLevel.*;
+import static lombok.AccessLevel.PRIVATE;
+import static lombok.AccessLevel.PROTECTED;
 
 /**
  * @author Antony Stubbs
@@ -37,12 +36,11 @@ public class Controller<K, V> {
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions<K, V> options;
 
-    private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
+    private StateMachine state;
 
-    /**
-     * Useful for testing async code
-     */
-    private final List<Runnable> controlLoopHooks = new ArrayList<>();
+    private ControlLoop<K, V> controlLoop;
+
+    private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
     /**
      * Reference to the control thread, used for waking up a blocking poll ({@link BlockingQueue#poll}) against a
@@ -63,7 +61,7 @@ public class Controller<K, V> {
     protected final ThreadPoolExecutor workerThreadPool;
 
     // todo make private
-    @Getter(PUBLIC)
+    @Getter(PRIVATE)
     private WorkMailbox<K, V> workMailbox;
 
     // todo make package level
@@ -191,6 +189,7 @@ public class Controller<K, V> {
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
     }
 
+    // todo delete type param
     // todo name
     private <R> boolean superviseControlLoop(Function userFunctionWrapped, Consumer<Object> callback) throws Exception {
         addInstanceMDC(options);
@@ -201,17 +200,22 @@ public class Controller<K, V> {
         Thread controlThread = Thread.currentThread();
         controlThread.setName("pc-control");
         this.blockableControlThread = controlThread;
-        while (state != closed) {
+        while (state.isOpen()) {
             log.debug("Control loop start");
             try {
-                controlLoop();
+                controlLoop.loop();
+
+                // sanity - supervise the poller
+                brokerPollSubsystem.supervise();
+
+                wm.logState();
             } catch (InterruptedException e) {
                 log.debug("Control loop interrupted, closing");
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+                state.doClose(DrainingCloseable.DEFAULT_TIMEOUT);
             } catch (Exception e) {
                 log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                 failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
+                state.doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                 throw failureReason;
             }
         }
@@ -306,8 +310,6 @@ public class Controller<K, V> {
             return this.commitCommand.get();
         }
     }
-
-
 
 
 }

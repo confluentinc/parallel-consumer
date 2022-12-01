@@ -29,6 +29,17 @@ public class StateMachine {
     @Setter
     private State state = State.unused;
 
+    void maybeTransitionState() {
+        log.trace("Current state: {}", state);
+        switch (state) {
+            case draining -> {
+                drain();
+            }
+            case closing -> {
+                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+            }
+        }
+    }
 
     /**
      * Close the system, without draining.
@@ -228,4 +239,7 @@ public class StateMachine {
     }
 
 
+    public boolean isOpen() {
+        return state != closed;
+    }
 }

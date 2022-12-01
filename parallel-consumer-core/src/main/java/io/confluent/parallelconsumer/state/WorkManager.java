@@ -272,4 +272,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public boolean isDirty() {
         return pm.isDirty();
     }
+
+    protected void logState() {
+        log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}",
+                getNumberOfWorkQueuedInShardsAwaitingSelection(), getNumberOfIncompleteOffsets(), getNumberRecordsOutForProcessing());
+    }
+
 }
