@@ -27,17 +27,6 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     }
 
     /**
-     * Register a function to be applied in parallel to each received message.
-     * <p>
-     * Throw a {@link PCRetriableException} to retry the message without the system logging an ERROR level message.
-     *
-     * @param usersVoidConsumptionFunction the function
-     */
-    // todo why isn't this in ParallelConsumer ?
-    void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
-
-
-    /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or more
      * {@link ProducerRecord}s to be sent back to the broker.
      * <p>

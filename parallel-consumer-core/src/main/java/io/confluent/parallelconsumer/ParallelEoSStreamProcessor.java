@@ -81,7 +81,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
      */
     private List<ConsumeProduceResult<K, V, K, V>> processAndProduceResults(final Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                                                             final PollContextInternal<K, V> context) {
-        ProducerManager<K, V> pm = super.getProducerManager().get();
+        ProducerManager<K, V> pm = controller.getProducerManager();
 
         // if running strict with no processing during commit - get the produce lock first
         if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
