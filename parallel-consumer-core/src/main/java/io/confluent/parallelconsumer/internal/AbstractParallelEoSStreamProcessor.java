@@ -31,6 +31,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     protected ParallelConsumerOptions<K, V> options;
 
+    private StateMachine state;
+
     @Getter(PROTECTED)
     private Controller<K, V> controller;
 
@@ -55,6 +57,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         module.setParallelEoSStreamProcessor(this);
 
         controller = module.controller();
+        state = module.stateMachine();
 
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
                 newOptions.getConsumer().groupMetadata().groupId(),
@@ -70,18 +73,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     // todo move to options
     @Deprecated
-public void setLongPollTimeout(Duration ofMillis) {
+    public void setLongPollTimeout(Duration ofMillis) {
         BrokerPollSystem.setLongPollTimeout(ofMillis);
     }
 
     @Override
     public void pauseIfRunning() {
-        controller.pauseIfRunning();
+        state.pauseIfRunning();
     }
 
     @Override
     public void resumeIfPaused() {
-        controller.pauseIfRunning();
+        state.pauseIfRunning();
     }
 
 }
