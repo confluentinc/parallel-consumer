@@ -1,11 +1,14 @@
 package io.confluent.parallelconsumer.internal;
 
-import lombok.Setter;
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
+import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
@@ -15,19 +18,27 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * @author Antony Stubbs
  */
 @Slf4j
-public class StateMachine {
+@FieldDefaults(makeFinal = true, level = PRIVATE)
+public class StateMachine implements DrainingCloseable {
+
+    WorkManager<?, ?> wm;
+
+    Controller<?, ?> controller;
+
+    Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
     /**
      * The run state of the controller.
      *
      * @see State
      */
-    @Setter
+    @NonFinal
     private State state = State.unused;
 
 
@@ -96,7 +107,116 @@ public class StateMachine {
         }
     }
 
-    private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
+    protected boolean isIdlingOrRunning() {
+        return state == running || state == draining || state == paused;
+    }
+
+    @Override
+    public void resumeIfPaused() {
+        if (this.state == State.paused) {
+            log.info("Transitioning parallel consumer to state running.");
+            this.state = State.running;
+            controller.notifySomethingToDo();
+        } else {
+            log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
+        }
+    }
+
+    /**
+     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
+     * This way, if partitions are revoked, the commit can be made inline.
+     */
+    private void maybeCloseConsumer() {
+        if (isResponsibleForCommits()) {
+            consumer.close();
+        }
+    }
+
+    private boolean isResponsibleForCommits() {
+        return (committer instanceof ProducerManager);
+    }
+
+    private void transitionToDraining() {
+        log.debug("Transitioning to draining...");
+        this.state = State.draining;
+        notifySomethingToDo();
+    }
+
+    public boolean isOpen() {
+        return state != closed;
+    }
+
+    private void transitionToClosing() {
+        log.debug("Transitioning to closing...");
+        if (state == State.unused) {
+            state = closed;
+        } else {
+            state = State.closing;
+        }
+        notifySomethingToDo();
+    }
+
+    public boolean isClosedOrFailed() {
+        boolean closed = state == State.closed;
+        boolean doneOrCancelled = false;
+        if (this.controlThreadFuture.isPresent()) {
+            Future<Boolean> threadFuture = controlThreadFuture.get();
+            doneOrCancelled = threadFuture.isDone() || threadFuture.isCancelled();
+        }
+        return closed || doneOrCancelled;
+    }
+
+
+    @Override
+    public void pauseIfRunning() {
+        if (this.state == State.running) {
+            log.info("Transitioning parallel consumer to state paused.");
+            this.state = State.paused;
+        } else {
+            log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
+        }
+    }
+
+    protected void maybeTransitionState() throws TimeoutException, ExecutionException, InterruptedException {
+        log.trace("Current state: {}", state);
+        switch (state) {
+            case draining -> {
+                drain();
+            }
+            case closing -> {
+                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+            }
+        }
+    }
+
+    /**
+     * @return if the system failed, returns the recorded reason.
+     */
+    public Exception getFailureCause() {
+        return this.failureReason;
+    }
+
+
+    public void transitionToRunning() {
+        if (state == State.unused) {
+            state = running;
+        } else {
+            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
+                    "more than once (they are asynchronous) (current state is {})", state));
+        }
+    }
+
+    protected void drain() {
+        log.debug("Signaling to drain...");
+        brokerPollSubsystem.drain();
+        if (!isRecordsAwaitingProcessing()) {
+            transitionToClosing();
+        } else {
+            log.debug("Records still waiting processing, won't transition to closing.");
+        }
+    }
+
+    protected void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
@@ -144,97 +264,12 @@ public class StateMachine {
         }
     }
 
-    private boolean isIdlingOrRunning() {
-        return state == running || state == draining || state == paused;
-    }
-
-    /**
-     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
-     * This way, if partitions are revoked, the commit can be made inline.
-     */
-    private void maybeCloseConsumer() {
-        if (isResponsibleForCommits()) {
-            consumer.close();
-        }
-    }
-
-    private boolean isResponsibleForCommits() {
-        return (committer instanceof ProducerManager);
-    }
-
-    private void transitionToDraining() {
-        log.debug("Transitioning to draining...");
-        this.state = State.draining;
-        notifySomethingToDo();
-    }
-
-
-    private void drain() {
-        log.debug("Signaling to drain...");
-        brokerPollSubsystem.drain();
-        if (!isRecordsAwaitingProcessing()) {
-            transitionToClosing();
-        } else {
-            log.debug("Records still waiting processing, won't transition to closing.");
-        }
-    }
-
-    private void transitionToClosing() {
-        log.debug("Transitioning to closing...");
-        if (state == State.unused) {
-            state = closed;
-        } else {
-            state = State.closing;
-        }
-        notifySomethingToDo();
-    }
-
-    public boolean isClosedOrFailed() {
-        boolean closed = state == State.closed;
-        boolean doneOrCancelled = false;
-        if (this.controlThreadFuture.isPresent()) {
-            Future<Boolean> threadFuture = controlThreadFuture.get();
-            doneOrCancelled = threadFuture.isDone() || threadFuture.isCancelled();
-        }
-        return closed || doneOrCancelled;
-    }
-
-
-    @Override
-    public void pauseIfRunning() {
-        if (this.state == State.running) {
-            log.info("Transitioning parallel consumer to state paused.");
-            this.state = State.paused;
-        } else {
-            log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
-        }
+    public boolean isRunning() {
+        return state == running;
     }
 
     @Override
-    public void resumeIfPaused() {
-        if (this.state == State.paused) {
-            log.info("Transitioning parallel consumer to state running.");
-            this.state = State.running;
-            notifySomethingToDo();
-        } else {
-            log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
-        }
-    }
-
-    /**
-     * @return if the system failed, returns the recorded reason.
-     */
-    public Exception getFailureCause() {
-        return this.failureReason;
-    }
-
-
-    public void transitionToRunning() {
-        if (state == State.unused) {
-            state = running;
-        } else {
-            throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
-                    "more than once (they are asynchronous) (current state is {})", state));
-        }
+    public long workRemaining() {
+        return wm.getNumberOfIncompleteOffsets();
     }
 }

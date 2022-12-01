@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
-import static io.confluent.parallelconsumer.internal.State.*;
+import static io.confluent.parallelconsumer.internal.State.running;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static lombok.AccessLevel.*;
 
@@ -48,10 +48,6 @@ public class Controller<K, V> implements DrainingCloseable {
     // todo decide delegate or not
     @Delegate
     private final StateMachine state;
-
-    private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
-
-    private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
      * Injectable clock for testing
@@ -200,17 +196,17 @@ public class Controller<K, V> implements DrainingCloseable {
         Thread controlThread = Thread.currentThread();
         controlThread.setName("pc-control");
         this.blockableControlThread = controlThread;
-        while (state != closed) {
+        while (state.isOpen()) {
             log.debug("Control loop start");
             try {
                 controlLoop();
             } catch (InterruptedException e) {
                 log.debug("Control loop interrupted, closing");
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+                state.doClose(DrainingCloseable.DEFAULT_TIMEOUT);
             } catch (Exception e) {
                 log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                 failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
+                state.doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                 throw failureReason;
             }
         }
@@ -259,15 +255,7 @@ public class Controller<K, V> implements DrainingCloseable {
         log.trace("Loop: Running {} loop end plugin(s)", controlLoopHooks.size());
         this.controlLoopHooks.forEach(Runnable::run);
 
-        log.trace("Current state: {}", state);
-        switch (state) {
-            case draining -> {
-                drain();
-            }
-            case closing -> {
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
-            }
-        }
+        state.maybeTransitionState();
 
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
@@ -291,7 +279,7 @@ public class Controller<K, V> implements DrainingCloseable {
      * todo move into {@link WorkManager} as it's specific to WM having enough work?
      */
     private void maybeWakeupPoller() {
-        if (state == running) {
+        if (state.isRunning()) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -390,10 +378,6 @@ public class Controller<K, V> implements DrainingCloseable {
         options.setCommitInterval(timeBetweenCommits);
     }
 
-    private boolean isIdlingOrRunning() {
-        return state == running || state == draining || state == paused;
-    }
-
     protected boolean isTimeToCommitNow() {
         updateLastCommitCheckTime();
 
@@ -447,7 +431,7 @@ public class Controller<K, V> implements DrainingCloseable {
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
-        if (isIdlingOrRunning()) {
+        if (state.isIdlingOrRunning()) {
             Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
@@ -586,11 +570,6 @@ public class Controller<K, V> implements DrainingCloseable {
      */
     public void addLoopEndCallBack(Runnable r) {
         this.controlLoopHooks.add(r);
-    }
-
-    @Override
-    public long workRemaining() {
-        return wm.getNumberOfIncompleteOffsets();
     }
 
 }
