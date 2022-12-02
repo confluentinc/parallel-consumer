@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 
 /**
  * A range of {@link Offset}s.
+ *
+ * @author Antony Stubbs
  */
 @ToString
 public class Offsets {
@@ -53,6 +55,7 @@ public class Offsets {
      */
     @Value
     public static class Offset {
+
         long value;
 
         public static Offset of(Long offset) {

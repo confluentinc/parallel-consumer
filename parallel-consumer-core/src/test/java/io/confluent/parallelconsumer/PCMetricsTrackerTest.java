@@ -23,8 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 @Slf4j
 class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
+
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    private final List<Tag> commonTags =  UniLists.of(Tag.of("instance", "pc1"));
+
+    private final List<Tag> commonTags = UniLists.of(Tag.of("instance", "pc1"));
 
     @Test
     void metricsRegisterBinding() {

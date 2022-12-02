@@ -26,31 +26,56 @@ import java.util.function.ToDoubleFunction;
  * @author Nacho Munoz
  */
 public class PCMetricsTracker implements MeterBinder, AutoCloseable {
+
     public static final long REFRESH_INTERVAL_SECONDS = 30;
+
     public static final long INITIAL_DELAY_SECONDS = 5;
+
     public static final String PC_METRIC_NAME_PREFIX = "pc";
+
     public static final String METRIC_NAME_PC_STATUS = PC_METRIC_NAME_PREFIX + ".status";
+
     public static final String METRIC_NAME_NUMBER_PARTITIONS = PC_METRIC_NAME_PREFIX + ".partitions";
+
     public static final String METRIC_NAME_NUMBER_SHARDS = PC_METRIC_NAME_PREFIX + ".shards";
+
     public static final String METRIC_NAME_SHARD_SIZE = PC_METRIC_NAME_PREFIX + ".shard.size";
+
     public static final String METRIC_NAME_AVERAGE_USER_PROCESSING_TIME = PC_METRIC_NAME_PREFIX + ".avg.processing.time";
+
     public static final String METRIC_NAME_AVERAGE_WAITING_TIME = PC_METRIC_NAME_PREFIX + ".avg.waiting.time";
+
     public static final String METRIC_NAME_TOTAL_INCOMPLETE_OFFSETS = PC_METRIC_NAME_PREFIX + ".incomplete.offsets.total";
+
     public static final String METRIC_NAME_INCOMPLETE_OFFSETS = PC_METRIC_NAME_PREFIX + ".incomplete.offsets.partition";
+
     public static final String METRIC_NAME_HIGHEST_COMPLETED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.complete.offset.partition";
+
     public static final String METRIC_NAME_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.sequential.succeeded.offset.partition";
+
     private static final String METRIC_CATEGORY = "subsystem";
+
     private static final String METRIC_PARTITION_MANAGER_CATEGORY = "partitions";
+
     private static final String METRIC_SHARD_MANAGER_CATEGORY = "shardmanager";
+
     private static final String METRIC_TOPIC = "topic";
+
     private static final String METRIC_PARTITION = "partition";
+
     private static final String METRIC_SHARD_KEY = "shard";
+
     private final ScheduledExecutorService scheduler = Executors
             .newSingleThreadScheduledExecutor(new NamedThreadFactory("micrometer-pc-metrics"));
+
     private final Set<Meter.Id> registeredMeterIds = ConcurrentHashMap.newKeySet();
+
     private final Supplier<PCMetrics> pcMetricsSupplier;
+
     private MeterRegistry meterRegistry;
+
     private volatile PCMetrics pcMetrics;
+
     private final Iterable<Tag> commonTags;
 
     public PCMetricsTracker(Supplier<PCMetrics> pcMetricsSupplier) {
