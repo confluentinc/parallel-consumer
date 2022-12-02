@@ -84,6 +84,7 @@ public class Controller<K, V> implements DrainingCloseable {
         this.workMailbox = module.workMailbox();
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
         this.wm = module.workManager();
+        this.controlLoop = module.controlLoop();
 
         producerManager = initProducerManager();
     }

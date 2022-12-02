@@ -370,7 +370,7 @@ class ProducerManagerTest {
             }
 
             @Override
-            public ControlLoop<?, ?> controlLoop() {
+            public ControlLoop<String, String> controlLoop() {
                 super.controlLoop();
                 return new ControlLoop<>(this) {
                     @Override

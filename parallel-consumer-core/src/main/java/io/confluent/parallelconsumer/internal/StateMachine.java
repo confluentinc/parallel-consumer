@@ -1,6 +1,5 @@
 package io.confluent.parallelconsumer.internal;
 
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.NonNull;
@@ -33,8 +32,6 @@ public class StateMachine implements DrainingCloseable {
 
     PCModule<?, ?> module;
 
-    ParallelConsumerOptions<?, ?> options;
-
     OffsetCommitter committer;
 
     WorkManager<?, ?> wm;
@@ -43,7 +40,7 @@ public class StateMachine implements DrainingCloseable {
 
     Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
-    Consumer consumer;
+    Consumer<?, ?> consumer;
 
     BrokerPollSystem<?, ?> brokerPollSubsystem;
 
@@ -71,11 +68,10 @@ public class StateMachine implements DrainingCloseable {
         controller = module.controller();
         committer = module.committer();
         consumer = module.consumer();
-        options = module.options();
         wm = module.workManager();
         brokerPollSubsystem = module.brokerPoller();
-        workerThreadPool = module.workerThreadPool();
         controllerLoop = module.controlLoop();
+        workerThreadPool = module.controlLoop().getWorkerPool();
     }
 
 
@@ -148,7 +144,7 @@ public class StateMachine implements DrainingCloseable {
         return state == running || state == draining || state == paused;
     }
 
-//    @Override
+    //    @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
             log.info("Transitioning parallel consumer to state running.");

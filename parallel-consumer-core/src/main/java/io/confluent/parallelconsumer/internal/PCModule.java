@@ -32,6 +32,16 @@ public class PCModule<K, V> {
 
     private WorkMailbox<K, V> workMailbox;
 
+    private StateMachine stateMachine;
+
+    private Controller<K, V> controller;
+
+//    private PCWorkerPool<K, V, Object> workerThreadPool;
+
+    private RebalanceHandler<K, V> rebalanceHandler;
+
+    private ControlLoop<K, V> controlLoop;
+
     public PCModule(ParallelConsumerOptions<K, V> options) {
         this.optionsInstance = options;
     }
@@ -119,12 +129,18 @@ public class PCModule<K, V> {
         return TimeUtils.getClock();
     }
 
-    public StateMachine stateMachine() {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public RebalanceHandler<K, V> rebalanceHandler() {
+        if (rebalanceHandler == null) {
+            rebalanceHandler = new RebalanceHandler<>(stateMachine(), controlLoop(), consumer(), controller(), workManager());
+        }
+        return rebalanceHandler;
     }
 
-    public Controller<K, V> controller() {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public StateMachine stateMachine() {
+        if (stateMachine == null) {
+            stateMachine = new StateMachine(this);
+        }
+        return stateMachine;
     }
 
     // todo make protected
@@ -143,19 +159,31 @@ public class PCModule<K, V> {
         return rebalanceHandler();
     }
 
-    public PCWorkerPool<?, ?, ?> workerThreadPool() {
-        throw new UnsupportedOperationException("Not implemented yet");
+//    public PCWorkerPool<?, ?, ?> workerThreadPool() {
+//        if (workerThreadPool == null) {
+//            workerThreadPool = new PCWorkerPool<>(options().getMaxConcurrency(), );
+//        }
+//        return workerThreadPool;
+//    }
+
+    public ControlLoop<K, V> controlLoop() {
+        if (controlLoop == null) {
+            controlLoop = new ControlLoop<>(this);
+        }
+        return controlLoop;
     }
 
-    public RebalanceHandler<K, V> rebalanceHandler() {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public Controller<K, V> controller() {
+        if (controller == null) {
+            controller = new Controller<>(this);
+        }
+        return controller;
     }
 
     public WorkMailbox<K, V> workMailBox() {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    public ControlLoop<?, ?> controlLoop() {
-        throw new UnsupportedOperationException("Not implemented yet");
+        if (workMailbox == null) {
+            workMailbox = new WorkMailbox<>(workManager());
+        }
+        return workMailbox;
     }
 }

@@ -22,6 +22,7 @@ import java.util.function.Function;
 
 import static io.confluent.parallelconsumer.internal.State.running;
 import static lombok.AccessLevel.PRIVATE;
+import static lombok.AccessLevel.PROTECTED;
 
 /**
  * Main Control loop for the parallel consumer.
@@ -41,6 +42,7 @@ public class ControlLoop<K, V> {
 
     ParallelConsumerOptions<K, V> options;
 
+    @Getter(PROTECTED)
     @NonFinal
     PCWorkerPool<K, V, Object> workerPool;
 

@@ -30,7 +30,7 @@ public class PCWorkerPool<K, V, R> implements Closeable {
     /**
      * The pool which is used for running the users' supplied function
      */
-    ThreadPoolExecutor workerThreadPool;
+    ThreadPoolExecutor executorPool;
 
     ParallelConsumerOptions<K, V> options;
 
@@ -41,13 +41,13 @@ public class PCWorkerPool<K, V, R> implements Closeable {
     public PCWorkerPool(int poolSize, FunctionRunner<K, V, R> functionRunner, ParallelConsumerOptions<K, V> options) {
         runner = functionRunner;
         this.options = options;
-        workerThreadPool = createWorkerPool(options.getMaxConcurrency());
+        executorPool = createExecutorPool(options.getMaxConcurrency());
         workers = Range.range(poolSize).toStream().boxed()
                 .map(ignore -> new PCWorker<>(this))
                 .collect(Collectors.toList());
     }
 
-    protected ThreadPoolExecutor createWorkerPool(int poolSize) {
+    protected ThreadPoolExecutor createExecutorPool(int poolSize) {
         ThreadFactory defaultFactory;
         try {
             defaultFactory = InitialContext.doLookup(options.getManagedThreadFactory());
@@ -146,6 +146,6 @@ public class PCWorkerPool<K, V, R> implements Closeable {
     }
 
     private int getNumberOfUserFunctionsQueued() {
-        return workerThreadPool.getQueue().size();
+        return executorPool.getQueue().size();
     }
 }
