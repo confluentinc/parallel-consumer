@@ -25,19 +25,24 @@ import java.util.regex.Pattern;
 public class RebalanceHandler<K, V> implements ConsumerRebalanceListener, SubscriptionHandler {
 
     public static final String SUBSCRIBING_TO_MSG = "Subscribing to {}";
+
     @Getter
     @NonFinal
     int numberOfAssignedPartitions;
+
+    StateMachine state;
+
+    ControlLoop<K, V> loop;
+
+    Consumer<K, V> consumer;
+
+    Controller<K, V> controller;
 
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
      */
     @NonFinal
-    private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
-
-    Consumer<K, V> consumer;
-
-    Controller<K, V> controller;
+    Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
     WorkManager<K, V> wm;
 
@@ -74,12 +79,12 @@ public class RebalanceHandler<K, V> implements ConsumerRebalanceListener, Subscr
      */
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-        log.debug("Partitions revoked {}, state: {}", partitions, controller.getState());
+        log.debug("Partitions revoked {}, state: {}", partitions, state.getState());
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
             // commit any offsets from revoked partitions BEFORE truncation
-            controller.commitOffsetsThatAreReady();
+            loop.commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
             wm.onPartitionsRevoked(partitions);

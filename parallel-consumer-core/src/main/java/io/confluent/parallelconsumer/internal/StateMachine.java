@@ -2,6 +2,7 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.experimental.FieldDefaults;
@@ -46,17 +47,18 @@ public class StateMachine implements DrainingCloseable {
 
     BrokerPollSystem<?, ?> brokerPollSubsystem;
 
+    PCWorkerPool<?, ?, ?> workerThreadPool;
+
+    ControlLoop<?, ?> controllerLoop;
+
     /**
      * The run state of the controller.
      *
      * @see State
      */
+    @Getter
     @NonFinal
-    private State state = State.unused;
-
-    private PCWorkerPool<?, ?, ?> workerThreadPool;
-
-    private ControlLoop<?, ?> controllerLoop;
+    State state = State.unused;
 
     /**
      * If the system failed with an exception, it is referenced here.
