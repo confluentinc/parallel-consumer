@@ -38,6 +38,7 @@ import static java.util.Optional.of;
  *
  * @author Antony Stubbs
  */
+// metrics: number of queues, average queue length
 @Slf4j
 public class ShardManager<K, V> {
 

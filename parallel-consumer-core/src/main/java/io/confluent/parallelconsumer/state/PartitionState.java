@@ -38,6 +38,10 @@ import static lombok.AccessLevel.*;
  * @see PartitionStateManager
  */
 // todo class becoming large - possible to extract some functionality?
+// metrics: current diff between highest succeeded and committable offset (offset tracked range / state size), blocked
+// state,
+// number of tracked incompletes, average retry count? highest retry count in last 24 hours? lowest incomplete
+// offsets' retry count? consumer lag for partition, CURRENT-OFFSET LOG-END-OFFSET,
 @ToString
 @Slf4j
 public class PartitionState<K, V> {

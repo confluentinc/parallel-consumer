@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
  *
  * @author Antony Stubbs
  */
+// metrics: avg offsets mapped per bit, average encoded size, avg time to encode,
 @ToString
 @Slf4j
 public abstract class OffsetEncoder {

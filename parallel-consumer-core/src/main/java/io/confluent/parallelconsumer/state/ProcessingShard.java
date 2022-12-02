@@ -27,7 +27,9 @@ import static lombok.AccessLevel.PRIVATE;
  * Models the queue of work to be processed, based on the {@link ProcessingOrder} modes.
  *
  * @author Antony Stubbs
+ * @see ShardManager
  */
+// metrics: queue length, queue time, avg time spend in queue
 @Slf4j
 @RequiredArgsConstructor
 public class ProcessingShard<K, V> {

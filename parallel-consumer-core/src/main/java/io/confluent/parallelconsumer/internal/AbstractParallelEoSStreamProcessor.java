@@ -52,8 +52,10 @@ import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 /**
+ * @author Antony Stubbs
  * @see ParallelConsumer
  */
+// metrics: avg time spend committing, avg user function running time, avg controller loop time
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
@@ -126,30 +128,69 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     /**
-     * An inbound message to the controller.
-     * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
+     * Run the supplied function.
      */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
-        WorkContainer<K, V> workContainer;
-        EpochAndRecordsMap<K, V> consumerRecords;
+    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
+                                                                                        Consumer<R> callback,
+                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
+        // call the user's function
+        List<R> resultsFromUserFunction;
+        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
 
-        private boolean isWorkResult() {
-            return workContainer != null;
-        }
+        try {
+            if (log.isDebugEnabled()) {
+                // first offset of the batch
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
+            }
+            log.trace("Pool received: {}", workContainerBatch);
 
-        private boolean isNewConsumerRecords() {
-            return !isWorkResult();
-        }
+            //
+            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
+            if (workIsStale) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
+                return null;
+            }
 
-        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords);
-        }
 
-        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<K, V>(work, null);
+            resultsFromUserFunction = timer.record(() -> usersFunction.apply(context));
+
+            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
+                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+            }
+
+            // capture each result, against the input record
+            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
+            for (R result : resultsFromUserFunction) {
+                log.trace("Running users call back...");
+                callback.accept(result);
+            }
+
+            // fail or succeed, either way we're done
+            for (var kvWorkContainer : workContainerBatch) {
+                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
+            }
+            log.trace("User function future registered");
+
+            return intermediateResults;
+        } catch (Exception e) {
+            // handle fail
+            var cause = e.getCause();
+            String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
+                    " mailbox. Context: {}", context, e);
+            if (cause instanceof PCRetriableException) {
+                log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
+            } else {
+                log.error(msg, e);
+            }
+
+            for (var wc : workContainerBatch) {
+                wc.onUserFunctionFailure(e);
+                addToMailbox(context, wc); // always add on error
+            }
+            throw e; // trow again to make the future failed
+        } finally {
+            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
         }
     }
 
@@ -1146,72 +1187,41 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     io.micrometer.core.instrument.Timer timer = metricsRegistry.timer("user.function");
 
     /**
-     * Run the supplied function.
+     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
      */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
-        // call the user's function
-        List<R> resultsFromUserFunction;
-        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
+    public PCMetrics calculateMetrics() {
+        var metrics = PCMetrics.builder();
 
-        try {
-            if (log.isDebugEnabled()) {
-                // first offset of the batch
-                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
+        addMetricsTo(metrics);
+
+        getWm().addMetricsTo(metrics);
+
+        metrics.functionTimer(timer);
+        metrics.successCounter(successCounter);
+
+        // should not create objects in metrics calculator method
+        {
+            new JvmMemoryMetrics().bindTo(metricsRegistry);
+            new JvmThreadMetrics().bindTo(metricsRegistry);
+            new ProcessorMetrics().bindTo(metricsRegistry);
+
+
+            // need to add closables to close system on shutdown
+            {
+                new JvmGcMetrics().bindTo(metricsRegistry);
+                new KafkaClientMetrics(consumer).bindTo(metricsRegistry);
+                // can bind to wrapper?
+                new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
+
+                // we don't use an admin client?
+                // new KafkaClientMetrics(admin).bindTo(metricsRegistry);
+
+                // can't for logback?
+                new LogbackMetrics().bindTo(metricsRegistry);
             }
-            log.trace("Pool received: {}", workContainerBatch);
-
-            //
-            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
-            if (workIsStale) {
-                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
-                return null;
-            }
-
-
-            long start = System.nanoTime();
-            resultsFromUserFunction = usersFunction.apply(context);
-            timer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
-
-            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
-                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
-
-            // capture each result, against the input record
-            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {
-                log.trace("Running users call back...");
-                callback.accept(result);
-            }
-
-            // fail or succeed, either way we're done
-            for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
-            }
-            log.trace("User function future registered");
-
-            return intermediateResults;
-        } catch (Exception e) {
-            // handle fail
-            var cause = e.getCause();
-            String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
-                    " mailbox. Context: {}", context, e);
-            if (cause instanceof PCRetriableException) {
-                log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
-            } else {
-                log.error(msg, e);
-            }
-
-            for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure(e);
-                addToMailbox(context, wc); // always add on error
-            }
-            throw e; // trow again to make the future failed
-        } finally {
-            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
         }
+
+        return metrics.build();
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1327,23 +1337,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
+     * An inbound message to the controller.
+     * <p>
+     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
      */
-    public PCMetrics calculateMetrics() {
-        var metrics = PCMetrics.builder();
+    @Value
+    @RequiredArgsConstructor(access = PRIVATE)
+    private static class ControllerEventMessage<K, V> {
 
-        addMetricsTo(metrics);
+        WorkContainer<K, V> workContainer;
 
-        getWm().addMetricsTo(metrics);
+        EpochAndRecordsMap<K, V> consumerRecords;
 
-        metrics.functionTimer(timer);
-        metrics.successCounter(successCounter);
+        private boolean isWorkResult() {
+            return workContainer != null;
+        }
 
-        new JvmMemoryMetrics().bindTo(metricsRegistry);
-        new JvmGcMetrics().bindTo(metricsRegistry);
-        new JvmThreadMetrics().bindTo(metricsRegistry);
-        new ProcessorMetrics().bindTo(metricsRegistry);
-        new KafkaClientMetrics().bindTo(metricsRegistry);
+        private boolean isNewConsumerRecords() {
+            return !isWorkResult();
+        }
 
 
 //        CompositeMeterRegistry compositeRegistry = new CompositeMeterRegistry();
@@ -1404,7 +1416,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         new LogbackMetrics().bindTo(metricsRegistry);
 
-        return metrics.build();
+        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords);
+        }
+
+        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<K, V>(work, null);
+        }
     }
 
     /**

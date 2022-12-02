@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
  * @author Antony Stubbs
  * @see PartitionState
  */
+// metrics: assigned partitions and their epochs, number of assigned partitions,
 @Slf4j
 public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 

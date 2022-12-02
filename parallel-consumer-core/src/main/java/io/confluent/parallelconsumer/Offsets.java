@@ -9,10 +9,7 @@ import lombok.ToString;
 import lombok.Value;
 import lombok.experimental.Delegate;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.SortedSet;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -32,9 +29,10 @@ public class Offsets {
     }
 
     public static Offsets fromRecords(List<RecordContext<?, ?>> records) {
-        return fromLongs(records.stream()
+        // unmodifiable necessary?
+        return fromLongs(Collections.unmodifiableList(records.stream()
                 .map(RecordContext::offset)
-                .collect(Collectors.toUnmodifiableList()));
+                .collect(Collectors.toList())));
     }
 
     // due to type erasure, can't use method overloading

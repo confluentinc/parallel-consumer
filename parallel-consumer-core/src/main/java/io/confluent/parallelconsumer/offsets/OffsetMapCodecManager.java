@@ -37,6 +37,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  *
  * @author Antony Stubbs
  */
+// metrics: avg time spend encoding, most common best encoder, number of times run length used, number of times
+// bitset used
 @Slf4j
 public class OffsetMapCodecManager<K, V> {
 

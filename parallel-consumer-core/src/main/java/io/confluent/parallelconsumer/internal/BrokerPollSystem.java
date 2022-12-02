@@ -34,6 +34,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <K>
  * @param <V>
  */
+// metrics: avg time spent polling, number of paused partitions?
 @Slf4j
 public class BrokerPollSystem<K, V> implements OffsetCommitter {
 

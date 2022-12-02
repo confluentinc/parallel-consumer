@@ -435,6 +435,9 @@ Where `${project.version}` is the version to be used:
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
+        new KafkaClientMetrics(kafkaConsumer).bindTo(metricsRegistry);
+        new KafkaClientMetrics(kafkaProducer).bindTo(metricsRegistry);
+
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
                 .maxConcurrency(1000) // <3>
@@ -445,8 +448,11 @@ Where `${project.version}` is the version to be used:
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
-        eosStreamProcessor.subscribe(of(inputTopic)); // <4>
 
+        eosStreamProcessor.subscribe(of(inputTopic)); // <4>
+        pcMetricsTracker = new PCMetricsTracker(((AbstractParallelEoSStreamProcessor)eosStreamProcessor)::calculateMetricsWithIncompletes,
+                            UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
+        pcMetricsTracker.bindTo(metricsRegistry);
         return eosStreamProcessor;
 ----
 
