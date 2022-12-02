@@ -7,8 +7,6 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.ThreadPoolExecutor;
-
 import static io.confluent.csid.utils.StringUtils.msg;
 
 /**
@@ -44,10 +42,11 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
      * TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to
      * vert.x.
      */
-    @Override
-    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
-        return super.setupWorkerPool(1);
-    }
+    // todo this has moved to PCWorkerPool
+//    @Override
+//    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+//        return super.setupWorkerPool(1);
+//    }
 
 
 }
