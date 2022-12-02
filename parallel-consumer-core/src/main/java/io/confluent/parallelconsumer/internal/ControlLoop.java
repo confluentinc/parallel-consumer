@@ -5,6 +5,7 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.core.lang.Nullable;
 import lombok.Getter;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
@@ -47,6 +48,7 @@ public class ControlLoop<K, V> {
 
     @Getter(PROTECTED)
     @NonFinal
+    @Nullable
     PCWorkerPool<K, V, Object> workerPool;
 
     // todo make private
@@ -112,7 +114,7 @@ public class ControlLoop<K, V> {
      * Main control loop
      */
     protected void loop() throws TimeoutException, ExecutionException, InterruptedException {
-        Objects.nonNull(workerPool);
+        Objects.requireNonNull(workerPool);
 
         maybeWakeupPoller();
 
