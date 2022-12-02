@@ -39,8 +39,9 @@ public class ControlLoop<K, V> {
      */
     List<Runnable> controlLoopHooks = new ArrayList<>();
 
-    ParallelConsumerOptions<?, ?> options;
+    ParallelConsumerOptions<K, V> options;
 
+    @NonFinal
     PCWorkerPool<K, V, Object> workerPool;
 
     // todo make private
