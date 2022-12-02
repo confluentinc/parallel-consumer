@@ -9,6 +9,7 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -56,7 +57,9 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     public String INPUT_TOPIC;
+
     public String OUTPUT_TOPIC;
+
     public String CONSUMER_GROUP_ID;
 
     public ConsumerGroupMetadata DEFAULT_GROUP_METADATA;
@@ -81,6 +84,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected LongPollingMockConsumer<String, String> consumerSpy;
+
     protected MockProducer<String, String> producerSpy;
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
@@ -88,12 +92,15 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     public static int defaultTimeoutSeconds = 30;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
+
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
+
     protected static Duration effectivelyInfiniteTimeout = Duration.ofMinutes(20);
 
     ParallelEoSStreamProcessorTest.MyAction myRecordProcessingAction;
 
     ConsumerRecord<String, String> firstRecord;
+
     ConsumerRecord<String, String> secondRecord;
 
     protected KafkaTestUtils ktu;
@@ -101,13 +108,16 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     protected AtomicReference<Integer> loopCountRef;
 
     volatile CountDownLatch loopLatchV = new CountDownLatch(0);
+
     volatile CountDownLatch controlLoopPauseLatch = new CountDownLatch(0);
+
     protected AtomicReference<Integer> loopCount;
 
     /**
      * Time to wait to verify some assertion types
      */
     long verificationWaitDelay;
+
     protected TopicPartition topicPartition;
 
     /**
@@ -210,6 +220,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         var optionsWithClients = parallelConsumerOptions.toBuilder()
                 .consumer(consumerSpy)
                 .producer(producerSpy)
+                .commitInterval(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS))
                 .build();
 
         parentParallelConsumer = initAsyncConsumer(optionsWithClients);
@@ -217,9 +228,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
 
         parentParallelConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
-        parentParallelConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
 
-        verificationWaitDelay = parentParallelConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
+        verificationWaitDelay = optionsWithClients.getCommitInterval().multipliedBy(2).toMillis();
 
         loopCountRef = attachLoopCounter(parentParallelConsumer);
     }
@@ -231,9 +241,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         consumer.addRecord(secondRecord);
     }
 
-    protected AtomicReference<Integer> attachLoopCounter(AbstractParallelEoSStreamProcessor parallelConsumer) {
+    protected AtomicReference<Integer> attachLoopCounter(AbstractParallelEoSStreamProcessor<?, ?> loop) {
         final AtomicReference<Integer> currentLoop = new AtomicReference<>(0);
-        parentParallelConsumer.addLoopEndCallBack(() -> {
+        loop.addLoopEndCallBack(() -> {
             Integer currentNumber = currentLoop.get();
             int newLoopNumber = currentNumber + 1;
             currentLoop.compareAndSet(currentNumber, newLoopNumber);
@@ -452,12 +462,21 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     protected boolean isUsingTransactionalProducer() {
-        ParallelConsumerOptions.CommitMode commitMode = parentParallelConsumer.getWm().getOptions().getCommitMode();
+        ParallelConsumerOptions.CommitMode commitMode = getWm().getOptions().getCommitMode();
         return commitMode.equals(PERIODIC_TRANSACTIONAL_PRODUCER);
     }
 
+    // todo rename
+    protected WorkManager getWm() {
+        return getModule().workManager();
+    }
+
+    private PCModule getModule() {
+        return null;
+    }
+
     protected boolean isUsingAsyncCommits() {
-        ParallelConsumerOptions.CommitMode commitMode = parentParallelConsumer.getWm().getOptions().getCommitMode();
+        ParallelConsumerOptions.CommitMode commitMode = getWm().getOptions().getCommitMode();
         return commitMode.equals(PERIODIC_CONSUMER_ASYNCHRONOUS);
     }
 

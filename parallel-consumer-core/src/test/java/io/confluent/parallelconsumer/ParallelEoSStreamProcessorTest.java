@@ -99,7 +99,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         sendSecondRecord(consumerSpy);
 
         // sanity
-        assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(UNORDERED);
+        assertThat(getWm().getOptions().getOrdering()).isEqualTo(UNORDERED);
 
         // setup
         var locks = constructLatches(2);
@@ -119,8 +119,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         awaitLatch(startBarrierLatch);
 
         // zero records waiting, 2 out for processing
-        assertThat(parallelConsumer.getWm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
-        assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
+        assertThat(getWm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
+        assertThat(getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1
         releaseAndWait(locks, 1);
@@ -459,7 +459,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         primeFirstRecord();
 
         // sanity check
-        assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(KEY);
+        assertThat(getWm().getOptions().getOrdering()).isEqualTo(KEY);
 
         sendSecondRecord(consumerSpy);
 
@@ -615,7 +615,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         sendSecondRecord(consumerSpy);
 
         // sanity check
-        assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(KEY);
+        assertThat(getWm().getOptions().getOrdering()).isEqualTo(KEY);
 
         // 0,1 previously sent to partition 0
         // send one more, with same key of 1

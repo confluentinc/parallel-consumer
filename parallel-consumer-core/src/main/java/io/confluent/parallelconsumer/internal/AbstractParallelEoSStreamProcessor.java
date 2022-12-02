@@ -25,6 +25,7 @@ import static lombok.AccessLevel.PROTECTED;
 /**
  * @see ParallelConsumer
  */
+// todo remove deprecated
 @Slf4j
 @FieldDefaults(level = PRIVATE, makeFinal = true)
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
@@ -35,6 +36,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     protected ParallelConsumerOptions<K, V> options;
 
+    // todo exposes too much
     @Delegate
     StateMachine state;
 
@@ -95,6 +97,39 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void resumeIfPaused() {
         state.pauseIfRunning();
+    }
+
+    /**
+     * @see ControlLoop#addLoopEndCallBack
+     */
+    @Deprecated
+    public void addLoopEndCallBack(Runnable action) {
+        getModule().controlLoop().addLoopEndCallBack(action);
+    }
+
+    /**
+     * @return
+     * @see ControlLoop#setTimeBetweenCommits
+     */
+    @Deprecated
+    public Duration getTimeBetweenCommits() {
+        return getModule().controlLoop().getTimeBetweenCommits();
+    }
+
+    /**
+     * @see ControlLoop#setTimeBetweenCommits
+     */
+    @Deprecated
+    public void setTimeBetweenCommits(Duration infinite) {
+        getModule().controlLoop().setTimeBetweenCommits(infinite);
+    }
+
+    /**
+     * todo docs
+     */
+    @Override
+    public void requestCommitAsap() {
+        getModule().controlLoop().requestCommitAsap();
     }
 
 }

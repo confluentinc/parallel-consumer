@@ -60,7 +60,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         OffsetMapCodecManager.forcedCodec = Optional.of(OffsetEncoding.BitSetV2); // force one that takes a predictable large amount of space
 
         //
-        var wm = parallelConsumer.getWm();
+        var wm = getWm();
         var pm = wm.getPm();
         PartitionState<String, String> partitionState = pm.getPartitionState(topicPartition);
 
@@ -148,7 +148,8 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
             {
                 {
                     // check it's not returned
-                    List<Long> workIfAvailable1 = StreamEx.of(wm.getWorkIfAvailable()).map(WorkContainer::offset).toList();
+                    StreamEx<WorkContainer> work = StreamEx.of(wm.getWorkIfAvailable());
+                    List<Long> workIfAvailable1 = work.map(WorkContainer::offset).toList();
                     assertTruth(workIfAvailable1).doesNotContain(0L);
                 }
 
@@ -157,7 +158,8 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
                 wm.onFailureResult(findWC(workIfAvailable, 0L));
 
                 {
-                    List<Long> workIfAvailable1 = StreamEx.of(wm.getWorkIfAvailable()).map(WorkContainer::offset).toList();
+                    StreamEx<WorkContainer> work = StreamEx.of(wm.getWorkIfAvailable());
+                    List<Long> workIfAvailable1 = work.map(WorkContainer::offset).toList();
                     assertTruth(workIfAvailable1).contains(0L);
                 }
 

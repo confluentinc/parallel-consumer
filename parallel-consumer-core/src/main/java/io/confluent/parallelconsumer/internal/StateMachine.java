@@ -75,7 +75,7 @@ public class StateMachine implements DrainingCloseable {
         wm = module.workManager();
         brokerPollSubsystem = module.brokerPoller();
         workerThreadPool = module.workerThreadPool();
-        controllerLoop = module.controllerLoop();
+        controllerLoop = module.controlLoop();
     }
 
 

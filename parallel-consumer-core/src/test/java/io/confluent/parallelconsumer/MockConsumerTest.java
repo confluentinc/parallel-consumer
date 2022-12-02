@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
@@ -48,30 +49,32 @@ class MockConsumerTest {
         var options = ParallelConsumerOptions.<String, String>builder()
                 .consumer(mockConsumer)
                 .build();
-        var parallelConsumer = new ParallelEoSStreamProcessor<String, String>(options);
-        parallelConsumer.subscribe(of(topic));
+        var module = new PCModuleTestEnv(options);
+        try (var parallelConsumer = new ParallelEoSStreamProcessor<String, String>(options, module);) {
+            parallelConsumer.subscribe(of(topic));
 
-        // MockConsumer is not a correct implementation of the Consumer contract - must manually rebalance++ - or use LongPollingMockConsumer
-        mockConsumer.rebalance(Collections.singletonList(tp));
-        parallelConsumer.onPartitionsAssigned(of(tp));
-        mockConsumer.updateBeginningOffsets(startOffsets);
+            // MockConsumer is not a correct implementation of the Consumer contract - must manually rebalance++ - or use LongPollingMockConsumer
+            mockConsumer.rebalance(Collections.singletonList(tp));
+            module.rebalanceHandler().onPartitionsAssigned(of(tp));
+            mockConsumer.updateBeginningOffsets(startOffsets);
 
-        //
-        addRecords(mockConsumer);
+            //
+            addRecords(mockConsumer);
 
-        //
-        ConcurrentLinkedQueue<RecordContext<String, String>> records = new ConcurrentLinkedQueue<>();
-        parallelConsumer.poll(recordContexts -> {
-            recordContexts.forEach(recordContext -> {
-                log.warn("Processing: {}", recordContext);
-                records.add(recordContext);
+            //
+            ConcurrentLinkedQueue<RecordContext<String, String>> records = new ConcurrentLinkedQueue<>();
+            parallelConsumer.poll(recordContexts -> {
+                recordContexts.forEach(recordContext -> {
+                    log.warn("Processing: {}", recordContext);
+                    records.add(recordContext);
+                });
             });
-        });
 
-        //
-        Awaitility.await().untilAsserted(() -> {
-            assertThat(records).hasSize(3);
-        });
+            //
+            Awaitility.await().untilAsserted(() -> {
+                assertThat(records).hasSize(3);
+            });
+        }
     }
 
     private void addRecords(MockConsumer<String, String> mockConsumer) {

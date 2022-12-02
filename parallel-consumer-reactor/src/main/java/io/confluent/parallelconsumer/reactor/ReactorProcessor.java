@@ -60,8 +60,8 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
         this.runner = ReactorRunner.<K, V, Object>builder()
                 .userFunctionWrapped(wrappedUserFunc)
                 .options(options)
-                .workMailbox(getWorkMailbox())
-                .workManager(getWm())
+                .workMailbox(getModule().workMailbox())
+                .workManager(getModule().workManager())
                 .schedulerSupplier(scheduleSupplier)
                 .build();
 

@@ -56,6 +56,11 @@ public interface ParallelConsumer<K, V> extends SubscriptionHandler, DrainingClo
     void resumeIfPaused();
 
     /**
+     * todo docs
+     */
+    void requestCommitAsap();
+
+    /**
      * A simple tuple structure.
      *
      * @param <L>
@@ -63,6 +68,7 @@ public interface ParallelConsumer<K, V> extends SubscriptionHandler, DrainingClo
      */
     @Data
     class Tuple<L, R> {
+
         private final L left;
         private final R right;
 

@@ -176,7 +176,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         ktu.send(consumerSpy, records);
 
         //
-        ParallelConsumerOptions<String, String> options = parallelConsumer.getWm().getOptions();
+        ParallelConsumerOptions<String, String> options = getWm().getOptions();
         HashMap<TopicPartition, List<ConsumerRecord<String, String>>> recordsMap = new HashMap<>();
         TopicPartition tp = new TopicPartition(INPUT_TOPIC, 0);
         recordsMap.put(tp, new ArrayList<>(records));

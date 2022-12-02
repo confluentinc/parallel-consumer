@@ -22,6 +22,7 @@ import java.util.Optional;
  *
  * @author Antony Stubbs
  */
+//todo make all protected
 public class PCModule<K, V> {
 
     protected ParallelConsumerOptions<K, V> optionsInstance;
@@ -107,7 +108,7 @@ public class PCModule<K, V> {
         return brokerPollSystem;
     }
 
-    protected WorkMailbox<K, V> workMailbox() {
+    public WorkMailbox<K, V> workMailbox() {
         if (workMailbox == null) {
             workMailbox = new WorkMailbox<>(workManager());
         }
@@ -139,18 +140,22 @@ public class PCModule<K, V> {
     }
 
     public SubscriptionHandler subscriptionHandler() {
-        throw new UnsupportedOperationException("Not implemented yet");
+        return rebalanceHandler();
     }
 
     public PCWorkerPool<?, ?, ?> workerThreadPool() {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 
-    public ControlLoop<?, ?> controllerLoop() {
+    public RebalanceHandler<K, V> rebalanceHandler() {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 
     public WorkMailbox<K, V> workMailBox() {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
+    public ControlLoop<?, ?> controlLoop() {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 }

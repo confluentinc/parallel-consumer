@@ -104,7 +104,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         List<Long> blockedOffsets = UniLists.of(0L, 2L);
         final int numberOfBlockedMessages = blockedOffsets.size();
 
-        WorkManager<String, String> wm = parallelConsumer.getWm();
+        WorkManager<String, String> wm = getWm();
         final PartitionState<String, String> partitionState = wm.getPm().getPartitionState(topicPartition);
 
         ConcurrentLinkedQueue<Long> seen = new ConcurrentLinkedQueue<>();

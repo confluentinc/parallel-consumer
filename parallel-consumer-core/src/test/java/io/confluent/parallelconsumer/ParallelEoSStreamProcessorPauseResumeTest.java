@@ -216,7 +216,7 @@ class ParallelEoSStreamProcessorPauseResumeTest extends ParallelEoSStreamProcess
 
         // shouldn't have anymore in flight records now
         assertThat(testUserFunction.numInFlightRecords.get()).isEqualTo(0);
-        assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(0);
+        assertThat(getWm().getNumberRecordsOutForProcessing()).isEqualTo(0);
 
         // resume parallel consumer ->
         parallelConsumer.resumeIfPaused();

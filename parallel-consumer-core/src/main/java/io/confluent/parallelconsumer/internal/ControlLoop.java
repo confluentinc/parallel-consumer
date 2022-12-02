@@ -238,6 +238,18 @@ public class ControlLoop<K, V> {
     }
 
     /**
+     * Sets the time between commits. Using a higher frequency will put more load on the brokers.
+     *
+     * @deprecated use {@link  ParallelConsumerOptions.ParallelConsumerOptionsBuilder#commitInterval}} instead. This
+     *         will be deleted in the next major version.
+     */
+    // todo delete in next major version
+    @Deprecated
+    public void setTimeBetweenCommits(final Duration timeBetweenCommits) {
+        options.setCommitInterval(timeBetweenCommits);
+    }
+
+    /**
      * Under some conditions, waiting longer before committing can be faster
      *
      * @return true if waiting to commit would help performance
@@ -335,6 +347,15 @@ public class ControlLoop<K, V> {
         var work = wm.getWorkIfAvailable(capacity);
         workerPool.distribute(work);
         return work.size();
+    }
+
+    /**
+     * Plugin a function to run at the end of each main loop.
+     * <p>
+     * Useful for testing and controlling loop progression.
+     */
+    public void addLoopEndCallBack(Runnable action) {
+        this.controlLoopHooks.add(action);
     }
 
 }
