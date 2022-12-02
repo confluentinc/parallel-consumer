@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.reactor;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngineRunner;
@@ -23,6 +27,9 @@ import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
+/**
+ * @author Antony Stubbs
+ */
 @Slf4j
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)

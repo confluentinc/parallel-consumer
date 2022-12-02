@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.experimental.SuperBuilder;
@@ -7,6 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+/**
+ * @author Antony Stubbs
+ */
 @Slf4j
 @SuperBuilder
 public abstract class ExternalEngineRunner<K, V, R> extends FunctionRunner<K, V, R> {

@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -15,6 +19,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
  */
 @Slf4j
 @Value
+// todo rename worker
 public class PCWorker<K, V, R> {
 
     SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();

@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.PCRetriableException;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -24,6 +28,9 @@ import static io.confluent.parallelconsumer.internal.Controller.addInstanceMDC;
 import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
+/**
+ * @author Antony Stubbs
+ */
 @Slf4j
 @SuperBuilder
 @FieldDefaults(level = PRIVATE, makeFinal = true)

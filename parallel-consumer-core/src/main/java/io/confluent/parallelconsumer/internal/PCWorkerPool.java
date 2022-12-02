@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -22,9 +26,13 @@ import java.util.stream.Collectors;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
+/**
+ * @author Antony Stubbs
+ */
 @Slf4j
 @Value
 @NonFinal
+// todo rename WorkerPool
 public class PCWorkerPool<K, V, R> implements Closeable {
 
     /**

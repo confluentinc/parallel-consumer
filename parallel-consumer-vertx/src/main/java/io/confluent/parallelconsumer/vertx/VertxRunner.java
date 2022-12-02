@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.vertx;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.internal.ExternalEngineRunner;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -10,6 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+/**
+ * @author Antony Stubbs
+ */
 @Slf4j
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)

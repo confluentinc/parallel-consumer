@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -22,6 +26,10 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
+/**
+ * @author Antony Stubbs
+ */
+// todo rename to ControllerMailbox
 @Slf4j
 @RequiredArgsConstructor
 public class WorkMailbox<K, V> {
@@ -127,7 +135,9 @@ public class WorkMailbox<K, V> {
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
     private static class ControllerEventMessage<K, V> {
+
         WorkContainer<K, V> workContainer;
+
         EpochAndRecordsMap<K, V> consumerRecords;
 
         private boolean isWorkResult() {

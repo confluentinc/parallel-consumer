@@ -23,6 +23,7 @@ import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 /**
+ * @author Antony Stubbs
  * @see ParallelConsumer
  */
 // todo remove deprecated
