@@ -55,7 +55,8 @@ public class ControlLoop<K, V> {
 
     StateMachine state;
 
-    RateLimiter queueStatsLimiter = new RateLimiter();
+    // todo delete
+//    RateLimiter queueStatsLimiter = new RateLimiter();
 
     // todo depends on MicroMeter pr
     SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
@@ -76,7 +77,14 @@ public class ControlLoop<K, V> {
     @NonFinal
     Instant lastCommitCheckTime = Instant.now();
 
-    public ControlLoop() {
+    public ControlLoop(PCModule<K, V> module) {
+        this.module = module;
+        options = module.options();
+        wm = module.workManager();
+        brokerPollSubsystem = module.brokerPoller();
+        state = module.stateMachine();
+        workMailbox = module.workMailbox();
+
     }
 
     // todo make private

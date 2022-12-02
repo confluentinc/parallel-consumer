@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContextInternal;
 import lombok.Getter;
+import lombok.experimental.Delegate;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,12 +30,19 @@ import static lombok.AccessLevel.PROTECTED;
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, Closeable {
 
     @Getter(PROTECTED)
-    protected ParallelConsumerOptions<K, V> options;
-
-    private StateMachine state;
+    PCModule<K, V> module;
 
     @Getter(PROTECTED)
-    private Controller<K, V> controller;
+    protected ParallelConsumerOptions<K, V> options;
+
+    @Delegate
+    StateMachine state;
+
+    @Delegate
+    SubscriptionHandler subscriptionHandler;
+
+    @Getter(PROTECTED)
+    Controller<K, V> controller;
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -49,6 +57,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
+        this.module = module;
         options = newOptions;
 
         var validator = new ConfigurationValidator<K, V>(options, options.getConsumer());
@@ -58,6 +67,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         controller = module.controller();
         state = module.stateMachine();
+        subscriptionHandler = module.subscriptionHandler();
 
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
                 newOptions.getConsumer().groupMetadata().groupId(),

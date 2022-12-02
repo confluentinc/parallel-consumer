@@ -126,7 +126,8 @@ public class PCModule<K, V> {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 
-    protected Optional<ProducerManager<K, V>> producerManager() {
+    // todo make protected
+    public Optional<ProducerManager<K, V>> producerManager() {
         if (!options().isProducerSupplied()) {
             return Optional.empty();
         }
@@ -135,5 +136,17 @@ public class PCModule<K, V> {
             this.producerManager = new ProducerManager<>(producerWrap(), consumerManager(), workManager(), options());
         }
         return Optional.of(producerManager);
+    }
+
+    public SubscriptionHandler subscriptionHandler() {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
+    public PCWorkerPool<?, ?, ?> workerThreadPool() {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
+    public ControlLoop<?, ?> controllerLoop() {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 }

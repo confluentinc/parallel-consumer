@@ -59,7 +59,8 @@ public class Controller<K, V> implements DrainingCloseable {
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
-    @Getter(PROTECTED)
+    // todo make private
+    @Getter(PRIVATE)
     private final Optional<ProducerManager<K, V>> producerManager;
 
     /**
@@ -125,6 +126,7 @@ public class Controller<K, V> implements DrainingCloseable {
         }
 
         // run main pool loop in thread
+        // todo casts
         Callable<Boolean> controlTask = () -> superviseControlLoop((Function) userFunctionWrapped, (Consumer<Object>) callback);
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);

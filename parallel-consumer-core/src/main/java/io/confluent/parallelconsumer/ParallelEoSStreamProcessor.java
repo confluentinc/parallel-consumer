@@ -72,7 +72,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         Function<PollContextInternal<K, V>, List<ConsumeProduceResult<K, V, K, V>>> producingUserFunctionWrapper =
                 context -> processAndProduceResults(userFunction, context);
 
-        supervisorLoop(producingUserFunctionWrapper, callback);
+        // todo casts
+        supervisorLoop((Function) producingUserFunctionWrapper, (Consumer) callback);
     }
 
     /**
@@ -82,7 +83,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     private List<ConsumeProduceResult<K, V, K, V>> processAndProduceResults(final Function<PollContext<K, V>, List<ProducerRecord<K, V>>> userFunction,
                                                                             final PollContextInternal<K, V> context) {
         @SuppressWarnings("OptionalGetWithoutIsPresent") // validator prevents this
-        var pm = getController().getProducerManager().get();
+        var pm = getModule().producerManager().get();
 
         // if running strict with no processing during commit - get the produce lock first
         if (options.isUsingTransactionCommitMode() && !options.isAllowEagerProcessingDuringTransactionCommit()) {
