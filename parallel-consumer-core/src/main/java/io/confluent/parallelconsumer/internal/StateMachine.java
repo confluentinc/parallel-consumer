@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -66,8 +65,15 @@ public class StateMachine implements DrainingCloseable {
     private Exception failureReason;
 
     public StateMachine(@NonNull PCModule module) {
+        this.module = module;
+        controller = module.controller();
         committer = module.committer();
         consumer = module.consumer();
+        options = module.options();
+        wm = module.workManager();
+        brokerPollSubsystem = module.brokerPoller();
+        workerThreadPool = module.workerThreadPool();
+        controllerLoop = module.controllerLoop();
     }
 
 
@@ -140,7 +146,7 @@ public class StateMachine implements DrainingCloseable {
         return state == running || state == draining || state == paused;
     }
 
-    @Override
+//    @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
             log.info("Transitioning parallel consumer to state running.");
@@ -196,7 +202,7 @@ public class StateMachine implements DrainingCloseable {
     }
 
 
-    @Override
+    //    @Override
     public void pauseIfRunning() {
         if (this.state == State.running) {
             log.info("Transitioning parallel consumer to state paused.");
@@ -269,12 +275,6 @@ public class StateMachine implements DrainingCloseable {
 
     protected void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
-
-        log.debug("Shutting down execution pool...");
-        List<Runnable> unfinished = workerThreadPool.close();
-        if (!unfinished.isEmpty()) {
-            log.warn("Threads not done count: {}", unfinished.size());
-        }
 
         log.debug("Awaiting worker pool termination...");
         boolean interrupted = true;

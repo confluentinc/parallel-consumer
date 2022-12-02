@@ -134,7 +134,7 @@ public class PCWorkerPool<K, V, R> implements Closeable {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 
-    public boolean awaitTermination(long toSeconds, TimeUnit seconds) {
+    public boolean awaitTermination(long toSeconds, TimeUnit seconds) throws InterruptedException {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 
