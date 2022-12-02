@@ -149,4 +149,8 @@ public class PCModule<K, V> {
     public ControlLoop<?, ?> controllerLoop() {
         throw new UnsupportedOperationException("Not implemented yet");
     }
+
+    public WorkMailbox<K, V> workMailBox() {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
 }

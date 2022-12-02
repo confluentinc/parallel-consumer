@@ -10,8 +10,6 @@ import io.confluent.parallelconsumer.internal.SubscriptionHandler;
 import lombok.Data;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 
-import java.util.function.Consumer;
-
 // tag::javadoc[]
 
 /**
@@ -26,15 +24,6 @@ import java.util.function.Consumer;
  */
 // end::javadoc[]
 public interface ParallelConsumer<K, V> extends SubscriptionHandler, DrainingCloseable {
-
-    /**
-     * Register a function to be applied in parallel to each received message.
-     * <p>
-     * Throw a {@link PCRetriableException} to retry the message without the system logging an ERROR level message.
-     *
-     * @param usersVoidConsumptionFunction the function
-     */
-    void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
 
     /**
      * Pause this consumer (i.e. stop processing of messages).

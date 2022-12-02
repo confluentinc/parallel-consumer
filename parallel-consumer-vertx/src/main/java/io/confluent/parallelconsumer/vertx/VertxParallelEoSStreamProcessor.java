@@ -31,7 +31,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -76,10 +75,10 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
      * <p>
      * Use this to share a Vertx runtime with different systems for efficiency, or to customise configuration.
      * <p>
-     * By default Vert.x's {@link WebClient} uses quite small connection limits to servers. PC overrides this to {@link
-     * ParallelConsumerOptions#getMaxConcurrency()}. You can configure these yourself by providing a configured Vert.x
-     * {@link WebClient} with {@link WebClientOptions} set to how you please. Consider also looking at other options
-     * below.
+     * By default Vert.x's {@link WebClient} uses quite small connection limits to servers. PC overrides this to
+     * {@link ParallelConsumerOptions#getMaxConcurrency()}. You can configure these yourself by providing a configured
+     * Vert.x {@link WebClient} with {@link WebClientOptions} set to how you please. Consider also looking at other
+     * options below.
      *
      * @see WebClientOptions#setMaxPoolSize
      * @see WebClientOptions#setMaxWaitQueueSize(int)
@@ -119,11 +118,11 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
      * TODO optimise thread usage by not using any extra thread here at all - go straight from the control thread to
      * vert.x.
      */
-    @Override
-    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
-        return super.setupWorkerPool(1);
-    }
-
+    // todo move to PCWorkerPool
+//    @Override
+//    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+//        return super.setupWorkerPool(1);
+//    }
     @Override
     public void vertxHttpReqInfo(Function<PollContext<K, V>, RequestInfo> requestInfoFunction,
                                  Consumer<Future<HttpResponse<Buffer>>> onSend,
@@ -180,7 +179,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         Consumer<Future<HttpResponse<Buffer>>> noOp = (ignore) -> {
         }; // don't need it, we attach to vertx futures for callback
 
-        super.supervisorLoop(userFuncWrapper, noOp);
+        // todo casts
+        super.supervisorLoop((Function) userFuncWrapper, (Consumer) noOp);
     }
 
     private void addVertxHooks(final PollContextInternal<K, V> context, final Future<?> send) {
@@ -191,12 +191,12 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             send.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
                 wc.onUserFunctionSuccess();
-                getWorkMailbox().addToMailbox(context, wc);
+                getModule().workMailBox().addToMailbox(context, wc);
             });
             send.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
                 wc.onUserFunctionFailure(h);
-                getWorkMailbox().addToMailbox(context, wc);
+                getModule().workMailBox().addToMailbox(context, wc);
             });
 
             // add plugin callback hook
@@ -224,7 +224,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         Consumer<Future<?>> noOp = ignore -> {
         }; // don't need it, we attach to vertx futures for callback
 
-        super.supervisorLoop(userFuncWrapper, noOp);
+        // todo casts
+        super.supervisorLoop((Function) userFuncWrapper, (Consumer) noOp);
     }
 
     @Override
@@ -242,7 +243,8 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
         Consumer<Future<?>> noOp = ignore -> {
         }; // don't need it, we attach to vertx futures for callback
 
-        super.supervisorLoop(userFuncWrapper, noOp);
+        // todo casts
+        super.supervisorLoop((Function) userFuncWrapper, (Consumer) noOp);
     }
 
     /**
@@ -259,10 +261,15 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
     @Getter
     @AllArgsConstructor
     public static class RequestInfo {
+
         public static final int DEFAULT_PORT = 8080;
+
         private final String host;
+
         private final int port;
+
         private final String contextPath;
+
         private Map<String, String> params;
 
         public RequestInfo(String host, String contextPath, Map<String, String> params) {

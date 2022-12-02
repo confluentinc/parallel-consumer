@@ -27,6 +27,18 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
     }
 
     /**
+     * Register a function to be applied in parallel to each received message.
+     * <p>
+     * Throw a {@link PCRetriableException} to retry the message without the system logging an ERROR level message.
+     * <p>
+     * This is in this interface, and not {@link ParallelConsumer}, because it is not implemented by the Vert.x and
+     * Reactor implementations.
+     *
+     * @param usersVoidConsumptionFunction the function
+     */
+    void poll(Consumer<PollContext<K, V>> usersVoidConsumptionFunction);
+
+    /**
      * Register a function to be applied in parallel to each received message, which in turn returns one or more
      * {@link ProducerRecord}s to be sent back to the broker.
      * <p>
@@ -80,8 +92,11 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      */
     @Data
     class ConsumeProduceResult<K, V, KK, VV> {
+
         private final PollContext<K, V> in;
+
         private final ProducerRecord<KK, VV> out;
+
         private final RecordMetadata meta;
     }
 }
