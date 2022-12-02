@@ -69,12 +69,6 @@ public class Controller<K, V> implements DrainingCloseable {
      */
     protected final DynamicLoadFactor dynamicExtraLoadFactor;
 
-    /**
-     * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
-     * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
-     * help).
-     */
-    private boolean lastWorkRequestWasFulfilled = false;
 
     public Controller(@NonNull PCModule<K, V> module) {
         this.brokerPollSubsystem = module.brokerPoller();

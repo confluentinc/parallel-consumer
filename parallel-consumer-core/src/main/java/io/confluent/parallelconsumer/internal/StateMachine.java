@@ -1,13 +1,11 @@
 package io.confluent.parallelconsumer.internal;
 
-import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
-import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -27,26 +25,13 @@ import static lombok.AccessLevel.PRIVATE;
  * @author Antony Stubbs
  */
 @Slf4j
+@RequiredArgsConstructor
 @FieldDefaults(makeFinal = true, level = PRIVATE)
 public class StateMachine implements DrainingCloseable {
 
     PCModule<?, ?> module;
 
-    OffsetCommitter committer;
-
-    WorkManager<?, ?> wm;
-
-    Controller<?, ?> controller;
-
     Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
-
-    Consumer<?, ?> consumer;
-
-    BrokerPollSystem<?, ?> brokerPollSubsystem;
-
-    PCWorkerPool<?, ?, ?> workerThreadPool;
-
-    ControlLoop<?, ?> controllerLoop;
 
     /**
      * The run state of the controller.
@@ -62,18 +47,6 @@ public class StateMachine implements DrainingCloseable {
      */
     @NonFinal
     private Exception failureReason;
-
-    public StateMachine(@NonNull PCModule module) {
-        this.module = module;
-        controller = module.controller();
-        committer = module.committer();
-        consumer = module.consumer();
-        wm = module.workManager();
-        brokerPollSubsystem = module.brokerPoller();
-        controllerLoop = module.controlLoop();
-        workerThreadPool = module.controlLoop().getWorkerPool();
-    }
-
 
     /**
      * Close the system, without draining.
@@ -144,35 +117,39 @@ public class StateMachine implements DrainingCloseable {
         return state == running || state == draining || state == paused;
     }
 
+    // todo not used?
     //    @Override
     public void resumeIfPaused() {
         if (this.state == State.paused) {
             log.info("Transitioning parallel consumer to state running.");
             this.state = State.running;
-            controller.notifySomethingToDo();
+            module.controller().notifySomethingToDo();
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
     }
 
-    /**
-     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
-     * This way, if partitions are revoked, the commit can be made inline.
-     */
-    private void maybeCloseConsumer() {
-        if (isResponsibleForCommits()) {
-            consumer.close();
-        }
-    }
-
-    private boolean isResponsibleForCommits() {
-        return (committer instanceof ProducerManager);
-    }
-
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
         this.state = State.draining;
-        controller.notifySomethingToDo();
+        module.controller().notifySomethingToDo();
+    }
+
+    protected void drain() {
+        log.debug("Signaling to drain...");
+        module.brokerPoller().drain();
+        if (!isRecordsAwaitingProcessing()) {
+            transitionToClosing();
+        } else {
+            log.debug("Records still waiting processing, won't transition to closing.");
+        }
+    }
+
+    private boolean isRecordsAwaitingProcessing() {
+        boolean isRecordsAwaitingProcessing = module.workManager().isRecordsAwaitingProcessing();
+        boolean threadsDone = areMyThreadsDone();
+        log.trace("isRecordsAwaitingProcessing {} || threadsDone {}", isRecordsAwaitingProcessing, threadsDone);
+        return isRecordsAwaitingProcessing || threadsDone;
     }
 
     public boolean isOpen() {
@@ -186,7 +163,7 @@ public class StateMachine implements DrainingCloseable {
         } else {
             state = State.closing;
         }
-        controller.notifySomethingToDo();
+        module.controller().notifySomethingToDo();
     }
 
     public boolean isClosedOrFailed() {
@@ -238,21 +215,42 @@ public class StateMachine implements DrainingCloseable {
         }
     }
 
-    protected void drain() {
-        log.debug("Signaling to drain...");
-        brokerPollSubsystem.drain();
-        if (!isRecordsAwaitingProcessing()) {
-            transitionToClosing();
-        } else {
-            log.debug("Records still waiting processing, won't transition to closing.");
+    protected void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
+        log.debug("Starting close process (state: {})...", state);
+
+        log.debug("Awaiting worker pool termination...");
+        module.controlLoop().awaitControlLoopClose(timeout);
+
+        // last check to see if after worker pool closed, has any new work arrived?
+        module.workMailbox().processWorkCompleteMailBox(Duration.ZERO);
+
+        //
+        module.controlLoop().commitOffsetsThatAreReady();
+
+        // only close consumer once producer has committed it's offsets (tx'l)
+        log.debug("Closing and waiting for broker poll system...");
+        module.brokerPoller().closeAndWait();
+
+        maybeCloseConsumer();
+
+        module.producerManager().ifPresent(x -> x.close(timeout));
+
+        log.debug("Close complete.");
+        this.state = closed;
+
+        if (this.getFailureCause() != null) {
+            log.error(msg("PC closed due to error: {}", getFailureCause().getMessage()), getFailureCause());
         }
     }
 
-    private boolean isRecordsAwaitingProcessing() {
-        boolean isRecordsAwaitingProcessing = wm.isRecordsAwaitingProcessing();
-        boolean threadsDone = areMyThreadsDone();
-        log.trace("isRecordsAwaitingProcessing {} || threadsDone {}", isRecordsAwaitingProcessing, threadsDone);
-        return isRecordsAwaitingProcessing || threadsDone;
+    /**
+     * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
+     * This way, if partitions are revoked, the commit can be made inline.
+     */
+    private void maybeCloseConsumer() {
+        if (isResponsibleForCommits()) {
+            module.consumer().close();
+        }
     }
 
     private boolean areMyThreadsDone() {
@@ -271,47 +269,10 @@ public class StateMachine implements DrainingCloseable {
         return failureReason;
     }
 
-    protected void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
-        log.debug("Starting close process (state: {})...", state);
-
-        log.debug("Awaiting worker pool termination...");
-        boolean interrupted = true;
-        while (interrupted) {
-            log.debug("Still interrupted");
-            try {
-                boolean terminationFinishedWithoutTimeout = workerThreadPool.awaitTermination(toSeconds(timeout), SECONDS);
-                interrupted = false;
-                if (!terminationFinishedWithoutTimeout) {
-                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
-                }
-            } catch (InterruptedException e) {
-                log.error("InterruptedException", e);
-                interrupted = true;
-            }
-        }
-        log.debug("Worker pool terminated.");
-
-        // last check to see if after worker pool closed, has any new work arrived?
-        module.workMailbox().processWorkCompleteMailBox(Duration.ZERO);
-
-        //
-        controllerLoop.commitOffsetsThatAreReady();
-
-        // only close consumer once producer has committed it's offsets (tx'l)
-        log.debug("Closing and waiting for broker poll system...");
-        brokerPollSubsystem.closeAndWait();
-
-        maybeCloseConsumer();
-
-        module.producerManager().ifPresent(x -> x.close(timeout));
-
-        log.debug("Close complete.");
-        this.state = closed;
-
-        if (this.getFailureCause() != null) {
-            log.error("PC closed due to error: {}", getFailureCause(), null);
-        }
+    private boolean isResponsibleForCommits() {
+        return (module.committer() instanceof ProducerManager);
     }
+
 
     public boolean isRunning() {
         return state == running;
@@ -319,6 +280,6 @@ public class StateMachine implements DrainingCloseable {
 
     @Override
     public long workRemaining() {
-        return wm.getNumberOfIncompleteOffsets();
+        return module.workManager().getNumberOfIncompleteOffsets();
     }
 }

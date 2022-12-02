@@ -471,9 +471,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         return getModule().workManager();
     }
 
-    private PCModule getModule() {
-        return null;
-    }
+    protected abstract PCModule getModule();
 
     protected boolean isUsingAsyncCommits() {
         ParallelConsumerOptions.CommitMode commitMode = getWm().getOptions().getCommitMode();

@@ -14,13 +14,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.parallelconsumer.internal.State.running;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
@@ -109,6 +112,8 @@ public class ControlLoop<K, V> {
      * Main control loop
      */
     protected void loop() throws TimeoutException, ExecutionException, InterruptedException {
+        Objects.nonNull(workerPool);
+
         maybeWakeupPoller();
 
         //
@@ -358,6 +363,25 @@ public class ControlLoop<K, V> {
      */
     public void addLoopEndCallBack(Runnable action) {
         this.controlLoopHooks.add(action);
+    }
+
+    public void awaitControlLoopClose(Duration timeout) {
+        boolean interrupted = true;
+        while (interrupted) {
+            log.debug("Still interrupted");
+            try {
+                boolean terminationFinishedWithoutTimeout = getWorkerPool().awaitTermination(toSeconds(timeout)
+                        , SECONDS);
+                interrupted = false;
+                if (!terminationFinishedWithoutTimeout) {
+                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
+                }
+            } catch (InterruptedException e) {
+                log.error("InterruptedException", e);
+                interrupted = true;
+            }
+        }
+        log.debug("Worker pool terminated.");
     }
 
 }
