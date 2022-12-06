@@ -52,9 +52,17 @@ public class ProcessingShard<K, V> {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
-    public boolean workIsWaitingToBeProcessed() {
-        return entries.values().parallelStream()
-                .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
+    public boolean isWorkWaitingToBeProcessed() {
+        if (options.getOrdering() == UNORDERED) {
+            // in UNORDERED mode, we can approximate that is the shard isn't empty, it probably has work to do - this
+            // function is only used to test if we should linger, so this is a good enough approximation
+            return !entries.isEmpty();
+//            return entries.values().parallelStream()
+//                    .anyMatch(WorkContainer::isAvailableToTakeAsWork);
+        } else {
+            // KEY and PARTITION ordering, only need to check the head, as it's the only possible
+            return entries.firstEntry() != null && entries.firstEntry().getValue().isAvailableToTakeAsWork();
+        }
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
@@ -75,11 +83,19 @@ public class ProcessingShard<K, V> {
         return entries.isEmpty();
     }
 
+    /**
+     * The number of entries in the shard.
+     * <p>
+     * Used to filter by only entries available to be processed - but that doesn't make sense, as in KEY and PARTITION
+     * ordering, only the head of the shard could be unavailable, so we iterate over the whole shard for nothing. In
+     * UNORDERED mode, the whole shard may be unavailable, but as ths is only used to check if the poller should
+     * throttle, we can't just continue buffering more records, as we'll run out of memory - should wait until the
+     * currently buffered limits are processed.
+     *
+     * @return the number of entries in the shard
+     */
     public long getCountOfWorkAwaitingSelection() {
-        return entries.values().stream()
-                // todo missing pm.isBlocked(topicPartition) ?
-                .filter(WorkContainer::isAvailableToTakeAsWork)
-                .count();
+        return entries.size();
     }
 
     public long getCountOfWorkTracked() {

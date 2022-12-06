@@ -10,8 +10,10 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
+import static lombok.AccessLevel.PROTECTED;
 
 /**
  * Shards are local queues of work to be processed.
@@ -58,8 +61,21 @@ public class ShardManager<K, V> {
      * @see K
      * @see WorkManager#getWorkIfAvailable()
      */
-    // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    // todo performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
+    @Getter(PROTECTED)
+    protected Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+
+    // todo swallow
+    RateLimiter slowWarningRateLimit = new RateLimiter(5);
+
+    // todo audit
+    @Getter
+    @NonFinal
+    int numberRecordsOutForProcessing = 0;
+
+    // thread safe? consumer and controller both access - consumer upon partition revocation
+    @NonFinal
+    long totalSizeOfShards;
 
     /**
      * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
@@ -116,19 +132,18 @@ public class ShardManager<K, V> {
     }
 
     /**
+     * Relatively expensive if in KEY ordered mode where there are lots of shards (unique keys)
+     *
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
-        return processingShards.values().stream()
-                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
-                .sum();
+        return totalSizeOfShards;
+//        cache this?
+//        return processingShards.values().parallelStream()
+//                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
+//                .sum();
     }
 
-    public boolean workIsWaitingToBeProcessed() {
-        Collection<ProcessingShard<K, V>> allShards = processingShards.values();
-        return allShards.parallelStream()
-                .anyMatch(ProcessingShard::workIsWaitingToBeProcessed);
-    }
 
     /**
      * Remove only the work shards which are referenced from work from revoked partitions
@@ -145,6 +160,11 @@ public class ShardManager<K, V> {
         }
     }
 
+    public boolean workIsWaitingToBeProcessed() {
+        return processingShards.values().parallelStream()
+                .anyMatch(ProcessingShard::isWorkWaitingToBeProcessed);
+    }
+
     /**
      * Removes any tracked work for this record, and removes the shard if it is empty
      */
@@ -155,6 +175,7 @@ public class ShardManager<K, V> {
             // remove the work
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
+            totalSizeOfShards--;
 
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
@@ -175,6 +196,8 @@ public class ShardManager<K, V> {
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
+
+        totalSizeOfShards++;
     }
 
     void removeShardIfEmpty(ShardKey key) {
@@ -200,6 +223,7 @@ public class ShardManager<K, V> {
             //
             shardOptional.get().onSuccess(wc);
             removeShardIfEmpty(key);
+            totalSizeOfShards--;
         } else {
             log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());
         }
