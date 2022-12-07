@@ -11,7 +11,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Deserializer;
@@ -36,6 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
+import static io.confluent.csid.utils.KafkaTestUtils.checkExactOrdering;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
@@ -51,7 +51,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 10, unit = MINUTES)
+@Timeout(value = 3, unit = MINUTES)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -939,32 +939,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
         log.debug("Testing...");
         checkExactOrdering(results, records);
-    }
-
-    /**
-     * todo docs, extract?
-     */
-    private <T> void checkExactOrdering(Map<String, Queue<PollContext<String, String>>> results, HashMap<Integer, List<T>> originalRecords) {
-        originalRecords.entrySet().forEach(entry -> {
-            var originalRecordList = entry.getValue();
-            var originalKey = entry.getKey();
-            var sequence = results.get(originalKey.toString());
-            assertThat(sequence).hasSameSizeAs(originalRecordList);
-            assertThat(sequence.size()).describedAs("Sanity: is same size as original list").isEqualTo(originalRecordList.size());
-            log.debug("Key {} has same size of record as original - {}", originalKey, sequence.size());
-            // check the integer sequence of PollContext value is linear and is without gaps
-            var last = sequence.poll();
-            PollContext<String, String> next = null;
-            while (!sequence.isEmpty()) {
-                next = sequence.poll();
-                var thisValue = Integer.parseInt(StringUtils.substringBefore(next.value(), ","));
-                var lastValue = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
-                assertThat(thisValue).isEqualTo(lastValue);
-                last = next;
-            }
-            log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", originalKey, next.value());
-
-        });
     }
 
 }
