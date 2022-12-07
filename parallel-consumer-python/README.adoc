@@ -54,11 +54,11 @@ Recommended (but can use other tools such as .venv):
 === Run Tests
 
 - Install test dependencies `pip install -r ./tests/requirements.txt`
-- Run tests `python -m pytest ./tests
+- Run tests `python -m pytest ./tests`
 
 == Publish Package
 
 - Build the package `python setup.py bdist_wheel`
-- Install [twine](https://twine.readthedocs.io/en/latest/) the official PyPi upload tool `pip install twine`
+- Install https://twine.readthedocs.io/en/latest/[twine] the official PyPi upload tool `pip install twine`
 - Test upload with testpypi `twine upload -r testpypi ./dist/* --verbose`
 - Upload to pypi `twine upload -r pypi ./dist/* --verbose`
