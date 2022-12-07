@@ -16,6 +16,7 @@ import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.truth.CommitHistorySubject;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.MockConsumer;
@@ -26,7 +27,6 @@ import org.assertj.core.api.ObjectAssert;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -422,14 +422,16 @@ public class WorkManagerTest {
         wm.onFailureResult(wc);
     }
 
+    // TODO: Blocker: Not implemented yet
     @Test
-    @Disabled
-    public void maxPerPartition() {
+    void maxPerPartition() {
+        throw new NotImplementedException();
     }
 
+    // TODO: Blocker: Not implemented yet
     @Test
-    @Disabled
-    public void maxPerTopic() {
+    void maxPerTopic() {
+        throw new NotImplementedException();
     }
 
     @Test

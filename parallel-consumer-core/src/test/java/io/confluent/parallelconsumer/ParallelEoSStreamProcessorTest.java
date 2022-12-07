@@ -11,6 +11,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Deserializer;
@@ -345,15 +346,15 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 assertCommitLists(of(of(2), of(2, 3, 4))));
     }
 
+    // TODO: Blocker: Not implemented yet
     @Test
-    @Disabled
     public void avro() {
         // send three messages - 0,1,2
         // finish processing 1
         // make sure no offsets are committed
         // finish 0
         // make sure offset 1, not 0 is committed
-        assertThat(false).isTrue();
+        throw new NotImplementedException();
     }
 
     @ParameterizedTest
