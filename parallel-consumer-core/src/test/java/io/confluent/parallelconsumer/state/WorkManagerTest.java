@@ -420,7 +420,7 @@ public class WorkManagerTest {
         wc.onUserFunctionFailure(null);
         wm.onFailureResult(wc);
     }
-=
+
     @Test
     public void maxInFlight() {
         //
