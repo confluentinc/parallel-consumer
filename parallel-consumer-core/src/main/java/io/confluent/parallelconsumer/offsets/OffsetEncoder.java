@@ -5,39 +5,48 @@ package io.confluent.parallelconsumer.offsets;
  */
 
 import lombok.SneakyThrows;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+
 
 /**
  * Base OffsetEncoder, defining the contract for encoding offset data.
  *
  * @author Antony Stubbs
  */
+@ToString
 @Slf4j
 public abstract class OffsetEncoder {
 
+    /**
+     * Implementation version of the encoding
+     */
+    protected final OffsetEncoding.Version version;
+
     private final OffsetSimultaneousEncoder offsetSimultaneousEncoder;
 
-    protected OffsetEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder) {
+    protected OffsetEncoder(OffsetSimultaneousEncoder offsetSimultaneousEncoder, OffsetEncoding.Version version) {
         this.offsetSimultaneousEncoder = offsetSimultaneousEncoder;
+        this.version = version;
     }
 
     protected abstract OffsetEncoding getEncodingType();
 
     protected abstract OffsetEncoding getEncodingTypeCompressed();
 
-    abstract void encodeIncompleteOffset(final int rangeIndex);
+    abstract void encodeIncompleteOffset(final long relativeOffset) throws EncodingNotSupportedException;
 
-    abstract void encodeCompletedOffset(final int rangeIndex);
+    abstract void encodeCompletedOffset(final long relativeOffset) throws EncodingNotSupportedException;
 
     abstract byte[] serialise() throws EncodingNotSupportedException;
 
     abstract int getEncodedSize();
 
     boolean quiteSmall() {
-        return this.getEncodedSize() < OffsetSimultaneousEncoder.LARGE_INPUT_MAP_SIZE_THRESHOLD;
+        return this.getEncodedSize() < OffsetSimultaneousEncoder.LARGE_ENCODED_SIZE_THRESHOLD_BYTES;
     }
 
     byte[] compress() throws IOException {
@@ -51,7 +60,7 @@ public abstract class OffsetEncoder {
     }
 
     private void register(final OffsetEncoding type, final byte[] bytes) {
-        log.debug("Registering {}, with site {}", type, bytes.length);
+        log.debug("Registering {}, with size {}", type, bytes.length);
         EncodedOffsetPair encodedPair = new EncodedOffsetPair(type, ByteBuffer.wrap(bytes));
         offsetSimultaneousEncoder.sortedEncodings.add(encodedPair);
         offsetSimultaneousEncoder.encodingMap.put(type, bytes);

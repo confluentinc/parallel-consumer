@@ -14,6 +14,12 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.2.5
+
+=== Fixes
+
+* fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
+
 == 0.5.2.4
 
 === Features
@@ -29,6 +35,8 @@ endif::[]
 * fixes #409: Adds support for compacted topics and commit offset resetting (#425)
 ** Truncate the offset state when bootstrap polled offset higher or lower than committed
 ** Prune missing records from the tracked incomplete offset state, when they're missing from polled batches
+* fix: Improvements to encoding ranges (int vs long) #439
+** Replace integer offset references with long - use Long everywhere we deal with offsets, and where we truncate down, do it exactly, detect and handle truncation issues.
 
 == 0.5.2.3
 

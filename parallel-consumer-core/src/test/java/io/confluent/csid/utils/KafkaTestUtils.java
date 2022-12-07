@@ -25,7 +25,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.Range.range;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -207,7 +206,7 @@ public class KafkaTestUtils {
 
     public ArrayList<ConsumerRecord<String, String>> generateRecordsForKey(Integer key, int quantity) {
         var records = new ArrayList<ConsumerRecord<String, String>>(quantity);
-        for (int i : range(quantity)) {
+        for (long i : Range.range(quantity)) {
             var rec = makeRecord(key.toString(), i + "");
             records.add(rec);
         }
@@ -224,7 +223,7 @@ public class KafkaTestUtils {
 
     @Setter
     @Getter
-    private List<Integer> defaultKeys = range(100).list();
+    private List<Integer> defaultKeys = Range.listOfIntegers(100);
 
     private Integer getRandomDefaultKey() {
         int i = (int) (random() * defaultKeys.size());
