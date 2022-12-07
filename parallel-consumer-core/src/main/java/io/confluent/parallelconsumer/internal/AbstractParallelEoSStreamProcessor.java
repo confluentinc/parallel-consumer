@@ -186,6 +186,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Instant lastCommitTime;
 
+    @Override
     public boolean isClosedOrFailed() {
         boolean closed = state == State.closed;
         boolean doneOrCancelled = false;
