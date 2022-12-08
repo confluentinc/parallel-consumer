@@ -41,7 +41,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <executable>../parallel-consumer-python/bin/run-tests.sh</executable>
+                    <executable>bin/run-tests.sh</executable>
                     <!--                    <arguments>-->
                     <!--                        <argument>&lt;!&ndash; configure here arguments, if any &ndash;&gt;</argument>-->
                     <!--                    </arguments>-->
