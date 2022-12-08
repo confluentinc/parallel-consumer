@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright (C) 2020-2022 Confluent, Inc.
+
+-->
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.confluent.parallelconsumer</groupId>
+        <artifactId>parallel-consumer-parent</artifactId>
+        <version>0.5.2.5-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>parallel-consumer-python-tests</artifactId>
+    <name>Confluent Parallel Consumer Python - Tests</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.confluent.parallelconsumer</groupId>
+            <artifactId>parallel-consumer-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>run-test-script</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <executable>../parallel-consumer-python/bin/run-tests.sh</executable>
+                    <!--                    <arguments>-->
+                    <!--                        <argument>&lt;!&ndash; configure here arguments, if any &ndash;&gt;</argument>-->
+                    <!--                    </arguments>-->
+                    <workingDirectory>../parallel-consumer-python/</workingDirectory>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
