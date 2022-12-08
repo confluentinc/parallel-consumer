@@ -578,7 +578,9 @@ From the `Clients` view, get the connection information customized to your clust
 
 Parallel Consumer is available from Python via the `pyallel_consumer` package.
 
-It is hosted on https://pypi.org/project/pyallel-consumer/[PyPi] and can be installed with `pip install pyallel-consumer`
+Install directly from GitHub
+
+`pip install -e 'git+https://github.com/confluentinc/parallel-consumer.git#egg=pyallel_consumer&subdirectory=parallel-consumer-python'`
 
 You can import the parallel consumer Java package as a Python package.
 All parallel consumer classes and functions are accessible from this, with support for passing Python objects as
@@ -599,7 +601,7 @@ processor.subscribe([topic])
 processor.poll(lambda o: print(f"Concurrently processing a record: {o}"))
 ```
 
-See the `parallel-consumer-python` [README](./parallel-consumer-python/README.adoc) for more information.
+See the `parallel-consumer-python` xref:./parallel-consumer-python/README.adoc[README] for more information.
 
 [[upgrading]]
 == Upgrading

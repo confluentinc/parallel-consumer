@@ -2,6 +2,12 @@
 
 Python wrapper for https://github.com/confluentinc/parallel-consumer[Confluent Parallel Consumer].
 
+== Installation
+
+Install directly from GitHub
+
+`pip install -e 'git+https://github.com/confluentinc/parallel-consumer.git#egg=pyallel_consumer&subdirectory=parallel-consumer-python'`
+
 == Usage
 
 This library starts the JVM and makes Java packages beginning with `io` available under the alias `jio` (to avoid conflicts with the std-lib `io.py` module).
