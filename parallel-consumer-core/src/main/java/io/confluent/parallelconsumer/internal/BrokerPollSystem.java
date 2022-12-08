@@ -319,7 +319,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             });
             committer.commit();
         } else {
-            throw new IllegalStateException(msg("Can't commit - not running (state: {}", runState));
+            throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
     }
 

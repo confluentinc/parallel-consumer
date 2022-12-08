@@ -420,18 +420,31 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @ThreadSafe
     @Override
     public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
-        var close = getMyActor().askImmediately(me -> {
-            me.closeInternal(timeout, drainMode);
-            return Void.class;
-        });
-        // wait
-        close.get(timeout.toMillis(), MILLISECONDS);
+        if (isIdlingOrRunning()) {
+            var close = getMyActor().askImmediately(me -> {
+                me.closeInternal(drainMode);
+                return Void.class;
+            });
+            // wait
+            close.get(timeout.toMillis(), MILLISECONDS);
+        } else {
+            doClose(timeout);
+        }
+
+        processCloseState(timeout);
     }
 
-    private void closeInternal(Duration timeout, DrainingMode drainMode) throws
-            ExecutionException,
-            TimeoutException,
-            InterruptedException {
+    private void processCloseState(Duration timeout) throws InterruptedException, ExecutionException, TimeoutException {
+        if (controlThreadFuture.isPresent()) {
+            log.debug("Checking for control thread exception...");
+            Future<?> future = controlThreadFuture.get();
+            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
+        }
+
+        log.info("Close complete.");
+    }
+
+    private void closeInternal(DrainingMode drainMode) {
         if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
@@ -448,16 +461,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
                 }
             }
 
-            waitForClose(timeout);
+//            waitForClose(timeout);
         }
-
-        if (controlThreadFuture.isPresent()) {
-            log.debug("Checking for control thread exception...");
-            Future<?> future = controlThreadFuture.get();
-            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
-        }
-
-        log.info("Close complete.");
     }
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
@@ -513,15 +518,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         // last check to see if after worker pool closed, has any new work arrived?
         processActorMessageQueueBlocking();
 
-        // only close consumer once producer has committed it's offsets (tx'l)
+        // last commit
+        commitOffsetsThatAreReady();
+
+        // only broker poller, and hence consumer, once `Committer` has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
 
         // reject further and process renaming - make sure no new messages possible
+        // todo can't close until when? to process responses? so then come public apis need to check state first before
+        //  allowing message?
         getMyActor().close();
-
-        // last commit
-        commitOffsetsThatAreReady();
 
         //
         maybeCloseConsumer();
@@ -560,7 +567,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     }
 
     private void transitionToDrainingAsync(Reason reason) {
-        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
+//        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
+        transitionToState(reason, State.DRAINING);
     }
 
     // also do closing
@@ -638,6 +646,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+
+        getMyActor().start();
     }
 
     /**
@@ -923,16 +933,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     }
 
     private void transitionToClosing() {
-        // should this jump the queue (Immediately)?
-        getMyActor().tellImmediately(me -> {
-            String msg = "Transitioning to closing...";
-            log.debug(msg);
-            if (state == UNUSED) {
-                state = CLOSED;
-            } else {
-                state = CLOSING;
-            }
-        });
+        String msg = "Transitioning to closing...";
+        log.debug(msg);
+        if (state == UNUSED) {
+            state = CLOSED;
+        } else {
+            state = CLOSING;
+        }
     }
 
     /**
@@ -1060,6 +1067,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * Visible for testing
      */
     protected void commitOffsetsThatAreReady() throws InterruptedException, TimeoutException {
+        if (state.equals(UNUSED)) {
+            return;
+        }
+
         log.debug("Committing offsets that are ready...");
         committer.retrieveOffsetsAndCommit();
         updateLastCommitCheckTime();

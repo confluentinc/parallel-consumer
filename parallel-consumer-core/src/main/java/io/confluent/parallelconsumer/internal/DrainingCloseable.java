@@ -16,7 +16,7 @@ import java.util.concurrent.TimeoutException;
  */
 public interface DrainingCloseable extends Closeable {
 
-    Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30); // can increase if debugging
+    Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5); // can increase if debugging
 
     enum DrainingMode {
         /**

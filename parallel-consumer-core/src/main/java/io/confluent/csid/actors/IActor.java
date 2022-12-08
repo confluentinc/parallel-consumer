@@ -13,6 +13,7 @@ import java.util.function.Consumer;
  *
  * @param <T>
  * @author Antony Stubbs
+ * @see Actor
  */
 // todo remove?
 // todo rename
@@ -45,4 +46,7 @@ public interface IActor<T> {
     String getActorName();
 
     void close();
+
+    void start();
+
 }

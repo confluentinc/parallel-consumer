@@ -17,7 +17,7 @@ class CompletableFutureTest {
         var appended = base.thenApply(appenderFunction);
         var a = base.complete("a");
         var s = appended.get();
-        ManagedTruth.assertThat(s).isEmpty();
+        ManagedTruth.assertThat(s).isEqualTo("a1");
     }
 
 }
