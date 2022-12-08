@@ -5,6 +5,7 @@ package io.confluent.csid.actors;
  */
 
 import com.google.common.truth.Truth;
+import io.confluent.csid.utils.ThreadUtils;
 import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -81,19 +82,15 @@ class ActorTest {
     @SneakyThrows
     @Test
     void processBlocking() {
-        final int delayMs = 1000;
-        final String magic = "magic";
-        final CountDownLatch returnedAfterBlocking = new CountDownLatch(1);
+        Duration delay = Duration.ofSeconds(1);
+        String magic = "magic";
+        CountDownLatch returnedAfterBlocking = new CountDownLatch(1);
         var pool = Executors.newCachedThreadPool();
 
         // setup 1s delay trigger
         pool.submit(() -> {
             // delay, so we block polling for a second
-            try {
-                Thread.sleep(delayMs + 100); // add 100ms for fuzz factor / race condition
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+            ThreadUtils.sleepLog(delay.plusMillis(100)); // add 100ms for fuzz factor / race condition
             // send the message to wake up the actor from the blocking process
             actor.tell(a -> a.setTold(magic));
         });
@@ -111,7 +108,7 @@ class ActorTest {
         // await AT LEAST delayMs before condition passes (earlier would mean there was no block during processing)
         // trigger should fire after the delay, waking of the process block and processing the closure to set the value
         Awaitility.await()
-                .atLeast(Duration.ofMillis(delayMs))
+                .atLeast(delay)
                 .untilAsserted(() -> assertThat(greeter.getTold()).isEqualTo(magic));
 
         //

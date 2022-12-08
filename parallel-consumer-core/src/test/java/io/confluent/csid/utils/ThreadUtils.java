@@ -7,6 +7,10 @@ package io.confluent.csid.utils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
+
+import static io.confluent.csid.utils.StringUtils.msg;
+
 @Slf4j
 public class ThreadUtils {
 
@@ -17,11 +21,15 @@ public class ThreadUtils {
         log.debug("Woke up (slept for {})", ms);
     }
 
-    public static void sleepLog(final int ms) {
+    public static void sleepLog(Duration duration) {
+        sleepLog(duration.toMillis());
+    }
+
+    public static void sleepLog(final long ms) {
         try {
             Thread.sleep(ms);
         } catch (InterruptedException e) {
-            log.error("Sleep of {} interrupted", e, ms);
+            log.error(msg("Sleep of {} interrupted", ms), e);
         }
     }
 
@@ -31,6 +39,6 @@ public class ThreadUtils {
     }
 
     public static void sleepSecondsLog(int seconds) {
-        sleepLog(seconds * 1000);
+        sleepLog(seconds * 1000L);
     }
 }
