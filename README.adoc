@@ -250,6 +250,10 @@ without operational burden or harming the cluster's performance
 * Exactly Once bulk transaction system
 ** When using the transactional mode, record processing that happens in parallel and produce records back to kafka get all grouped into a large batch transaction, and the offsets and records are submitted through the transactional producer, giving you Exactly once Semantics for parallel processing.
 ** For further information, see the <<transaction-system>> section.
+* High-level <<python>> API
+
+=== Minor
+
 * Fair partition traversal
 * Zero~ dependencies (`Slf4j` and `Lombok`) for the core module
 * Java 8 compatibility
@@ -258,7 +262,6 @@ without operational burden or harming the cluster's performance
 * Manual global pause / resume of all partitions, without unsubscribing from topics (useful for implementing a simplistic https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern[circuit breaker])
 ** Circuit breaker patterns for individual paritions or keys can be done through throwing failure exceptions in the processing function (see https://github.com/confluentinc/parallel-consumer/pull/291[PR #291 Explicit terminal and retriable exceptions] for further refinement)
 ** Note: Pausing of a partition is also automatic, whenever back pressure has built up on a given partition
-* High-level Python API
 
 //image:https://codecov.io/gh/astubbs/parallel-consumer/branch/master/graph/badge.svg["Coverage",https://codecov.io/gh/astubbs/parallel-consumer]
 //image:https://travis-ci.com/astubbs/parallel-consumer.svg?branch=master["Build Status", link="https://travis-ci.com/astubbs/parallel-consumer"]
