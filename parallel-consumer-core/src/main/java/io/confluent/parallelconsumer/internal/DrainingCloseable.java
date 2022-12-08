@@ -3,9 +3,17 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
+import lombok.SneakyThrows;
+
 import java.io.Closeable;
 import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
+/**
+ * @author Antony Stubbs
+ */
 public interface DrainingCloseable extends Closeable {
 
     Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30); // can increase if debugging
@@ -23,50 +31,60 @@ public interface DrainingCloseable extends Closeable {
     }
 
     /**
-     * Close the consumer, without draining. Uses a reasonable default timeout.
+     * Close the consumer, without draining. Uses a reasonable default timeout. Blocking until it has finished closing.
      *
      * @see #DEFAULT_TIMEOUT
      * @see #close(Duration, DrainingMode)
      */
+    @SneakyThrows
     default void close() {
         closeDontDrainFirst();
     }
 
     /**
+     * Close the consumer, blocking until it has finished closing.
+     *
      * @see DrainingMode#DRAIN
      */
-    default void closeDrainFirst() {
+    default void closeDrainFirst() throws ExecutionException, InterruptedException, TimeoutException {
         closeDrainFirst(DEFAULT_TIMEOUT);
     }
 
     /**
+     * Close the consumer, blocking until it has finished closing.
+     *
      * @see DrainingMode#DONT_DRAIN
      */
-    default void closeDontDrainFirst() {
+    default void closeDontDrainFirst() throws ExecutionException, InterruptedException, TimeoutException {
         closeDontDrainFirst(DEFAULT_TIMEOUT);
     }
 
     /**
+     * Close the consumer, blocking until it has finished closing.
+     *
      * @see DrainingMode#DRAIN
      */
-    default void closeDrainFirst(Duration timeout) {
+    default void closeDrainFirst(Duration timeout) throws ExecutionException, InterruptedException, TimeoutException {
         close(timeout, DrainingMode.DRAIN);
     }
 
     /**
+     * Close the consumer, blocking until it has finished closing.
+     *
      * @see DrainingMode#DONT_DRAIN
      */
-    default void closeDontDrainFirst(Duration timeout) {
+    default void closeDontDrainFirst(Duration timeout) throws ExecutionException, InterruptedException, TimeoutException {
         close(timeout, DrainingMode.DONT_DRAIN);
     }
 
     /**
-     * Close the consumer.
+     * Close the consumer, blocking until it has finished closing.
      *
      * @param timeout      how long to wait before giving up
      * @param drainingMode wait for messages already consumed from the broker to be processed before closing
      */
-    void close(Duration timeout, DrainingMode drainingMode);
+    // todo consider - do users want to have checked or unchecked exceptions when closing?
+    void close(Duration timeout, DrainingMode drainingMode) throws ExecutionException, InterruptedException, TimeoutException;
 
     /**
      * Of the records consumed from the broker, how many do we have remaining in our local queues

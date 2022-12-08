@@ -9,7 +9,6 @@ import io.confluent.csid.utils.ThreadUtils;
 import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 
 /**
@@ -28,12 +28,16 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 class ActorTest {
 
     public static final String MESSAGE = "tell";
+
     Greeter greeter = new Greeter();
+
     Actor<Greeter> actor = new Actor<>(greeter);
 
     @Data
     public static class Greeter {
+
         public static final String PREFIX = "kiwi-";
+
         String told = "";
 
         public String greet(String msg) {
@@ -66,7 +70,7 @@ class ActorTest {
         String s = tell.get();
         assertThat(s).isEqualTo(Greeter.PREFIX + MESSAGE);
 
-        Assertions.assertThatThrownBy(() -> actor.tell(g -> g.greet("closed")))
+        assertThatThrownBy(() -> actor.tell(g -> g.greet("closed")))
                 .hasMessageContainingAll("CLOSED", "not", "target", "state");
     }
 
@@ -114,5 +118,16 @@ class ActorTest {
         //
         Truth.assertWithMessage("Thread returned from blocking process ok")
                 .that(returnedAfterBlocking.getCount()).isEqualTo(0);
+    }
+
+    @SneakyThrows
+    @Test
+    void exceptions() {
+        var fut = actor.ask(g -> {
+            throw new RuntimeException("test");
+        });
+        actor.process();
+        assertThatThrownBy(fut::get)
+                .hasMessageContaining("test");
     }
 }

@@ -70,6 +70,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // todo rename to ActorRef? ActorInterface? ActorAPI? Also clashes with field name.
+// todo also - another branch uses ActorRef - resolve
 public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actorRef;
@@ -84,6 +85,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     @Getter(AccessLevel.PROTECTED)
     private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>();
+//    private final LinkedBlockingDeque<FutureTask<T>> actionMailbox = new LinkedBlockingDeque<>();
 
     @Override
     public void tell(final Consumer<T> action) {
@@ -98,18 +100,58 @@ public class Actor<T> implements IActor<T>, Interruptible {
     }
 
     @Override
-    public <R> Future<R> ask(final Function<T, R> action) {
+    public <R> Future<R> ask(FunctionWithException<T, R> action) {
         checkState(ActorState.ACCEPTING_MESSAGES);
 
-        /*
-         * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
-         */
-        FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
+//        CompletableFuture<T> future = new CompletableFuture<T>();
+//        Supplier<R> rSupplier = () -> action.apply(actorRef);
+//        var rCompletableFuture = future.supplyAsync(rSupplier);
+
+
+//        var task = askInternal(action);
+
+        CompletableFuture<R> future = new CompletableFuture<>();
+
+//        Runnable runnable = () -> action.apply(actorRef);
+
+//        Supplier<R> task = () -> action.apply(actorRef);
+//        Runnable task = () -> action.apply(actorRef);
+
+//        var rFutureTask = new FutureTask<R>();
+
+        Runnable runnable = createRunnable(action, future);
+//        var rCompletableFuture = CompletableFuture.supplyAsync()
 
         // queue
-        getActionMailbox().add(task);
+        getActionMailbox().add(runnable);
 
-        return task;
+        return future;
+    }
+
+    private <R> Runnable createRunnable(FunctionWithException<T, R> action, CompletableFuture<R> future) {
+        return () -> {
+            try {
+                var apply = action.apply(actorRef);
+                future.complete(apply);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        };
+    }
+
+    private <R> CompletableFuture<R> askInternal(Function<T, R> action) {
+
+        CompletableFuture<T> future = new CompletableFuture<T>();
+        future.complete(actorRef);
+//        future.
+
+        Runnable rCallable = () -> action.apply(actorRef);
+        var rCompletableFuture = future.thenApply(action);
+
+//        FutureTask<R> task = new FutureTask<>(rCallable);
+//        FutureTask<R> task1 = task.;
+//        task1.run();
+        return rCompletableFuture;
     }
 
     private void checkState(ActorState targetState) {
@@ -126,12 +168,13 @@ public class Actor<T> implements IActor<T>, Interruptible {
      *         the {@link #process} methods.
      */
     @Override
-    public <R> Future<R> askImmediately(final Function<T, R> action) {
+    public <R> Future<R> askImmediately(FunctionWithException<T, R> action) {
         checkState(ActorState.ACCEPTING_MESSAGES);
-
-        FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
+//        var task = askInternal(action);
+        var future = new CompletableFuture<R>();
+        var task = createRunnable(action, future);
         getActionMailbox().addFirst(task);
-        return task;
+        return future;
     }
 
     /**

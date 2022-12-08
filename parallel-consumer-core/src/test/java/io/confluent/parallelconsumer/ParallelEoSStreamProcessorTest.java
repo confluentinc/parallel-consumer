@@ -91,6 +91,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     /**
      * Checks that - for messages that are currently undergoing processing, that no offsets for them are committed
      */
+    @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
@@ -692,6 +693,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertThat(durationOfCloseOperation).as("Should be fast").isLessThan(expectedDurationOfClose);
     }
 
+    @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     public void closeWithoutRunningShouldBeEventBasedFast(CommitMode commitMode) {
@@ -710,6 +712,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
     }
 
+    @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void consumeFlowDoesntRequireProducer(CommitMode commitMode) {
@@ -827,6 +830,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .hasMessageContainingAll("Producer", "options");
     }
 
+    @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void produceMessageFlow(CommitMode commitMode) {
@@ -855,6 +859,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
      * See <a href="https://github.com/confluentinc/parallel-consumer/issues/433">Different computational results
      * obtained with different max concurrency configurations for the same parallel consumer #433</a>
      */
+    @SneakyThrows
     @Test
     void lessKeysThanThreads() {
         setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()

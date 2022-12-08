@@ -408,6 +408,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      *
      * @see State#DRAINING
      */
+    @SneakyThrows
     @ThreadSafe
     @Override
     public void close() {
@@ -418,14 +419,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
     @ThreadSafe
     @Override
-    public void close(Duration timeout, DrainingMode drainMode) {
-        getMyActor().tellImmediately(me -> {
-            closeInternal(timeout, drainMode);
+    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
+        var close = getMyActor().askImmediately(me -> {
+            me.closeInternal(timeout, drainMode);
+            return Void.class;
         });
+        // wait
+        close.get(timeout.toMillis(), MILLISECONDS);
     }
 
-    @SneakyThrows // todo remove sneaky - should declare public api wht can happen
-    private void closeInternal(Duration timeout, DrainingMode drainMode) {
+    private void closeInternal(Duration timeout, DrainingMode drainMode) throws
+            ExecutionException,
+            TimeoutException,
+            InterruptedException {
         if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
