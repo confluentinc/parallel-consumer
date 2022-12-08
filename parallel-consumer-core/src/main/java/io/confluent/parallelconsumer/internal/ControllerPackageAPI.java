@@ -16,6 +16,8 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 //todo extract the other interfaces
 public interface ControllerPackageAPI<K, V> extends ThreadSafeAPI, ConsumerRebalanceListener {
 
+    @ThreadSafe
+        // make sense to annotate the interface?
     void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords);
 
 //    Optional<Object> getMyId();

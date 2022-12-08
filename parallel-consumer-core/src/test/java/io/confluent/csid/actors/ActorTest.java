@@ -33,6 +33,10 @@ class ActorTest {
 
     Actor<Greeter> actor = new Actor<>(greeter);
 
+    public ActorTest() {
+        actor.start();
+    }
+
     @Data
     public static class Greeter {
 

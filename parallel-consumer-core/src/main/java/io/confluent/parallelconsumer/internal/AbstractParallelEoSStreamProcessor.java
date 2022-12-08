@@ -1176,6 +1176,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
+    @ThreadSafe
     @Override
     public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
         log.trace("Sending new polled records signal to controller - total partitions: {} records: {}",
@@ -1256,4 +1257,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         });
     }
 
+    // todo remove - for tests that call controlLoop directly
+    public void start() {
+        getMyActor().start();
+    }
 }
