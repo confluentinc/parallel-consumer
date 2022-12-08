@@ -35,7 +35,7 @@ class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     }
 
     @Override
-    protected ParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions options) {
+    protected ParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions<String, String> options) {
         streaming = new JStreamParallelEoSStreamProcessor<>(options);
 
         return streaming;
@@ -45,7 +45,7 @@ class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     void testStream() {
         var latch = new CountDownLatch(1);
         Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
-            ProducerRecord mock = mock(ProducerRecord.class);
+            ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             log.info("Consumed and produced record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
             myRecordProcessingAction.apply(record.getSingleConsumerRecord());
             latch.countDown();

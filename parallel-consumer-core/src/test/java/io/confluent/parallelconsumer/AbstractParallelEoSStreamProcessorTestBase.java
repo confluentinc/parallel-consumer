@@ -224,7 +224,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         loopCountRef = attachLoopCounter(parentParallelConsumer);
     }
 
-    protected abstract AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions);
+    protected abstract AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions);
 
     protected void sendSecondRecord(MockConsumer<String, String> consumer) {
         secondRecord = ktu.makeRecord("key-0", "v1");
