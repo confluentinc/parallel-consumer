@@ -13,11 +13,11 @@ public class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStrea
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
         return initPollingAsyncConsumer(parallelConsumerOptions);
     }
 
-    protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
         parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
         super.parentParallelConsumer = parallelConsumer;
         return parallelConsumer;
