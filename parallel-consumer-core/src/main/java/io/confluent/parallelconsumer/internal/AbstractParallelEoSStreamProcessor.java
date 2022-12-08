@@ -408,6 +408,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      *
      * @see State#DRAINING
      */
+    @ThreadSafe
     @Override
     public void close() {
         // use a longer timeout, to cover for evey other step using the default
@@ -415,9 +416,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         closeDontDrainFirst(timeout);
     }
 
+    @ThreadSafe
     @Override
-    @SneakyThrows
     public void close(Duration timeout, DrainingMode drainMode) {
+        getMyActor().tellImmediately(me -> {
+            closeInternal(timeout, drainMode);
+        });
+    }
+
+    @SneakyThrows // todo remove sneaky - should declare public api wht can happen
+    private void closeInternal(Duration timeout, DrainingMode drainMode) {
         if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
@@ -611,9 +619,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
                     log.debug("Control loop interrupted, closing");
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
-                    log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+                    log.error(msg("Error from poll control thread, will attempt controlled shutdown, then rethrow. " +
+                            "Error: " + e.getMessage()), e);
                     transitionToClosing();
-                    failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    failureReason = new RuntimeException(msg("Error from poll control thread: " + e.getMessage()), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw failureReason;
                 }
@@ -908,6 +917,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     }
 
     private void transitionToClosing() {
+        // should this jump the queue (Immediately)?
         getMyActor().tellImmediately(me -> {
             String msg = "Transitioning to closing...";
             log.debug(msg);

@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.state.WorkContainer;
  *
  * @author Antony Stubbs
  */
+//todo merge with ControllerPackageAPI?
 //todo extract the other interfaces
 public interface ControllerInternalAPI<K, V> extends ThreadSafeAPI {
 
