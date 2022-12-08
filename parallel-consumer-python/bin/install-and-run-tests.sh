@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
 set -x
 
 pip install .
