@@ -193,12 +193,12 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 
     @Override
     public synchronized void subscribe(final Pattern pattern, final ConsumerRebalanceListener listener) {
-        throw new IllegalStateException(); // cannot determine what a pattern would correlate to
+        throw new IllegalStateException("Cannot determine what a pattern would correlate to - use subscribe(Collection<String> topics) instead");
     }
 
     @Override
     public synchronized void subscribe(final Pattern pattern) {
-        throw new IllegalStateException(); // cannot determine what a pattern would correlate to
+        throw new IllegalStateException("Cannot determine what a pattern would correlate to - use subscribe(Collection<String> topics) instead");
     }
 
     public void subscribeWithRebalanceAndAssignment(Collection<String> topics, int partitions) {

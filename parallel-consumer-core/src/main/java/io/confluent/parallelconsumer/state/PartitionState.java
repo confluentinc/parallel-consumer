@@ -327,7 +327,7 @@ public class PartitionState<K, V> {
                             "by the broker or committed offset has been raised. Bootstrap polled {} but expected {} from loaded commit data. " +
                             "Could be caused by record retention or compaction and offset reset policy LATEST.",
                     bootstrapPolledOffset,
-                    this.tp.partition(),
+                    this.topicPartition.partition(),
                     bootstrapPolledOffset,
                     expectedBootstrapRecordOffset);
 

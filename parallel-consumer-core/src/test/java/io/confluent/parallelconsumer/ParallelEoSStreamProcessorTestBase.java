@@ -19,7 +19,7 @@ public abstract class ParallelEoSStreamProcessorTestBase extends AbstractParalle
     }
 
     protected ParallelEoSStreamProcessor<String, String> initPollingParallelConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
-        PCModule module = createModule(parallelConsumerOptions);
+        PCModule<String, String> module = createModule(parallelConsumerOptions);
         parallelConsumer = module == null ?
                 new ParallelEoSStreamProcessor<>(parallelConsumerOptions) :
                 new ParallelEoSStreamProcessor<>(parallelConsumerOptions, module);
@@ -27,8 +27,8 @@ public abstract class ParallelEoSStreamProcessorTestBase extends AbstractParalle
         return parallelConsumer;
     }
 
-    protected PCModule<String, String> createModule(final ParallelConsumerOptions parallelConsumerOptions) {
-        return null;
+    protected PCModule<String, String> createModule(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
+        return new PCModule<>(parallelConsumerOptions);
     }
 
 }
