@@ -116,7 +116,7 @@ class ActorTest {
         // await AT LEAST delayMs before condition passes (earlier would mean there was no block during processing)
         // trigger should fire after the delay, waking of the process block and processing the closure to set the value
         Awaitility.await()
-                .atLeast(delay)
+                .atLeast(delay.multipliedBy(9).dividedBy(10)) // 90% of the delay
                 .untilAsserted(() -> assertThat(greeter.getTold()).isEqualTo(magic));
 
         //

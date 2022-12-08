@@ -875,7 +875,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 //        final int total = 10;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
-        records.entrySet().forEach(x -> log.debug("Key {} has {} records", x.getKey(), x.getValue().size()));
+        records.forEach((key, value) -> log.debug("Key {} has {} records", key, value.size()));
         log.debug("Sending...");
         ktu.send(consumerSpy, records);
 
@@ -891,7 +891,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         // count how many we've received so far
-        await().atMost(3000, TimeUnit.SECONDS)
+        await().atMost(30, TimeUnit.SECONDS)
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
