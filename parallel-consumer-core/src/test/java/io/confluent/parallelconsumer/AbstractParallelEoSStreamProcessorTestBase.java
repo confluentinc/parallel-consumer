@@ -181,17 +181,23 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     protected void instantiateConsumerProducer() {
+        instantiateConsumer();
+        instantiateProducer();
+
+        myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
+    }
+
+    private void instantiateConsumer() {
         LongPollingMockConsumer<String, String> consumer = new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST);
+        this.consumerSpy = spy(consumer);
+        when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
+    }
+
+    private void instantiateProducer() {
         MockProducer<String, String> producer = new MockProducer<>(true,
                 Serdes.String().serializer(), Serdes.String().serializer());
-
         this.producerSpy = spy(producer);
-        this.consumerSpy = spy(consumer);
-        myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
-
-        when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
-
-        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
     }
 
     /**
@@ -217,7 +223,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      * @param optionsWithClients
      */
     protected void setupParallelConsumerInstance(ParallelConsumerOptions<String, String> optionsWithClients) {
-        optionsWithClients = maybeAddConsumer(optionsWithClients);
+        optionsWithClients = maybeAddConsumerAndProducer(optionsWithClients);
 
         parentParallelConsumer = initParallelConsumer(optionsWithClients);
 
@@ -231,8 +237,11 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         loopCountRef = attachLoopCounter(parentParallelConsumer);
     }
 
-    private ParallelConsumerOptions maybeAddConsumer(ParallelConsumerOptions options) {
+    private ParallelConsumerOptions<String, String> maybeAddConsumerAndProducer(ParallelConsumerOptions<String, String> options) {
         var copy = options.toBuilder();
+
+        setupKafkaClients();
+
         if (options.getConsumer() == null) {
             copy.consumer(consumerSpy);
         }

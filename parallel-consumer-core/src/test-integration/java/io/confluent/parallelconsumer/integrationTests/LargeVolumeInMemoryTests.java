@@ -57,7 +57,10 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
                 .build());
 
 //        int quantityOfMessagesToProduce = 1_000_000;
-        int quantityOfMessagesToProduce = 500;
+        int quantityOfMessagesToProduce = 10_000;
+//        int quantityOfMessagesToProduce = 500;
+
+        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, quantityOfMessagesToProduce);
 
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(quantityOfMessagesToProduce);
         ktu.send(consumerSpy, records);
@@ -65,6 +68,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         CountDownLatch allMessagesConsumedLatch = new CountDownLatch(quantityOfMessagesToProduce);
 
         parallelConsumer.pollAndProduceMany((rec) -> {
+            bar.step();
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
@@ -140,7 +144,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void timingOfDifferentOrderingTypes(CommitMode commitMode) {
-        var quantityOfMessagesToProduce = 10_00;
+        var quantityOfMessagesToProduce = 10_000;
         var defaultNumKeys = 20;
 
         ParallelConsumerOptions<String, String> baseOptions = ParallelConsumerOptions.<String, String>builder()
