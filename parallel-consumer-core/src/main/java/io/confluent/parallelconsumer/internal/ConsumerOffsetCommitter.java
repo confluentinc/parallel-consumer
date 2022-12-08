@@ -102,9 +102,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                     }
                 });
             }
-            default -> {
-                throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
-            }
+            default ->
+                    throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
         }
     }
 
