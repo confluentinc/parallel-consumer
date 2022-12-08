@@ -49,10 +49,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final ShardManager<K, V> sm;
 
     /**
-     * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be pre-loaded awaiting
+     * The multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} that should be preloaded awaiting
      * processing.
-     * <p>
-     * We use it here as well to make sure we have a matching number of messages in queues available.
      */
     private final DynamicLoadFactor dynamicLoadFactor;
 
@@ -209,7 +207,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
-     * should be downloaded (or pipelined in the Consumer)
+     *         should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
         return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();

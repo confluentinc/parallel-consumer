@@ -64,6 +64,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
+    private final RateLimiter pauseLimiter = new RateLimiter(1);
+
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
@@ -200,17 +202,34 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    private final RateLimiter pauseLimiter = new RateLimiter(1);
+    /**
+     * If we are currently processing too many records, we must stop polling for more from the broker. But we must also
+     * make sure we maintain the keep alive with the broker so as not to cause a rebalance.
+     * <p>
+     * Pauses all assignments.
+     */
+    private void managePauseOfSubscription() {
+        boolean throttle = shouldThrottle();
+        log.trace("Need to throttle: {}", throttle);
+        if (throttle) {
+            doPauseMaybe();
+        } else {
+            resumeIfPaused();
+        }
+    }
 
+    /**
+     * If we haven't tried to pause too frequently, pause all the subscriptions.
+     *
+     * @see #pauseLimiter
+     */
     private void doPauseMaybe() {
         // idempotent
         if (pausedForThrottling) {
             log.trace("Already paused");
         } else {
             if (pauseLimiter.couldPerform()) {
-                pauseLimiter.performIfNotLimited(() -> {
-                    doPause();
-                });
+                pauseLimiter.performIfNotLimited(this::doPause);
             } else {
                 if (log.isDebugEnabled()) {
                     log.debug("Should pause but pause rate limit exceeded {} vs {}.",
@@ -218,20 +237,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                             pauseLimiter.getRate());
                 }
             }
-        }
-    }
-
-    /**
-     * Pause all assignments
-     */
-    private void doPause() {
-        if (!pausedForThrottling) {
-            pausedForThrottling = true;
-            log.debug("Pausing subs");
-            Set<TopicPartition> assignment = consumerManager.assignment();
-            consumerManager.pause(assignment);
-        } else {
-            log.debug("Already paused, skipping");
         }
     }
 
@@ -267,16 +272,16 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     /**
-     * If we are currently processing too many records, we must stop polling for more from the broker. But we must also
-     * make sure we maintain the keep alive with the broker so as not to cause a rebalance.
+     * Pause all assignments
      */
-    private void managePauseOfSubscription() {
-        boolean throttle = shouldThrottle();
-        log.trace("Need to throttle: {}", throttle);
-        if (throttle) {
-            doPauseMaybe();
+    private void doPause() {
+        if (pausedForThrottling) {
+            log.debug("Already paused, skipping");
         } else {
-            resumeIfPaused();
+            pausedForThrottling = true;
+            log.debug("Pausing subs");
+            Set<TopicPartition> assignment = consumerManager.assignment();
+            consumerManager.pause(assignment);
         }
     }
 

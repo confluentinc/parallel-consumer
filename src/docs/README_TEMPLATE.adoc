@@ -959,22 +959,8 @@ Each thread collaborates with the others through thread safe Java collections.
 .Core Architecture. Threads are represented by letters and colours, with their steps in sequential numbers.
 image::https://lucid.app/publicSegments/view/320d924a-6517-4c54-a72e-b1c4b22e59ed/image.png[Core Architecture,align="center"]
 
-=== Vert.x Architecture
-
-The Vert.x module is an optional extension to the core module.
-As depicted in the diagram, the architecture extends the core architecture.
-
-Instead of the work thread pool count being the degree of concurrency, it is controlled by a max parallel requests setting, and work is performed asynchronously on the Vert.x engine by a _core_ count aligned Vert.x managed thread pool using Vert.x asynchronous IO plugins (https://vertx.io/docs/vertx-core/java/#_verticles[verticles]).
-
-.Vert.x Architecture
-image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture,align="center"]
-
-=== Transactional System Architecture
-
-image::https://lucid.app/publicSegments/view/7480d948-ed7d-4370-a308-8ec12e6b453b/image.png[]
-
 [[offset_map]]
-=== Offset Map
+==== Offset Map
 
 Unlike a traditional queue, messages are not deleted on an acknowledgement.
 However, offsets *are* tracked *per message*, per consumer group - there is no message replay for successful messages, even over clean restarts.
@@ -1013,7 +999,7 @@ The sizes of the compressed maps are then compared, and the smallest chosen for 
 If both serialised formats are significantly large, they are then both compressed using `zstd` compression, and if that results in a smaller serialization then the compressed form is used instead.
 
 
-==== Storage Notes
+===== Storage Notes
 
 * Runtime data model creates list of incomplete offsets
 * Continuously builds a full complete / not complete bit map from the base offset to be committed
@@ -1032,7 +1018,41 @@ However, with runlength encoding and typical offset patterns this should be quit
 ** Not being able to fit the map into the metadata, depends on message acknowledgement patterns in the use case and the numbers of messages involved.
 Also, the information density in the map (i.e. a single not yet completed message in 4000 completed ones will be a tiny map and will fit very large amounts of messages)
 
-===== FAQ
+==== Back Pressure
+
+There are two back pressure systems in PC, one for pausing the broker poller, and one for pausing the work pool for certain partitions.
+
+===== Broker Poller Back Pressure
+
+The poller will check with the `WorkManager` very loop, to see if the target number of records are buffered in the controller.
+If they target is met, it will pause all assignments, until the buffer levels drop below this target again.
+
+===== Offset Map Back Pressure
+
+If there are too many records in flight, which cause the storage requirements for the offset map (see <<offset_map>>) to exceed the storage limits - the partitions will switch to "blocked", which will prevent any more work from being taken form them.
+This way, only progress can be made, which causes the space requirements to drop, after which the partitions will be unblocked, and work will resume being taken from them.
+
+===== Interaction
+
+The interaction between these two systems is that if the offset backpressure turns on, partition work polling will stop (for that partition), but other partitions will continue.
+So this cause a knock on affect to the poller, as work from the buffers will slow down.
+However, as long as other partitions are running ok, the buffered records will still be getting drained from other partitions, and so the poller will not be paused.
+
+=== Vert.x Architecture
+
+The Vert.x module is an optional extension to the core module.
+As depicted in the diagram, the architecture extends the core architecture.
+
+Instead of the work thread pool count being the degree of concurrency, it is controlled by a max parallel requests setting, and work is performed asynchronously on the Vert.x engine by a _core_ count aligned Vert.x managed thread pool using Vert.x asynchronous IO plugins (https://vertx.io/docs/vertx-core/java/#_verticles[verticles]).
+
+.Vert.x Architecture
+image::https://lucid.app/publicSegments/view/509df410-5997-46be-98e7-ac7f241780b4/image.png[Vert.x Architecture,align="center"]
+
+=== Transactional System Architecture
+
+image::https://lucid.app/publicSegments/view/7480d948-ed7d-4370-a308-8ec12e6b453b/image.png[]
+
+== FAQ
 
 [qanda]
 If for example, offset 5 cannot be processed for whatever reason, does it cause the committed offset to stick to 5?::
