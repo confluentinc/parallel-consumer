@@ -51,7 +51,6 @@ import static org.awaitility.Awaitility.waitAtMost;
 class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase {
 
     protected PCModuleTestEnv module;
-//    protected PCModule module;
 
     @Override
     protected PCModule<String, String> createModule(ParallelConsumerOptions options) {
@@ -60,31 +59,10 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         return module;
     }
 
-    //
-//    protected PCModuleTestEnv module;
-//
-//    @BeforeEach
-//    void setup() {
-//        module = new PCModuleTestEnv(getOptions());
-//    }
-//
-//    @Override
-//    protected PCModule getModule() {
-//        return module;
-//    }
-//
-//    @Override
-//    protected ParallelConsumerOptions<String, String> getOptions() {
-//        var options = super.getOptions().toBuilder();
-//        options.consumer(super.consumerSpy);
-//        return options.build();
-//    }
-
     /**
      * Tests that when required space for encoding offset becomes too large, back pressure is put into the system so
      * that no further messages for the given partitions can be taken for processing, until more messages complete.
      */
-    // todo refactor test to use the new DI system, to manipulate one of the mocks to force test scenario, instead of messing with static state
     @Test
     void backPressureShouldPreventTooManyMessagesBeingQueuedForProcessing() throws OffsetDecodingError {
         // mock messages downloaded for processing > MAX_TO_QUEUE

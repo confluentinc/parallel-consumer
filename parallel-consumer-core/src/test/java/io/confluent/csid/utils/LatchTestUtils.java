@@ -45,7 +45,6 @@ public class LatchTestUtils {
         awaitLatch(latch, DEFAULT_TIMEOUT_SECONDS * 2);
     }
 
-    //    @SneakyThrows
     public static void awaitLatch(final CountDownLatch latch, final int seconds) throws TimeoutException {
         log.trace("Waiting on latch with timeout {}s", seconds);
         Instant start = now();

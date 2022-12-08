@@ -42,7 +42,7 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
     protected PCModuleTestEnv module;
 
     @Override
-    protected PCModuleTestEnv createModule(ParallelConsumerOptions options) {
+    protected PCModuleTestEnv createModule(ParallelConsumerOptions<String, String> options) {
         module = new PCModuleTestEnv(getOptionsWithClients());
         return module;
     }
@@ -68,7 +68,6 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         var blockedOffsets = UniLists.of(0L, 2L);
 
         assertTruth(wm.getSm()).getNumberOfWorkQueuedInShardsAwaitingSelection().isEqualTo(numberOfRecords);
-//        assertTruth(wm.getSm()).getNumberOfShards().isEqualTo(numberOfRecords);
 
         List<WorkContainer<String, String>> workIfAvailable = wm.getWorkIfAvailable();
         Truth.assertWithMessage("Should initially get all records")

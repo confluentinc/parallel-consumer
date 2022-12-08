@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -45,10 +46,12 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
     private final AtomicBoolean statePretendingToLongPoll = new AtomicBoolean(false);
 
     /**
-     * with common default
+     * With common default - needed in this class for {@link #subscribeWithRebalanceAndAssignment}, so we know how many
+     * partitions to the topic should have. Because of course the {@link #subscribe} methods do not indicate
+     * partitions.
      */
     @Getter
-    private int numberOfPartitionsToWorkWith = 2;
+    private final int numberOfPartitionsToWorkWith = 2;
 
     @Override
     public synchronized ConsumerRecords<K, V> poll(Duration timeout) {

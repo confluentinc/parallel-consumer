@@ -207,14 +207,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     protected void subscribeParallelConsumerAndMockConsumerTo(String topic) {
         List<String> of = of(topic);
         parentParallelConsumer.subscribe(of);
-
-        // todo why not move this into a #subscribe override - don't know partitions?
-//        consumerSpy.subscribeWithRebalanceAndAssignment(of, 2);
     }
-
-//    protected void setupParallelConsumerInstance(ProcessingOrder order) {
-//        setupParallelConsumerInstance(ParallelConsumerOptions.builder().ordering(order).build());
-//    }
 
     /**
      * Maybe adds a mock consumer, and then instantiates PC, subscribes it to the generated topic, sets it's polling
