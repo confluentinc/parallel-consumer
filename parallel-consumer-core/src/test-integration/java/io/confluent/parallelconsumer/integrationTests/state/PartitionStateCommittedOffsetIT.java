@@ -542,6 +542,7 @@ class PartitionStateCommittedOffsetIT extends BrokerIntegrationTest<String, Stri
      */
     @Test
     void noOffsetPolicyOnStartup() {
+        log.warn("This test will produce errors in the log - these are expected");
         this.offsetResetStrategy = NONE;
         try (
                 KafkaClientUtils clientUtils = new KafkaClientUtils(kafkaContainer);
