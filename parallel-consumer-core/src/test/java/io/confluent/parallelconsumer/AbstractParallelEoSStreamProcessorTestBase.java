@@ -241,7 +241,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         return copy.build();
     }
 
-    protected abstract AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions);
+    protected abstract AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions);
 
     protected void sendSecondRecord(MockConsumer<String, String> consumer) {
         secondRecord = ktu.makeRecord("key-0", "v1");

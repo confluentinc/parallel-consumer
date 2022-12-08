@@ -323,10 +323,11 @@ public class PartitionState<K, V> {
 
         if (pollAboveExpected) {
             // previously committed offset record has been removed from the topic, so we need to truncate up to it
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition " +
+            log.warn("Truncating state - removing records lower than {} from partition {}. Offsets have been removed from the partition " +
                             "by the broker or committed offset has been raised. Bootstrap polled {} but expected {} from loaded commit data. " +
                             "Could be caused by record retention or compaction and offset reset policy LATEST.",
                     bootstrapPolledOffset,
+                    this.tp.partition(),
                     bootstrapPolledOffset,
                     expectedBootstrapRecordOffset);
 

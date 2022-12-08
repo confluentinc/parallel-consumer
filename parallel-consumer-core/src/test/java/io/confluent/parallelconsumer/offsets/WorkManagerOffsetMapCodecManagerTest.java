@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,7 +28,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.xerial.snappy.SnappyOutputStream;
 import pl.tlinkowski.unij.api.UniLists;
-import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.io.ByteArrayOutputStream;
@@ -234,13 +232,6 @@ class WorkManagerOffsetMapCodecManagerTest {
         log.info("s {}", s64.length());
 
         return outg;
-    }
-
-    @Test
-    @Disabled("TODO: Blocker: Not implemented yet")
-    void truncationOnCommit() {
-        wm.onOffsetCommitSuccess(UniMaps.of());
-        assertThat(true).isFalse();
     }
 
     @Test

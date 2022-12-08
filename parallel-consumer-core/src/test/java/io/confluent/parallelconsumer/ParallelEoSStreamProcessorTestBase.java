@@ -14,11 +14,11 @@ public abstract class ParallelEoSStreamProcessorTestBase extends AbstractParalle
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
 
     @Override
-    protected AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected AbstractParallelEoSStreamProcessor<String, String> initParallelConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
         return initPollingParallelConsumer(parallelConsumerOptions);
     }
 
-    protected ParallelEoSStreamProcessor<String, String> initPollingParallelConsumer(ParallelConsumerOptions parallelConsumerOptions) {
+    protected ParallelEoSStreamProcessor<String, String> initPollingParallelConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
         PCModule module = createModule(parallelConsumerOptions);
         parallelConsumer = module == null ?
                 new ParallelEoSStreamProcessor<>(parallelConsumerOptions) :
