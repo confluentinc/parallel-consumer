@@ -10,6 +10,7 @@ import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
+import io.confluent.parallelconsumer.ParallelConsumerOptions.ParallelConsumerOptionsBuilder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
@@ -50,11 +51,9 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void load(CommitMode commitMode) {
-        setupKafkaClients();
-        setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()
+        setupNewInstance(ParallelConsumerOptions.<String, String>builder()
                 .ordering(UNORDERED)
-                .commitMode(commitMode)
-                .build());
+                .commitMode(commitMode));
 
 //        int quantityOfMessagesToProduce = 1_000_000;
         int quantityOfMessagesToProduce = 10_000;
@@ -136,6 +135,11 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         return mostRecentTPCommit.offset();
     }
 
+    private void setupNewInstance(ParallelConsumerOptionsBuilder<String, String> baseOptions) {
+        setupKafkaClients(); // code smell - super class setup system needs refactoring
+        setupParallelConsumerInstance(baseOptions.build());
+    }
+
     /**
      * Test comparative performance of different ordering restrictions and different key spaces.
      * <p>
@@ -144,7 +148,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void timingOfDifferentOrderingTypes(CommitMode commitMode) {
-        var quantityOfMessagesToProduce = 10_000;
+        var quantityOfMessagesToProduce = 1_000;
         var defaultNumKeys = 20;
 
         ParallelConsumerOptions<String, String> baseOptions = ParallelConsumerOptions.<String, String>builder()
@@ -156,8 +160,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
         Duration unorderedDuration = null;
         for (var round : range(2)) { // warm up round first
-            setupKafkaClients(); // code smell - super class setup system needs refactoring
-            setupParallelConsumerInstance(baseOptions.toBuilder().ordering(UNORDERED).build());
+            setupNewInstance(baseOptions.toBuilder().ordering(UNORDERED));
             log.debug("No order");
             unorderedDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
             log.info("Duration for Unordered processing in round {} with {} keys was {}", round, defaultNumKeys, unorderedDuration);
@@ -165,15 +168,14 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
         var keyOrderingSizeToResults = new TreeMap<Integer, Duration>();
         for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
-            setupKafkaClients(); // code smell - super class setup system needs refactoring
-            setupParallelConsumerInstance(baseOptions.toBuilder().ordering(KEY).build());
+            setupNewInstance(baseOptions.toBuilder().ordering(KEY));
             log.debug("By key, {} keys", keySize);
             var keyOrderDuration = time(() -> testTiming(keySize, quantityOfMessagesToProduce));
             log.info("Duration for Key order processing {} keys was {}", keySize, keyOrderDuration);
             keyOrderingSizeToResults.put(keySize, keyOrderDuration);
         }
 
-        setupParallelConsumerInstance(baseOptions.toBuilder().ordering(PARTITION).build());
+        setupNewInstance(baseOptions.toBuilder().ordering(PARTITION));
         log.debug("By partition");
         var partitionOrderDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
         log.info("Duration for Partition order processing {} keys was {}", defaultNumKeys, partitionOrderDuration);
