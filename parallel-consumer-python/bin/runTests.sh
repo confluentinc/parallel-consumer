@@ -1,5 +1,5 @@
 #!/bin/bash
 
-python setup.py bdist_wheel
-pip install twine
-twine upload -r pypi ./dist/* --verbose
+pip install .
+pip install -r ./tests/requirements.txt
+python -m pytest ./tests
