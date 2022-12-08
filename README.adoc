@@ -1321,6 +1321,10 @@ endif::[]
 === Improvements
 
 * feature: Simple PCRetriableException to remove error spam from logs (#444)
+* minor: fixes #486: Missing generics in JStreamParallelStreamProcessor #491
+* minor: partially address #459: Moves isClosedOrFailed into top level ParallelConsumer interface (#491)
+* tests: Demonstrates how to use MockConsumer with PC for issue #176
+* other minor improvements
 
 === Fixes
 
