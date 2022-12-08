@@ -156,6 +156,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
         Duration unorderedDuration = null;
         for (var round : range(2)) { // warm up round first
+            setupKafkaClients(); // code smell - super class setup system needs refactoring
             setupParallelConsumerInstance(baseOptions.toBuilder().ordering(UNORDERED).build());
             log.debug("No order");
             unorderedDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
@@ -164,6 +165,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
 
         var keyOrderingSizeToResults = new TreeMap<Integer, Duration>();
         for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
+            setupKafkaClients(); // code smell - super class setup system needs refactoring
             setupParallelConsumerInstance(baseOptions.toBuilder().ordering(KEY).build());
             log.debug("By key, {} keys", keySize);
             var keyOrderDuration = time(() -> testTiming(keySize, quantityOfMessagesToProduce));

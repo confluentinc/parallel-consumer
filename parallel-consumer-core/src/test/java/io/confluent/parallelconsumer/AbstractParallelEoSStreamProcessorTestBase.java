@@ -233,8 +233,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     private ParallelConsumerOptions<String, String> maybeAddConsumerAndProducer(ParallelConsumerOptions<String, String> options) {
         var copy = options.toBuilder();
 
-        setupKafkaClients();
-
         if (options.getConsumer() == null) {
             copy.consumer(consumerSpy);
         }
