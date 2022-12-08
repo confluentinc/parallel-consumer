@@ -87,9 +87,10 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
-    public static int defaultTimeoutSeconds = 10;
+    public static final int DEFAULT_TIMEOUT_SECONDS = 30;
 
-    public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
+    public static Duration defaultTimeout = ofSeconds(DEFAULT_TIMEOUT_SECONDS);
+
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
     protected static Duration effectivelyInfiniteTimeout = Duration.ofMinutes(20);
 
@@ -309,7 +310,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         log.debug("Waiting on {} cycles on loop latch for {}...", waitForCount, defaultTimeout);
         loopLatchV = new CountDownLatch(waitForCount);
         try {
-            boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
+            boolean timeout = !loopLatchV.await(DEFAULT_TIMEOUT_SECONDS, SECONDS);
             if (timeout || parentParallelConsumer.isClosedOrFailed())
                 throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeout, waitForCount, loopLatchV.getCount()));
         } catch (InterruptedException e) {

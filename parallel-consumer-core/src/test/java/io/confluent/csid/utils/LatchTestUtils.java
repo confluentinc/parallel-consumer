@@ -15,7 +15,7 @@ import java.util.concurrent.TimeoutException;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.Range.range;
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_TIMEOUT_SECONDS;
 import static java.time.Duration.between;
 import static java.time.Instant.now;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -37,12 +37,12 @@ public class LatchTestUtils {
 
     @SneakyThrows
     public static void awaitLatch(CountDownLatch latch) {
-        awaitLatch(latch, defaultTimeoutSeconds);
+        awaitLatch(latch, DEFAULT_TIMEOUT_SECONDS);
     }
 
     public static void awaitLatchWithException(CountDownLatch latch) throws TimeoutException {
         // latch timeouts should be longer, as they are never the root cause, and so can hide the root if time out too soone
-        awaitLatch(latch, defaultTimeoutSeconds * 2);
+        awaitLatch(latch, DEFAULT_TIMEOUT_SECONDS * 2);
     }
 
     //    @SneakyThrows

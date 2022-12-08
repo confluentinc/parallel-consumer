@@ -123,7 +123,7 @@ class ReactorPCTest extends ReactorUnitTestBase {
                 }));
 
         // block here until all messages processed
-        LatchTestUtils.awaitLatch(completeOrProblem, defaultTimeoutSeconds);
+        LatchTestUtils.awaitLatch(completeOrProblem, DEFAULT_TIMEOUT_SECONDS);
 
         //
         int maxConcurrencyAllowedThreshold = (int) (maxConcurrency * MAX_CONCURRENCY_OVERFLOW_ALLOWANCE.value);

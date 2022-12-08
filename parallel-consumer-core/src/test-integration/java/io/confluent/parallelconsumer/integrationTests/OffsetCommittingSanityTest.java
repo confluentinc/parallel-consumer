@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.defaultTimeoutSeconds;
+import static io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase.DEFAULT_TIMEOUT_SECONDS;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -127,7 +127,7 @@ public class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, St
         //
         if (check.equals(CheckMode.CHECK_CONSUMED)) {
             assertThatCode(() -> {
-                waitAtMost(ofSeconds(defaultTimeoutSeconds)).alias("all produced messages consumed")
+                waitAtMost(ofSeconds(DEFAULT_TIMEOUT_SECONDS)).alias("all produced messages consumed")
                         .untilAsserted(
                                 () -> assertThat(consumedOffsets).isEqualTo(producedOffsets));
             }).doesNotThrowAnyException(); // wait for no concurrent exceptions

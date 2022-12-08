@@ -40,6 +40,7 @@ import static io.confluent.csid.utils.KafkaTestUtils.checkExactOrdering;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -386,8 +387,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @SneakyThrows
     void testVoidPollMethod(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
-//        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
-
 
         int expected = 1;
         var msgCompleteBarrier = new CountDownLatch(expected);
@@ -684,20 +683,20 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(msgCompleteBarrier);
 
-        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+        assertTruth(parallelConsumer).isNotClosedOrFailed();
 
         // allow for offset to be committed
         awaitForOneLoopCycle();
 
-        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+        assertTruth(parallelConsumer).isNotClosedOrFailed();
 
         parallelConsumer.requestCommitAsap();
 
-        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+        assertTruth(parallelConsumer).isNotClosedOrFailed();
 
         awaitForOneLoopCycle();
 
-        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+        assertTruth(parallelConsumer).isNotClosedOrFailed();
 
         await().untilAsserted(() ->
                 assertCommits(of(1)));
@@ -851,8 +850,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @EnumSource(CommitMode.class)
     void produceMessageFlow(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
-//        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
-
 
         parallelConsumer.pollAndProduce((ignore) -> new ProducerRecord<>("Hello", "there"));
 

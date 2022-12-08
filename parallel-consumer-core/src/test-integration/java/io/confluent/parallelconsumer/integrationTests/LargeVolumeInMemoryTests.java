@@ -73,7 +73,7 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         });
 
         //
-        allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
+        allMessagesConsumedLatch.await(DEFAULT_TIMEOUT_SECONDS, SECONDS);
 //        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
 
 

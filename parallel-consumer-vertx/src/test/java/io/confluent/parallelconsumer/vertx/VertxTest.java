@@ -209,7 +209,7 @@ class VertxTest extends VertxBaseUnitTest {
                 countDownLatch.countDown();
             });
         }
-        boolean success = countDownLatch.await(defaultTimeoutSeconds, SECONDS);
+        boolean success = countDownLatch.await(DEFAULT_TIMEOUT_SECONDS, SECONDS);
         if (!success)
             throw new AssertionError("Timeout reached");
         return list;

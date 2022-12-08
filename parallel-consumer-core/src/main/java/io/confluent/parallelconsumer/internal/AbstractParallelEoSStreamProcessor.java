@@ -595,7 +595,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
                 blockableControlThread.interrupt();
             } else {
-                log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next looop.");
+                log.trace("Work box not being polled currently, so thread not blocked, will come around to the mailbox in the next loop.");
             }
         }
     }
