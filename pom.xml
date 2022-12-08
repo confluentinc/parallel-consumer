@@ -605,6 +605,7 @@
                                 <exclude>**/release-pom.xml</exclude>
                                 <exclude>**/target/**/*</exclude>
                                 <exclude>**/README*</exclude>
+                                <exclude>**/requirements.txt</exclude>
                                 <!-- don't think this is needed, as it's excluded by default. But running really slow on OSx so thought should check -->
                                 <!-- https://github.com/mathieucarbou/license-maven-plugin/issues/298-->
                                 <!-- Ideally the fix would be this issue: https://github.com/mathieucarbou/license-maven-plugin/issues/126  Ignore items from .gitignore #126-->
