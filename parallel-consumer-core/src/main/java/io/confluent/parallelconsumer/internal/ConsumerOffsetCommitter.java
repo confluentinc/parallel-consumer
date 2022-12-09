@@ -144,8 +144,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         // new version
         Future<Class<Void>> ask = commitRequestSend();
         log.debug("Waiting on a commit response");
-        @SuppressWarnings("unused")
-        Class<Void> voidClass = ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
 //        // \/ old version!
 //
