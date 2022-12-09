@@ -135,6 +135,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
                 var apply = action.apply(actorRef);
                 future.complete(apply);
             } catch (Exception e) {
+                log.error("Error in actor task", e);
                 future.completeExceptionally(e);
             }
         };
@@ -190,6 +191,14 @@ public class Actor<T> implements IActor<T>, Interruptible {
         var task = createRunnable(action, future);
         getActionMailbox().addFirst(task);
         return future;
+    }
+
+    public Future<Class<Void>> askImmediatelyVoid(Consumer<T> action) {
+        FunctionWithException<T, Class<Void>> funcWrap = actor -> {
+            action.accept(actor);
+            return Void.TYPE;
+        };
+        return askImmediately(funcWrap);
     }
 
     /**

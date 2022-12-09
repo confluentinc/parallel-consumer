@@ -423,10 +423,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Override
     public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
         if (isIdlingOrRunning()) {
-            var close = getMyActor().askImmediately(me -> {
-                me.closeInternal(drainMode);
-                return Void.class;
-            });
+            var close = getMyActor().askImmediatelyVoid(me
+                    -> me.closeInternal(drainMode));
             // wait
             close.get(timeout.toMillis(), MILLISECONDS);
         } else {
