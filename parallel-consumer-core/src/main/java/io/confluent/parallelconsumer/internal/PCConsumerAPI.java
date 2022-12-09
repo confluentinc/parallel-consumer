@@ -13,7 +13,8 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * The subset of functions accessable from the underlaying {@link Consumer}.
+ * The subset of functions accessible from the underlying {@link Consumer}. Naturally, cannot implement the [@link
+ * Consumer} interface.
  *
  * @param <K>
  * @param <V>

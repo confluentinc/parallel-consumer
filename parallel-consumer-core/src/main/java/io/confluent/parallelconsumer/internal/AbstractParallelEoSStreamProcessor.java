@@ -68,13 +68,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * @see #getConsumerFacadeRestricted()
      */
     @Getter
-    private ConsumerFacade consumerFacade;
+    private ConsumerFacade<K, V> consumerFacade;
 
     /**
-     * Use this is possible instead of {@link #getConsumerFacade()}, as it only has the functions that are allowed to be
+     * Use this if possible instead of {@link #getConsumerFacade()}, as it only has the functions that are allowed to be
      * called. Use {@link #getConsumerFacade()} if you need something that "is a"
-     * {@link org.apache.kafka.clients.consumer.Consumer}.
+     * {@link org.apache.kafka.clients.consumer.Consumer}, but won't have unsupported functions called.
      *
+     * @see PCConsumerAPI
+     * @see ConsumerFacade
      * @see #getConsumerFacadeRestricted()
      */
     public PCConsumerAPI<K, V> getConsumerFacadeRestricted() {
@@ -88,7 +90,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<K, V> options;
 
     /**
      * Injectable clock for testing

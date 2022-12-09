@@ -4,16 +4,11 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
@@ -336,10 +331,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 //     * Will silently skip if not configured with a committer
 //     */
 //    private void maybeDoCommit() throws TimeoutException, InterruptedException {
-        if (committer.isPresent()) {
+//        if (committer.isPresent()) {
     //        committer.get().maybeDoCommit();
     //    }
-    }
+//    }
 
     /**
      * Wakeup if colling the broker
