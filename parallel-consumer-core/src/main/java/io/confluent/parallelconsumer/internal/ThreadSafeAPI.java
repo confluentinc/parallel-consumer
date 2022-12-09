@@ -5,7 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 /**
- * Internal thread safe APIs
+ * Marker for internal thread safe APIs
  *
  * @author Antony Stubbs
  */

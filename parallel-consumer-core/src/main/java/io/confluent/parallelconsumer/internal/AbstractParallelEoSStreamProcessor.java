@@ -51,7 +51,7 @@ import static lombok.AccessLevel.PUBLIC;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
+public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerRebalanceHandler<K, V> implements
         ParallelConsumer<K, V>,
         ControllerInternalAPI<K, V>,
         ConsumerRebalanceListener,
@@ -140,7 +140,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     /**
      * todo docs
      */
-    private ConsumerRebalanceHandler rebalanceHandler;
+    private final ConsumerRebalanceHandler rebalanceHandler;
 
     /**
      * Useful for testing async code
@@ -194,6 +194,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
      */
+    // todo this needs to be reconciled with all subscription flows
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
@@ -241,6 +242,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         this.wm = module.workManager();
 
         this.brokerPollSubsystem = module.brokerPoller(this);
+
+        this.rebalanceHandler = module.parallelEoSStreamProcessor;
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(module.producerManager());
@@ -330,7 +333,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
-    public void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
         getMyActor().tell(controller -> controller.onPartitionsRevokedInternal(partitions));
     }
 
@@ -359,7 +362,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         }
     }
 
-    public void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
+    protected void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
         getMyActor().tell(controller -> controller.onPartitionsAssignedInternal(partitions));
     }
 
@@ -368,7 +371,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    protected void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
+    private void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         // todo interrupting can be removed after improvements/reblaance-messages is merged
