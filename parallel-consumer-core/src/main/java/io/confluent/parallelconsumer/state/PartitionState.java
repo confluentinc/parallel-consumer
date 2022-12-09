@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import pl.tlinkowski.unij.api.UniSets;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -327,10 +326,11 @@ public class PartitionState<K, V> {
 
         if (pollAboveExpected) {
             // previously committed offset record has been removed from the topic, so we need to truncate up to it
-            log.warn("Truncating state - removing records lower than {}. Offsets have been removed from the partition " +
+            log.warn("Truncating state - removing records lower than {} from partition {}. Offsets have been removed from the partition " +
                             "by the broker or committed offset has been raised. Bootstrap polled {} but expected {} from loaded commit data. " +
                             "Could be caused by record retention or compaction and offset reset policy LATEST.",
                     bootstrapPolledOffset,
+                    this.tp.partition(),
                     bootstrapPolledOffset,
                     expectedBootstrapRecordOffset);
 
@@ -348,9 +348,7 @@ public class PartitionState<K, V> {
             );
 
             // reset
-            var resetHighestSeenOffset = Optional.<Long>empty();
-            var resetIncompletesMap = UniSets.<Long>of();
-            var offsetData = new OffsetMapCodecManager.HighestOffsetAndIncompletes(resetHighestSeenOffset, resetIncompletesMap);
+            var offsetData = OffsetMapCodecManager.HighestOffsetAndIncompletes.of();
             initStateFromOffsetData(offsetData);
         }
     }
@@ -400,7 +398,6 @@ public class PartitionState<K, V> {
     /**
      * @return incomplete offsets which are lower than the highest succeeded
      */
-    // todo change from Set to List (order)
     public SortedSet<Long> getIncompleteOffsetsBelowHighestSucceeded() {
         long highestSucceeded = getOffsetHighestSucceeded();
         return incompleteOffsets.keySet().parallelStream()
@@ -531,25 +528,25 @@ public class PartitionState<K, V> {
             return;
         }
 
-        var lowOffset = getFirst(records).get().offset(); // NOSONAR see #isEmpty
+        var offsetOfLowestRecord = getFirst(records).get().offset(); // NOSONAR see #isEmpty
 
-        maybeTruncateBelowOrAbove(lowOffset);
+        maybeTruncateBelowOrAbove(offsetOfLowestRecord);
 
         // build the hash set once, so we can do random access checks of our tracked incompletes
-        var polledOffsetLookup = records.stream()
+        var polledOffsets = records.stream()
                 .map(ConsumerRecord::offset)
                 .collect(Collectors.toSet());
 
-        var highOffset = getLast(records).get().offset(); // NOSONAR see #isEmpty
+        var offsetOfHighestRecord = getLast(records).get().offset(); // NOSONAR see #isEmpty
 
         // for the incomplete offsets within this range of poll batch
         var offsetsToRemoveFromTracking = new ArrayList<Long>();
-        var incompletesWithinPolledBatch = incompleteOffsets.keySet().subSet(lowOffset, true, highOffset, true);
-        for (long incompleteOffset : incompletesWithinPolledBatch) {
-            boolean offsetMissingFromPolledRecords = !polledOffsetLookup.contains(incompleteOffset);
+        var trackedIncompletesWithinPolledBatch = incompleteOffsets.keySet().subSet(offsetOfLowestRecord, true, offsetOfHighestRecord, true);
+        for (long trackedIncomplete : trackedIncompletesWithinPolledBatch) {
+            boolean incompleteMissingFromPolledRecords = !polledOffsets.contains(trackedIncomplete);
 
-            if (offsetMissingFromPolledRecords) {
-                offsetsToRemoveFromTracking.add(incompleteOffset);
+            if (incompleteMissingFromPolledRecords) {
+                offsetsToRemoveFromTracking.add(trackedIncomplete);
                 // don't need to remove it from the #commitQueue, as it would never have been added
             }
         }
@@ -561,8 +558,8 @@ public class PartitionState<K, V> {
                             "base offset, after initial load and before a rebalance.",
                     offsetsToRemoveFromTracking,
                     getTp(),
-                    lowOffset,
-                    highOffset
+                    offsetOfLowestRecord,
+                    offsetOfHighestRecord
             );
             offsetsToRemoveFromTracking.forEach(incompleteOffsets::remove);
         }

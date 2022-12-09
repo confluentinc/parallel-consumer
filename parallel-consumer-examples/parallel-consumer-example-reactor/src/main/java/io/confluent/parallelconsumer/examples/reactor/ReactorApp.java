@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.examples.reactor;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.reactor.ReactorProcessor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -66,6 +67,7 @@ public class ReactorApp {
         return 8080;
     }
 
+    @SneakyThrows
     void close() {
         this.parallelConsumer.closeDrainFirst();
     }

@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.examples.vertx;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.vertx.JStreamVertxParallelStreamProcessor;
 import io.confluent.parallelconsumer.vertx.VertxParallelEoSStreamProcessor.RequestInfo;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -71,6 +72,7 @@ public class VertxApp {
         return 8080;
     }
 
+    @SneakyThrows
     void close() {
         this.parallelConsumer.closeDrainFirst();
     }

@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static java.time.Duration.ofSeconds;
+import static java.time.Duration.ofMinutes;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -80,7 +80,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
                         "(expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(60))
+            waitAtMost(ofMinutes(3))
                     // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
                     // .failFast( () -> pcThree.getFailureCause(), () -> pcThree.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .failFast("PC died - check logs", () -> pcThree.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761

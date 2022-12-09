@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,7 +28,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.xerial.snappy.SnappyOutputStream;
 import pl.tlinkowski.unij.api.UniLists;
-import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.io.ByteArrayOutputStream;
@@ -237,13 +235,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     }
 
     @Test
-    @Disabled("TODO: Blocker: Not implemented yet")
-    void truncationOnCommit() {
-        wm.onOffsetCommitSuccess(UniMaps.of());
-        assertThat(true).isFalse();
-    }
-
-    @Test
     void base64Encoding() {
         // encode
         String originalString = "TEST";
@@ -321,9 +312,9 @@ class WorkManagerOffsetMapCodecManagerTest {
     @Test
     void largeOffsetMap() {
         injectSucceededWorkAtOffset(200); // force system to have seen a high offset
-        byte[] bytes = offsetCodecManager.encodeOffsetsCompressed(0L, state);
+        byte[] encoded = offsetCodecManager.encodeOffsetsCompressed(0L, state);
         int smallestCompressionObserved = 10;
-        assertThat(bytes).as("very small")
+        assertThat(encoded).as("very small")
                 .hasSizeLessThan(smallestCompressionObserved); // arbitrary size expectation based on past observations - expect around 7
     }
 

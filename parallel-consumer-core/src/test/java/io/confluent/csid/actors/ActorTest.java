@@ -5,10 +5,10 @@ package io.confluent.csid.actors;
  */
 
 import com.google.common.truth.Truth;
+import io.confluent.csid.utils.ThreadUtils;
 import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 
 /**
@@ -27,12 +28,20 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 class ActorTest {
 
     public static final String MESSAGE = "tell";
+
     Greeter greeter = new Greeter();
+
     Actor<Greeter> actor = new Actor<>(greeter);
+
+    public ActorTest() {
+        actor.start();
+    }
 
     @Data
     public static class Greeter {
+
         public static final String PREFIX = "kiwi-";
+
         String told = "";
 
         public String greet(String msg) {
@@ -65,7 +74,7 @@ class ActorTest {
         String s = tell.get();
         assertThat(s).isEqualTo(Greeter.PREFIX + MESSAGE);
 
-        Assertions.assertThatThrownBy(() -> actor.tell(g -> g.greet("closed")))
+        assertThatThrownBy(() -> actor.tell(g -> g.greet("closed")))
                 .hasMessageContainingAll("CLOSED", "not", "target", "state");
     }
 
@@ -81,19 +90,15 @@ class ActorTest {
     @SneakyThrows
     @Test
     void processBlocking() {
-        final int delayMs = 1000;
-        final String magic = "magic";
-        final CountDownLatch returnedAfterBlocking = new CountDownLatch(1);
+        Duration delay = Duration.ofSeconds(1);
+        String magic = "magic";
+        CountDownLatch returnedAfterBlocking = new CountDownLatch(1);
         var pool = Executors.newCachedThreadPool();
 
         // setup 1s delay trigger
         pool.submit(() -> {
             // delay, so we block polling for a second
-            try {
-                Thread.sleep(delayMs + 100); // add 100ms for fuzz factor / race condition
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+            ThreadUtils.sleepLog(delay.plusMillis(100)); // add 100ms for fuzz factor / race condition
             // send the message to wake up the actor from the blocking process
             actor.tell(a -> a.setTold(magic));
         });
@@ -111,11 +116,22 @@ class ActorTest {
         // await AT LEAST delayMs before condition passes (earlier would mean there was no block during processing)
         // trigger should fire after the delay, waking of the process block and processing the closure to set the value
         Awaitility.await()
-                .atLeast(Duration.ofMillis(delayMs))
+                .atLeast(delay.multipliedBy(9).dividedBy(10)) // 90% of the delay
                 .untilAsserted(() -> assertThat(greeter.getTold()).isEqualTo(magic));
 
         //
         Truth.assertWithMessage("Thread returned from blocking process ok")
                 .that(returnedAfterBlocking.getCount()).isEqualTo(0);
+    }
+
+    @SneakyThrows
+    @Test
+    void exceptions() {
+        var fut = actor.ask(g -> {
+            throw new RuntimeException("test");
+        });
+        actor.process();
+        assertThatThrownBy(fut::get)
+                .hasMessageContaining("test");
     }
 }

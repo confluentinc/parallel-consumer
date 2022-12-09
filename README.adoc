@@ -305,7 +305,6 @@ As an illustrative example of relative performance, given:
 * 10,000 messages to process
 * A single partition (simplifies comparison - a topic with 5 partitions is the same as 1 partition with a keyspace of 5)
 * Default `ParallelConsumerOptions`
-** maxUncommittedMessagesToHandle = 1000
 ** maxConcurrency = 100
 ** numberOfThreads = 16
 
@@ -473,7 +472,6 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 
 [source,java]
 ----
-
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
@@ -588,8 +586,23 @@ See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example
 [[project-reactor]]
 === Project Reactor
 
-TODO example
+As per the Vert.x support, there is also a Reactor module.
+This means you can use Reactor's non-blocking threading model to process your messages, allowing for orders of magnitudes higher concurrent processing than the core module's thread per worker module.
 
+See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-reactor/src/main/java/io/confluent/parallelconsumer/examples/reactor/ReactorApp.java[Reactor example] project, and it's test.
+
+.Call any Reactor API for each message usage. This example uses a simple `Mono.just` to return a value, but you can use any Reactor API here.
+[source,java,indent=0]
+----
+        parallelConsumer.react(context -> {
+            var consumerRecord = context.getSingleRecord().getConsumerRecord();
+            log.info("Concurrently constructing and returning RequestInfo from record: {}", consumerRecord);
+            Map<String, String> params = UniMaps.of("recordKey", consumerRecord.key(), "payload", consumerRecord.value());
+            return Mono.just("something todo"); // <1>
+        });
+----
+
+[[spring]]
 [[streams-usage-code]]
 === Kafka Streams Concurrent Processing
 
@@ -885,12 +898,18 @@ If you're used to using the auto commit mode in the normal Kafka consumer, you c
 We suggest starting with this mode, and it is the default.
 
 [[transaction-system]]
-=== Apache Kafka EoS Transaction Model
+=== Apache Kafka EoS Transaction Model in BULK
 
 There is also the option to use Kafka's Exactly Once Semantics (EoS) system.
-This causes all messages produced as a result of processing a message to be committed within a transaction, along with their source offset.
+This causes all messages produced, by all workers in parallel, as a result of processing their messages, to be committed within a SINGLE, BULK transaction, along with their source offset.
+
+Note importantly - this is a BULK transaction, not a per input record transaction.
+
 This means that even under failure, the results will exist exactly once in the Kafka output topic.
 If as a part of your processing, you create side effects in other systems, this pertains to the usual idempotency requirements when breaking of EoS Kafka boundaries.
+
+CAUTION:: This is a BULK transaction, not a per input record transaction.
+There is not a single transaction per input record and per worker "thread", but one *LARGE* transaction that gets used by all parallel processing, until the commit interval.
 
 NOTE:: As with the `synchronous` processing mode, this will also block the processing loop until a successful transaction completes
 
@@ -1003,20 +1022,9 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
 == Roadmap
 
 For released changes, see the link:CHANGELOG.adoc[CHANGELOG].
-For features in development, have a look at the https://github.com/confluentinc/parallel-consumer/issues[GitHub issues].
 
-=== Medium Term - What's up next ⏲
-
-* https://github.com/confluentinc/parallel-consumer/issues/28[Distributed tracing integration]
-* https://github.com/confluentinc/parallel-consumer/issues/24[Distributed rate limiting]
-* https://github.com/confluentinc/parallel-consumer/issues/27[Metrics]
-* More customisable handling[https://github.com/confluentinc/parallel-consumer/issues/65] of HTTP interactions
-
-=== Long Term - The future ☁️
-
-* https://github.com/confluentinc/parallel-consumer/issues/21[Automatic fanout] (automatic selection of concurrency level based on downstream back pressure) (https://github.com/confluentinc/parallel-consumer/pull/22[draft PR])
-* Dead Letter Queue (DLQ) handling
-* Call backs only once offset has been committed
+For features in development and a more accurate view on the roadmap, have a look at the
+https://github.com/confluentinc/parallel-consumer/issues[GitHub issues], and clone https://github.com/astubbs/parallel-consumer[Antony's fork].
 
 == Usage Requirements
 
@@ -1291,17 +1299,29 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.2.5
+
+=== Fixes
+
+* fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
+
 == 0.5.2.4
 
 === Improvements
 
 * feature: Simple PCRetriableException to remove error spam from logs (#444)
+* minor: fixes #486: Missing generics in JStreamParallelStreamProcessor #491
+* minor: partially address #459: Moves isClosedOrFailed into top level ParallelConsumer interface (#491)
+* tests: Demonstrates how to use MockConsumer with PC for issue #176
+* other minor improvements
 
 === Fixes
 
 * fixes #409: Adds support for compacted topics and commit offset resetting (#425)
 ** Truncate the offset state when bootstrap polled offset higher or lower than committed
 ** Prune missing records from the tracked incomplete offset state, when they're missing from polled batches
+* fix: Improvements to encoding ranges (int vs long) #439
+** Replace integer offset references with long - use Long everywhere we deal with offsets, and where we truncate down, do it exactly, detect and handle truncation issues.
 
 == 0.5.2.3
 

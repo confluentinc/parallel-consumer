@@ -96,20 +96,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         pm.onPartitionsRevoked(partitions);
-        onPartitionsRemoved(partitions);
-    }
-
-    /**
-     * Clear offset map for lost partitions
-     */
-    @Override
-    public void onPartitionsLost(Collection<TopicPartition> partitions) {
-        pm.onPartitionsLost(partitions);
-        onPartitionsRemoved(partitions);
-    }
-
-    void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        // no-op - nothing to do
     }
 
     public void registerWork(EpochAndRecordsMap<K, V> records) {

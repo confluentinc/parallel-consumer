@@ -24,4 +24,13 @@
         <module>parallel-consumer-example-reactor</module>
     </modules>
 
+    <dependencies>
+        <dependency>
+            <groupId>io.stubbs.truth</groupId>
+            <artifactId>truth-generator-api</artifactId>
+            <version>${truth-generator-maven-plugin.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
 </project>

@@ -54,7 +54,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Hold the tracking state for each of our managed partitions.
      */
-    private final Map<TopicPartition, PartitionState<K, V>> partitionStates = new ConcurrentHashMap<>();
+    private final Map<TopicPartition, PartitionState<K, V>> partitionStates = new HashMap<>();
 
     /**
      * Record the generations of partition assignment, for fencing off invalid work.
@@ -135,28 +135,10 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         log.info("Partitions revoked: {}", partitions);
 
         try {
-            onPartitionsRemoved(partitions);
+            incrementPartitionAssignmentEpoch(partitions);
+            resetOffsetMapAndRemoveWork(partitions);
         } catch (Exception e) {
             log.error("Error in onPartitionsRevoked", e);
-            throw e;
-        }
-    }
-
-    void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        incrementPartitionAssignmentEpoch(partitions);
-        resetOffsetMapAndRemoveWork(partitions);
-    }
-
-    /**
-     * Clear offset map for lost partitions
-     */
-    @Override
-    public void onPartitionsLost(Collection<TopicPartition> partitions) {
-        try {
-            log.info("Lost partitions: {}", partitions);
-            onPartitionsRemoved(partitions);
-        } catch (Exception e) {
-            log.error("Error in onPartitionsLost", e);
             throw e;
         }
     }

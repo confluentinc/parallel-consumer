@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.examples.streams;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -20,6 +21,7 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -104,7 +106,7 @@ public class StreamsApp {
         return "add your server here";
     }
 
-    void close() {
+    void close() throws IOException {
         streams.close();
         parallelConsumer.close();
     }

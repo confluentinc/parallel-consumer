@@ -78,18 +78,18 @@ public class OffsetMapCodecManager<K, V> {
          * Of the offsets encoded, the incomplete ones.
          */
         // todo change to List as Sets have no order
-        Set<Long> incompleteOffsets;
+        SortedSet<Long> incompleteOffsets;
 
         public static HighestOffsetAndIncompletes of(long highestSeenOffset) {
-            return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new HashSet<>());
+            return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), new TreeSet<>());
         }
 
-        public static HighestOffsetAndIncompletes of(long highestSeenOffset, Set<Long> incompleteOffsets) {
+        public static HighestOffsetAndIncompletes of(long highestSeenOffset, SortedSet<Long> incompleteOffsets) {
             return new HighestOffsetAndIncompletes(Optional.of(highestSeenOffset), incompleteOffsets);
         }
 
         public static HighestOffsetAndIncompletes of() {
-            return new HighestOffsetAndIncompletes(Optional.empty(), new HashSet<>());
+            return new HighestOffsetAndIncompletes(Optional.empty(), new TreeSet<>());
         }
     }
 

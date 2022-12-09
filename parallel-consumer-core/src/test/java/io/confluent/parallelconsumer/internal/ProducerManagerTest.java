@@ -258,13 +258,14 @@ class ProducerManagerTest {
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         try (var pc = module.pc()) {
+            pc.start();
             pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
-            pc.setState(State.running);
+            pc.setState(State.RUNNING);
 
             // "send" one record
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();
-            pc.registerWork(freshWork);
+            pc.sendNewPolledRecordsAsync(freshWork);
 
             assertThat(producerManager).getProducerTransactionLock().isNotWriteLocked();
 
@@ -272,7 +273,7 @@ class ProducerManagerTest {
             var producingLockRef = new AtomicReference<ProducerManager.ProducingLock>();
             var offset1Mutex = new CountDownLatch(1);
             var blockedOn1 = new AtomicBoolean(false);
-            // todo refactor to use real user function directly
+            // todo refactor to use real user function directly - link to PR and branch for UserFunctionRunner
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
                 ProducerManager<String, String>.ProducingLock newValue = null;
                 try {
@@ -319,12 +320,12 @@ class ProducerManagerTest {
             {
                 var msg = "wait for first record to finish";
                 log.debug(msg);
-                await(msg).untilAsserted(() -> assertThat(pc.getWorkMailBox()).hasSize(1));
+                await(msg).untilAsserted(() -> assertThat(pc.getMyActor()).hasSizeEqualTo(1));
             }
 
             // send another record, register the work
             freshWork = mu.createFreshWork();
-            pc.registerWork(freshWork);
+            pc.sendNewPolledRecordsAsync(freshWork);
 
             // will first try to commit - which will work fine, as there's no produce lock isn't held yet (off 0 goes through fine)
             // then it will get the work, distributes it

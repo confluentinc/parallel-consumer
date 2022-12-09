@@ -28,6 +28,11 @@ import java.util.regex.Pattern;
 public interface ParallelConsumer<K, V> extends DrainingCloseable {
 
     /**
+     * @return true if the system has either closed, or has crashed
+     */
+    boolean isClosedOrFailed();
+
+    /**
      * @see KafkaConsumer#subscribe(Collection)
      */
     void subscribe(Collection<String> topics);

@@ -41,15 +41,20 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
+import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.*;
+import static lombok.AccessLevel.PROTECTED;
+import static lombok.AccessLevel.PUBLIC;
 
 /**
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInterface, ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
+public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInterface, ParallelConsumer<K, V>,
+        ControllerInternalAPI<K, V>,
+        ConsumerRebalanceListener,
+        Closeable {
 
     /*
      * This is a bit of a GOD class now, and so care should be taken not to expand it's scope furhter. Where possible,
@@ -57,6 +62,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      */
 
     public static final String MDC_INSTANCE_ID = "pcId";
+
+    /**
+     * @see #getConsumerFacadeRestricted()
+     */
+    @Getter
+    private ConsumerFacade consumerFacade;
+
+    /**
+     * Use this is possible instead of {@link #getConsumerFacade()}, as it only has the functions that are allowed to be
+     * called. Use {@link #getConsumerFacade()} if you need something that "is a"
+     * {@link org.apache.kafka.clients.consumer.Consumer}.
+     *
+     * @see #getConsumerFacadeRestricted()
+     */
+    public PCConsumerAPI<K, V> getConsumerFacadeRestricted() {
+        return getConsumerFacade();
+    }
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
@@ -72,6 +94,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      */
     @Setter(AccessLevel.PACKAGE)
     private Clock clock = TimeUtils.getClock();
+
+    /**
+     * Defensive programming - prep for the downstream refactor that's coming
+     */
+    protected ControllerInternalAPI<K, V> controllerApi;
 
     /**
      * Sets the time between commits. Using a higher frequency will put more load on the brokers.
@@ -102,7 +129,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     /**
      * Actor for accepting messages closures form other threads.
      */
-    @Getter(PRIVATE)
+    // todo make private
+    @Getter(PUBLIC)
     private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
 
     @Getter(PROTECTED)
@@ -124,6 +152,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     protected final WorkManager<K, V> wm;
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
+
+    /**
+     * todo docs
+     */
+    private final ConsumerRebalanceHandler rebalanceHandler = new ConsumerRebalanceHandler<>(this);
 
     /**
      * Useful for testing async code
@@ -148,6 +181,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      */
     private Instant lastCommitTime;
 
+    @Override
     public boolean isClosedOrFailed() {
         boolean closed = state == State.CLOSED;
         boolean doneOrCancelled = false;
@@ -180,6 +214,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
+    private final RateLimiter maxLoadingLog = new RateLimiter(30);
+
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
      * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
@@ -200,6 +236,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
+        controllerApi = this;
+
         options = newOptions;
         this.consumer = options.getConsumer();
 
@@ -219,7 +257,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         this.wm = module.workManager();
 
         this.brokerPollSubsystem = module.brokerPoller(this);
-
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(module.producerManager());
@@ -282,30 +319,35 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         }
     }
 
+    // replace with facade delegate
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
-        consumer.subscribe(topics, this);
+        consumer.subscribe(topics, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Pattern pattern) {
         log.debug("Subscribing to {}", pattern);
-        consumer.subscribe(pattern, this);
+        consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", topics);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(topics, this);
+        consumer.subscribe(topics, this.rebalanceHandler);
     }
 
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         log.debug("Subscribing to {}", pattern);
         usersConsumerRebalanceListener = Optional.of(callback);
-        consumer.subscribe(pattern, this);
+        consumer.subscribe(pattern, this.rebalanceHandler);
+    }
+
+    public void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
+        getMyActor().tell(controller -> controller.onPartitionsRevokedInternal(partitions));
     }
 
     /**
@@ -313,8 +355,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      * <p>
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
-    @Override
-    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+    protected void onPartitionsRevokedInternal(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         try {
             // commit any offsets from revoked partitions BEFORE truncation
@@ -334,13 +375,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         }
     }
 
+    public void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
+        getMyActor().tell(controller -> controller.onPartitionsAssignedInternal(partitions));
+    }
+
     /**
      * Delegate to {@link WorkManager}
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+    protected void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         // todo interrupting can be removed after improvements/reblaance-messages is merged
@@ -348,43 +392,37 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     }
 
     /**
-     * Cannot commit any offsets for partitions that have been `lost` (as opposed to revoked). Just delegate to
-     * {@link WorkManager} for truncation.
-     *
-     * @see WorkManager#onPartitionsAssigned
-     */
-    @Override
-    public void onPartitionsLost(Collection<TopicPartition> partitions) {
-        wm.onPartitionsLost(partitions);
-        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
-    }
-
-    /**
      * Nasty reflection to check if auto commit is disabled.
      * <p>
      * Other way would be to politely request the user also include their consumer properties when construction, but
-     * this is more reliable in a correctness sense, but britle in terms of coupling to internal implementation.
+     * this is more reliable in a correctness sense, but brittle in terms of coupling to internal implementation.
      * Consider requesting ability to inspect configuration at runtime.
      */
-    @SneakyThrows
     private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
-        if (consumer instanceof KafkaConsumer) {
-            // Commons lang FieldUtils#readField - avoid needing commons lang
-            Field coordinatorField = consumer.getClass().getDeclaredField("coordinator"); //NoSuchFieldException
-            coordinatorField.setAccessible(true);
-            ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
+        try {
+            if (consumer instanceof KafkaConsumer) {
+                // Could use Commons Lang FieldUtils#readField - but, avoid needing commons lang
+                Field coordinatorField = KafkaConsumer.class.getDeclaredField("coordinator");
+                coordinatorField.setAccessible(true);
+                ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
 
-            if (coordinator == null)
-                throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
+                if (coordinator == null)
+                    throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
 
-            Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
-            autoCommitEnabledField.setAccessible(true);
-            Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
+                Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
+                autoCommitEnabledField.setAccessible(true);
+                Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
 
-            if (isAutoCommitEnabled)
-                throw new IllegalArgumentException("Consumer auto commit must be disabled, as commits are handled by the library.");
-        } else {
-            // noop - probably MockConsumer being used in testing - which doesn't do auto commits
+                if (TRUE.equals(isAutoCommitEnabled))
+                    throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+            } else if (consumer instanceof MockConsumer) {
+                log.debug("Detected MockConsumer class which doesn't do auto commits");
+            } else {
+                // Probably Mockito
+                log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
         }
     }
 
@@ -393,6 +431,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      *
      * @see State#DRAINING
      */
+    @SneakyThrows
+    @ThreadSafe
     @Override
     public void close() {
         // use a longer timeout, to cover for evey other step using the default
@@ -400,9 +440,32 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         closeDontDrainFirst(timeout);
     }
 
+    @ThreadSafe
     @Override
-    @SneakyThrows
-    public void close(Duration timeout, DrainingMode drainMode) {
+    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
+        if (isIdlingOrRunning()) {
+            var close = getMyActor().askImmediatelyVoid(me
+                    -> me.closeInternal(drainMode));
+            // wait
+            close.get(timeout.toMillis(), MILLISECONDS);
+        } else {
+            doClose(timeout);
+        }
+
+        processCloseState(timeout);
+    }
+
+    private void processCloseState(Duration timeout) throws InterruptedException, ExecutionException, TimeoutException {
+        if (controlThreadFuture.isPresent()) {
+            log.debug("Checking for control thread exception...");
+            Future<?> future = controlThreadFuture.get();
+            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
+        }
+
+        log.info("Close complete.");
+    }
+
+    private void closeInternal(DrainingMode drainMode) {
         if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
@@ -419,16 +482,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
                 }
             }
 
-            waitForClose(timeout);
+//            waitForClose(timeout);
         }
-
-        if (controlThreadFuture.isPresent()) {
-            log.debug("Checking for control thread exception...");
-            Future<?> future = controlThreadFuture.get();
-            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
-        }
-
-        log.info("Close complete.");
     }
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
@@ -482,17 +537,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         log.debug("Worker pool terminated.");
 
         // last check to see if after worker pool closed, has any new work arrived?
-        processWorkCompleteMailBox(Duration.ZERO);
+        processActorMessageQueueBlocking();
 
-        // only close consumer once producer has committed it's offsets (tx'l)
+        // last commit
+        commitOffsetsThatAreReady();
+
+        // only broker poller, and hence consumer, once `Committer` has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
 
         // reject further and process renaming - make sure no new messages possible
+        // todo can't close until when? to process responses? so then come public apis need to check state first before
+        //  allowing message?
         getMyActor().close();
-
-        // last commit
-        commitOffsetsThatAreReady();
 
         //
         maybeCloseConsumer();
@@ -531,7 +588,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     }
 
     private void transitionToDrainingAsync(Reason reason) {
-        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
+//        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
+        transitionToState(reason, State.DRAINING);
     }
 
     // also do closing
@@ -596,9 +654,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
                     log.debug("Control loop interrupted, closing");
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
-                    log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+                    log.error(msg("Error from poll control thread, will attempt controlled shutdown, then rethrow. " +
+                            "Error: " + e.getMessage()), e);
                     transitionToClosing();
-                    failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    failureReason = new RuntimeException(msg("Error from poll control thread: " + e.getMessage()), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw failureReason;
                 }
@@ -608,6 +667,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+
+        getMyActor().start();
     }
 
     /**
@@ -672,7 +733,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      * todo move into {@link WorkManager} as it's specific to WM having enough work?
      */
     private void maybeWakeupPoller() {
-        if (state == running) {
+        if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -861,7 +922,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
                         getNumberOfUserFunctionsQueued(), getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
-                log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
+                maxLoadingLog.performIfNotLimited(()
+                        -> log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}",
+                        dynamicExtraLoadFactor.getCurrentFactor(),
+                        dynamicExtraLoadFactor.getMaxFactor()));
             }
         }
     }
@@ -893,15 +957,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     }
 
     private void transitionToClosing() {
-        getMyActor().tellImmediately(me -> {
-            String msg = "Transitioning to closing...";
-            log.debug(msg);
-            if (state == UNUSED) {
-                state = CLOSED;
-            } else {
-                state = CLOSING;
-            }
-        });
+        String msg = "Transitioning to closing...";
+        log.debug(msg);
+        if (state == UNUSED) {
+            state = CLOSED;
+        } else {
+            state = CLOSING;
+        }
     }
 
     /**
@@ -1028,7 +1090,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     /**
      * Visible for testing
      */
-    protected void commitOffsetsThatAreReady() {
+    protected void commitOffsetsThatAreReady() throws InterruptedException, TimeoutException {
+        if (state.equals(UNUSED)) {
+            return;
+        }
+
         log.debug("Committing offsets that are ready...");
         committer.retrieveOffsetsAndCommit();
         updateLastCommitCheckTime();
@@ -1097,7 +1163,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
 
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                sendWorkResultAsync(context, wc); // always add on error
+                controllerApi.sendWorkResultAsync(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
         } finally {
@@ -1112,7 +1178,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
      */
     // todo collapse
     protected void addWorkResultOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
-        sendWorkResultAsync(context, wc);
+        controllerApi.sendWorkResultAsync(context, wc);
     }
 
     /**
@@ -1125,20 +1191,31 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         wc.onUserFunctionSuccess();
     }
 
-    // todo extract controller api? - improvements/lambda-api
-    protected void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
+    // todo make protected
+    @ThreadSafe
+    @Override
+    public void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         log.trace("Sending new work result to controller {}", wc);
         getMyActor().tell(controller -> controller.handleWorkResult(wc));
 
         wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
+    @ThreadSafe
+    @Override
     public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
         log.trace("Sending new polled records signal to controller - total partitions: {} records: {}",
                 polledRecords.partitions().size(),
                 polledRecords.count());
         getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
+//
+//    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
+//        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
+//        log.debug("Adding {} to mailbox...", event);
+//        var message = ControllerEventMessage.<K, V>of(event);
+//        workMailBox.add(message);
+//    }
 
     /**
      * Early notify of work arrived.
@@ -1180,7 +1257,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
     public void requestCommitAsap() {
         log.debug("Registering command to commit next chance");
         // if want immediate commit, need to wake up poller here too - call #commitOffsetsThatAreReadyImmediately instead
-        getMyActor().tell(AbstractParallelEoSStreamProcessor::commitOffsetsThatAreReady);
+        getMyActor().tell(this::commitOffsetsThatAreReadyWrapped);
+    }
+
+    @SneakyThrows
+    private void commitOffsetsThatAreReadyWrapped(AbstractParallelEoSStreamProcessor<K, V> controller) {
+        controller.commitOffsetsThatAreReady();
     }
 
     @Override
@@ -1207,4 +1289,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         });
     }
 
+    // todo remove - for tests that call controlLoop directly
+    public void start() {
+        getMyActor().start();
+    }
 }

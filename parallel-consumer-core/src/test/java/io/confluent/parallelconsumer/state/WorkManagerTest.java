@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.state;
 import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
+import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -25,7 +26,6 @@ import org.assertj.core.api.ObjectAssert;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -41,7 +41,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -423,16 +422,6 @@ public class WorkManagerTest {
     }
 
     @Test
-    @Disabled
-    public void maxPerPartition() {
-    }
-
-    @Test
-    @Disabled
-    public void maxPerTopic() {
-    }
-
-    @Test
     public void maxInFlight() {
         //
         var opts = ParallelConsumerOptions.builder();
@@ -570,7 +559,7 @@ public class WorkManagerTest {
 
         KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
-        List<Integer> keys = range(uniqueKeys).list();
+        List<Integer> keys = Range.listOfIntegers(uniqueKeys);
 
         var records = ktu.generateRecords(keys, quantity);
         var flattened = ktu.flatten(records.values());

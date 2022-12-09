@@ -86,7 +86,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.5.0</version>
+            <version>42.5.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -109,7 +109,7 @@
         <dependency>
             <groupId>uk.co.jemos.podam</groupId>
             <artifactId>podam</artifactId>
-            <version>7.2.10.RELEASE</version>
+            <version>7.2.11.RELEASE</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -129,7 +129,7 @@
                         <package>io.confluent.csid</package>
                     </packages>
                     <classes>
-<!--                        <class>io.confluent.csid.actors.Greeter</class>-->
+                        <class>io.confluent.csid.actors.Actor</class>
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.internal.ProducerManager</class>

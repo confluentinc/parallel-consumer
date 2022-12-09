@@ -16,6 +16,9 @@ import lombok.ToString;
  */
 public interface Interruptible {
 
+    /**
+     * If blocked waiting on messages, this will interrupt that wait.
+     */
     // todo rename
     void interruptMaybePollingActor(Reason reason);
 
@@ -27,11 +30,6 @@ public interface Interruptible {
     @ToString
     @EqualsAndHashCode
     class Reason {
-//        /**
-//         * @deprecated should not be used, as bypasses the requirement of providing a reason
-//         */
-//        @Deprecated
-//        public static final Reason UNKNOWN = new Reason("unknown-reason");
 
         /**
          * The description of the cause or need for interruption.
@@ -41,6 +39,7 @@ public interface Interruptible {
         /**
          * Sometimes there is a root cause (Reason) for the Reason to interrupt something.
          */
+        // todo this can be used to carry exceptions?
         // todo not used, removed
         @Deprecated
         private Reason root;
