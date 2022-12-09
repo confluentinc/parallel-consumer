@@ -53,7 +53,6 @@ import static lombok.AccessLevel.PUBLIC;
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         ParallelConsumer<K, V>,
-        ControllerPackageAPI<K, V>,
         ControllerInternalAPI<K, V>,
         ConsumerRebalanceListener,
         Closeable {
@@ -79,6 +78,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     @Setter(AccessLevel.PACKAGE)
     private Clock clock = TimeUtils.getClock();
+
+    /**
+     * Defensive programming - prep for the downstream refactor that's coming
+     */
+    protected ControllerInternalAPI<K, V> controllerApi;
 
     /**
      * Sets the time between commits. Using a higher frequency will put more load on the brokers.
@@ -210,6 +214,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
+
+        controllerApi = this;
 
         options = newOptions;
         this.consumer = options.getConsumer();
@@ -1142,7 +1148,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                sendWorkResultAsync(context, wc); // always add on error
+                controllerApi.sendWorkResultAsync(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
         } finally {
@@ -1157,7 +1163,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     // todo collapse
     protected void addWorkResultOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
-        sendWorkResultAsync(context, wc);
+        controllerApi.sendWorkResultAsync(context, wc);
     }
 
     /**
@@ -1171,6 +1177,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     }
 
     // todo make protected
+    @ThreadSafe
     @Override
     public void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         log.trace("Sending new work result to controller {}", wc);

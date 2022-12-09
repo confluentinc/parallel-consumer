@@ -6,6 +6,9 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.state.WorkContainer;
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
+
+import java.util.Optional;
 
 /**
  * Internal thread safe API for the Controller
@@ -14,8 +17,24 @@ import io.confluent.parallelconsumer.state.WorkContainer;
  */
 //todo merge with ControllerPackageAPI?
 //todo extract the other interfaces
-public interface ControllerInternalAPI<K, V> extends ThreadSafeAPI {
+public interface ControllerInternalAPI<K, V> extends ThreadSafeAPI, ConsumerRebalanceListener {
 
+    /**
+     * todo docs
+     */
+    @ThreadSafe
     void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc);
+
+    /**
+     * todo docs
+     */
+    @ThreadSafe
+    // make sense to annotate the interface?
+    void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords);
+
+    /**
+     * todo docs
+     */
+    Optional<String> getMyId();
 
 }

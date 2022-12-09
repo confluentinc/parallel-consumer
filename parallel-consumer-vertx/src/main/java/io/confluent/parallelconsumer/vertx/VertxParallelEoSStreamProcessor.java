@@ -191,12 +191,12 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
             send.onSuccess(h -> {
                 log.debug("Vert.x Vertical success");
                 wc.onUserFunctionSuccess();
-                sendWorkResultAsync(context, wc);
+                controllerApi.sendWorkResultAsync(context, wc);
             });
             send.onFailure(h -> {
                 log.error("Vert.x Vertical fail: {}", h.getMessage());
                 wc.onUserFunctionFailure(h);
-                sendWorkResultAsync(context, wc);
+                controllerApi.sendWorkResultAsync(context, wc);
             });
 
             // add plugin callback hook
