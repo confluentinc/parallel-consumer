@@ -189,6 +189,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
+    private final RateLimiter maxLoadingLog = new RateLimiter(30);
+
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
      * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
@@ -901,7 +903,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
                         getNumberOfUserFunctionsQueued(), getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
-                log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
+                maxLoadingLog.performIfNotLimited(()
+                        -> log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}",
+                        dynamicExtraLoadFactor.getCurrentFactor(),
+                        dynamicExtraLoadFactor.getMaxFactor()));
             }
         }
     }
