@@ -11,13 +11,13 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
-import org.slf4j.event.Level;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -43,19 +43,21 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter(AccessLevel.PUBLIC) // TODO PROTECTED
     private final ConsumerManager<K, V> consumerManager;
 
-    private State state = running;
+    private State runState = RUNNING;
 
-    private Optional<Future<Boolean>> pollControlThreadFuture;
+    private Optional<Future<Boolean>> pollControlThreadFuture = Optional.empty();
 
     /**
-     * While {@link io.confluent.parallelconsumer.internal.State#paused paused} is an externally controlled state that
+     * While {@link io.confluent.parallelconsumer.internal.State#PAUSED paused} is an externally controlled state that
      * temporarily stops polling and work registration, the {@code paused} flag is used internally to pause
      * subscriptions if polling needs to be throttled.
      */
     @Getter
-    private volatile boolean paused = false;
+    private volatile boolean pausedForThrottling = false;
 
-    private final AbstractParallelEoSStreamProcessor<K, V> pc;
+    //    private final AbstractParallelEoSStreamProcessor<K, V> pc;
+    private final ControllerInternalAPI<K, V> pc;
+
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
@@ -67,12 +69,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
+    // todo remove direct access to WM
+    @NonNull
     private final WorkManager<K, V> wm;
 
     @Getter
     private final ActorRef<BrokerPollSystem<K, V>> myActor = new ActorRef<>(TimeUtils.getClock(), this);
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
+    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ControllerInternalAPI<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
 
@@ -105,7 +109,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 try {
                     booleanFuture.get();
                 } catch (Exception e) {
-                    throw new InternalRuntimeError("Error in " + BrokerPollSystem.class.getSimpleName() + " system.", e);
+                    throw new InternalRuntimeException("Error in " + BrokerPollSystem.class.getSimpleName() + " system.", e);
                 }
             }
         }
@@ -114,22 +118,23 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * @return true if closed cleanly
      */
-    private boolean controlLoop() {
+    private boolean controlLoop() throws TimeoutException, InterruptedException {
         Thread.currentThread().setName("pc-broker-poll");
         pc.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
         log.trace("Broker poll control loop start");
-        committer.ifPresent(x -> x.claim());
+        committer.ifPresent(ConsumerOffsetCommitter::claim);
         try {
-            while (state != closed) {
+            while (runState != CLOSED) {
                 handlePoll();
+
 
                 getMyActor().processBounded();
 
-                switch (state) {
-                    case draining -> {
+                switch (runState) {
+                    case DRAINING -> {
                         doPause();
                     }
-                    case closing -> {
+                    case CLOSING -> {
                         doClose();
                     }
                 }
@@ -143,8 +148,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private void handlePoll() {
-        log.trace("Loop: Broker poller: ({})", state);
-        if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
+        log.trace("Loop: Broker poller: ({})", runState);
+        if (runState == RUNNING || runState == DRAINING) { // if draining - subs will be paused, so use this to just sleep
             var polledRecords = pollBrokerForRecords();
             int count = polledRecords.count();
             log.debug("Got {} records in poll result", count);
@@ -160,7 +165,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         log.debug("Doing close...");
         doPause();
         maybeCloseConsumerManager();
-        state = closed;
+        runState = CLOSED;
     }
 
     /**
@@ -181,13 +186,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private EpochAndRecordsMap<K, V> pollBrokerForRecords() {
         managePauseOfSubscription();
-        log.debug("Subscriptions are paused: {}", paused);
+        log.debug("Subscriptions are paused: {}", pausedForThrottling);
 
-        boolean pollTimeoutNormally = state == running || state == draining;
+        boolean pollTimeoutNormally = runState == RUNNING || runState == DRAINING;
         Duration thisLongPollTimeout = pollTimeoutNormally ? BrokerPollSystem.longPollTimeout
                 : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
-        log.debug("Long polling broker with timeout {}, might appear to sleep here if subs are paused, or no data available on broker. Run state: {}", thisLongPollTimeout, state);
+        log.debug("Long polling broker with timeout {}, might appear to sleep here if subs are paused, or no data available on broker. Run state: {}", thisLongPollTimeout, runState);
         ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
 
         log.debug("Poll completed");
@@ -201,9 +206,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     public void drain() {
         // idempotent
-        if (state != State.draining) {
+        if (runState != State.DRAINING) {
             log.debug("Signaling poll system to drain, waking up consumer...");
-            state = State.draining;
+            runState = State.DRAINING;
             consumerManager.wakeup();
         }
     }
@@ -212,7 +217,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private void doPauseMaybe() {
         // idempotent
-        if (paused) {
+        if (pausedForThrottling) {
             log.trace("Already paused");
         } else {
             if (pauseLimiter.couldPerform()) {
@@ -229,9 +234,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    /**
+     * Pause all assignments
+     */
     private void doPause() {
-        if (!paused) {
-            paused = true;
+        if (!pausedForThrottling) {
+            pausedForThrottling = true;
             log.debug("Pausing subs");
             Set<TopicPartition> assignment = consumerManager.assignment();
             consumerManager.pause(assignment);
@@ -255,7 +263,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         log.warn("Broker poll control thread not closed cleanly.");
                     }
                 } catch (InterruptedException e) {
-                    InterruptibleThread.logInterrupted(log, Level.DEBUG, "Interrupted waiting for broker poller thread to finish", e);
+                    log.debug("Interrupted waiting for broker poller thread to finish", e);
                 } catch (ExecutionException | TimeoutException e) {
                     log.error("Execution or timeout exception waiting for broker poller thread to finish", e);
                     throw e;
@@ -267,7 +275,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private void transitionToClosing() {
         log.debug("Poller transitioning to closing, waking up consumer");
-        state = State.closing;
+        runState = State.CLOSING;
         consumerManager.wakeup();
     }
 
@@ -290,13 +298,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     private void resumeIfPaused() {
         // idempotent
-        if (paused) {
+        if (pausedForThrottling) {
             log.debug("Resuming consumer, waking up");
             Set<TopicPartition> pausedTopics = consumerManager.paused();
             consumerManager.resume(pausedTopics);
             // trigger consumer to perform a new poll without the assignments paused, otherwise it will continue to long poll on nothing
             consumerManager.wakeup();
-            paused = false;
+            pausedForThrottling = false;
         }
     }
 
@@ -312,7 +320,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @SneakyThrows
     @Override
     public void retrieveOffsetsAndCommit() {
-        if (state == running || state == draining || state == closing) {
+        if (runState == RUNNING || runState == DRAINING || runState == CLOSING) {
             // {@link Optional#ifPresentOrElse} only @since 9
             ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
                 // shouldn't be here
@@ -320,54 +328,56 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             });
             committer.commit();
         } else {
-            throw new IllegalStateException(msg("Can't commit - not running (state: {}", state));
+            throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
     }
 
 //    /**
 //     * Will silently skip if not configured with a committer
 //     */
-//    private void maybeDoCommit() {
-//        committer.ifPresent(ConsumerOffsetCommitter::maybeDoCommit);
-//    }
+//    private void maybeDoCommit() throws TimeoutException, InterruptedException {
+        if (committer.isPresent()) {
+    //        committer.get().maybeDoCommit();
+    //    }
+    }
 
     /**
      * Wakeup if colling the broker
      */
     public void wakeupIfPaused() {
-        if (paused)
+        if (pausedForThrottling)
             consumerManager.wakeup();
     }
 
     /**
      * Pause polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#running
-     * running}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#RUNNING running}, calling this method will be a no-op.
      * </p>
      */
     public void pausePollingAndWorkRegistrationIfRunning() {
-        if (this.state == State.running) {
+        if (this.runState == State.RUNNING) {
             log.info("Transitioning broker poll system to state paused.");
-            this.state = State.paused;
+            this.runState = State.PAUSED;
         } else {
-            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.state);
+            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.runState);
         }
     }
 
     /**
      * Resume polling from the underlying Kafka Broker.
      * <p>
-     * Note: If the poll system is currently not in state {@link io.confluent.parallelconsumer.internal.State#paused
-     * paused}, calling this method will be a no-op.
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#PAUSED paused}, calling this method will be a no-op.
      * </p>
      */
     public void resumePollingAndWorkRegistrationIfPaused() {
-        if (this.state == State.paused) {
+        if (this.runState == State.PAUSED) {
             log.info("Transitioning broker poll system to state running.");
-            this.state = State.running;
+            this.runState = State.RUNNING;
         } else {
-            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.state);
+            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
         }
     }
 }

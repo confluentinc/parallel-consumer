@@ -9,7 +9,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.2.0-SNAPSHOT</version>
+        <version>0.6.0.0-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -27,7 +27,7 @@
         <dependency>
             <groupId>com.github.luben</groupId>
             <artifactId>zstd-jni</artifactId>
-            <version>1.5.2-3</version>
+            <version>1.5.2-4</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -86,18 +86,18 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.3.5</version>
+            <version>42.5.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.github.tomakehurst</groupId>
-            <artifactId>wiremock</artifactId>
+            <artifactId>wiremock-jre8</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threeten-extra</artifactId>
-            <version>1.7.0</version>
+            <version>1.7.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -109,10 +109,9 @@
         <dependency>
             <groupId>uk.co.jemos.podam</groupId>
             <artifactId>podam</artifactId>
-            <version>7.2.9.RELEASE</version>
+            <version>7.2.11.RELEASE</version>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
@@ -130,11 +129,15 @@
                         <package>io.confluent.csid</package>
                     </packages>
                     <classes>
+                        <class>io.confluent.csid.actors.Actor</class>
                         <class>io.confluent.parallelconsumer.PollContext</class>
+                        <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
+                        <class>io.confluent.parallelconsumer.internal.ProducerManager</class>
                         <class>io.confluent.parallelconsumer.state.WorkContainer</class>
                         <class>io.confluent.parallelconsumer.state.WorkManager</class>
                         <class>io.confluent.parallelconsumer.state.PartitionState</class>
                         <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
+                        <class>io.confluent.parallelconsumer.state.ShardKey</class>
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                     </classes>
                     <legacyClasses>
@@ -142,8 +145,10 @@
                         <class>org.apache.kafka.clients.consumer.OffsetAndMetadata</class>
                         <class>org.apache.kafka.clients.consumer.ConsumerRecord</class>
                         <class>org.apache.kafka.clients.consumer.ConsumerRecords</class>
+                        <class>org.apache.kafka.clients.consumer.Consumer</class>
                         <class>org.apache.kafka.clients.producer.RecordMetadata</class>
                         <class>org.apache.kafka.clients.producer.ProducerRecord</class>
+                        <class>org.apache.kafka.clients.producer.Producer</class>
                     </legacyClasses>
                     <entryPointClassPackage>io.confluent.parallelconsumer</entryPointClassPackage>
                 </configuration>
