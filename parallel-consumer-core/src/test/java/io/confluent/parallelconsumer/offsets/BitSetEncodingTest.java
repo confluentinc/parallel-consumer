@@ -10,10 +10,8 @@ import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.JavaUtils.toTreeSet;
 import static io.confluent.parallelconsumer.offsets.OffsetEncoding.Version.v2;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,8 +20,8 @@ class BitSetEncodingTest {
     @SneakyThrows
     @Test
     void basic() {
-        Set<Long> incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(Collectors.toSet()); // lol - DRY!
-        List<Long> completes = UniLists.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(Collectors.toList()); // lol - DRY!
+        var incompletes = UniSets.of(0, 4, 6, 7, 8, 10).stream().map(x -> (long) x).collect(toTreeSet());
+        var completes = UniLists.of(1, 2, 3, 5, 9).stream().map(x -> (long) x).collect(toTreeSet());
         OffsetSimultaneousEncoder offsetSimultaneousEncoder = new OffsetSimultaneousEncoder(-1, 0L, incompletes);
         int length = 11;
         BitSetEncoder bs = new BitSetEncoder(length, offsetSimultaneousEncoder, v2);

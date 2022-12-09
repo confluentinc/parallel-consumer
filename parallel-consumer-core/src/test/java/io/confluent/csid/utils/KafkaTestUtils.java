@@ -5,6 +5,7 @@ package io.confluent.csid.utils;
  */
 
 import io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -12,6 +13,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -25,7 +27,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.Range.range;
 import static java.lang.Math.random;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class KafkaTestUtils {
 
     private final String INPUT_TOPIC;
+
     private final String CONSUMER_GROUP_ID;
 
     @Getter
@@ -78,8 +80,8 @@ public class KafkaTestUtils {
     /**
      * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager}).
      * <p>
-     * Like {@link AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)} but for a {@link
-     * MockProducer}.
+     * Like {@link AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)} but for a
+     * {@link MockProducer}.
      *
      * @see AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)
      * @see OffsetMapCodecManager
@@ -184,17 +186,19 @@ public class KafkaTestUtils {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
 //        List<Integer> keyWork = UniLists.copyOf(keys);
 
-        int count = 0;
-        while (count < quantity) {
+        int globalCount = 0;
+        while (globalCount < quantity) {
             Integer key = getRandomKey(keys);
             int recsCountForThisKey = (int) (Math.random() * quantity);
-            String value = count + "";
             String keyString = key.toString();
+            final List<ConsumerRecord<String, String>> keyList = keyRecords.computeIfAbsent(key, (ignore) -> new ArrayList<>());
+            int keyCount = keyList.size();
+            String value = keyCount + "," + globalCount;
             ConsumerRecord<String, String> rec = makeRecord(keyString, value);
 //            var consumerRecords = generateRecordsForKey(key, recsCountForThisKey);
-            keyRecords.computeIfAbsent(key, (ignore) -> new ArrayList<>()).add(rec);
+            keyList.add(rec);
 //            keyRecords.put(key, consumerRecords);
-            count++;
+            globalCount++;
         }
         return keyRecords;
     }
@@ -207,7 +211,7 @@ public class KafkaTestUtils {
 
     public ArrayList<ConsumerRecord<String, String>> generateRecordsForKey(Integer key, int quantity) {
         var records = new ArrayList<ConsumerRecord<String, String>>(quantity);
-        for (int i : range(quantity)) {
+        for (long i : Range.range(quantity)) {
             var rec = makeRecord(key.toString(), i + "");
             records.add(rec);
         }
@@ -224,7 +228,7 @@ public class KafkaTestUtils {
 
     @Setter
     @Getter
-    private List<Integer> defaultKeys = range(100).list();
+    private List<Integer> defaultKeys = Range.listOfIntegers(100);
 
     private Integer getRandomDefaultKey() {
         int i = (int) (random() * defaultKeys.size());
@@ -283,5 +287,33 @@ public class KafkaTestUtils {
         var consumerRecords = generateRecords(i);
         send(consumerSpy, consumerRecords);
         return consumerRecords;
+    }
+
+    /**
+     * Checks that the ordering of the results is the same as the ordering of the input records
+     */
+    // todo move to specific assertion utils class, along with other legacy assertion utils?
+    public static <T> void checkExactOrdering(Map<String, Queue<PollContext<String, String>>> results,
+                                              HashMap<Integer, List<T>> originalRecords) {
+        originalRecords.entrySet().forEach(entry -> {
+            var originalRecordList = entry.getValue();
+            var originalKey = entry.getKey();
+            var sequence = results.get(originalKey.toString());
+            assertThat(sequence).hasSameSizeAs(originalRecordList);
+            assertThat(sequence.size()).describedAs("Sanity: is same size as original list").isEqualTo(originalRecordList.size());
+            log.debug("Key {} has same size of record as original - {}", originalKey, sequence.size());
+            // check the integer sequence of PollContext value is linear and is without gaps
+            var last = sequence.poll();
+            PollContext<String, String> next = null;
+            while (!sequence.isEmpty()) {
+                next = sequence.poll();
+                var thisValue = Integer.parseInt(org.apache.commons.lang3.StringUtils.substringBefore(next.value(), ","));
+                var lastValue = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
+                assertThat(thisValue).isEqualTo(lastValue);
+                last = next;
+            }
+            log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", originalKey, next.value());
+
+        });
     }
 }

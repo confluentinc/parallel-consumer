@@ -189,10 +189,10 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         batchFailPoll(receivedBatches);
 
         //
-        int expectedNumOfBatches = (int) Math.ceil(expectedNumOfMessages / (double) batchSize);
+        baseTest.awaitForCommit(expectedNumOfMessages);
 
         //
-        baseTest.awaitForCommit(expectedNumOfMessages);
+        int expectedNumOfBatches = (int) Math.ceil(expectedNumOfMessages / (double) batchSize);
 
         // due to the failure, might get one extra batch
         assertThat(receivedBatches).hasSizeGreaterThanOrEqualTo(expectedNumOfBatches);
@@ -213,18 +213,17 @@ public abstract class BatchTestMethods<POLL_RETURN> {
      */
     protected abstract void batchFailPoll(List<PollContext<String, String>> receivedBatches);
 
-    protected POLL_RETURN batchFailPollInner(PollContext<String, String> pollBatch) {
-        List<Long> offsets = pollBatch.getOffsetsFlattened();
-        log.debug("Got batch {}", offsets);
+    protected POLL_RETURN batchFailPollInner(PollContext<String, String> batchPollContext) {
+        List<Long> offsets = batchPollContext.getOffsetsFlattened();
 
         boolean contains = offsets.contains(FAILURE_TARGET);
         if (contains) {
-            var target = pollBatch.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
+            var target = batchPollContext.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
             int numberOfFailedAttempts = target.getNumberOfFailedAttempts();
             int targetAttempts = 3;
             if (numberOfFailedAttempts < targetAttempts) {
                 log.debug("Failing batch containing target offset {}", FAILURE_TARGET);
-                throw new FakeRuntimeError(msg("Testing failure processing a batch - pretend attempt #{}", numberOfFailedAttempts));
+                throw new FakeRuntimeException(msg("Testing failure processing a batch - pretend attempt #{}", numberOfFailedAttempts));
             } else {
                 log.debug("Failing target {} now completing as has has reached target attempts {}", offsets, targetAttempts);
             }

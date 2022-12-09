@@ -47,6 +47,10 @@ import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.*;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+/**
+ * @author Antony Stubbs
+ * @see AbstractParallelEoSStreamProcessor
+ */
 // todo migrate commit assertion methods in to a Truth Subject
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessorTestBase {
@@ -181,7 +185,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
         this.producerSpy = spy(producer);
         this.consumerSpy = spy(consumer);
-        myRecordProcessingAction = mock(ParallelEoSStreamProcessorTest.MyAction.class);
+        myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
 
         when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
     }
@@ -220,7 +224,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         loopCountRef = attachLoopCounter(parentParallelConsumer);
     }
 
-    protected abstract AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions);
+    protected abstract AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions);
 
     protected void sendSecondRecord(MockConsumer<String, String> consumer) {
         secondRecord = ktu.makeRecord("key-0", "v1");

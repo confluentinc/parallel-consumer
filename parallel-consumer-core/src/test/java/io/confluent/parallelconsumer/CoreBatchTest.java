@@ -67,10 +67,11 @@ public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements
             }
 
             @Override
-            protected void batchFailPoll(List<PollContext<String, String>> receivedBatches) {
+            protected void batchFailPoll(List<PollContext<String, String>> accumlativeReceivedBatches) {
                 parallelConsumer.poll(pollBatch -> {
+                    log.debug("Batch of messages: {}", pollBatch.getOffsetsFlattened());
                     batchFailPollInner(pollBatch);
-                    receivedBatches.add(pollBatch);
+                    accumlativeReceivedBatches.add(pollBatch);
                 });
             }
         };

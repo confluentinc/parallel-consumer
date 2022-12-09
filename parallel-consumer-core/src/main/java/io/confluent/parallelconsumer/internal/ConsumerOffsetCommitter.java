@@ -17,6 +17,9 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
+import java.util.UUID;
+import java.util.concurrent.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -65,7 +68,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
-    void commit() {
+    void commit() throws TimeoutException, InterruptedException {
         if (isOwner()) {
             // todo why? when am i the owner?
             retrieveOffsetsAndCommit();
@@ -102,9 +105,8 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                     }
                 });
             }
-            default -> {
-                throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
-            }
+            default ->
+                    throw new IllegalArgumentException("Cannot use " + commitMode + " when using " + this.getClass().getSimpleName());
         }
     }
 
@@ -141,11 +143,10 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     // replace with Actors
     @SneakyThrows // remove
     private void commitAndWait() {
-        // new version
         Future<Class<Void>> ask = commitRequestSend();
+
         log.debug("Waiting on a commit response");
-        @SuppressWarnings("unused")
-        Class<Void> voidClass = ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
 //        // \/ old version!
 //
@@ -187,7 +188,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //        return request;
 //    }
 
-//    void maybeDoCommit() {
+//    void maybeDoCommit() throws TimeoutException, InterruptedException {
 //        // todo poll mail box instead
 //        CommitRequest poll = commitRequestQueue.poll();
 //        if (poll != null) {

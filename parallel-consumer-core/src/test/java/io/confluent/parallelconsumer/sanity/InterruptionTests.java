@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.sanity;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -31,7 +30,7 @@ class InterruptionTests {
                 // lock.wait(0); // zero causes it to wait forever
             }
         } catch (InterruptedException e) {
-            InterruptibleThread.logInterrupted(log, e);
+            log.debug("", e);
         }
     }
 }

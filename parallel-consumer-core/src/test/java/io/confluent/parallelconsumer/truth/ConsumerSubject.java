@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
 
-import static io.confluent.parallelconsumer.truth.CommitHistorySubject.commitHistories;
-
 /**
  * Optionally move this class into source control, and add your custom assertions here.
  * <p>
@@ -54,13 +52,18 @@ public class ConsumerSubject extends ConsumerParentSubject {
 
     private final Duration timeout = Duration.ofSeconds(10);
 
+    public CommitHistorySubject hasCommittedToPartition(String topic, int partition) {
+        TopicPartition topicPartition = new TopicPartition(topic, partition);
+        return hasCommittedToPartition(topicPartition);
+    }
+
     public CommitHistorySubject hasCommittedToPartition(TopicPartition topicPartitions) {
-        Map<TopicPartition, CommitHistorySubject> map = hasCommittedToPartition(UniSets.of(topicPartitions));
-        return map.values().stream()
+        Map<TopicPartition, CommitHistorySubject> rawCommitHistory = hasCommittedToPartition(UniSets.of(topicPartitions));
+        return rawCommitHistory.values().stream()
                 .findFirst()
                 .orElse(
                         check("getCommitHistory(%s)", topicPartitions.topic())
-                                .about(commitHistories())
+                                .about(CommitHistorySubject.commitHistories())
                                 .that(new CommitHistory(UniLists.of())));
     }
 
@@ -70,7 +73,7 @@ public class ConsumerSubject extends ConsumerParentSubject {
                 .filter(entry -> entry.getValue() != null)
                 .toMap(entry -> entry.getKey(), entry
                         -> check("getCommitHistory(%s)", entry.getKey().topic() + ":" + entry.getKey().partition())
-                        .about(commitHistories())
+                        .about(CommitHistorySubject.commitHistories())
                         .that(new CommitHistory(UniLists.of(entry.getValue()))));
     }
 

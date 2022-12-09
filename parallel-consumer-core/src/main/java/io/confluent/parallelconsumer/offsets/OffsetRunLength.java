@@ -1,8 +1,9 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -12,12 +13,17 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
+/**
+ * Methods for encoding and decoding the run-lengths.
+ *
+ * @author Antony Stubbs
+ */
 @Slf4j
 @UtilityClass
 public class OffsetRunLength {
@@ -75,7 +81,7 @@ public class OffsetRunLength {
         final ShortBuffer v1ShortBuffer = in.asShortBuffer();
         final IntBuffer v2IntegerBuffer = in.asIntBuffer();
 
-        final var incompletes = new HashSet<Long>(); // we don't know the capacity yet
+        final var incompletes = new TreeSet<Long>();
 
         long highestSeenOffset = 0L;
 
