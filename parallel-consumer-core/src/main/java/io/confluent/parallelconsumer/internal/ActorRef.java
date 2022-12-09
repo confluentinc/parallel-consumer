@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
@@ -109,7 +108,7 @@ public class ActorRef<T> implements IActor<T>, Executor {
     /**
      * Blocking version of {@link #processBounded()}
      */
-    public void processBlocking(Duration timeout) throws InterruptedException {
+    public void processBlocking(Duration timeout) {
         processBounded();
         maybeBlockUntilScheduledOrAction(timeout);
     }

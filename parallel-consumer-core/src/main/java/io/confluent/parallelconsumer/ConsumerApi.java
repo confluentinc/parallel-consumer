@@ -4,6 +4,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 
 /**
  * @author Antony Stubbs
+ * @see ConsumerFacade
  */
 public interface ConsumerApi {
 

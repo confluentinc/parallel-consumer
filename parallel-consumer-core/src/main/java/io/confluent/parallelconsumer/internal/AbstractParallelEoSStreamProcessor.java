@@ -80,6 +80,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         return getConsumerFacade();
     }
 
+    @Getter
+    private final ConsumerFacade consumerFacade;
+
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a
      * user function.
@@ -257,6 +260,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements APIInt
         this.wm = module.workManager();
 
         this.brokerPollSubsystem = module.brokerPoller(this);
+
+        this.consumerFacade = new ConsumerFacade(brokerPollSubsystem);
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(module.producerManager());
