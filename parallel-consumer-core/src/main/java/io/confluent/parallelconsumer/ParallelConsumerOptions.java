@@ -24,6 +24,16 @@ import static java.time.Duration.ofMillis;
 
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
+ * <p>
+ * The important options to look at are:
+ * <p>
+ * {@link #ordering}, {@link #maxConcurrency} and {@link #batchSize}.
+ * <p>
+ * If you want to go deeper, look at {@link #defaultMessageRetryDelay}, {@link #retryDelayProvider} and
+ * {@link #commitMode}.
+ * <p>
+ * Note: The only required option is the {@link #consumer} ({@link #producer} is only needed if you use the Produce
+ * flows). All other options have sensible defaults.
  *
  * @author Antony Stubbs
  * @see #builder()

@@ -258,6 +258,7 @@ class ProducerManagerTest {
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         try (var pc = module.pc()) {
+            pc.start();
             pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
             pc.setState(State.RUNNING);
@@ -272,7 +273,7 @@ class ProducerManagerTest {
             var producingLockRef = new AtomicReference<ProducerManager.ProducingLock>();
             var offset1Mutex = new CountDownLatch(1);
             var blockedOn1 = new AtomicBoolean(false);
-            // todo refactor to use real user function directly
+            // todo refactor to use real user function directly - link to PR and branch for UserFunctionRunner
             Function<PollContextInternal<String, String>, List<Object>> userFunc = context -> {
                 ProducerManager<String, String>.ProducingLock newValue = null;
                 try {

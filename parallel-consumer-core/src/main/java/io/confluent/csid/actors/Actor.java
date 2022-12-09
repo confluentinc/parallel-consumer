@@ -12,8 +12,8 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -70,11 +70,13 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @EqualsAndHashCode
 @RequiredArgsConstructor
 // todo rename to ActorRef? ActorInterface? ActorAPI? Also clashes with field name.
+// todo also - another branch uses ActorRef - resolve
 public class Actor<T> implements IActor<T>, Interruptible {
 
     private final T actorRef;
 
-    private volatile ActorState state = ActorState.ACCEPTING_MESSAGES;
+    private final AtomicReference<ActorState> state = new AtomicReference<>(ActorState.NOT_STARTED);
+
 
     /**
      * Single queueing point for all messages to the actor.
@@ -84,6 +86,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     @Getter(AccessLevel.PROTECTED)
     private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>();
+//    private final LinkedBlockingDeque<FutureTask<T>> actionMailbox = new LinkedBlockingDeque<>();
 
     @Override
     public void tell(final Consumer<T> action) {
@@ -98,23 +101,78 @@ public class Actor<T> implements IActor<T>, Interruptible {
     }
 
     @Override
-    public <R> Future<R> ask(final Function<T, R> action) {
-        checkState(ActorState.ACCEPTING_MESSAGES);
+    public <R> Future<R> ask(FunctionWithException<T, R> action) {
+        CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
 
-        /*
-         * Consider using {@link CompletableFuture} instead - however {@link FutureTask} is just fine for PC.
-         */
-        FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
+//        CompletableFuture<T> future = new CompletableFuture<T>();
+//        Supplier<R> rSupplier = () -> action.apply(actorRef);
+//        var rCompletableFuture = future.supplyAsync(rSupplier);
+
+
+//        var task = askInternal(action);
+
+//        CompletableFuture<R> future = new CompletableFuture<>();
+
+//        Runnable runnable = () -> action.apply(actorRef);
+
+//        Supplier<R> task = () -> action.apply(actorRef);
+//        Runnable task = () -> action.apply(actorRef);
+
+//        var rFutureTask = new FutureTask<R>();
+
+        Runnable runnable = createRunnable(action, future);
+//        var rCompletableFuture = CompletableFuture.supplyAsync()
 
         // queue
-        getActionMailbox().add(task);
+        getActionMailbox().add(runnable);
 
-        return task;
+        return future;
     }
 
+    private <R> Runnable createRunnable(FunctionWithException<T, R> action, CompletableFuture<R> future) {
+        return () -> {
+            try {
+                var apply = action.apply(actorRef);
+                future.complete(apply);
+            } catch (Exception e) {
+                log.error("Error in actor task", e);
+                future.completeExceptionally(e);
+            }
+        };
+    }
+
+//    private <R> CompletableFuture<R> askInternal(Function<T, R> action) {
+//
+//        CompletableFuture<T> future = new CompletableFuture<T>();
+//        future.complete(actorRef);
+////        future.
+//
+//        Runnable rCallable = () -> action.apply(actorRef);
+//        var rCompletableFuture = future.thenApply(action);
+//
+////        FutureTask<R> task = new FutureTask<>(rCallable);
+////        FutureTask<R> task1 = task.;
+////        task1.run();
+//        return rCompletableFuture;
+//    }
+
     private void checkState(ActorState targetState) {
-        if (!state.equals(targetState)) {
-            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state, targetState));
+        if (!targetState.equals(state.get())) {
+            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
+        }
+    }
+
+    private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
+        if (!targetState.equals(state.get())) {
+            var message = state.get() == ActorState.NOT_STARTED
+                    ? "Actor is not started yet ({}) - call `#start` first"
+                    : "Actor in {} state, not {} target state";
+            return CompletableFuture.failedFuture(new InternalRuntimeException(msg(
+                    message,
+                    state.get(),
+                    targetState)));
+        } else {
+            return new CompletableFuture<>();
         }
     }
 
@@ -126,12 +184,21 @@ public class Actor<T> implements IActor<T>, Interruptible {
      *         the {@link #process} methods.
      */
     @Override
-    public <R> Future<R> askImmediately(final Function<T, R> action) {
-        checkState(ActorState.ACCEPTING_MESSAGES);
-
-        FutureTask<R> task = new FutureTask<>(() -> action.apply(actorRef));
+    public <R> Future<R> askImmediately(FunctionWithException<T, R> action) {
+        CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
+//        var task = askInternal(action);
+//        var future = new CompletableFuture<R>();
+        var task = createRunnable(action, future);
         getActionMailbox().addFirst(task);
-        return task;
+        return future;
+    }
+
+    public Future<Class<Void>> askImmediatelyVoid(Consumer<T> action) {
+        FunctionWithException<T, Class<Void>> funcWrap = actor -> {
+            action.accept(actor);
+            return Void.TYPE;
+        };
+        return askImmediately(funcWrap);
     }
 
     /**
@@ -239,8 +306,13 @@ public class Actor<T> implements IActor<T>, Interruptible {
      */
     @Override
     public void close() {
-        state = ActorState.CLOSED;
+        state.set(ActorState.CLOSED);
         process();
+    }
+
+    @Override
+    public void start() {
+        state.set(ActorState.ACCEPTING_MESSAGES);
     }
 
     /**
@@ -254,6 +326,7 @@ public class Actor<T> implements IActor<T>, Interruptible {
     }
 
     public enum ActorState {
+        NOT_STARTED,
         ACCEPTING_MESSAGES,
         CLOSED
     }

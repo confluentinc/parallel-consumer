@@ -51,7 +51,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private volatile boolean pausedForThrottling = false;
 
-    private final AbstractParallelEoSStreamProcessor<K, V> pc;
+    //    private final AbstractParallelEoSStreamProcessor<K, V> pc;
+    private final ControllerInternalAPI<K, V> pc;
+
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
@@ -67,7 +69,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @NonNull
     private final WorkManager<K, V> wm;
 
-    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
+    public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ControllerInternalAPI<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
 
@@ -319,7 +321,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             });
             committer.commit();
         } else {
-            throw new IllegalStateException(msg("Can't commit - not running (state: {}", runState));
+            throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
     }
 

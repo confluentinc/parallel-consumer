@@ -53,7 +53,6 @@ import static lombok.AccessLevel.PUBLIC;
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerRebalanceHandler<K, V> implements
         ParallelConsumer<K, V>,
-        ControllerPackageAPI<K, V>,
         ControllerInternalAPI<K, V>,
         ConsumerRebalanceListener,
         Closeable {
@@ -79,6 +78,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      */
     @Setter(AccessLevel.PACKAGE)
     private Clock clock = TimeUtils.getClock();
+
+    /**
+     * Defensive programming - prep for the downstream refactor that's coming
+     */
+    protected ControllerInternalAPI<K, V> controllerApi;
 
     /**
      * Sets the time between commits. Using a higher frequency will put more load on the brokers.
@@ -158,6 +162,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      */
     private Instant lastCommitTime;
 
+    @Override
     public boolean isClosedOrFailed() {
         boolean closed = state == State.CLOSED;
         boolean doneOrCancelled = false;
@@ -191,6 +196,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
+    private final RateLimiter maxLoadingLog = new RateLimiter(30);
+
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
      * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
@@ -210,6 +217,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
+
+        controllerApi = this;
 
         options = newOptions;
         this.consumer = options.getConsumer();
@@ -405,6 +414,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      *
      * @see State#DRAINING
      */
+    @SneakyThrows
+    @ThreadSafe
     @Override
     public void close() {
         // use a longer timeout, to cover for evey other step using the default
@@ -412,9 +423,32 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         closeDontDrainFirst(timeout);
     }
 
+    @ThreadSafe
     @Override
-    @SneakyThrows
-    public void close(Duration timeout, DrainingMode drainMode) {
+    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
+        if (isIdlingOrRunning()) {
+            var close = getMyActor().askImmediatelyVoid(me
+                    -> me.closeInternal(drainMode));
+            // wait
+            close.get(timeout.toMillis(), MILLISECONDS);
+        } else {
+            doClose(timeout);
+        }
+
+        processCloseState(timeout);
+    }
+
+    private void processCloseState(Duration timeout) throws InterruptedException, ExecutionException, TimeoutException {
+        if (controlThreadFuture.isPresent()) {
+            log.debug("Checking for control thread exception...");
+            Future<?> future = controlThreadFuture.get();
+            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
+        }
+
+        log.info("Close complete.");
+    }
+
+    private void closeInternal(DrainingMode drainMode) {
         if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
@@ -431,16 +465,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
                 }
             }
 
-            waitForClose(timeout);
+//            waitForClose(timeout);
         }
-
-        if (controlThreadFuture.isPresent()) {
-            log.debug("Checking for control thread exception...");
-            Future<?> future = controlThreadFuture.get();
-            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
-        }
-
-        log.info("Close complete.");
     }
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
@@ -496,15 +522,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         // last check to see if after worker pool closed, has any new work arrived?
         processActorMessageQueueBlocking();
 
-        // only close consumer once producer has committed it's offsets (tx'l)
+        // last commit
+        commitOffsetsThatAreReady();
+
+        // only broker poller, and hence consumer, once `Committer` has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
 
         // reject further and process renaming - make sure no new messages possible
+        // todo can't close until when? to process responses? so then come public apis need to check state first before
+        //  allowing message?
         getMyActor().close();
-
-        // last commit
-        commitOffsetsThatAreReady();
 
         //
         maybeCloseConsumer();
@@ -543,7 +571,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     }
 
     private void transitionToDrainingAsync(Reason reason) {
-        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
+//        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
+        transitionToState(reason, State.DRAINING);
     }
 
     // also do closing
@@ -608,9 +637,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
                     log.debug("Control loop interrupted, closing");
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
-                    log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
+                    log.error(msg("Error from poll control thread, will attempt controlled shutdown, then rethrow. " +
+                            "Error: " + e.getMessage()), e);
                     transitionToClosing();
-                    failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
+                    failureReason = new RuntimeException(msg("Error from poll control thread: " + e.getMessage()), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     throw failureReason;
                 }
@@ -620,6 +650,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+
+        getMyActor().start();
     }
 
     /**
@@ -873,7 +905,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
                         getNumberOfUserFunctionsQueued(), getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
-                log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
+                maxLoadingLog.performIfNotLimited(()
+                        -> log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}",
+                        dynamicExtraLoadFactor.getCurrentFactor(),
+                        dynamicExtraLoadFactor.getMaxFactor()));
             }
         }
     }
@@ -905,15 +940,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     }
 
     private void transitionToClosing() {
-        getMyActor().tellImmediately(me -> {
-            String msg = "Transitioning to closing...";
-            log.debug(msg);
-            if (state == UNUSED) {
-                state = CLOSED;
-            } else {
-                state = CLOSING;
-            }
-        });
+        String msg = "Transitioning to closing...";
+        log.debug(msg);
+        if (state == UNUSED) {
+            state = CLOSED;
+        } else {
+            state = CLOSING;
+        }
     }
 
     /**
@@ -1041,6 +1074,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      * Visible for testing
      */
     protected void commitOffsetsThatAreReady() throws InterruptedException, TimeoutException {
+        if (state.equals(UNUSED)) {
+            return;
+        }
+
         log.debug("Committing offsets that are ready...");
         committer.retrieveOffsetsAndCommit();
         updateLastCommitCheckTime();
@@ -1109,7 +1146,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                sendWorkResultAsync(context, wc); // always add on error
+                controllerApi.sendWorkResultAsync(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
         } finally {
@@ -1124,7 +1161,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      */
     // todo collapse
     protected void addWorkResultOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
-        sendWorkResultAsync(context, wc);
+        controllerApi.sendWorkResultAsync(context, wc);
     }
 
     /**
@@ -1138,6 +1175,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     }
 
     // todo make protected
+    @ThreadSafe
     @Override
     public void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         log.trace("Sending new work result to controller {}", wc);
@@ -1146,6 +1184,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
+    @ThreadSafe
     @Override
     public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
         log.trace("Sending new polled records signal to controller - total partitions: {} records: {}",
@@ -1233,4 +1272,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         });
     }
 
+    // todo remove - for tests that call controlLoop directly
+    public void start() {
+        getMyActor().start();
+    }
 }

@@ -96,7 +96,7 @@ public class PCModule<K, V> {
 
     private BrokerPollSystem<K, V> brokerPollSystem;
 
-    protected BrokerPollSystem<K, V> brokerPoller(AbstractParallelEoSStreamProcessor<K, V> pc) {
+    protected BrokerPollSystem<K, V> brokerPoller(ControllerInternalAPI<K, V> pc) {
         if (brokerPollSystem == null) {
             brokerPollSystem = new BrokerPollSystem<>(consumerManager(), workManager(), pc, options());
         }

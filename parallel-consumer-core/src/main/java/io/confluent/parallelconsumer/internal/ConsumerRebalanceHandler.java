@@ -12,7 +12,7 @@ import java.util.Collection;
  *
  * @author Antony Stubbs
  */
-// todo inline into controller? or keep seperate so user doesnt
+// todo inline into controller? or keep separate so user doesn't have access to the public rebalance interface methods?
 @RequiredArgsConstructor
 public abstract class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
 

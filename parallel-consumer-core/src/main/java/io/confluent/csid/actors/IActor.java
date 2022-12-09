@@ -7,13 +7,13 @@ package io.confluent.csid.actors;
 import java.time.Duration;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * todo docs
  *
  * @param <T>
  * @author Antony Stubbs
+ * @see Actor
  */
 // todo remove?
 // todo rename
@@ -32,9 +32,9 @@ public interface IActor<T> {
     void tellImmediately(Consumer<T> action);
 
     // todo use CompletableFuture instead of Future
-    <R> Future<R> askImmediately(Function<T, R> action);
+    <R> Future<R> askImmediately(FunctionWithException<T, R> action);
 
-    <R> Future<R> ask(Function<T, R> action);
+    <R> Future<R> ask(FunctionWithException<T, R> action);
 
     boolean isEmpty();
 
@@ -46,4 +46,7 @@ public interface IActor<T> {
     String getActorName();
 
     void close();
+
+    void start();
+
 }
