@@ -17,11 +17,9 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Queue;
-import java.util.UUID;
-import java.util.concurrent.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
@@ -181,6 +179,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         });
     }
 
+    // removed as the commiter will do the commit directly if instructed through messaging
 //    private CommitRequest requestCommitInternal() {
 //        CommitRequest request = new CommitRequest();
 //        commitRequestQueue.add(request);
@@ -188,6 +187,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //        return request;
 //    }
 
+    // removed as the commiter will do the commit directly if instructed through messaging
 //    void maybeDoCommit() throws TimeoutException, InterruptedException {
 //        // todo poll mail box instead
 //        CommitRequest poll = commitRequestQueue.poll();

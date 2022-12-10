@@ -4,16 +4,9 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
@@ -27,6 +20,8 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -332,14 +327,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    // removed as the commiter will do the commit directly if instructed through messaging
 //    /**
 //     * Will silently skip if not configured with a committer
 //     */
 //    private void maybeDoCommit() throws TimeoutException, InterruptedException {
-        if (committer.isPresent()) {
+//        if (committer.isPresent()) {
     //        committer.get().maybeDoCommit();
     //    }
-    }
+//    }
 
     /**
      * Wakeup if colling the broker
