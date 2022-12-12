@@ -1,0 +1,28 @@
+#
+# Copyright (C) 2020-2022 Confluent, Inc.
+#
+
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+
+rule_files:
+  - alert.yml
+
+alerting:
+  alertmanagers:
+    - scheme: http
+      static_configs:
+        - targets: [ 'alertmanager:9093' ]
+
+scrape_configs:
+  - job_name: services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - 'prometheus:9090'
+  - job_name: 'pc'
+    metrics_path: '/prometheus'
+    static_configs:
+      - targets:
+          - 'parallel-consumer:7001'

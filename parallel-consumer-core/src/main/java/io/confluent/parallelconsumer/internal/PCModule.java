@@ -8,6 +8,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
@@ -22,6 +23,16 @@ import java.time.Clock;
  * @author Antony Stubbs
  */
 public class PCModule<K, V> {
+    public static final String PARALLEL_CONSUMER_PREFIX = "parallel-consumer.";
+
+    MeterRegistry meterRegistry;
+
+    public MeterRegistry meterRegistry() {
+        if (meterRegistry == null) {
+            meterRegistry = options().getMeterRegistry();
+        }
+        return meterRegistry;
+    }
 
     protected ParallelConsumerOptions<K, V> optionsInstance;
 

@@ -44,6 +44,7 @@ public class ShardManager<K, V> {
 
     private final PCModule<K, V> module;
 
+
     @Getter
     private final ParallelConsumerOptions<?, ?> options;
 
@@ -199,6 +200,7 @@ public class ShardManager<K, V> {
         // remove from processing queues
         var key = computeShardKey(wc);
         var shardOptional = getShard(key);
+
         if (shardOptional.isPresent()) {
             //
             shardOptional.get().onSuccess(wc);

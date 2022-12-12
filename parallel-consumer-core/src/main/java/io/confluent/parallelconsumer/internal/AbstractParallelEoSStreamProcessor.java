@@ -9,6 +9,9 @@ import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
@@ -153,7 +156,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
 
 
-            resultsFromUserFunction = timer.record(() -> usersFunction.apply(context));
+            resultsFromUserFunction = userProcessingTimer.record(() -> usersFunction.apply(context));
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
@@ -274,6 +277,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
+    @Getter(PROTECTED)
+    PCModule<K,V> module;
+
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
      * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
@@ -293,7 +299,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
-
+        this.module = module;
         options = newOptions;
         this.consumer = options.getConsumer();
 
@@ -324,6 +330,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+
+        new ExecutorServiceMetrics(workerThreadPool, "pc-worker-executor", Collections.emptyList())
+                .bindTo(module.meterRegistry());
+
+        this.userProcessingTimer = io.micrometer.core.instrument.Timer.builder("pc.user.function.processing.time")
+                .description("user function processing time")
+                .publishPercentileHistogram(true)
+                .publishPercentiles(0.5,0.95,0.99,0.999)
+                .register(module.meterRegistry());
     }
 
     private void validateConfiguration() {
@@ -1184,7 +1199,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         lastCommitCheckTime = Instant.now();
     }
 
-    io.micrometer.core.instrument.Timer timer = metricsRegistry.timer("user.function");
+    private io.micrometer.core.instrument.Timer userProcessingTimer;
+
 
     /**
      * Gather metrics from the {@link ParallelConsumer} and for monitoring.
@@ -1196,7 +1212,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         getWm().addMetricsTo(metrics);
 
-        metrics.functionTimer(timer);
+        metrics.functionTimer(userProcessingTimer);
         metrics.successCounter(successCounter);
 
         // should not create objects in metrics calculator method
@@ -1211,13 +1227,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 new JvmGcMetrics().bindTo(metricsRegistry);
                 new KafkaClientMetrics(consumer).bindTo(metricsRegistry);
                 // can bind to wrapper?
-                new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
+                //new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
 
                 // we don't use an admin client?
                 // new KafkaClientMetrics(admin).bindTo(metricsRegistry);
 
                 // can't for logback?
-                new LogbackMetrics().bindTo(metricsRegistry);
+                //new LogbackMetrics().bindTo(metricsRegistry);
             }
         }
 
@@ -1414,7 +1430,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //                .register(registry);
 
 
-        new LogbackMetrics().bindTo(metricsRegistry);
+       // new LogbackMetrics().bindTo(metricsRegistry);
 
         private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
             return new ControllerEventMessage<>(null, polledRecords);

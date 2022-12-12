@@ -5,12 +5,16 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModule;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStreamProcessorTestBase {
 
     protected ParallelEoSStreamProcessor<String, String> parallelConsumer;
+    @Getter
+    private PCModule module;
 
     @Override
     protected AbstractParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
@@ -18,6 +22,7 @@ public class ParallelEoSStreamProcessorTestBase extends AbstractParallelEoSStrea
     }
 
     protected ParallelEoSStreamProcessor<String, String> initPollingAsyncConsumer(ParallelConsumerOptions<String, String> parallelConsumerOptions) {
+        module = new PCModule<>(parallelConsumerOptions);
         parallelConsumer = new ParallelEoSStreamProcessor<>(parallelConsumerOptions);
         super.parentParallelConsumer = parallelConsumer;
         return parallelConsumer;

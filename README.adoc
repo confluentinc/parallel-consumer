@@ -433,26 +433,30 @@ Where `${project.version}` is the version to be used:
 [source,java,indent=0]
 ----
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
-        Producer<String, String> kafkaProducer = getKafkaProducer();
+       // Producer<String, String> kafkaProducer = getKafkaProducer();
+        Metrics.addRegistry(metricsRegistry);
+        new KafkaClientMetrics(kafkaConsumer).bindTo(Metrics.globalRegistry);
+        new JvmMemoryMetrics().bindTo(Metrics.globalRegistry);
+        new JvmHeapPressureMetrics().bindTo(Metrics.globalRegistry);
+        new JvmGcMetrics().bindTo(Metrics.globalRegistry);
+        new JvmThreadMetrics().bindTo(Metrics.globalRegistry);
 
-        new KafkaClientMetrics(kafkaConsumer).bindTo(metricsRegistry);
-        new KafkaClientMetrics(kafkaProducer).bindTo(metricsRegistry);
+      //  new KafkaClientMetrics(kafkaProducer).bindTo(Metrics.globalRegistry);
 
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY) // <2>
                 .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
-                .producer(kafkaProducer)
+                //.producer(kafkaProducer)
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
-
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
         pcMetricsTracker = new PCMetricsTracker(((AbstractParallelEoSStreamProcessor)eosStreamProcessor)::calculateMetricsWithIncompletes,
                             UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
-        pcMetricsTracker.bindTo(metricsRegistry);
+        pcMetricsTracker.bindTo(Metrics.globalRegistry);
         return eosStreamProcessor;
 ----
 

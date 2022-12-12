@@ -12,6 +12,7 @@ import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.Collections;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -37,6 +38,9 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
     public static final String METRIC_NAME_NUMBER_PARTITIONS = PC_METRIC_NAME_PREFIX + ".partitions";
 
+    public static final String METRIC_NAME_NUMBER_PAUSED_PARTITIONS = PC_METRIC_NAME_PREFIX + ".paused.partitions";
+
+
     public static final String METRIC_NAME_NUMBER_SHARDS = PC_METRIC_NAME_PREFIX + ".shards";
 
     public static final String METRIC_NAME_SHARD_SIZE = PC_METRIC_NAME_PREFIX + ".shard.size";
@@ -51,7 +55,11 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
     public static final String METRIC_NAME_HIGHEST_COMPLETED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.complete.offset.partition";
 
+    public static final String METRIC_NAME_HIGHEST_SEEN_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.seen.offset";
+
     public static final String METRIC_NAME_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.sequential.succeeded.offset.partition";
+
+    public static final String METRIC_NAME_LAST_COMMITTED_OFFSET = PC_METRIC_NAME_PREFIX + ".latest.commited.offset.partition";
 
     private static final String METRIC_CATEGORY = "subsystem";
 
@@ -138,6 +146,14 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
         bindGauge(METRIC_NAME_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET, "Highest sequential succeeded offset in the partition",
                 tracker -> tracker.pcMetrics.getPartitionMetrics().get(tp).getHighestSequentialSucceededOffset(),
                 partitionTags);
+
+        bindGauge(METRIC_NAME_HIGHEST_SEEN_OFFSET, "Highest consumed offset in the partition",
+                tracker -> tracker.pcMetrics.getPartitionMetrics().get(tp).getHighestSeenOffset(),
+                partitionTags);
+
+        bindGauge(METRIC_NAME_LAST_COMMITTED_OFFSET, "Latest commited offset in the partition",
+                tracker -> tracker.pcMetrics.getPartitionMetrics().get(tp).getLastCommittedOffset(),
+                partitionTags);
     }
 
     private void defineMetersShardManager(ShardKey key, PCMetrics.ShardMetrics sm) {
@@ -180,6 +196,11 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
         bindGauge(METRIC_NAME_PC_STATUS, "PC Status",
                 tracker -> tracker.pcMetrics.getPollerMetrics().getState().ordinal(),
+                UniLists.of(Tag.of("status", pcMetrics.getPollerMetrics().getState().name())));
+
+        bindGauge(METRIC_NAME_NUMBER_PAUSED_PARTITIONS, "Number of paused partitions",
+                tracker -> Optional.ofNullable(tracker.pcMetrics.getPollerMetrics().getPausedPartitions())
+                        .orElseGet(()->Collections.emptyMap()).size(),
                 UniLists.of(Tag.of("status", pcMetrics.getPollerMetrics().getState().name())));
 
         if (partitionsMetricsCount != pcMetrics.getPartitionMetrics().size()) {

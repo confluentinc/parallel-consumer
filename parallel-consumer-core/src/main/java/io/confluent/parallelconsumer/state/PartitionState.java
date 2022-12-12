@@ -18,6 +18,7 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
@@ -163,15 +164,30 @@ public class PartitionState<K, V> {
     @Getter
     private final long partitionsAssignmentEpoch;
 
+    private DistributionSummary ratioOfPayloadUsed;
+    private DistributionSummary ratioOfMetadataSpaceUsed;
+
     public PartitionState(long newEpoch,
                           PCModule<K, V> pcModule,
                           TopicPartition topicPartition,
                           OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
         this.module = pcModule;
+
         this.tp = topicPartition;
         this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
+
+        ratioOfPayloadUsed = DistributionSummary.builder("pc.payload.ratio.used")
+                .description("ratio between offset metadata payload size and offsets encoded")
+                .publishPercentileHistogram(true)
+                .publishPercentiles(0.5, 0.95, 0.99, 0.999)
+                .register(module.meterRegistry());
+        ratioOfMetadataSpaceUsed = DistributionSummary.builder("pc.metadata.space.used")
+                .description("ratio between offset metadata payload size and available space")
+                .publishPercentileHistogram(true)
+                .publishPercentiles(0.5, 0.95, 0.99, 0.999)
+                .register(module.meterRegistry());
     }
 
     private void initStateFromOffsetData(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
@@ -436,7 +452,6 @@ public class PartitionState<K, V> {
         }
     }
 
-    DistributionSummary ratioOfPayloadUsed;
 
 
     /**
@@ -454,11 +469,12 @@ public class PartitionState<K, V> {
 
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(null);
+            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.module);
             long offsetOfNextExpectedMessage = getOffsetToCommit();
             var offsetRange = getOffsetHighestSucceeded() - offsetOfNextExpectedMessage;
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             ratioOfPayloadUsed.record(offsetMapPayload.length() / (double) offsetRange);
+            ratioOfMetadataSpaceUsed.record(offsetMapPayload.length() / OffsetMapCodecManager.DefaultMaxMetadataSize);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
                 return empty();
@@ -647,6 +663,7 @@ public class PartitionState<K, V> {
         b.highestSeenOffset(getOffsetHighestSeen());
         b.epoch(getPartitionsAssignmentEpoch());
         b.highestCompletedOffset(getOffsetHighestSucceeded());
+        b.highestSequentialSucceededOffset(getOffsetHighestSequentialSucceeded());
         b.numberOfIncompletes(incompleteOffsets.size());
 
         //

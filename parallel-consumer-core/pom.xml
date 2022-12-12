@@ -36,6 +36,7 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
+            <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
             <version>1.10.2</version>
             <scope>compile</scope>
@@ -146,6 +147,12 @@
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                         <class>io.confluent.parallelconsumer.PCMetrics</class>
                         <class>io.confluent.parallelconsumer.Offsets</class>
+<!--                        <class>io.confluent.parallelconsumer.OffsetsSubject</class>-->
+<!--                        <class>io.confluent.parallelconsumer.PCMetricsSubject</class>-->
+<!--                        <class>io.confluent.parallelconsumer.PCPartitionMetricsSubject</class>-->
+<!--                        <class>io.confluent.parallelconsumer.CompressionStatsSubject</class>-->
+<!--                        <class>io.confluent.parallelconsumer.CommitModeSubject</class>-->
+
                     </classes>
                     <legacyClasses>
                         <!-- todo check legacy is recursive -->

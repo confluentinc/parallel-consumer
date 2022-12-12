@@ -5,7 +5,9 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.KafkaUtils;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +44,7 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
     public static final int NO_EPOCH = -1;
 
     public RemovedPartitionState() {
-        super(NO_EPOCH, null, null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
+        super(NO_EPOCH, new PCModule<>(ParallelConsumerOptions.<K, V>builder().build()), null, OffsetMapCodecManager.HighestOffsetAndIncompletes.of());
     }
 
     public static PartitionState getSingleton() {

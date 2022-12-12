@@ -5,6 +5,8 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -69,6 +71,12 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final String managedThreadFactory = "java:comp/DefaultManagedThreadFactory";
+
+    /**
+     * Micrometer MeterRegistry
+     */
+    @Builder.Default
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     /**
      * The ordering guarantee to use.
