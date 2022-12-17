@@ -95,4 +95,14 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
         private final ProducerRecord<KK, VV> out;
         private final RecordMetadata meta;
     }
+
+    /**
+     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
+     */
+    PCMetrics calculateMetrics();
+
+    /**
+     * Gather metrics from the {@link ParallelConsumer} including incomplete offsets and for monitoring.
+     */
+    PCMetrics calculateMetricsWithIncompletes();
 }

@@ -6,7 +6,6 @@ package io.confluent.parallelconsumer.examples.core;
 
 import com.sun.net.httpserver.HttpServer;
 import io.confluent.parallelconsumer.*;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmHeapPressureMetrics;
@@ -134,7 +133,7 @@ public class CoreApp {
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
-        pcMetricsTracker = new PCMetricsTracker(((AbstractParallelEoSStreamProcessor)eosStreamProcessor)::calculateMetricsWithIncompletes,
+        pcMetricsTracker = new PCMetricsTracker(eosStreamProcessor::calculateMetricsWithIncompletes,
                             UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
 
         UniLists.of(pcMetricsTracker, new KafkaClientMetrics(kafkaConsumer), new JvmMemoryMetrics(),
