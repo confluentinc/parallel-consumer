@@ -163,17 +163,23 @@ public class Actor<T> implements IActor<T>, Interruptible {
     }
 
     private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
-        if (!targetState.equals(state.get())) {
-            var message = state.get() == ActorState.NOT_STARTED
-                    ? "Actor is not started yet ({}) - call `#start` first"
-                    : "Actor in {} state, not {} target state";
-            return CompletableFuture.failedFuture(new InternalRuntimeException(msg(
-                    message,
-                    state.get(),
-                    targetState)));
-        } else {
+        if (targetState.equals(state.get())) {
             return new CompletableFuture<>();
         }
+
+
+        var message = state.get() == ActorState.NOT_STARTED
+                ? "Actor is not started yet ({}) - call `#start` first"
+                : "Actor in {} state, not {} target state";
+        var result = new InternalRuntimeException(msg(
+                message,
+                state.get(),
+                targetState));
+
+        // CompletableFuture.failedFuture(result); @since 1.9
+        var future = new CompletableFuture<R>();
+        future.completeExceptionally(result);
+        return future;
     }
 
     /**
