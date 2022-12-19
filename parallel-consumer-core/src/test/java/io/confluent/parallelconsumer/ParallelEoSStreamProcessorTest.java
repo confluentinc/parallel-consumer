@@ -31,7 +31,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
@@ -870,7 +869,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .build());
 
         // use a small set of keys, over a large set of records
-        final int keySetSize = 4;
+        final int keySetSize = 40;
         var keys = Range.range(keySetSize).listAsIntegers();
         final int total = 100_000;
 //        final int total = 10;
@@ -895,14 +894,14 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         // count how many we've received so far
-        await().atMost(3000, TimeUnit.SECONDS)
+        await().atMost(3, MINUTES)
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
         parallelConsumer.closeDrainFirst();
         bar.close();
 
-        // check ordering is exact
+        // check ordering is exact - remove sequenceSize?
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
         log.debug("Testing...");
         checkExactOrdering(results, records);
