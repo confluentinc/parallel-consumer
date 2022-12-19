@@ -19,7 +19,6 @@ import java.util.Objects;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofMillis;
 
 /**
