@@ -12,6 +12,7 @@ import lombok.experimental.FieldNameConstants;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -42,7 +43,7 @@ import static java.time.Duration.ofMillis;
 @Builder(toBuilder = true)
 @ToString
 @FieldNameConstants
-//@InterfaceStability.Evolving
+@InterfaceStability.Evolving
 public class ParallelConsumerOptions<K, V> {
 
     /**
