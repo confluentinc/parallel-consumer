@@ -1,0 +1,135 @@
+# Parallel Consumer Metrics
+
+This document is intended to gather a few initial metrics that can be used to monitor the performance and health of the parallel consumer.
+
+### Shard Manager
+
+**Shard Size**
+
+Gauge `pc_shard_size{shard="shardName"}`
+
+Number of records queued for processing in a given shard
+
+**User Function Processing Time**
+
+Timer `pc_user_function_processing_time_seconds`
+
+Distribution of execution times for user-provided function for record processing.
+
+**Waiting Queue Time**
+
+Timer `pc_waiting_queue_time_seconds`
+
+Distribution of time records spend in the waiting for selection in the shard queue.
+
+### Partition Manager
+
+**Last Committed Offset**
+
+Gauge `pc_last_committed_offset_partition{topic="topicName", partition="partitionNumber"}`
+
+Last offset committed to the partition.
+
+**Highest Completed Offset**
+
+Gauge `pc_highest_completed_offset_partition{topic="topicName", partition="partitionNumber"}`
+
+Offset of the last record successfully processed by the user function.
+
+**Highest Sequential Offset (a.k.a Highest Committable Offset)**
+
+Gauge `pc_highest_sequential_offset_partition{topic="topicName", partition="partitionNumber"}`
+
+Offset of the last record successfully processed by the user function, for which all previous records to this offset were marked as successfully processed.
+
+**Number of Incomplete Offsets**
+
+Gauge `pc_incomplete_offsets_partition{topic="topicName", partition="partitionNumber"}`
+
+Number of record offsets not marked for committing.
+
+**Highest Seen Offset**
+
+Gauge `pc_highest_seen_offset_partition{topic="topicName", partition="partitionNumber"}`
+
+The offset of the last record added to the shard processing queue.
+
+**Current Epoch**
+
+Gauge `pc_current_epoch_partition{topic="topicName", partition="partitionNumber"}`
+
+Represents the epoch of the partition assignment, used to fence off invalid work from previous generations.
+
+
+### Encoding Compression Stats
+
+**Offsets Metadata Encoding Time**
+
+Timer `pc_offsets_metadata_encoding_time_seconds`
+
+Distribution of time spent encoding offsets metadata.
+
+**Encoding Usage**
+
+Counter `pc_encoding_usage{codec="BitSet|BitSetCompressed|BitSetV2Compressed|RunLength"}`
+
+Distribution of the number of times a given encoding was used.
+
+**Offsets Metadata Space Usage**
+
+Gauge `pc_metadata_space_used`
+
+Percentage distribution of the space used by the encoded offsets metadata. Maximum space for OffsetMetadata is 4096 bytes.
+
+**Offsets Metadata Compression Ratio**
+
+Gauge `pc_metadata_compression_ratio`
+
+Distribution of encoded offsets compression ratio.
+
+### Work Manager
+
+**Total In-flight Records**
+
+Gauge `pc_records_inflight`
+
+Total number of records currently being processed or waiting for retry.
+
+**Total Records Awaiting Selection**
+
+Gauge `pc_records_awaiting_selection`
+
+Total number of records waiting to be selected for processing.
+
+**Successfully Processed Records**
+
+Counter `pc_successfully_processed_records_total{partition="partitionNumber", topic="topicName"}`
+
+Total number of records successfully processed.
+
+**Failed Records**
+
+Counter `pc_failed_processed_records_total{partition="partitionNumber", topic="topicName"}`
+
+Total number of records failed to be processed.
+
+**Slow Records**
+
+Counter `pc_slow_processed_records_total{partition="partitionNumber", topic="topicName"}`
+
+Total number of records that spent more than the configured time threshold in the waiting queue. This setting defaults to 10 seconds.
+
+### Broker Poller
+
+**Status**
+
+Gauge `pc_status{status="running|closing|closed|draining|paused|closed"}`
+
+Parallel Consumer status check
+
+**Number of Paused Partitions**
+
+Gauge `pc_paused_partitions`
+
+Number of partitions paused by the broker poller as backpressure mechanism.
+
