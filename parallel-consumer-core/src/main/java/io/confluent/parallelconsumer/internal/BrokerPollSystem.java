@@ -336,35 +336,4 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             consumerManager.wakeup();
     }
 
-    /**
-     * Pause polling from the underlying Kafka Broker.
-     * <p>
-     * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#running running}, calling this method will be a no-op.
-     * </p>
-     */
-    public void pausePollingAndWorkRegistrationIfRunning() {
-        if (this.runState == State.running) {
-            log.info("Transitioning broker poll system to state paused.");
-            this.runState = State.paused;
-        } else {
-            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.runState);
-        }
-    }
-
-    /**
-     * Resume polling from the underlying Kafka Broker.
-     * <p>
-     * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#paused paused}, calling this method will be a no-op.
-     * </p>
-     */
-    public void resumePollingAndWorkRegistrationIfPaused() {
-        if (this.runState == State.paused) {
-            log.info("Transitioning broker poll system to state running.");
-            this.runState = State.running;
-        } else {
-            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
-        }
-    }
 }
