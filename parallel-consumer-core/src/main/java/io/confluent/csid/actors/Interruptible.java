@@ -10,16 +10,24 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 /**
- * Something which is able to be interrupted, with a {@link Reason}.
+ * Allows something to be interrupted with a {@link Reason}.
  *
  * @author Antony Stubbs
  */
 public interface Interruptible {
 
+
     /**
-     * If blocked waiting on messages, this will interrupt that wait.
+     * A simple convenience method to push an effectively NO-OP message to the actor, which would wake it up if it were
+     * blocked polling the queue for a new message. Useful to have a blocked thread return from the process method if
+     * it's blocked, without needed to {@link Thread#interrupt} it, but you don't want to send it a closure for some
+     * reason.
+     *
+     * @param reason the reason for interrupting the Actor
+     * @deprecated rather than call this generic wakeup method, it's better to send a message directly to your Actor, so
+     *         that the interrupt has context. However, this can be useful to use for legacy code.
      */
-    // todo rename
+    @Deprecated
     void interruptMaybePollingActor(Reason reason);
 
     /**
