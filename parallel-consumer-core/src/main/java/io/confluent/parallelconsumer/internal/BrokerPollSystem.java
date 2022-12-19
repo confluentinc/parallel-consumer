@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
+import io.confluent.csid.actors.Actor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.*;
@@ -69,7 +69,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private final WorkManager<K, V> wm;
 
     @Getter
-    private final ActorRef<BrokerPollSystem<K, V>> myActor = new ActorRef<>(TimeUtils.getClock(), this);
+    private final Actor<BrokerPollSystem<K, V>> myActor = new Actor<>(this);
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ControllerInternalAPI<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
@@ -123,7 +123,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 handlePoll();
 
 
-                getMyActor().processBounded();
+                getMyActor().process();
 
                 switch (runState) {
                     case DRAINING -> {

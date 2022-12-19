@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
+import io.confluent.csid.actors.Actor;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -136,7 +136,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //        CommitRequest request;
 //    }
 
-    private final ActorRef<ConsumerOffsetCommitter<K, V>> myActor = new ActorRef<>(TimeUtils.getClock(), this);
+    private final Actor<ConsumerOffsetCommitter<K, V>> myActor = new Actor<>(this);
 
     // replace with Actors
     @SneakyThrows // remove
