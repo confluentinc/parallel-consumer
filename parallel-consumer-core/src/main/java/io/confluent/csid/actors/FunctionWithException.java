@@ -1,5 +1,9 @@
 package io.confluent.csid.actors;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 /**
  * A copy of Java's {@link java.util.function.Function}, but which can throw exceptions.
  *
