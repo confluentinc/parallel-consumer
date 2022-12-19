@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -874,12 +875,15 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         log.debug("Sending...");
         ktu.send(consumerSpy, records);
 
+        var bar = ProgressBarUtils.getNewMessagesBar(log, total);
+
         // run
         log.debug("Consuming...");
         var results = new ConcurrentHashMap<String, Queue<PollContext<String, String>>>();
         AtomicLong counter = new AtomicLong();
         parallelConsumer.poll(recordContexts -> {
             counter.incrementAndGet();
+            bar.step();
             log.trace("Consumed {}", recordContexts);
             results.computeIfAbsent(recordContexts.key(), ignore -> new ConcurrentLinkedQueue<>())
                     .add(recordContexts);
@@ -891,6 +895,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                         assertThat(counter.get()).isEqualTo(total));
 
         parallelConsumer.closeDrainFirst();
+        bar.close();
 
         // check ordering is exact
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
