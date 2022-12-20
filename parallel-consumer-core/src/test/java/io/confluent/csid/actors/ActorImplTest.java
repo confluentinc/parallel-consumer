@@ -53,7 +53,6 @@ class ActorImplTest {
     void tell() {
         actor.tell(g -> g.setTold(MESSAGE));
         actor.process();
-//        ManagedTruth.assertThat(greeter). // todo get TG working with Greeter class
         assertThat(greeter.getTold()).isEqualTo(MESSAGE);
     }
 

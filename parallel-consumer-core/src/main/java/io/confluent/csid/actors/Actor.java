@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * @author Antony Stubbs
  * @see ActorImpl
  */
-public interface Actor<T> {
+public interface Actor<T> extends Interruptible {
 
     /**
      * Exceptions in execution will be logged
@@ -62,9 +62,19 @@ public interface Actor<T> {
     void tell(Consumer<T> action);
 
     /**
-     * Same as {@link Actor#tell} but messages will be placed at the front of the queue, instead of at the end.
+     * Same as {@link Actor#tell}, but messages will be placed at the front of the queue, instead of at the end.
+     *
+     * @see #tell
      */
     void tellImmediately(Consumer<T> action);
+
+    /**
+     * Same as {@link Actor#tellImmediately}, but returns a {@link Future} which will complete when the {@link Consumer}
+     * has finished running. Including a completing exceptionally if there's an error running the {@link Consumer}.
+     *
+     * @see #tellImmediately
+     */
+    Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action);
 
     /**
      * Send a message to the actor, returning a Future with the result of the message.
@@ -76,7 +86,7 @@ public interface Actor<T> {
     <R> Future<R> ask(FunctionWithException<T, R> action);
 
     /**
-     * Same as {@link Actor#ask} but messages will be placed at the front of the queue, instead of at the end.
+     * Same as {@link Actor#ask}, but messages will be placed at the front of the queue, instead of at the end.
      *
      * @param <R> the type of the result
      * @return a {@link Future} which will contain the function result, once the closure has been processed by one of

@@ -421,7 +421,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, TimeoutException, InterruptedException {
         try {
             if (isIdlingOrRunning()) {
-                var close = getMyActor().askImmediatelyVoid(me
+                var close = getMyActor().tellImmediatelyWithAck(me
                         -> me.closeInternal(drainMode));
                 // wait - blocks
                 close.get(timeout.toMillis(), MILLISECONDS);
@@ -1183,7 +1183,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Deprecated
     public void notifySomethingToDo(Reason reason) {
         // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
-        getMyActor().interruptMaybePollingActor(reason);
+        getMyActor().interrupt(reason);
     }
 
     @Override

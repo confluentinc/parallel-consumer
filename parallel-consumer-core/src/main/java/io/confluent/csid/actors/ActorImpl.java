@@ -29,7 +29,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
-public class ActorImpl<T> implements Actor<T>, Interruptible {
+public class ActorImpl<T> implements Actor<T> {
 
     /**
      * The direct reference to the instance to act upon.
@@ -115,7 +115,8 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         return future;
     }
 
-    public Future<Class<Void>> askImmediatelyVoid(Consumer<T> action) {
+    @Override
+    public Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action) {
         FunctionWithException<T, Class<Void>> funcWrap = actor -> {
             action.accept(actor);
             return Void.TYPE;
@@ -180,7 +181,7 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
     }
 
     @Override
-    public void interruptMaybePollingActor(Reason reason) {
+    public void interrupt(Reason reason) {
         log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
         getActionMailbox().add(() -> interruptInternalSync(reason));
     }
@@ -211,7 +212,7 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         log.debug("Interruption signal processed: {}", reason);
     }
 
-    public enum ActorState {
+    private enum ActorState {
         NOT_STARTED,
         ACCEPTING_MESSAGES,
         CLOSED
