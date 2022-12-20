@@ -27,10 +27,15 @@ import org.mockito.Mockito;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
+import static io.confluent.csid.utils.KafkaTestUtils.checkExactOrdering;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
@@ -46,7 +51,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 1, unit = MINUTES)
+@Timeout(value = 3, unit = MINUTES)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -345,17 +350,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 assertCommitLists(of(of(2), of(2, 3, 4))));
     }
 
-    @Test
-    @Disabled
-    public void avro() {
-        // send three messages - 0,1,2
-        // finish processing 1
-        // make sure no offsets are committed
-        // finish 0
-        // make sure offset 1, not 0 is committed
-        assertThat(false).isTrue();
-    }
-
     @ParameterizedTest
     @EnumSource(CommitMode.class)
     void controlFlowException(CommitMode commitMode) {
@@ -412,38 +406,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             verify(producerSpy, atLeastOnce()).commitTransaction();
             verify(producerSpy, atLeastOnce()).sendOffsetsToTransaction(anyMap(), ArgumentMatchers.<ConsumerGroupMetadata>any());
         }
-    }
-
-    @Test
-    @Disabled
-    public void userSucceedsButProduceToBrokerFails() {
-    }
-
-    @Test
-    @Disabled
-    public void poisonPillGoesToDeadLetterQueue() {
-    }
-
-    @Test
-    @Disabled
-    public void failingMessagesDontBreakCommitOrders() {
-        assertThat(false).isTrue();
-    }
-
-    @Test
-    @Disabled
-    public void messagesCanBeProcessedOptionallyPartitionOffsetOrder() {
-    }
-
-    @Test
-    @Disabled
-    public void failingMessagesThatAreRetriedDontBreakProcessingOrders() {
-        assertThat(false).isTrue();
-    }
-
-    @Test
-    @Disabled
-    public void ifTooManyMessagesAreInFlightDontPollBrokerForMore() {
     }
 
     @ParameterizedTest()
@@ -885,6 +847,55 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
 
         assertThat(producerSpy.history()).hasSize(1);
+    }
+
+    /**
+     * Explicit check for situation where thread size is much larger than key set size.
+     * <p>
+     * See <a href="https://github.com/confluentinc/parallel-consumer/issues/433">Different computational results
+     * obtained with different max concurrency configurations for the same parallel consumer #433</a>
+     */
+    @Test
+    void lessKeysThanThreads() {
+        setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()
+                .ordering(KEY)
+                // use many more threads than keys
+                .maxConcurrency(100)
+                .build());
+
+        // use a small set of keys, over a large set of records
+        final int keySetSize = 4;
+        var keys = Range.range(keySetSize).listAsIntegers();
+        final int total = 100_000;
+//        final int total = 10;
+        log.debug("Generating {} records against {} keys...", total, keySetSize);
+        var records = ktu.generateRecords(keys, total);
+        records.entrySet().forEach(x -> log.debug("Key {} has {} records", x.getKey(), x.getValue().size()));
+        log.debug("Sending...");
+        ktu.send(consumerSpy, records);
+
+        // run
+        log.debug("Consuming...");
+        var results = new ConcurrentHashMap<String, Queue<PollContext<String, String>>>();
+        AtomicLong counter = new AtomicLong();
+        parallelConsumer.poll(recordContexts -> {
+            counter.incrementAndGet();
+            log.trace("Consumed {}", recordContexts);
+            results.computeIfAbsent(recordContexts.key(), ignore -> new ConcurrentLinkedQueue<>())
+                    .add(recordContexts);
+        });
+
+        // count how many we've received so far
+        await().atMost(3000, TimeUnit.SECONDS)
+                .untilAsserted(() ->
+                        assertThat(counter.get()).isEqualTo(total));
+
+        parallelConsumer.closeDrainFirst();
+
+        // check ordering is exact
+        var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
+        log.debug("Testing...");
+        checkExactOrdering(results, records);
     }
 
 }

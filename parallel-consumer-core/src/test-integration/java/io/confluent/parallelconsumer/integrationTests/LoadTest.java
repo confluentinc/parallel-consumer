@@ -59,6 +59,7 @@ public class LoadTest extends DbTest {
     @Test
     void timedNormalKafkaConsumerTest() {
         setupTestData();
+
         // subscribe in advance, it can be a few seconds
         getKcu().getConsumer().subscribe(UniLists.of(topic));
 

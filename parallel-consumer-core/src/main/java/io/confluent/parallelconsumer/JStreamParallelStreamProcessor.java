@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 public interface JStreamParallelStreamProcessor<K, V> extends DrainingCloseable {
 
-    static JStreamParallelStreamProcessor createJStreamEosStreamProcessor(ParallelConsumerOptions<?, ?> options) {
+    static <K, V> JStreamParallelStreamProcessor<K, V> createJStreamEosStreamProcessor(ParallelConsumerOptions<K, V> options) {
         return new JStreamParallelEoSStreamProcessor<>(options);
     }
 
