@@ -212,7 +212,8 @@ public class ActorImpl<T> implements Actor<T> {
         log.debug("Interruption signal processed: {}", reason);
     }
 
-    private enum ActorState {
+    // todo TG needs public - should be private
+    public enum ActorState {
         NOT_STARTED,
         ACCEPTING_MESSAGES,
         CLOSED
