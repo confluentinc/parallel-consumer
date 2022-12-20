@@ -12,10 +12,9 @@ import java.util.Collection;
  *
  * @author Antony Stubbs
  */
-// todo inline into controller? or keep separate so user doesn't have access to the public rebalance interface
-//  methods? - differ to controller refactor branch
+// todo partial refactor - continued on controller refactor branch
 @RequiredArgsConstructor
-public abstract class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
+public abstract class RebalanceHandler implements ConsumerRebalanceListener {
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {

@@ -51,10 +51,9 @@ import static lombok.AccessLevel.*;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerRebalanceHandler<K, V> implements
+public abstract class AbstractParallelEoSStreamProcessor<K, V> extends RebalanceHandler implements
         ParallelConsumer<K, V>,
         ControllerInternalAPI<K, V>,
-        ConsumerRebalanceListener,
         Closeable {
 
     public static final String MDC_INSTANCE_ID = "pcId";
@@ -128,7 +127,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
-    private final ConsumerRebalanceHandler rebalanceHandler;
+    private final RebalanceHandler rebalanceHandler;
 
     /**
      * Useful for testing async code
