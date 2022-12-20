@@ -11,6 +11,11 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+/**
+ * Sanity tests for {@link CompletableFuture}.
+ *
+ * @author Antony Stubbs
+ */
 class CompletableFutureTest {
 
     @SneakyThrows

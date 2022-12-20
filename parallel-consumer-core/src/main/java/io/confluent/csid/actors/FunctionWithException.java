@@ -9,6 +9,7 @@ package io.confluent.csid.actors;
  *
  * @author Antony Stubbs
  * @see java.util.function.Function
+ * @see Actor#ask(FunctionWithException)
  */
 @FunctionalInterface
 public interface FunctionWithException<T, R> {

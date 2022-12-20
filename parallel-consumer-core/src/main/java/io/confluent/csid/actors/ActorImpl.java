@@ -11,7 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -19,64 +22,24 @@ import static io.confluent.csid.utils.StringUtils.msg;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
- * Micro Actor framework for structured, ordered, simple IPC.
- * <p>
- * By sending messages as Java Lambda (closure) functions, the Actor paradigm messages are effectively generated for us
- * automatically by the compiler. This takes the hassle out of creating message classes for every type of message we
- * want to send an actor - by effectively defining the message fields from the variables of the scope being closed over
- * and captured.
- * <p>
- * {@link ActorImpl} works in two parts - sending messages and processing them. Messages can be sent in two ways, by
- * {@link #ask}ing, or {@link #tell}ing.
- * <p>
- * Telling
- * <p>
- * The closure message is sent into the queue, with no response.
- * <p>
- * Asking
- * <p>
- * The closure message is sent into the queue, and a {@link Future} returned which will contain the response once it's
- * processed.
- * <p>
- * Messages can also be sent to the front of the queue, by using the {@code Immediately} versions of the methods. Note:
- * messages sent with these versions end up effectively in a "First In, Last Out" (FILO) queue, as a subsequent
- * immediate message will be in front of previous ones.
- * <p>
- * Processing
- * <p>
- * To process the closures, you must call one of the processing methods, and execution will be done in the calling
- * thread.
- * <p>
- * The {@link #process()} function iterates over all the closures in the queue, executing them serially.
- * <p>
- * The {@link #processBlocking(Duration)} version does the same initially, but then also will block by
- * {@link BlockingQueue#poll(long, TimeUnit)}ing the queue for new messages for the given duration, in order to allow
- * your program's thread to effectively {@link Thread#sleep} until new messages are sent.
- * <p>
- * Naming suggestions for classes declaring APIs which use the {@link ActorImpl}:
- * <p>
- * {@code Sync} denotes methods which will block using the {@link #ask} functions, waiting for a response.
- * <p>
- * todo drop?: , OR not run on the actor queue, but are Thread-Safe to call.
- * <p>
- * {@code Async} denotes methods which will return immediately, after queueing a message.
- * <p>
- *
- * @param <T> the Type of the Object to send closures to
  * @author Antony Stubbs
+ * @see Actor
  */
 @Slf4j
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
-// todo rename to ActorRef? ActorInterface? ActorAPI? Also clashes with field name.
-// todo also - another branch uses ActorRef - resolve
-public class ActorImpl<T> implements Actor<T>, Interruptible {
+public class ActorImpl<T> implements Actor<T> {
 
+    /**
+     * The direct reference to the instance to act upon.
+     */
     private final T actorRef;
 
+    /**
+     * Current state of the Actor.
+     */
     private final AtomicReference<ActorState> state = new AtomicReference<>(ActorState.NOT_STARTED);
-
 
     /**
      * Single queueing point for all messages to the actor.
@@ -84,9 +47,8 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
      * {@link LinkedBlockingDeque} is implemented as a simple doubly-linked list protected by a single lock and using
      * conditions to manage blocking. Thread safe, highly performant, single lock.
      */
-    @Getter(AccessLevel.PROTECTED)
+    @Getter(AccessLevel.PRIVATE)
     private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>();
-//    private final LinkedBlockingDeque<FutureTask<T>> actionMailbox = new LinkedBlockingDeque<>();
 
     @Override
     public void tell(final Consumer<T> action) {
@@ -103,29 +65,8 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
     @Override
     public <R> Future<R> ask(FunctionWithException<T, R> action) {
         CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
-
-//        CompletableFuture<T> future = new CompletableFuture<T>();
-//        Supplier<R> rSupplier = () -> action.apply(actorRef);
-//        var rCompletableFuture = future.supplyAsync(rSupplier);
-
-
-//        var task = askInternal(action);
-
-//        CompletableFuture<R> future = new CompletableFuture<>();
-
-//        Runnable runnable = () -> action.apply(actorRef);
-
-//        Supplier<R> task = () -> action.apply(actorRef);
-//        Runnable task = () -> action.apply(actorRef);
-
-//        var rFutureTask = new FutureTask<R>();
-
         Runnable runnable = createRunnable(action, future);
-//        var rCompletableFuture = CompletableFuture.supplyAsync()
-
-        // queue
         getActionMailbox().add(runnable);
-
         return future;
     }
 
@@ -141,21 +82,6 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         };
     }
 
-//    private <R> CompletableFuture<R> askInternal(Function<T, R> action) {
-//
-//        CompletableFuture<T> future = new CompletableFuture<T>();
-//        future.complete(actorRef);
-////        future.
-//
-//        Runnable rCallable = () -> action.apply(actorRef);
-//        var rCompletableFuture = future.thenApply(action);
-//
-////        FutureTask<R> task = new FutureTask<>(rCallable);
-////        FutureTask<R> task1 = task.;
-////        task1.run();
-//        return rCompletableFuture;
-//    }
-
     private void checkState(ActorState targetState) {
         if (!targetState.equals(state.get())) {
             throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
@@ -166,7 +92,6 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         if (targetState.equals(state.get())) {
             return new CompletableFuture<>();
         }
-
 
         var message = state.get() == ActorState.NOT_STARTED
                 ? "Actor is not started yet ({}) - call `#start` first"
@@ -182,24 +107,16 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         return future;
     }
 
-    /**
-     * Send a message to the actor, returning a Future with the result of the message.
-     *
-     * @param <R> the type of the result
-     * @return a {@link Future} which will contain the function result, once the closure has been processed by one of
-     *         the {@link #process} methods.
-     */
     @Override
     public <R> Future<R> askImmediately(FunctionWithException<T, R> action) {
         CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
-//        var task = askInternal(action);
-//        var future = new CompletableFuture<R>();
         var task = createRunnable(action, future);
         getActionMailbox().addFirst(task);
         return future;
     }
 
-    public Future<Class<Void>> askImmediatelyVoid(Consumer<T> action) {
+    @Override
+    public Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action) {
         FunctionWithException<T, Class<Void>> funcWrap = actor -> {
             action.accept(actor);
             return Void.TYPE;
@@ -207,34 +124,17 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         return askImmediately(funcWrap);
     }
 
-    /**
-     * @return true if the queue is empty
-     */
     // todo only used from one place which is deprecated
     @Override
     public boolean isEmpty() {
         return this.getActionMailbox().isEmpty();
     }
 
-    /**
-     * @return the number of actions in the queue
-     */
+    @Override
     public int getSize() {
         return this.getActionMailbox().size();
     }
 
-    /**
-     * Processes the closures in the queued, in bounded element space.
-     * <p>
-     * Given the elements currently in the queue at the beginning of the method, processes them, but no more.
-     * <p>
-     * In other words - processes all elements currently in the queue, but not new ones which are added during
-     * processing (the execution of this method). We do this so that we finish predictably and have no chance of taking
-     * forever (which could happen if messages were continuously added between polling the queue for new messages).
-     * <p>
-     * Does not execute scheduled - todo remove scheduled to subclass?
-     */
-    // todo in interface?
     @Override
     public void process() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
@@ -252,10 +152,6 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         }
     }
 
-    /**
-     * Blocking version of {@link #process()}, will process messages, then block until either a new message arrives, or
-     * the timeout is reached.
-     */
     @Override
     public void processBlocking(Duration timeout) throws InterruptedException {
         process();
@@ -284,20 +180,8 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         command.run();
     }
 
-    /**
-     * A simple convenience method to push an effectively NO-OP message to the actor, which would wake it up if it were
-     * blocked polling the queue for a new message. Useful to have a blocked thread return from the process method if
-     * it's blocked, without needed to {@link Thread#interrupt} it, but you don't want to send it a closure for some
-     * reason.
-     *
-     * @param reason the reason for interrupting the Actor
-     * @deprecated rather than call this generic wakeup method, it's better to send a message directly to your Actor
-     *         object {@link T} (todo how to link to type param), so that the interrupt has context. However this can be
-     *         useful to use for legacy code.
-     */
-    @Deprecated
     @Override
-    public void interruptMaybePollingActor(Reason reason) {
+    public void interrupt(Reason reason) {
         log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
         getActionMailbox().add(() -> interruptInternalSync(reason));
     }
@@ -307,9 +191,6 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         return actorRef.getClass().getSimpleName();
     }
 
-    /**
-     * Stop accepting any further messages, and then process any closures in the queue.
-     */
     @Override
     public void close() {
         state.set(ActorState.CLOSED);
@@ -331,6 +212,7 @@ public class ActorImpl<T> implements Actor<T>, Interruptible {
         log.debug("Interruption signal processed: {}", reason);
     }
 
+    // todo TG needs this public - fix - should not be accessing - make private
     public enum ActorState {
         NOT_STARTED,
         ACCEPTING_MESSAGES,

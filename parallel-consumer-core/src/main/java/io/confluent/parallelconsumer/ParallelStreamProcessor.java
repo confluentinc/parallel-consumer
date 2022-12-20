@@ -22,8 +22,8 @@ import java.util.function.Function;
  */
 public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, DrainingCloseable {
 
-    static <KK, VV> ParallelEoSStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
-        return new ParallelEoSStreamProcessor(options);
+    static <KK, VV> ParallelStreamProcessor<KK, VV> createEosStreamProcessor(ParallelConsumerOptions<KK, VV> options) {
+        return new ParallelEoSStreamProcessor<>(options);
     }
 
     /**

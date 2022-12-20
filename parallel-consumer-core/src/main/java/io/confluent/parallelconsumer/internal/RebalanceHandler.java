@@ -14,27 +14,32 @@ import java.util.Queue;
 /**
  * Separate out concerns from the Controller, and so the user doesn't have access to the public rebalance interface
  * methods.
+ * <p>
+ * Note: Is mainly an abstract class instead of an Interface, as you can't have protected methods in interfaces (they
+ * must all be public)
  *
  * @author Antony Stubbs
  */
-// todo inline into controller? or keep separate so user doesn't have access to the public rebalance interface methods?
+// todo partial refactor - continued on controller refactor branch
 @RequiredArgsConstructor
-public abstract class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
+public abstract class RebalanceHandler implements ConsumerRebalanceListener {
 
-//    private final AbstractParallelEoSStreamProcessor<K, V> controller;
-
+    @ThreadSafe
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         onPartitionsRevokedTellAsync(partitions);
     }
 
+    @ThreadSafe
     protected abstract void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions);
 
+    @ThreadSafe
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         onPartitionsAssignedTellAsync(partitions);
     }
 
+    @ThreadSafe
     protected abstract void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions);
 
 }
