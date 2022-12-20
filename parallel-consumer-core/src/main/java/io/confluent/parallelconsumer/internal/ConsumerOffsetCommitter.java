@@ -172,17 +172,17 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
     // removed as the commiter will do the commit directly if instructed through messaging
     void maybeDoCommit() throws TimeoutException, InterruptedException {
-        // todo poll mail box instead
-        CommitRequest poll = commitRequestQueue.poll();
-        if (poll != null) {
-            log.debug("Commit requested, performing...");
-            retrieveOffsetsAndCommit();
-            // only need to send a response if someone will be waiting
-            if (isSync()) {
-                log.debug("Adding commit response to queue...");
-                commitResponseQueue.add(new CommitResponse(poll));
-            }
-        }
+//        // todo poll mail box instead
+//        CommitRequest poll = commitRequestQueue.poll();
+//        if (poll != null) {
+//            log.debug("Commit requested, performing...");
+//            retrieveOffsetsAndCommit();
+//            // only need to send a response if someone will be waiting
+//            if (isSync()) {
+//                log.debug("Adding commit response to queue...");
+//                commitResponseQueue.add(new CommitResponse(poll));
+//            }
+//        }
     }
 
     public boolean isSync() {
