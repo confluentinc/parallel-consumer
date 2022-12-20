@@ -92,8 +92,8 @@
 
     <!-- Tests    -->
     <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="debug"/>-->
-    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest" level="debug"/>
-    <!--        <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest" level="debug"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests.LargeVolumeInMemoryTests" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.ParallelConsumerTestBase" level="trace"/>-->
