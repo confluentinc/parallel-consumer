@@ -23,13 +23,13 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * @author Antony Stubbs
- * @see IActor
+ * @see IActorAPI
  */
 @Slf4j
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
-public class Actor<T> implements IActor<T>, Interruptible {
+public class Actor<T> implements IActorAPI<T>, Interruptible {
 
     /**
      * The direct reference to the instance to act upon.

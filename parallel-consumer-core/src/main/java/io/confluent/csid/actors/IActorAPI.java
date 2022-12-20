@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * @author Antony Stubbs
  * @see Actor
  */
-public interface IActor<T> {
+public interface IActorAPI<T> {
 
     /**
      * Exceptions in execution will be logged
@@ -62,7 +62,7 @@ public interface IActor<T> {
     void tell(Consumer<T> action);
 
     /**
-     * Same as {@link IActor#tell} but messages will be placed at the front of the queue, instead of at the end.
+     * Same as {@link IActorAPI#tell} but messages will be placed at the front of the queue, instead of at the end.
      */
     void tellImmediately(Consumer<T> action);
 
