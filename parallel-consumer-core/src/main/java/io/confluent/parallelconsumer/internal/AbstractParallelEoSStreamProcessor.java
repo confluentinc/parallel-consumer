@@ -53,7 +53,6 @@ import static lombok.AccessLevel.PUBLIC;
  */
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> extends RebalanceHandler implements
-        APIInterface,
         ParallelConsumer<K, V>,
         ControllerInternalAPI<K, V>,
         Closeable {

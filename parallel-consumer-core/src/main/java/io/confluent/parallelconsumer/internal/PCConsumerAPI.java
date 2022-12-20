@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
  * @param <V>
  * @author Antony Stubbs
  */
-public interface PCConsumerAPI<K, V> {
+public interface PCConsumerAPI {
 
     @SneakyThrows
     Set<TopicPartition> assignment();

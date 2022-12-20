@@ -17,6 +17,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
 import java.util.List;
@@ -55,11 +56,16 @@ public class CoreApp {
 
         postSetup();
 
-        var consumer = parallelConsumer.getConsumerFacade();
-        consumer.
+        // example consumer API access
+        var consumer = parallelConsumer.consumerApiAccess();
+        var partial = consumer.partialKafkaConsumer();
+        var full = consumer.fullConsumerFacade();
 
-                // tag::example[]
-                        parallelConsumer.poll(record ->
+        var endOffsets = partial.endOffsets(UniSets.of());
+
+
+        // tag::example[]
+        parallelConsumer.poll(record ->
                 log.info("Concurrently processing a record: {}", record)
         );
         // end::example[]

@@ -19,6 +19,10 @@ import java.util.Map;
 /**
  * Implements all of the {@link Consumer} interface, either asynchronously, or throws an exception if the function is
  * not supported.
+ * <p>todo resolve docs</p>
+ * An implementation of the Kafka Consumer API, with unsupported functions which throw exceptions. Useful for when you
+ * want to let something else use PC, where it's unaware of it's capabilities, yet you know it won't call unsupported
+ * methods.
  * <p>
  * Generally, you can only... And you can't...
  *

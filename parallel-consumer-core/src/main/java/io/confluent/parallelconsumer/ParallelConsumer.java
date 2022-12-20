@@ -14,6 +14,7 @@ import java.util.Collection;
 import java.util.regex.Pattern;
 
 // tag::javadoc[]
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
@@ -83,6 +84,12 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
     void resumeIfPaused();
 
     /**
+     * APIs to directly controlling the consumer through various {@link org.apache.kafka.clients.consumer.Consumer}
+     * methods.
+     */
+    ConsumerApiAccess<K, V> consumerApiAccess();
+
+    /**
      * A simple tuple structure.
      *
      * @param <L>
@@ -90,7 +97,9 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
      */
     @Data
     class Tuple<L, R> {
+
         private final L left;
+
         private final R right;
 
         public static <LL, RR> Tuple<LL, RR> pairOf(LL l, RR r) {
