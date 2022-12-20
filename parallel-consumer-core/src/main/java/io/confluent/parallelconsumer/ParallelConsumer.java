@@ -84,8 +84,9 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
     void resumeIfPaused();
 
     /**
-     * APIs to directly controlling the consumer through various {@link org.apache.kafka.clients.consumer.Consumer}
-     * methods.
+     * APIs to directly control the consumer through various {@link org.apache.kafka.clients.consumer.Consumer} methods.
+     * PC will react appropriately, with respect to what type of method is called. See the method documentation for
+     * specifics for each method you call - they all work slightly differently from each other.
      */
     ConsumerApiAccess<K, V> consumerApiAccess();
 

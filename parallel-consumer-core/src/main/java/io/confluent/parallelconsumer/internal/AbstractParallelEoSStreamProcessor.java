@@ -64,9 +64,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      */
     private final ConsumerApiAccess<K, V> consumerFacade;
 
-    /**
-     * Get access to the underlying {@link org.apache.kafka.clients.consumer.Consumer} interface.
-     */
     @Override
     public ConsumerApiAccess<K, V> consumerApiAccess() {
         return consumerFacade;
