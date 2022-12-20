@@ -5,10 +5,10 @@ package io.confluent.parallelconsumer.internal;
  */
 
 /**
- * Internal thread safe APIs
+ * Convention only indicator that something is ThreadSafe
  *
  * @author Antony Stubbs
  */
-public interface ThreadSafeAPI {
+public interface IThreadSafeAPI {
 
 }

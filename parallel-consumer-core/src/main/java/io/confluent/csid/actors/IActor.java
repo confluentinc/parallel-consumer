@@ -107,7 +107,7 @@ public interface IActor<T> {
     String getActorName();
 
     /**
-     * Stop accepting any further messages, and then process any closures in the queue.
+     * Stop accepting any further messages, and then process any messages in the queue.
      */
     void close();
 
