@@ -40,8 +40,9 @@ def job = {
     stage('Build') {
         archiveArtifacts artifacts: 'pom.xml'
         withVaultEnv([["gpg/confluent-packaging-private-8B1DA6120C2BF624", "passphrase", "GPG_PASSPHRASE"]]) {
+            def mavenSettingsFile = "${env.WORKSPACE_TMP}/maven-global-settings.xml"             
             withMavenSettings("maven/jenkins_maven_global_settings", "settings", "MAVEN_GLOBAL_SETTINGS", mavenSettingsFile) {
-                withMaven(globalMavenSettingsFilePath: "${env.MAVEN_GLOBAL_SETTINGS_FILE}") {
+                withMaven(globalMavenSettingsFilePath: mavenSettingsFile) {
                     withDockerServer([uri: dockerHost()]) {
                         def isPrBuild = env.CHANGE_TARGET ? true : false
                         def buildPhase = isPrBuild ? "install" : "deploy"
