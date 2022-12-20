@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.actors.Actor;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
@@ -44,8 +45,7 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.PROTECTED;
-import static lombok.AccessLevel.PUBLIC;
+import static lombok.AccessLevel.*;
 
 /**
  * @see ParallelConsumer
@@ -56,11 +56,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         ControllerInternalAPI<K, V>,
         ConsumerRebalanceListener,
         Closeable {
-
-    /*
-     * This is a bit of a GOD class now, and so care should be taken not to expand it's scope furhter. Where possible,
-     * refactor out functionality as we go.
-     */
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -79,9 +74,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     @Setter(AccessLevel.PACKAGE)
     private Clock clock = TimeUtils.getClock();
 
-    /**
-     * Defensive programming - prep for the downstream refactor that's coming
-     */
     protected ControllerInternalAPI<K, V> controllerApi;
 
     /**
@@ -111,17 +103,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     private Instant lastCommitCheckTime = Instant.now();
 
     /**
-     * Actor for accepting messages closures form other threads.
+     * Actor for IPC
      */
     // todo make private
-    @Getter(PUBLIC)
-    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
+    @Getter(PRIVATE)
+    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new ActorImpl<>(this);
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
-    // todo fill in PR number
-    // todo remove with consumer facade PR XXX - branch improvements/consumer-interface
+    // todo remove with consumer facade - branch improvements/consumer-interface
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -131,7 +122,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
-    // todo make package level
+    // todo make package level - in controller extraction branch
     @Getter(PUBLIC)
     protected final WorkManager<K, V> wm;
 
@@ -370,7 +361,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     private void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        // todo interrupting can be removed after improvements/reblaance-messages is merged
+        // todo interrupting can be removed after improvements/rebalance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
     }
 
@@ -425,17 +416,29 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
     @ThreadSafe
     @Override
-    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
-        if (isIdlingOrRunning()) {
-            var close = getMyActor().askImmediatelyVoid(me
-                    -> me.closeInternal(drainMode));
-            // wait
-            close.get(timeout.toMillis(), MILLISECONDS);
-        } else {
-            doClose(timeout);
-        }
+    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, TimeoutException, InterruptedException {
+        try {
+            if (isIdlingOrRunning()) {
+                var close = getMyActor().tellImmediatelyWithAck(me
+                        -> me.closeInternal(drainMode));
+                // wait - blocks
+                close.get(timeout.toMillis(), MILLISECONDS);
+            } else {
+                // control loop not running, perform the close directly
+                doClose(timeout);
+            }
 
-        processCloseState(timeout);
+            processCloseState(timeout);
+        } catch (InterruptedException e) {
+            // ignore
+            log.debug("Interrupted waiting on close...", e);
+            throw e;
+        } catch (ExecutionException | TimeoutException e) {
+            log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
+                    "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
+                    "draining.", state, e);
+            throw e;
+        }
     }
 
     private void processCloseState(Duration timeout) throws InterruptedException, ExecutionException, TimeoutException {
@@ -450,7 +453,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
     private void closeInternal(DrainingMode drainMode) {
         if (state == CLOSED) {
-            log.info("Already closed, checking end state..");
+            log.info("Already closed");
         } else {
             log.info("Signaling to close...");
 
@@ -464,31 +467,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
                     transitionToClosing();
                 }
             }
-
-//            waitForClose(timeout);
-        }
-    }
-
-    private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
-        log.info("Waiting on closed state...");
-        while (!state.equals(CLOSED)) {
-            try {
-                Future<Boolean> booleanFuture = this.controlThreadFuture.get();
-                log.debug("Blocking on control future");
-                boolean signaled = booleanFuture.get(toSeconds(timeout), SECONDS);
-                if (!signaled)
-                    throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
-            } catch (InterruptedException e) {
-                // ignore
-                log.debug("Interrupted waiting on close...", e);
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException | TimeoutException e) {
-                log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
-                        "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
-                        "draining.", state, e);
-                throw e;
-            }
-            log.trace("Still waiting for system to close...");
         }
     }
 
@@ -531,7 +509,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
 
         // reject further and process renaming - make sure no new messages possible
         // todo can't close until when? to process responses? so then come public apis need to check state first before
-        //  allowing message?
+        //  allowing message? stop actor first, then process, then close?
         getMyActor().close();
 
         //
@@ -571,11 +549,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     }
 
     private void transitionToDrainingAsync(Reason reason) {
-//        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
         transitionToState(reason, State.DRAINING);
     }
 
-    // also do closing
     private void transitionToState(Reason reason, State newState) {
         log.debug("Transitioning to state {} from {} - reason: {}...", reason, newState, state);
         this.state = newState;
@@ -1159,7 +1135,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      * @see ExternalEngine#onUserFunctionSuccess
      * @see ExternalEngine#isAsyncFutureWork
      */
-    // todo collapse
+    // todo collapse after controller refactor
     protected void addWorkResultOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
         controllerApi.sendWorkResultAsync(context, wc);
     }
@@ -1174,7 +1150,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         wc.onUserFunctionSuccess();
     }
 
-    // todo make protected
+    // todo make protected - after controller refactor - it won't be part of the main public class anymore
     @ThreadSafe
     @Override
     public void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
@@ -1184,6 +1160,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
         wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
+    // todo make protected - after controller refactor - it won't be part of the main public class anymore
     @ThreadSafe
     @Override
     public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
@@ -1211,7 +1188,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     @Deprecated
     public void notifySomethingToDo(Reason reason) {
         // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
-        getMyActor().interruptMaybePollingActor(reason);
+        getMyActor().interrupt(reason);
     }
 
     @Override
@@ -1237,7 +1214,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      * <p>
      * Useful for testing, but otherwise the close methods will commit and clean up properly.
      */
+    // todo in controller refactor - consider making this part of the user API, or hidden
     public void requestCommitAsap() {
+        // todo consider making this use a trigger variable like is used to - as we may end up committing twice right after another
         log.debug("Registering command to commit next chance");
         // if want immediate commit, need to wake up poller here too - call #commitOffsetsThatAreReadyImmediately instead
         getMyActor().tell(this::commitOffsetsThatAreReadyWrapped);

@@ -51,9 +51,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private volatile boolean pausedForThrottling = false;
 
-    //    private final AbstractParallelEoSStreamProcessor<K, V> pc;
     private final ControllerInternalAPI<K, V> pc;
-
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
@@ -65,7 +63,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
-    // todo remove direct access to WM
+    // todo remove direct access to WM in partition messages PR
     @NonNull
     private final WorkManager<K, V> wm;
 

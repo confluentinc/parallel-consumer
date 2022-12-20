@@ -15,25 +15,25 @@ import java.util.Optional;
  *
  * @author Antony Stubbs
  */
-//todo merge with ControllerPackageAPI?
-//todo extract the other interfaces
-public interface ControllerInternalAPI<K, V> extends ThreadSafeAPI, ConsumerRebalanceListener {
+public interface ControllerInternalAPI<K, V> extends IThreadSafeAPI, ConsumerRebalanceListener {
 
     /**
-     * todo docs
+     * Thread safe async sending of results from worker thread
      */
     @ThreadSafe
     void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc);
 
     /**
-     * todo docs
+     * Thread safe async sending of newly polled records
      */
     @ThreadSafe
     // make sense to annotate the interface?
     void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords);
 
     /**
-     * todo docs
+     * The configured ID of the parallel consumer instance
+     * <p>
+     * todo @see ParallelConsumerOptions after controller refactor
      */
     Optional<String> getMyId();
 
