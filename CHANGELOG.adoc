@@ -14,6 +14,17 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.6.0.0
+
+=== Improvements
+
+* major: New IPC system using lightweight Lambda actor queue #325
+** Massive simplification to the IPC aspects of the code base, enabling more features with less burden
+** Introduces the new Actor model implementation
+* major: #200 Shared nothing architecture - last step to realise partition events #270
+** Instead of shared state being manipulated directly (assigned partitions, and removal of dangling work), it's now down through the Actor model
+** This simplifies the system, removes potential for errors with shared state and race conditions
+
 == 0.5.2.5
 
 === Fixes

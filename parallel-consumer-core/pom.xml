@@ -130,6 +130,7 @@
                     </packages>
                     <classes>
                         <class>io.confluent.csid.actors.Actor</class>
+                        <class>io.confluent.csid.actors.ActorImpl</class>
                         <class>io.confluent.parallelconsumer.PollContext</class>
                         <class>io.confluent.parallelconsumer.ParallelEoSStreamProcessor</class>
                         <class>io.confluent.parallelconsumer.internal.ProducerManager</class>

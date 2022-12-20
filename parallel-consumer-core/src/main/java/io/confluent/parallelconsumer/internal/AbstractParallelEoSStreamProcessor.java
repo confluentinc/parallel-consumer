@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.actors.Actor;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
@@ -51,16 +52,10 @@ import static lombok.AccessLevel.PUBLIC;
  * @see ParallelConsumer
  */
 @Slf4j
-public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
+public abstract class AbstractParallelEoSStreamProcessor<K, V> extends RebalanceHandler implements
         ParallelConsumer<K, V>,
         ControllerInternalAPI<K, V>,
-        ConsumerRebalanceListener,
         Closeable {
-
-    /*
-     * This is a bit of a GOD class now, and so care should be taken not to expand it's scope furhter. Where possible,
-     * refactor out functionality as we go.
-     */
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -98,9 +93,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Setter(AccessLevel.PACKAGE)
     private Clock clock = TimeUtils.getClock();
 
-    /**
-     * Defensive programming - prep for the downstream refactor that's coming
-     */
     protected ControllerInternalAPI<K, V> controllerApi;
 
     /**
@@ -130,17 +122,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     private Instant lastCommitCheckTime = Instant.now();
 
     /**
-     * Actor for accepting messages closures form other threads.
+     * Actor for IPC
      */
     // todo make private
-    @Getter(PUBLIC)
-    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
+    @Getter(PROTECTED)
+    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new ActorImpl<>(this);
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
 
-    // todo fill in PR number
-    // todo remove with consumer facade PR XXX - branch improvements/consumer-interface
+    // todo remove with consumer facade - branch improvements/consumer-interface
     private final org.apache.kafka.clients.consumer.Consumer<K, V> consumer;
 
     /**
@@ -150,7 +141,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
-    // todo make package level
+    // todo make package level - in controller extraction branch
     @Getter(PUBLIC)
     protected final WorkManager<K, V> wm;
 
@@ -159,7 +150,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     /**
      * todo docs
      */
-    private final ConsumerRebalanceHandler rebalanceHandler = new ConsumerRebalanceHandler<>(this);
+    private final RebalanceHandler rebalanceHandler;
 
     /**
      * Useful for testing async code
@@ -213,6 +204,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
      */
+    // todo this needs to be reconciled with all subscription flows
     private Optional<ConsumerRebalanceListener> usersConsumerRebalanceListener = Optional.empty();
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
@@ -260,6 +252,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         this.wm = module.workManager();
 
         this.brokerPollSubsystem = module.brokerPoller(this);
+
+        this.rebalanceHandler = module.parallelEoSStreamProcessor;
 
         if (options.isProducerSupplied()) {
             this.producerManager = Optional.of(module.producerManager());
@@ -349,8 +343,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         consumer.subscribe(pattern, this.rebalanceHandler);
     }
 
-    public void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
-        getMyActor().tell(controller -> controller.onPartitionsRevokedInternal(partitions));
+    protected void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
+        getMyActor().tellImmediately(controller -> controller.onPartitionsRevokedInternal(partitions));
     }
 
     /**
@@ -378,8 +372,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         }
     }
 
-    public void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
-        getMyActor().tell(controller -> controller.onPartitionsAssignedInternal(partitions));
+    protected void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
+        getMyActor().tellImmediately(controller -> controller.onPartitionsAssignedInternal(partitions));
     }
 
     /**
@@ -387,10 +381,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    protected void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
+    private void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        // todo interrupting can be removed after improvements/reblaance-messages is merged
+        // todo interrupting can be removed after improvements/rebalance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
     }
 
@@ -445,17 +439,29 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
     @ThreadSafe
     @Override
-    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, InterruptedException, TimeoutException {
-        if (isIdlingOrRunning()) {
-            var close = getMyActor().askImmediatelyVoid(me
-                    -> me.closeInternal(drainMode));
-            // wait
-            close.get(timeout.toMillis(), MILLISECONDS);
-        } else {
-            doClose(timeout);
-        }
+    public void close(Duration timeout, DrainingMode drainMode) throws ExecutionException, TimeoutException, InterruptedException {
+        try {
+            if (isIdlingOrRunning()) {
+                var close = getMyActor().tellImmediatelyWithAck(me
+                        -> me.closeInternal(drainMode));
+                // wait - blocks
+                close.get(timeout.toMillis(), MILLISECONDS);
+            } else {
+                // control loop not running, perform the close directly
+                doClose(timeout);
+            }
 
-        processCloseState(timeout);
+            processCloseState(timeout);
+        } catch (InterruptedException e) {
+            // ignore
+            log.debug("Interrupted waiting on close...", e);
+            throw e;
+        } catch (ExecutionException | TimeoutException e) {
+            log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
+                    "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
+                    "draining.", state, e);
+            throw e;
+        }
     }
 
     private void processCloseState(Duration timeout) throws InterruptedException, ExecutionException, TimeoutException {
@@ -470,7 +476,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
     private void closeInternal(DrainingMode drainMode) {
         if (state == CLOSED) {
-            log.info("Already closed, checking end state..");
+            log.info("Already closed");
         } else {
             log.info("Signaling to close...");
 
@@ -484,31 +490,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
                     transitionToClosing();
                 }
             }
-
-//            waitForClose(timeout);
-        }
-    }
-
-    private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
-        log.info("Waiting on closed state...");
-        while (!state.equals(CLOSED)) {
-            try {
-                Future<Boolean> booleanFuture = this.controlThreadFuture.get();
-                log.debug("Blocking on control future");
-                boolean signaled = booleanFuture.get(toSeconds(timeout), SECONDS);
-                if (!signaled)
-                    throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
-            } catch (InterruptedException e) {
-                // ignore
-                log.debug("Interrupted waiting on close...", e);
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException | TimeoutException e) {
-                log.error("Execution or timeout exception while waiting for the control thread to close cleanly " +
-                        "(state was {}). Try increasing your time-out to allow the system to drain, or close without " +
-                        "draining.", state, e);
-                throw e;
-            }
-            log.trace("Still waiting for system to close...");
         }
     }
 
@@ -551,7 +532,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
 
         // reject further and process renaming - make sure no new messages possible
         // todo can't close until when? to process responses? so then come public apis need to check state first before
-        //  allowing message?
+        //  allowing message? stop actor first, then process, then close?
         getMyActor().close();
 
         //
@@ -591,11 +572,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     }
 
     private void transitionToDrainingAsync(Reason reason) {
-//        getMyActor().tellImmediately(controller -> transitionToState(reason, State.DRAINING));
         transitionToState(reason, State.DRAINING);
     }
 
-    // also do closing
     private void transitionToState(Reason reason, State newState) {
         log.debug("Transitioning to state {} from {} - reason: {}...", reason, newState, state);
         this.state = newState;
@@ -972,7 +951,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     /**
      * Check the work queue for work to be done, potentially blocking.
      * <p>
-     * Can be interrupted if something else needs doing via the {@link Actor}, {@link #myActor}.
+     * Can be interrupted if something else needs doing via the {@link ActorImpl}, {@link #myActor}.
      * <p>
      * Visible for testing.
      */
@@ -1179,7 +1158,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * @see ExternalEngine#onUserFunctionSuccess
      * @see ExternalEngine#isAsyncFutureWork
      */
-    // todo collapse
+    // todo collapse after controller refactor
     protected void addWorkResultOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) { // NOSONAR
         controllerApi.sendWorkResultAsync(context, wc);
     }
@@ -1194,7 +1173,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         wc.onUserFunctionSuccess();
     }
 
-    // todo make protected
+    // todo make protected - after controller refactor - it won't be part of the main public class anymore
     @ThreadSafe
     @Override
     public void sendWorkResultAsync(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
@@ -1204,6 +1183,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         wc.onPostAddToMailBox(pollContext, producerManager);
     }
 
+    // todo make protected - after controller refactor - it won't be part of the main public class anymore
     @ThreadSafe
     @Override
     public void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords) {
@@ -1212,18 +1192,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
                 polledRecords.count());
         getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
-//
-//    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
-//        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
-//        log.debug("Adding {} to mailbox...", event);
-//        var message = ControllerEventMessage.<K, V>of(event);
-//        workMailBox.add(message);
-//    }
 
     /**
      * Early notify of work arrived.
      * <p>
-     * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
+     * Only wake up the thread if it's sleeping while performing {@link ActorImpl#processBlocking}
      *
      * @see #processActorMessageQueueBlocking
      * @deprecated todo should be defunct after full migration to Actor framework, as ANY messages for the controller will also wake it up.
@@ -1231,7 +1204,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Deprecated
     public void notifySomethingToDo(Reason reason) {
         // todo reason enum? extend? e.g. Reason.COMMIT_TIME ?
-        getMyActor().interruptMaybePollingActor(reason);
+        getMyActor().interrupt(reason);
     }
 
     @Override
@@ -1257,7 +1230,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * <p>
      * Useful for testing, but otherwise the close methods will commit and clean up properly.
      */
+    // todo in controller refactor - consider making this part of the user API, or hidden
     public void requestCommitAsap() {
+        // todo consider making this use a trigger variable like is used to - as we may end up committing twice right after another
         log.debug("Registering command to commit next chance");
         // if want immediate commit, need to wake up poller here too - call #commitOffsetsThatAreReadyImmediately instead
         getMyActor().tell(this::commitOffsetsThatAreReadyWrapped);

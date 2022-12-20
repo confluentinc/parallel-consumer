@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.actors.Actor;
 import io.confluent.parallelconsumer.ParallelConsumerException;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -50,7 +51,7 @@ import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_T
 public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V> {
 
     //    private final AbstractParallelEoSStreamProcessor<?, ?> controller;
-    private final BrokerPollSystem<?, ?> basePollerRef;
+    private final BrokerPollSystem<K, V> basePollerRef;
 
     /**
      * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
@@ -62,7 +63,7 @@ public class ConsumerFacade<K, V> implements Consumer<K, V>, PCConsumerAPI<K, V>
         return blockingAskConsumer(Consumer::assignment);
     }
 
-    private ActorRef<BrokerPollSystem<K, V>> consumer() {
+    private Actor<BrokerPollSystem<K, V>> consumer() {
         return basePollerRef.getMyActor();
     }
 

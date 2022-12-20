@@ -11,8 +11,6 @@ import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -54,6 +52,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Hold the tracking state for each of our managed partitions.
      */
+    // todo audio change to non concurrent - check access controls - there are none - i.e public getState method
     private final Map<TopicPartition, PartitionState<K, V>> partitionStates = new HashMap<>();
 
     /**
@@ -288,6 +287,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return this.partitionStates.values().stream()
                 .anyMatch(PartitionState::isDirty);
     }
+
+    // todo potentially slow when in KEY mode
     public long getNumberOfAssignedPartitions() {
         return this.partitionStates.values().stream()
                 .filter(

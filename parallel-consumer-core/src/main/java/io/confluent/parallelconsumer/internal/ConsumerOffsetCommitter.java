@@ -4,11 +4,10 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -17,12 +16,12 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Queue;
-import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 
@@ -34,26 +33,13 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.P
 @Slf4j
 public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V> implements OffsetCommitter {
 
-    /**
-     * Chosen arbitrarily - retries should never be needed, if they are it's an invalid state
-     */
-    private static final int ARBITRARY_RETRY_LIMIT = 50;
-
     private final CommitMode commitMode;
 
     private final Duration commitTimeout;
 
+    // todo code smell - should be able to remove with bus now
     private Optional<Thread> owningThread = Optional.empty();
 
-    /**
-     * Queue of commit requests from other threads
-     */
-//    private final Queue<CommitRequest> commitRequestQueue = new ConcurrentLinkedQueue<>();
-
-    /**
-     * Queue of commit responses, for other threads to block on
-     */
-//    private final BlockingQueue<CommitResponse> commitResponseQueue = new LinkedBlockingQueue<>();
     public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, ParallelConsumerOptions options) {
         super(newConsumer, newWorkManager);
         commitMode = options.getCommitMode();
@@ -68,19 +54,27 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
+    // todo this should be package private, and should not need to expose a thread safe interface - bubble up to broker system instead - see Controller refactor
     void commit() throws TimeoutException, InterruptedException {
-        if (isOwner()) {
-            // todo why? when am i the owner?
+        if (isCurrentThreadOwner()) {
+            // todo why? when am i the owner? audit - i think never
+            // commit directly with consumer
             retrieveOffsetsAndCommit();
-        } else if (isSync()) {
-            log.debug("Sync commit");
-            commitAndWait();
+        }
+
+        Future<Class<Void>> ask = commitRequestSend();
+
+        if (isSync()) {
+            log.debug("Sync commit - waiting on a commit response");
+            try {
+                ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (ExecutionException e) {
+                throw new InternalRuntimeException(msg("Timeout waiting for commit response {} to request {}", commitTimeout));
+            }
             log.debug("Finished waiting");
         } else {
-            // async
-            // we just request the commit
-            log.debug("Async commit to be requested");
-            Future<Class<Void>> ask = commitRequestSend();
+            // async - fire and forget
+            log.debug("Async commit sent");
         }
     }
 
@@ -117,36 +111,22 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     protected void postCommit() {
     }
 
-    private boolean isOwner() {
+    /**
+     * @deprecated todo still needed? audit
+     */
+    @Deprecated
+    private boolean isCurrentThreadOwner() {
         return Thread.currentThread().equals(owningThread.orElse(null));
     }
 
-//    /**
-//     * Commit request message
-//     */
-//    @Value
-//    public static class CommitRequest {
-//        UUID id = UUID.randomUUID();
-//        long requestedAtMs = System.currentTimeMillis();
-//    }
+    private final ActorImpl<ConsumerOffsetCommitter<K, V>> myActor = new ActorImpl<>(this);
 
-//    /**
-//     * Commit response message, linked to a {@link CommitRequest}
-//     */
-//    @Value
-//    public static class CommitResponse {
-//        CommitRequest request;
-//    }
-
-    private final ActorRef<ConsumerOffsetCommitter<K, V>> myActor = new ActorRef<>(TimeUtils.getClock(), this);
-
-    // replace with Actors
-    @SneakyThrows // remove
-    private void commitAndWait() {
-        Future<Class<Void>> ask = commitRequestSend();
-
-        log.debug("Waiting on a commit response");
-        ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
+//    @SneakyThrows // remove
+//    private void commitAndWait() {
+//        Future<Class<Void>> ask = commitRequestSend();
+//
+//        log.debug("Waiting on a commit response");
+//        ask.get(commitTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
 //        // \/ old version!
 //
@@ -172,15 +152,17 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //            }
 //            attempts++;
 //        }
-    }
+//    }
 
     private Future<Class<Void>> commitRequestSend() {
+        // change to ask with ack, but needs throwing Consumer?
         return myActor.ask(committer -> {
             committer.retrieveOffsetsAndCommit();
             return Void.class;
         });
     }
 
+    // removed as the commiter will do the commit directly if instructed through messaging
 //    private CommitRequest requestCommitInternal() {
 //        CommitRequest request = new CommitRequest();
 //        commitRequestQueue.add(request);
@@ -188,19 +170,20 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //        return request;
 //    }
 
-//    void maybeDoCommit() throws TimeoutException, InterruptedException {
-//        // todo poll mail box instead
-//        CommitRequest poll = commitRequestQueue.poll();
-//        if (poll != null) {
-//            log.debug("Commit requested, performing...");
-//            retrieveOffsetsAndCommit();
-//            // only need to send a response if someone will be waiting
-//            if (isSync()) {
-//                log.debug("Adding commit response to queue...");
-//                commitResponseQueue.add(new CommitResponse(poll));
-//            }
-//        }
-//    }
+    // removed as the commiter will do the commit directly if instructed through messaging
+    void maybeDoCommit() throws TimeoutException, InterruptedException {
+        // todo poll mail box instead
+        CommitRequest poll = commitRequestQueue.poll();
+        if (poll != null) {
+            log.debug("Commit requested, performing...");
+            retrieveOffsetsAndCommit();
+            // only need to send a response if someone will be waiting
+            if (isSync()) {
+                log.debug("Adding commit response to queue...");
+                commitResponseQueue.add(new CommitResponse(poll));
+            }
+        }
+    }
 
     public boolean isSync() {
         return commitMode.equals(PERIODIC_CONSUMER_SYNC);

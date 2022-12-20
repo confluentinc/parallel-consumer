@@ -22,18 +22,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 
 /**
- * @see Actor
+ * @see ActorImpl
  */
 @Slf4j
-class ActorTest {
+class ActorImplTest {
 
     public static final String MESSAGE = "tell";
 
     Greeter greeter = new Greeter();
 
-    Actor<Greeter> actor = new Actor<>(greeter);
+    ActorImpl<Greeter> actor = new ActorImpl<>(greeter);
 
-    public ActorTest() {
+    public ActorImplTest() {
         actor.start();
     }
 
@@ -53,7 +53,6 @@ class ActorTest {
     void tell() {
         actor.tell(g -> g.setTold(MESSAGE));
         actor.process();
-//        ManagedTruth.assertThat(greeter). // todo get TG working with Greeter class
         assertThat(greeter.getTold()).isEqualTo(MESSAGE);
     }
 
