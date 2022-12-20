@@ -58,7 +58,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<K, V> options;
 
     /**
      * Injectable clock for testing
@@ -122,7 +122,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
     private static class ControllerEventMessage<K, V> {
+
         WorkContainer<K, V> workContainer;
+
         EpochAndRecordsMap<K, V> consumerRecords;
 
         private boolean isWorkResult() {
