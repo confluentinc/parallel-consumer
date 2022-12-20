@@ -73,9 +73,16 @@ public interface Actor<T> {
      * @return a {@link Future} which will contain the function result, once the closure has been processed by one of
      *         the {@link #process} methods.
      */
-    <R> Future<R> askImmediately(FunctionWithException<T, R> action);
-
     <R> Future<R> ask(FunctionWithException<T, R> action);
+
+    /**
+     * Same as {@link Actor#ask} but messages will be placed at the front of the queue, instead of at the end.
+     *
+     * @param <R> the type of the result
+     * @return a {@link Future} which will contain the function result, once the closure has been processed by one of
+     *         the {@link #process} methods.
+     */
+    <R> Future<R> askImmediately(FunctionWithException<T, R> action);
 
     /**
      * @return true if the queue is empty
@@ -104,6 +111,9 @@ public interface Actor<T> {
      */
     void process();
 
+    /**
+     * The identifier of the actor
+     */
     String getActorName();
 
     /**
@@ -111,6 +121,11 @@ public interface Actor<T> {
      */
     void close();
 
+    /**
+     * Start accepting messages.
+     * <p>
+     * Any messages sent before this will be rejected, as there's a chance they may never be processed.
+     */
     void start();
 
 }
