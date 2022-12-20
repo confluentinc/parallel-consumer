@@ -1168,13 +1168,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
                 polledRecords.count());
         getMyActor().tell(controller -> controller.getWm().registerWork(polledRecords));
     }
-//
-//    public void sendPartitionEvent(PartitionEventType type, Collection<TopicPartition> partitions) {
-//        var event = new ConsumerRebalanceHandler.PartitionEventMessage(type, partitions);
-//        log.debug("Adding {} to mailbox...", event);
-//        var message = ControllerEventMessage.<K, V>of(event);
-//        workMailBox.add(message);
-//    }
 
     /**
      * Early notify of work arrived.
