@@ -320,7 +320,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     }
 
     protected void onPartitionsRevokedTellAsync(Collection<TopicPartition> partitions) {
-        getMyActor().tell(controller -> controller.onPartitionsRevokedInternal(partitions));
+        getMyActor().tellImmediately(controller -> controller.onPartitionsRevokedInternal(partitions));
     }
 
     /**
@@ -349,7 +349,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     }
 
     protected void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
-        getMyActor().tell(controller -> controller.onPartitionsAssignedInternal(partitions));
+        getMyActor().tellImmediately(controller -> controller.onPartitionsAssignedInternal(partitions));
     }
 
     /**
