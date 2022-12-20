@@ -1299,6 +1299,14 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.6.0.0
+
+=== Improvements
+
+* major: New IPC system using lightweight Lambda actor queue #325
+** Massive simplification to the IPC aspects of the code base, enabling more features with less burden
+** Introduces the new Actor model implementation
+
 == 0.5.2.5
 
 === Fixes
