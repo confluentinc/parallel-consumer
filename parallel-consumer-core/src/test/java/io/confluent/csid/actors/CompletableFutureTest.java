@@ -1,5 +1,9 @@
 package io.confluent.csid.actors;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.ManagedTruth;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
@@ -7,6 +11,11 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+/**
+ * Sanity tests for {@link CompletableFuture}.
+ *
+ * @author Antony Stubbs
+ */
 class CompletableFutureTest {
 
     @SneakyThrows

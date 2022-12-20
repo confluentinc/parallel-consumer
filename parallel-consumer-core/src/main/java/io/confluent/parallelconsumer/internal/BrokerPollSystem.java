@@ -4,16 +4,11 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.InterruptibleThread;
 import io.confluent.csid.utils.TimeUtils;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.TopicPartition;
@@ -27,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -55,9 +51,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private volatile boolean pausedForThrottling = false;
 
-    //    private final AbstractParallelEoSStreamProcessor<K, V> pc;
     private final ControllerInternalAPI<K, V> pc;
-
 
     private Optional<ConsumerOffsetCommitter<K, V>> committer = Optional.empty();
 
@@ -69,12 +63,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @Getter
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
-    // todo remove direct access to WM
+    // todo remove direct access to WM in partition messages PR
     @NonNull
     private final WorkManager<K, V> wm;
 
     @Getter
-    private final ActorRef<BrokerPollSystem<K, V>> myActor = new ActorRef<>(TimeUtils.getClock(), this);
+    private final ActorImpl<BrokerPollSystem<K, V>> myActor = new ActorImpl<>(this);
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ControllerInternalAPI<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
@@ -127,8 +121,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             while (runState != CLOSED) {
                 handlePoll();
 
+                // old: - would check if it was asked
+                // maybeDoCommit();
 
-                getMyActor().processBounded();
+                getMyActor().process();
 
                 switch (runState) {
                     case DRAINING -> {
@@ -317,6 +313,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      *
      * @see CommitMode
      */
+    @ThreadSafe
     @SneakyThrows
     @Override
     public void retrieveOffsetsAndCommit() {
@@ -326,20 +323,22 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 // shouldn't be here
                 throw new IllegalStateException("No committer configured");
             });
+            // delegate
             committer.commit();
         } else {
             throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
     }
 
+    // removed as the commiter will do the commit directly if instructed through messaging
 //    /**
 //     * Will silently skip if not configured with a committer
 //     */
-//    private void maybeDoCommit() throws TimeoutException, InterruptedException {
-        if (committer.isPresent()) {
-    //        committer.get().maybeDoCommit();
-    //    }
-    }
+    private void maybeDoCommit() throws TimeoutException, InterruptedException {
+//        if (committer.isPresent()) {
+            committer.get().maybeDoCommit();
+        }
+//    }
 
     /**
      * Wakeup if colling the broker

@@ -4,10 +4,12 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.ParallelConsumerException;
+import io.confluent.csid.actors.Actor;
+import io.confluent.csid.actors.FunctionWithException;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
@@ -25,15 +27,12 @@ import java.util.regex.Pattern;
 import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT;
 
 /**
- * todo docs
- * <p>
- * This exposes a limited subset of the {@link Consumer} interface that is valid to be used within the PC context.
- * <p>
- * Generally, you can only... And you can't...
+ * The part of the {@link Consumer} API that PC supports.
  * <p>
  * All methods are / must be thread safe.
  *
  * @author Antony Stubbs
+ * @see PCConsumerAPI a restrucited Consumer API with only the supported functions.
  */
 // todo rename suffix Async (is it must implement consumer, but is an ASYNC implementation)
 @SuppressWarnings(
@@ -43,10 +42,9 @@ import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_T
 @Slf4j
 @RequiredArgsConstructor
 // todo which package? root or internal?
-public class ConsumerFacade<K, V> implements Consumer<K, V> {
+public class ConsumerFacade<K, V> implements PCConsumerAPI<K, V> {
 
-    //    private final AbstractParallelEoSStreamProcessor<?, ?> controller;
-    private final BrokerPollSystem<?, ?> basePollerRef;
+    private final BrokerPollSystem<K, V> basePollerRef;
 
     /**
      * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
@@ -58,7 +56,7 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
         return blockingAskConsumer(Consumer::assignment);
     }
 
-    private ActorRef<BrokerPollSystem<K, V>> consumer() {
+    private Actor<BrokerPollSystem<K, V>> consumer() {
         return basePollerRef.getMyActor();
     }
 
@@ -76,7 +74,8 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
         return blockingAsk(poller -> ask.apply(poller.getConsumerManager().getConsumer()));
     }
 
-    private <R> R blockingAsk(Function<BrokerPollSystem<K, V>, R> poller) throws InterruptedException, ExecutionException, TimeoutException {
+    // todo move to Actor?
+    private <R> R blockingAsk(FunctionWithException<BrokerPollSystem<K, V>, R> poller) throws InterruptedException, ExecutionException, TimeoutException {
         Future<R> ask = consumer().ask(poller);
         return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -203,32 +202,6 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
         return blockingAskConsumer(Consumer::groupMetadata);
     }
 
-    @Override
-    public void enforceRebalance() {
-        throwInvalidCall(); // ?
-//        return blockingAskConsumer(consumer -> consumer.enforceRebalance(partition, timeout));
-    }
-
-    @Override
-    public void close() {
-        throwInvalidCall();
-    }
-
-    private void throwInvalidCall() throws ParallelConsumerException {
-        boolean swallow = false;
-        if (swallow) {
-            log.trace("Swallowing invalid call to a method");
-        } else {
-            throw new ParallelConsumerException("Not allowed");
-        }
-    }
-
-    @Override
-    public void close(final Duration timeout) {
-        throwInvalidCall();
-    }
-
-
     @SneakyThrows
     @Override
     public Map<TopicPartition, Long> endOffsets(Collection collection, Duration timeout) {
@@ -304,76 +277,38 @@ public class ConsumerFacade<K, V> implements Consumer<K, V> {
         blockingAskConsumerVoid(consumer -> consumer.subscribe(topics));
     }
 
-    // not allowed
-
     @Override
+    @SneakyThrows
     public Set<TopicPartition> paused() {
-        throwInvalidCall();
-        return Set.of();
-    }
+        return blockingAskConsumer(Consumer::paused);
 
-    // no-ops
-
-
-    @Override
-    public ConsumerRecords poll(final long timeout) {
-        throwInvalidCall();
-        return ConsumerRecords.empty();
-    }
-
-    @Override
-    public ConsumerRecords poll(final Duration timeout) {
-        throwInvalidCall();
-        return ConsumerRecords.empty();
     }
 
     @Override
     public void commitSync() {
-        throwInvalidCall();
+        blockingAskConsumerVoid(Consumer::commitSync);
     }
 
     @Override
-    public void commitSync(final Duration timeout) {
-        throwInvalidCall();
+    public void commitSync(Duration timeout) {
+        blockingAskConsumerVoid(consumer -> consumer.commitSync(timeout));
     }
 
     @Override
     public void commitAsync() {
-        throwInvalidCall();
+        blockingAskConsumerVoid(Consumer::commitAsync);
     }
 
     @Override
-    public void commitAsync(final OffsetCommitCallback callback) {
-        throwInvalidCall();
-    }
+    public void commitAsync(OffsetCommitCallback callback) {
+        blockingAskConsumerVoid(consumer -> consumer.commitAsync(callback));
 
-    @Override
-    public void commitAsync(final Map offsets, final OffsetCommitCallback callback) {
-        throwInvalidCall();
-    }
-
-    @Override
-    public void commitSync(final Map offsets, final Duration timeout) {
-        throwInvalidCall();
-    }
-
-    @Override
-    public void commitSync(final Map offsets) {
-        throwInvalidCall();
-    }
-
-    @Override
-    public void resume(final Collection collection) {
-        throwInvalidCall();
-    }
-
-    @Override
-    public void pause(final Collection collection) {
-        throwInvalidCall();
     }
 
     @Override
     public void wakeup() {
-        throwInvalidCall();
+        // audit
+        blockingAskConsumerVoid(Consumer::wakeup);
     }
+
 }
