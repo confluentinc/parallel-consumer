@@ -241,6 +241,9 @@ without operational burden or harming the cluster's performance
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
 * Batch support in all versions of the API to process batches of messages in parallel instead of single messages.
 ** Particularly useful for when your processing function can work with more than a single record at a time - e.g. sending records to an API which has a batch version like Elasticsearch
+
+== TODO consumer interface documentation
+
 * Vert.x and Reactor.io non-blocking library integration
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support

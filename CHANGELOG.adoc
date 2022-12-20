@@ -16,6 +16,18 @@ endif::[]
 
 == 0.6.0.0
 
+=== Features
+
+TODO changelog and readme docs
+
+* feature #520: Thread safe User API exposure of ALL Consumer APIs #346
+** fixes #191: Need ability to seek to the beginning of a partition
+** fixes #186: Ensure all PC API's are thread safe
+*** E.g. let's you use all consumer APIs, including seek, end offsets, lag, assignment, paused, even poll, commit and pause
+*** Both a restricted interface and a full implementation are provided
+*** Allows PC to be used by any client expecting a Kafka Consumer interface, but enables use of high speed PC APIs enabling no head of line blocking and other features aside from the concurrent processing ones.
+See <<docs>> section for elaboration
+
 === Improvements
 
 * major: New IPC system using lightweight Lambda actor queue #325

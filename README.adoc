@@ -243,6 +243,9 @@ without operational burden or harming the cluster's performance
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
 * Batch support in all versions of the API to process batches of messages in parallel instead of single messages.
 ** Particularly useful for when your processing function can work with more than a single record at a time - e.g. sending records to an API which has a batch version like Elasticsearch
+
+== TODO consumer interface documentation
+
 * Vert.x and Reactor.io non-blocking library integration
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
@@ -472,6 +475,7 @@ See {issues_link}/12[issue #12], and the `ParallelConsumer` JavaDoc:
 
 [source,java]
 ----
+
 /**
  * Asynchronous / concurrent message consumer for Kafka.
  * <p>
@@ -1300,6 +1304,18 @@ toc::[]
 endif::[]
 
 == 0.6.0.0
+
+=== Features
+
+TODO changelog and readme docs
+
+* feature #520: Thread safe User API exposure of ALL Consumer APIs #346
+** fixes #191: Need ability to seek to the beginning of a partition
+** fixes #186: Ensure all PC API's are thread safe
+*** E.g. let's you use all consumer APIs, including seek, end offsets, lag, assignment, paused, even poll, commit and pause
+*** Both a restricted interface and a full implementation are provided
+*** Allows PC to be used by any client expecting a Kafka Consumer interface, but enables use of high speed PC APIs enabling no head of line blocking and other features aside from the concurrent processing ones.
+See <<docs>> section for elaboration
 
 === Improvements
 
