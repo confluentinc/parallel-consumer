@@ -360,7 +360,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         wm.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
-        // todo interrupting can be removed after improvements/reblaance-messages is merged
+        // todo interrupting can be removed after improvements/rebalance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
     }
 
