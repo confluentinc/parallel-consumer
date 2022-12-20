@@ -60,26 +60,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     public static final String MDC_INSTANCE_ID = "pcId";
 
     /**
-     * @see #getConsumerFacadeRestricted()
+     * @see #consumerApiAccess()
      */
-    @Getter
-    private ConsumerFacade<K, V> consumerFacade;
+    private final ConsumerApiAccess<K, V> consumerFacade;
 
     /**
-     * Use this if possible instead of {@link #getConsumerFacade()}, as it only has the functions that are allowed to be
-     * called. Use {@link #getConsumerFacade()} if you need something that "is a"
-     * {@link org.apache.kafka.clients.consumer.Consumer}, but won't have unsupported functions called.
-     *
-     * @see PCConsumerAPI
-     * @see ConsumerFacade
-     * @see #getConsumerFacadeRestricted()
+     * Get access to the underlying {@link org.apache.kafka.clients.consumer.Consumer} interface.
      */
-    public PCConsumerAPI<K, V> getConsumerFacadeRestricted() {
-        return getConsumerFacade();
+    @Override
+    public ConsumerApiAccess<K, V> consumerApiAccess() {
+        return consumerFacade;
     }
-
-    @Getter
-    private final ConsumerFacade consumerFacade;
 
     /**
      * Key for the work container descriptor that will be added to the {@link MDC diagnostic context} while inside a

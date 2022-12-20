@@ -56,10 +56,6 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI<K, V> {
         return blockingAskConsumer(Consumer::assignment);
     }
 
-    private Actor<BrokerPollSystem<K, V>> consumer() {
-        return basePollerRef.getMyActor();
-    }
-
     /**
      * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
      * loop. Uses a default timeout of {@link io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT}
@@ -68,16 +64,6 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI<K, V> {
     @Override
     public Set<String> subscription() {
         return blockingAsk(poller -> poller.getConsumerManager().subscription());
-    }
-
-    private <R> R blockingAskConsumer(Function<Consumer<K, V>, R> ask) throws InterruptedException, ExecutionException, TimeoutException {
-        return blockingAsk(poller -> ask.apply(poller.getConsumerManager().getConsumer()));
-    }
-
-    // todo move to Actor?
-    private <R> R blockingAsk(FunctionWithException<BrokerPollSystem<K, V>, R> poller) throws InterruptedException, ExecutionException, TimeoutException {
-        Future<R> ask = consumer().ask(poller);
-        return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -112,25 +98,6 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI<K, V> {
         blockingAskConsumerVoid(consumer -> consumer.seek(partition, offset));
     }
 
-    private <R> void blockingAskConsumerVoid(java.util.function.Consumer<Consumer<K, V>> ask) {
-        java.util.function.Consumer<BrokerPollSystem<K, V>> wrap = poller -> ask.accept(poller.getConsumerManager().getConsumer());
-        blockingAskVoid(wrap);
-    }
-
-//    private <R> void blockingAskConsumer(Function<Consumer<K, V>> ask) {
-//        java.util.function.Consumer<BrokerPollSystem<K, V>> wrap = poller -> ask.accept(poller.getConsumerManager().getConsumer());
-//        blockingAskVoid(wrap);
-//    }
-
-    @SneakyThrows
-    private <R> void blockingAskVoid(java.util.function.Consumer<BrokerPollSystem<K, V>> ask) {
-        blockingAsk(poller -> {
-            ask.accept(poller);
-            return Void.class;
-        });
-    }
-
-
     @Override
     public void seek(TopicPartition partition, OffsetAndMetadata offsetAndMetadata) {
         blockingAskConsumerVoid(consumer -> consumer.seek(partition, offsetAndMetadata));
@@ -153,6 +120,11 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI<K, V> {
     public OffsetAndMetadata committed(TopicPartition partition) {
         return blockingAskConsumer(consumer -> consumer.committed(partition));
     }
+
+//    private <R> void blockingAskConsumer(Function<Consumer<K, V>> ask) {
+//        java.util.function.Consumer<BrokerPollSystem<K, V>> wrap = poller -> ask.accept(poller.getConsumerManager().getConsumer());
+//        blockingAskVoid(wrap);
+//    }
 
     @SneakyThrows
     @Override
@@ -309,6 +281,33 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI<K, V> {
     public void wakeup() {
         // audit
         blockingAskConsumerVoid(Consumer::wakeup);
+    }
+
+    private <R> void blockingAskConsumerVoid(java.util.function.Consumer<Consumer<K, V>> ask) {
+        java.util.function.Consumer<BrokerPollSystem<K, V>> wrap = poller -> ask.accept(poller.getConsumerManager().getConsumer());
+        blockingAskVoid(wrap);
+    }
+
+    @SneakyThrows
+    private <R> void blockingAskVoid(java.util.function.Consumer<BrokerPollSystem<K, V>> ask) {
+        blockingAsk(poller -> {
+            ask.accept(poller);
+            return Void.class;
+        });
+    }
+
+    private <R> R blockingAskConsumer(Function<Consumer<K, V>, R> ask) throws InterruptedException, ExecutionException, TimeoutException {
+        return blockingAsk(poller -> ask.apply(poller.getConsumerManager().getConsumer()));
+    }
+
+    // todo move to Actor?
+    private <R> R blockingAsk(FunctionWithException<BrokerPollSystem<K, V>, R> poller) throws InterruptedException, ExecutionException, TimeoutException {
+        Future<R> ask = consumer().ask(poller);
+        return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    private Actor<BrokerPollSystem<K, V>> consumer() {
+        return basePollerRef.getMyActor();
     }
 
 }
