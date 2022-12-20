@@ -12,11 +12,10 @@ import java.util.Collection;
  *
  * @author Antony Stubbs
  */
-// todo inline into controller? or keep separate so user doesn't have access to the public rebalance interface methods?
+// todo inline into controller? or keep separate so user doesn't have access to the public rebalance interface
+//  methods? - differ to controller refactor branch
 @RequiredArgsConstructor
 public abstract class ConsumerRebalanceHandler<K, V> implements ConsumerRebalanceListener {
-
-//    private final AbstractParallelEoSStreamProcessor<K, V> controller;
 
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
