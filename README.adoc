@@ -1299,6 +1299,16 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.6.0.0
+
+=== Features
+
+* ...
+
+=== Improvements
+
+* ...
+
 == 0.5.2.5
 
 === Fixes
