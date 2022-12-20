@@ -1,6 +1,5 @@
 package io.confluent.parallelconsumer.internal;
 
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.Metric;
@@ -15,6 +14,12 @@ import java.util.regex.Pattern;
 /**
  * The subset of functions accessible from the underlying {@link Consumer}. Naturally, cannot implement the [@link
  * Consumer} interface.
+ * <p>
+ * This exposes a limited subset of the {@link Consumer} interface that is valid to be used within the PC context.
+ * <p>
+ * Generally, you can only... And you can't...
+ * <p>
+ * All methods are / must be thread safe.
  *
  * @param <K>
  * @param <V>
@@ -69,22 +74,20 @@ public interface PCConsumerAPI<K, V> {
 
     @SneakyThrows
     ConsumerGroupMetadata groupMetadata();
-
-    void enforceRebalance();
-
-    /**
-     * Closes the entire PC system, not just the consumer.
-     *
-     * @see ParallelEoSStreamProcessor#close
-     */
-    void close();
-
-    /**
-     * Closes the entire PC system, not just the consumer.
-     *
-     * @see ParallelEoSStreamProcessor#close
-     */
-    void close(Duration timeout);
+//
+//    /**
+//     * Closes the entire PC system, not just the consumer.
+//     *
+//     * @see ParallelEoSStreamProcessor#close
+//     */
+//    void close();
+//
+//    /**
+//     * Closes the entire PC system, not just the consumer.
+//     *
+//     * @see ParallelEoSStreamProcessor#close
+//     */
+//    void close(Duration timeout);
 
     @SneakyThrows
     Map<TopicPartition, Long> endOffsets(Collection collection, Duration timeout);

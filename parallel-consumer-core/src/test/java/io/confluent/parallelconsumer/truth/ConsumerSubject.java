@@ -9,8 +9,6 @@ import io.confluent.parallelconsumer.model.CommitHistory;
 import io.stubbs.truth.generator.SubjectFactoryMethod;
 import io.stubbs.truth.generator.UserManagedSubject;
 import one.util.streamex.StreamEx;
-import io.stubbs.truth.generator.UserManagedTruth;
-import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerParentSubject;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -22,7 +20,6 @@ import javax.annotation.Generated;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
-import java.util.Optional;
 
 /**
  * Optionally move this class into source control, and add your custom assertions here.

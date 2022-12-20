@@ -19,7 +19,8 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
  */
 class ConsumerFacadeTest extends BrokerIntegrationTest {
 
-    Consumer<String, String> realConsumer = super.kcu.getConsumer();
+    Consumer<String, String> realConsumer = getKcu().getConsumer();
+
     AbstractParallelEoSStreamProcessor<String, String> pc;
 
     ConsumerFacade<String, String> cf;
