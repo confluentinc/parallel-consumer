@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.csid.actors.Actor;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
@@ -106,7 +107,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     // todo make private
     @Getter(PRIVATE)
-    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
+    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new ActorImpl<>(this);
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
