@@ -45,7 +45,8 @@ import static io.confluent.parallelconsumer.internal.State.*;
 import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static lombok.AccessLevel.*;
+import static lombok.AccessLevel.PROTECTED;
+import static lombok.AccessLevel.PUBLIC;
 
 /**
  * @see ParallelConsumer
@@ -105,7 +106,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      * Actor for IPC
      */
     // todo make private
-    @Getter(PRIVATE)
+    @Getter(PROTECTED)
     private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new ActorImpl<>(this);
 
     @Getter(PROTECTED)
