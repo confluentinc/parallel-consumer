@@ -120,6 +120,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             while (runState != CLOSED) {
                 handlePoll();
 
+                // old: - would check if it was asked
+                // maybeDoCommit();
 
                 getMyActor().process();
 
@@ -310,6 +312,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      *
      * @see CommitMode
      */
+    @ThreadSafe
     @SneakyThrows
     @Override
     public void retrieveOffsetsAndCommit() {
@@ -319,6 +322,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 // shouldn't be here
                 throw new IllegalStateException("No committer configured");
             });
+            // delegate
             committer.commit();
         } else {
             throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
@@ -329,11 +333,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 //    /**
 //     * Will silently skip if not configured with a committer
 //     */
-//    private void maybeDoCommit() throws TimeoutException, InterruptedException {
-//        if (committer.isPresent()) {
-    //        committer.get().maybeDoCommit();
-    //    }
-//    }
+    private void maybeDoCommit() throws TimeoutException, InterruptedException {
+        if (committer.isPresent()) {
+            committer.get().maybeDoCommit();
+        }
+    }
 
     /**
      * Wakeup if colling the broker
