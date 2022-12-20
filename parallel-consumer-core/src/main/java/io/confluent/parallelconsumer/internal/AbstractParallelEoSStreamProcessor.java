@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.actors.Actor;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.csid.actors.Interruptible.Reason;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
@@ -115,7 +115,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
      */
     // todo make private
     @Getter(PUBLIC)
-    private final Actor<AbstractParallelEoSStreamProcessor<K, V>> myActor = new Actor<>(this);
+    private final ActorImpl<AbstractParallelEoSStreamProcessor<K, V>> myActor = new ActorImpl<>(this);
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
@@ -956,7 +956,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     /**
      * Check the work queue for work to be done, potentially blocking.
      * <p>
-     * Can be interrupted if something else needs doing via the {@link Actor}, {@link #myActor}.
+     * Can be interrupted if something else needs doing via the {@link ActorImpl}, {@link #myActor}.
      * <p>
      * Visible for testing.
      */
@@ -1207,7 +1207,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends ConsumerR
     /**
      * Early notify of work arrived.
      * <p>
-     * Only wake up the thread if it's sleeping while performing {@link Actor#processBlocking}
+     * Only wake up the thread if it's sleeping while performing {@link ActorImpl#processBlocking}
      *
      * @see #processActorMessageQueueBlocking
      * @deprecated todo should be defunct after full migration to Actor framework, as ANY messages for the controller will also wake it up.

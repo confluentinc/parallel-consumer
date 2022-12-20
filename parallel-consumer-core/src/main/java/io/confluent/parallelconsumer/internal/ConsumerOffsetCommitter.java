@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.actors.Actor;
+import io.confluent.csid.actors.ActorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -136,7 +136,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //        CommitRequest request;
 //    }
 
-    private final Actor<ConsumerOffsetCommitter<K, V>> myActor = new Actor<>(this);
+    private final ActorImpl<ConsumerOffsetCommitter<K, V>> myActor = new ActorImpl<>(this);
 
     // replace with Actors
     @SneakyThrows // remove
