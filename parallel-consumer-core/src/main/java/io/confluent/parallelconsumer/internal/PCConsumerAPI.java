@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.Metric;
@@ -23,6 +27,7 @@ import java.util.regex.Pattern;
  *
  * @param <K>
  * @param <V>
+ * @author Antony Stubbs
  */
 public interface PCConsumerAPI<K, V> {
 
