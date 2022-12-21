@@ -38,12 +38,12 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final ConsumerManager<K, V> consumerManager;
 
-    private State runState = running;
+    private State runState = RUNNING;
 
     private Optional<Future<Boolean>> pollControlThreadFuture = Optional.empty();
 
     /**
-     * While {@link io.confluent.parallelconsumer.internal.State#paused paused} is an externally controlled state that
+     * While {@link io.confluent.parallelconsumer.internal.State#PAUSED paused} is an externally controlled state that
      * temporarily stops polling and work registration, the {@code paused} flag is used internally to pause
      * subscriptions if polling needs to be throttled.
      */
@@ -112,16 +112,16 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         log.trace("Broker poll control loop start");
         committer.ifPresent(ConsumerOffsetCommitter::claim);
         try {
-            while (runState != closed) {
+            while (runState != CLOSED) {
                 handlePoll();
 
                 maybeDoCommit();
 
                 switch (runState) {
-                    case draining -> {
+                    case DRAINING -> {
                         doPause();
                     }
-                    case closing -> {
+                    case CLOSING -> {
                         doClose();
                     }
                 }
@@ -136,7 +136,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private void handlePoll() {
         log.trace("Loop: Broker poller: ({})", runState);
-        if (runState == running || runState == draining) { // if draining - subs will be paused, so use this to just sleep
+        if (runState == RUNNING || runState == DRAINING) { // if draining - subs will be paused, so use this to just sleep
             var polledRecords = pollBrokerForRecords();
             int count = polledRecords.count();
             log.debug("Got {} records in poll result", count);
@@ -152,7 +152,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         log.debug("Doing close...");
         doPause();
         maybeCloseConsumerManager();
-        runState = closed;
+        runState = CLOSED;
     }
 
     /**
@@ -175,7 +175,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", pausedForThrottling);
 
-        boolean pollTimeoutNormally = runState == running || runState == draining;
+        boolean pollTimeoutNormally = runState == RUNNING || runState == DRAINING;
         Duration thisLongPollTimeout = pollTimeoutNormally ? BrokerPollSystem.longPollTimeout
                 : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
@@ -193,9 +193,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     public void drain() {
         // idempotent
-        if (runState != State.draining) {
+        if (runState != State.DRAINING) {
             log.debug("Signaling poll system to drain, waking up consumer...");
-            runState = State.draining;
+            runState = State.DRAINING;
             consumerManager.wakeup();
         }
     }
@@ -262,7 +262,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private void transitionToClosing() {
         log.debug("Poller transitioning to closing, waking up consumer");
-        runState = State.closing;
+        runState = State.CLOSING;
         consumerManager.wakeup();
     }
 
@@ -307,7 +307,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @SneakyThrows
     @Override
     public void retrieveOffsetsAndCommit() {
-        if (runState == running || runState == draining || runState == closing) {
+        if (runState == RUNNING || runState == DRAINING || runState == CLOSING) {
             // {@link Optional#ifPresentOrElse} only @since 9
             ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
                 // shouldn't be here
@@ -336,35 +336,4 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             consumerManager.wakeup();
     }
 
-    /**
-     * Pause polling from the underlying Kafka Broker.
-     * <p>
-     * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#running running}, calling this method will be a no-op.
-     * </p>
-     */
-    public void pausePollingAndWorkRegistrationIfRunning() {
-        if (this.runState == State.running) {
-            log.info("Transitioning broker poll system to state paused.");
-            this.runState = State.paused;
-        } else {
-            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.runState);
-        }
-    }
-
-    /**
-     * Resume polling from the underlying Kafka Broker.
-     * <p>
-     * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#paused paused}, calling this method will be a no-op.
-     * </p>
-     */
-    public void resumePollingAndWorkRegistrationIfPaused() {
-        if (this.runState == State.paused) {
-            log.info("Transitioning broker poll system to state running.");
-            this.runState = State.running;
-        } else {
-            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
-        }
-    }
 }

@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
+import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -30,7 +31,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
@@ -867,12 +867,13 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         final int keySetSize = 4;
         var keys = Range.range(keySetSize).listAsIntegers();
         final int total = 100_000;
-//        final int total = 10;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
         records.entrySet().forEach(x -> log.debug("Key {} has {} records", x.getKey(), x.getValue().size()));
         log.debug("Sending...");
         ktu.send(consumerSpy, records);
+
+        var bar = ProgressBarUtils.getNewMessagesBar(log, total);
 
         // run
         log.debug("Consuming...");
@@ -880,19 +881,21 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         AtomicLong counter = new AtomicLong();
         parallelConsumer.poll(recordContexts -> {
             counter.incrementAndGet();
+            bar.step();
             log.trace("Consumed {}", recordContexts);
             results.computeIfAbsent(recordContexts.key(), ignore -> new ConcurrentLinkedQueue<>())
                     .add(recordContexts);
         });
 
         // count how many we've received so far
-        await().atMost(3000, TimeUnit.SECONDS)
+        await().atMost(3, MINUTES)
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
         parallelConsumer.closeDrainFirst();
+        bar.close();
 
-        // check ordering is exact
+        // check ordering is exact - remove sequenceSize?
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
         log.debug("Testing...");
         checkExactOrdering(results, records);

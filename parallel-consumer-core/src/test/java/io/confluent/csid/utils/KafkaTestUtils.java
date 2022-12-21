@@ -308,8 +308,8 @@ public class KafkaTestUtils {
             while (!sequence.isEmpty()) {
                 next = sequence.poll();
                 var thisValue = Integer.parseInt(org.apache.commons.lang3.StringUtils.substringBefore(next.value(), ","));
-                var lastValue = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
-                assertThat(thisValue).isEqualTo(lastValue);
+                var lastValuePlusOne = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
+                assertThat(thisValue).isEqualTo(lastValuePlusOne);
                 last = next;
             }
             log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", originalKey, next.value());
