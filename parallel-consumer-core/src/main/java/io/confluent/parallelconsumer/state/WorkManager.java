@@ -217,7 +217,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *         should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
+        return getTotalSizeOfAllShards() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -236,8 +236,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
-    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
-        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+    public long getTotalSizeOfAllShards() {
+        return sm.getTotalSizeOfAllShards();
     }
 
     public boolean hasIncompleteOffsets() {
@@ -245,7 +245,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
+        return sm.getTotalSizeOfAllShards() > 0;
     }
 
     public void handleFutureResult(WorkContainer<K, V> wc) {
@@ -277,4 +277,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public boolean isDirty() {
         return pm.isDirty();
     }
+
+    public int getNumberRecordsOutForProcessing() {
+        return sm.getNumberRecordsOutForProcessing();
+    }
+
 }

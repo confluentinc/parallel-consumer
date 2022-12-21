@@ -474,16 +474,17 @@ public class PartitionState<K, V> {
             // exceeded maximum API allowed, strip the payload
             mustStrip = true;
             setAllowedMoreRecords(false);
-            log.warn("Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                            "Warning: messages might be replayed on rebalance. " +
+            log.warn("Partition: {} - Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
+                            "Partition will be put into blocked state, to allow for record success to reduce encoding payload size. " +
+                            "Warning: messages might be replayed on rebalance until this rectifies. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
-                    metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
+                    getTp(), metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
-            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
+            log.debug("Partition: {} - Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
                             "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
-                    metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
+                    getTp(), metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
             setAllowedMoreRecords(true);
