@@ -140,6 +140,8 @@ public class ActorImpl<T> implements Actor<T> {
 
     @Override
     public void process() {
+        start();
+
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
         // check for more work to batch up, there may be more work queued up behind the head that we can also take
