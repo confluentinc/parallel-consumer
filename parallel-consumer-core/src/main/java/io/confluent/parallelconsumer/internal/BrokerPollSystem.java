@@ -230,12 +230,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private void doPause() {
         if (pausedForThrottling) {
             log.debug("Already paused, skipping");
-        } else {
-            pausedForThrottling = true;
-            log.debug("Pausing subs");
-            Set<TopicPartition> assignment = consumerManager.assignment();
-            consumerManager.pause(assignment);
+            return;
         }
+
+        pausedForThrottling = true;
+        log.debug("Pausing subs");
+        Set<TopicPartition> assignment = consumerManager.assignment();
+        consumerManager.pause(assignment);
     }
 
     public void closeAndWait() throws TimeoutException, ExecutionException {
