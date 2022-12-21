@@ -640,10 +640,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
-            addInstanceMDC();
-            log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
+            addInstanceMDC();
+            log.info("Control loop starting up...");
             this.blockableControlThread = controlThread;
             while (state != CLOSED) {
                 log.debug("Control loop start");
@@ -713,17 +713,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // sanity - supervise the poller
         brokerPollSubsystem.supervise();
 
-        // thread yield for spin lock avoidance
-        Duration duration = Duration.ofMillis(1);
-        try {
-            Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-            log.trace("Woke up", e);
-        }
-
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getTotalSizeOfAllShards(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     /**
@@ -735,7 +727,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
+                        wm.getTotalSizeOfAllShards(),
                         options.getTargetAmountOfRecordsInFlight());
                 brokerPollSubsystem.wakeupIfPaused();
             }
@@ -906,7 +898,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
      */
     protected void checkPipelinePressure() {
-        if (log.isTraceEnabled())
+        if (log.isTraceEnabled()) {
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
                             "if (isPoolQueueLow() {} && lastWorkRequestWasFulfilled {}))",
                     getNumberOfUserFunctionsQueued(),
@@ -914,6 +906,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     dynamicExtraLoadFactor.getCurrentFactor(),
                     isPoolQueueLow(),
                     lastWorkRequestWasFulfilled);
+        }
 
         if (isPoolQueueLow() && lastWorkRequestWasFulfilled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();

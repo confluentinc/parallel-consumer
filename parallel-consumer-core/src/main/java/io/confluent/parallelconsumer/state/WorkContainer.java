@@ -226,6 +226,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * Checking that there's no back pressure for the partition it belongs to is covered by
      * {@link PartitionStateManager#isAllowedMoreRecords(WorkContainer)}.
      */
+    // todo rename isReadyToProcess?
     public boolean isAvailableToTakeAsWork() {
         return isNotInFlight() && !isUserFunctionSucceeded() && isDelayPassed();
     }

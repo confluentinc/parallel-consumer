@@ -124,7 +124,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         awaitLatch(startBarrierLatch);
 
         // zero records waiting, 2 out for processing
-        assertThat(parallelConsumer.getWm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
+        assertThat(parallelConsumer.getWm().getTotalSizeOfAllShards()).isZero();
         assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1
@@ -869,7 +869,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         final int total = 100_000;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
-        records.entrySet().forEach(x -> log.debug("Key {} has {} records", x.getKey(), x.getValue().size()));
+        records.forEach((key, value) -> log.debug("Key {} has {} records", key, value.size()));
         log.debug("Sending...");
         ktu.send(consumerSpy, records);
 

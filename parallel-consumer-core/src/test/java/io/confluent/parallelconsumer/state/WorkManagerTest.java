@@ -573,7 +573,7 @@ public class WorkManagerTest {
         registerWork(recs);
 
         //
-        long awaiting = wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection();
+        long awaiting = wm.getSm().getTotalSizeOfAllShards();
         assertThat(awaiting).isEqualTo(quantity);
 
         //
@@ -621,7 +621,7 @@ public class WorkManagerTest {
         succeed(work);
 
         //
-        assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
+        assertThat(wm.getSm().getTotalSizeOfAllShards()).isZero();
         assertThat(wm.getNumberOfIncompleteOffsets()).as("Partition commit queues are now empty").isZero();
 
         // drain commit queue
