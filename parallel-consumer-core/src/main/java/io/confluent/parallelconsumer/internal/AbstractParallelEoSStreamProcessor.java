@@ -67,7 +67,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<K, V> options;
 
     /**
      * Injectable clock for testing
@@ -463,7 +463,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
             switch (drainMode) {
                 case DRAIN -> {
                     log.info("Will wait for all in flight to complete before");
-                    transitionToDrainingAsync(new Reason("Closing"));
+                    transitionToDraining(new Reason("Closing"));
                 }
                 case DONT_DRAIN -> {
                     log.info("Not waiting for remaining queued to complete, will finish in flight, then close...");
@@ -551,7 +551,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         return isRecordsAwaitingProcessing || threadsDone;
     }
 
-    private void transitionToDrainingAsync(Reason reason) {
+    private void transitionToDraining(Reason reason) {
         transitionToState(reason, State.DRAINING);
     }
 
@@ -919,8 +919,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     }
 
     private void transitionToClosing() {
-        String msg = "Transitioning to closing...";
-        log.debug(msg);
+        log.debug("Transitioning to closing...");
         if (state == UNUSED) {
             state = CLOSED;
         } else {
@@ -1223,6 +1222,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         controller.commitOffsetsThatAreReady();
     }
 
+    @ThreadSafe
     @Override
     public void pauseIfRunning() {
         getMyActor().tellImmediately(me -> {
@@ -1235,6 +1235,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         });
     }
 
+    @ThreadSafe
     @Override
     public void resumeIfPaused() {
         getMyActor().tellImmediately(me -> {
