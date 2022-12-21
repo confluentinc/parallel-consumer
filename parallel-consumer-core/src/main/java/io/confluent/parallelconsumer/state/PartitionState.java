@@ -478,7 +478,7 @@ public class PartitionState<K, V> {
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize
             // try to turn on back pressure before max size is reached
             setAllowedMoreRecords(false);
-            log.warn("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
+            log.debug("Payload size {} higher than threshold {}, but still lower than max {}. Will write payload, but will " +
                             "not allow further messages, in order to allow the offset data to shrink (via succeeding messages).",
                     metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
