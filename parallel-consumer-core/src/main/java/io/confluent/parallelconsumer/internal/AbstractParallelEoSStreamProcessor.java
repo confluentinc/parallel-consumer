@@ -309,6 +309,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         }
     }
 
+    @Override
+    public void subscribe(String topic) {
+        subscribe(Collections.singletonList(topic));
+    }
+
     // replace with facade delegate
     @Override
     public void subscribe(Collection<String> topics) {

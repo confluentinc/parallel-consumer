@@ -34,6 +34,13 @@ public interface ParallelConsumer<K, V> extends DrainingCloseable {
     boolean isClosedOrFailed();
 
     /**
+     * Conenvience wrapper for {@link KafkaConsumer#subscribe(Collection)}.
+     *
+     * @see KafkaConsumer#subscribe(Collection)
+     */
+    void subscribe(String topic);
+
+    /**
      * @see KafkaConsumer#subscribe(Collection)
      */
     void subscribe(Collection<String> topics);
