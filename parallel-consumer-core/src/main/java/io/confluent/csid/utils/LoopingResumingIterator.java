@@ -5,7 +5,6 @@ package io.confluent.csid.utils;
  */
 
 import lombok.Getter;
-import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Iterator;
