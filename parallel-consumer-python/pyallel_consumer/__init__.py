@@ -48,8 +48,8 @@ def _install_jre(version: str = '17', *args, **kwargs) -> str:
         jre_install_dir = Path(e.filename.split('/Contents/')[0])
         print(f'Assuming install dir is {jre_install_dir}')
     jvm_path = _find_jre(jre_install_dir)
-    assert jvm_path.exists(), f'{jvm_path} does not exist'
-    return str(jvm_path)
+    assert Path(jvm_path).exists(), f'{jvm_path} does not exist'
+    return jvm_path
 
 
 class _Pom:
