@@ -85,10 +85,11 @@ public class ActorImpl<T> implements Actor<T> {
         }
 
         var message = state.get() == ActorState.NOT_STARTED
-                ? "Actor is not started yet ({}) - call `#start` first"
-                : "Actor in {} state, not {} target state";
+                ? "Actor for class {} is not started yet ({}) - call `#start` first"
+                : "Actor for class {} in {} state, not {} target state";
         var result = new InternalRuntimeException(msg(
                 message,
+                actorRef.getClass().getSimpleName(),
                 state.get(),
                 targetState));
 
@@ -163,6 +164,7 @@ public class ActorImpl<T> implements Actor<T> {
         process();
     }
 
+    // todo private through process
     @Override
     public void start() {
         state.set(ActorState.ACCEPTING_MESSAGES);
