@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.internal.ConsumerFacade;
 import io.confluent.parallelconsumer.internal.FullConsumerFacade;
 import io.confluent.parallelconsumer.internal.PCConsumerAPI;
