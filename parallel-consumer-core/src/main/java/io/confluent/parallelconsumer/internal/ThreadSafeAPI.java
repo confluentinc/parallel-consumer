@@ -9,6 +9,6 @@ package io.confluent.parallelconsumer.internal;
  *
  * @author Antony Stubbs
  */
-public interface IThreadSafeAPI {
+public interface ThreadSafeAPI {
 
 }

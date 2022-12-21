@@ -5,6 +5,7 @@ package io.confluent.csid.actors;
  */
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
+import io.confluent.parallelconsumer.internal.ThreadSafe;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,6 +28,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  */
 @Slf4j
 @ToString
+@ThreadSafe
 @EqualsAndHashCode
 @RequiredArgsConstructor
 public class ActorImpl<T> implements Actor<T> {
@@ -63,47 +65,19 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     @Override
+    public Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action) {
+        FunctionWithException<T, Class<Void>> funcWrap = actor -> {
+            action.accept(actor);
+            return Void.TYPE;
+        };
+        return askImmediately(funcWrap);
+    }
+
+    @Override
     public <R> Future<R> ask(FunctionWithException<T, R> action) {
         CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
         Runnable runnable = createRunnable(action, future);
         getActionMailbox().add(runnable);
-        return future;
-    }
-
-    private <R> Runnable createRunnable(FunctionWithException<T, R> action, CompletableFuture<R> future) {
-        return () -> {
-            try {
-                var apply = action.apply(actorRef);
-                future.complete(apply);
-            } catch (Exception e) {
-                log.error("Error in actor task", e);
-                future.completeExceptionally(e);
-            }
-        };
-    }
-
-    private void checkState(ActorState targetState) {
-        if (!targetState.equals(state.get())) {
-            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
-        }
-    }
-
-    private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
-        if (targetState.equals(state.get())) {
-            return new CompletableFuture<>();
-        }
-
-        var message = state.get() == ActorState.NOT_STARTED
-                ? "Actor is not started yet ({}) - call `#start` first"
-                : "Actor in {} state, not {} target state";
-        var result = new InternalRuntimeException(msg(
-                message,
-                state.get(),
-                targetState));
-
-        // CompletableFuture.failedFuture(result); @since 1.9
-        var future = new CompletableFuture<R>();
-        future.completeExceptionally(result);
         return future;
     }
 
@@ -113,26 +87,6 @@ public class ActorImpl<T> implements Actor<T> {
         var task = createRunnable(action, future);
         getActionMailbox().addFirst(task);
         return future;
-    }
-
-    @Override
-    public Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action) {
-        FunctionWithException<T, Class<Void>> funcWrap = actor -> {
-            action.accept(actor);
-            return Void.TYPE;
-        };
-        return askImmediately(funcWrap);
-    }
-
-    // todo only used from one place which is deprecated
-    @Override
-    public boolean isEmpty() {
-        return this.getActionMailbox().isEmpty();
-    }
-
-    @Override
-    public int getSize() {
-        return this.getActionMailbox().size();
     }
 
     @Override
@@ -181,14 +135,24 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     @Override
-    public void interrupt(Reason reason) {
-        log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
-        getActionMailbox().add(() -> interruptInternalSync(reason));
+    public String getActorName() {
+        return actorRef.getClass().getSimpleName();
     }
 
     @Override
-    public String getActorName() {
-        return actorRef.getClass().getSimpleName();
+    public int getSize() {
+        return this.getActionMailbox().size();
+    }
+
+    // todo only used from one place which is deprecated
+    @Override
+    public boolean isEmpty() {
+        return this.getActionMailbox().isEmpty();
+    }
+
+    @Override
+    public void start() {
+        state.set(ActorState.ACCEPTING_MESSAGES);
     }
 
     @Override
@@ -197,9 +161,47 @@ public class ActorImpl<T> implements Actor<T> {
         process();
     }
 
+    private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
+        if (targetState.equals(state.get())) {
+            return new CompletableFuture<>();
+        }
+
+        var message = state.get() == ActorState.NOT_STARTED
+                ? "Actor is not started yet ({}) - call `#start` first"
+                : "Actor in {} state, not {} target state";
+        var result = new InternalRuntimeException(msg(
+                message,
+                state.get(),
+                targetState));
+
+        // CompletableFuture.failedFuture(result); @since 1.9
+        var future = new CompletableFuture<R>();
+        future.completeExceptionally(result);
+        return future;
+    }
+
+    private <R> Runnable createRunnable(FunctionWithException<T, R> action, CompletableFuture<R> future) {
+        return () -> {
+            try {
+                var apply = action.apply(actorRef);
+                future.complete(apply);
+            } catch (Exception e) {
+                log.error("Error in actor task", e);
+                future.completeExceptionally(e);
+            }
+        };
+    }
+
+    private void checkState(ActorState targetState) {
+        if (!targetState.equals(state.get())) {
+            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
+        }
+    }
+
     @Override
-    public void start() {
-        state.set(ActorState.ACCEPTING_MESSAGES);
+    public void interrupt(Reason reason) {
+        log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
+        getActionMailbox().add(() -> interruptInternal(reason));
     }
 
     /**
@@ -208,7 +210,7 @@ public class ActorImpl<T> implements Actor<T> {
      * Note: Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on
      * the queue.
      */
-    private void interruptInternalSync(Reason reason) {
+    private void interruptInternal(Reason reason) {
         log.debug("Interruption signal processed: {}", reason);
     }
 
