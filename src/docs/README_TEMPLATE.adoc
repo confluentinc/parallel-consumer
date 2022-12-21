@@ -1035,7 +1035,7 @@ This way, only progress can be made, which causes the space requirements to drop
 ===== Interaction
 
 The interaction between these two systems is that if the offset backpressure turns on, partition work polling will stop (for that partition), but other partitions will continue.
-So this cause a knock on affect to the poller, as work from the buffers will slow down.
+So this causes a knock on affect to the poller, as work from the buffers will slow down.
 However, as long as other partitions are running ok, the buffered records will still be getting drained from other partitions, and so the poller will not be paused.
 
 === Vert.x Architecture

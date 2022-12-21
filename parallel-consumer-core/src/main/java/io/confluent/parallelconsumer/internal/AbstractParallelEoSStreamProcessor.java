@@ -115,13 +115,34 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     /**
-     * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
-     * sure threads always have work to do.
+     * An inbound message to the controller.
      * <p>
-     * This is also used by the {@link WorkManager#dynamicLoadFactor}, so that we have matching multiple of work
-     * buffered from the broker.
+     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
      */
-    protected final DynamicLoadFactor dynamicExtraLoadFactor;
+    @Value
+    @RequiredArgsConstructor(access = PRIVATE)
+    private static class ControllerEventMessage<K, V> {
+
+        WorkContainer<K, V> workContainer;
+
+        EpochAndRecordsMap<K, V> consumerRecords;
+
+        private boolean isWorkResult() {
+            return workContainer != null;
+        }
+
+        private boolean isNewConsumerRecords() {
+            return !isWorkResult();
+        }
+
+        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords);
+        }
+
+        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<K, V>(work, null);
+        }
+    }
 
     private final BrokerPollSystem<K, V> brokerPollSubsystem;
 
@@ -152,34 +173,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
 
     /**
-     * An inbound message to the controller.
+     * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
+     * sure threads always have work to do.
      * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
+     * This is also used by the {@link WorkManager#dynamicLoadFactor}, so that we have matching multiple of work
+     * buffered from the broker.
      */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
-
-        WorkContainer<K, V> workContainer;
-
-        EpochAndRecordsMap<K, V> consumerRecords;
-
-        private boolean isWorkResult() {
-            return workContainer != null;
-        }
-
-        private boolean isNewConsumerRecords() {
-            return !isWorkResult();
-        }
-
-        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords);
-        }
-
-        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<K, V>(work, null);
-        }
-    }
+    protected final DynamicLoadFactor dynamicExtraLoadFactor;
 
     /**
      * If the system failed with an exception, it is referenced here.
