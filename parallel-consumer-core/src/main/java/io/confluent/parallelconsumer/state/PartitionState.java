@@ -472,7 +472,8 @@ public class PartitionState<K, V> {
             mustStrip = true;
             setAllowedMoreRecords(false);
             log.warn("Partition: {} - Offset map data too large (size: {}) to fit in metadata payload hard limit of {} - cannot include in commit. " +
-                            "Warning: messages might be replayed on rebalance. " +
+                            "Partition will be put into blocked state, to allow for record success to reduce encoding payload size. " +
+                            "Warning: messages might be replayed on rebalance until this rectifies. " +
                             "See kafka.coordinator.group.OffsetConfig#DefaultMaxMetadataSize = {} and issue #47.",
                     getTp(), metaPayloadLength, DefaultMaxMetadataSize, DefaultMaxMetadataSize);
         } else if (metaPayloadLength > getPressureThresholdValue()) { // and thus metaPayloadLength <= DefaultMaxMetadataSize

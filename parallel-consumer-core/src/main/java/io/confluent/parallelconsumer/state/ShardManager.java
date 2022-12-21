@@ -103,13 +103,14 @@ public class ShardManager<K, V> {
      * Read optimised view of {@link WorkContainer}s that need retrying.
      */
     @Getter(AccessLevel.PACKAGE) // visible for testing
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
+            NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
      * shard.
      */
-    private Optional<ShardKey> iterationResumePoint = Optional.empty();
+    @NonFinal
+    Optional<ShardKey> iterationResumePoint = Optional.empty();
 
     public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
         this.module = module;
