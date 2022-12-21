@@ -47,7 +47,7 @@ def _install_jre(version: str = '17', *args, **kwargs) -> str:
         print(str(e))
         jre_install_dir = Path(e.filename.split('/Contents/')[0])
         print(f'Assuming install dir is {jre_install_dir}')
-    jvm_path = Path(jre_install_dir) / 'Contents/Home/lib/libjli.dylib'
+    jvm_path = _find_jre(jre_install_dir)
     assert jvm_path.exists(), f'{jvm_path} does not exist'
     return str(jvm_path)
 
