@@ -1253,19 +1253,21 @@ There are two back pressure systems in PC, one for pausing the broker poller, an
 
 ===== Broker Poller Back Pressure
 
-The poller will check with the `WorkManager` very loop, to see if the target number of records are buffered in the controller.
+The poller will check with the `WorkManager` every loop, to see if the target number of records are buffered in the controller.
 If they target is met, it will pause all assignments, until the buffer levels drop below this target again.
+In a future version, it is planned to selectively pause partitions, based on target levels individually.
 
 ===== Offset Map Back Pressure
 
 If there are too many records in flight, which cause the storage requirements for the offset map (see <<offset_map>>) to exceed the storage limits - the partitions will switch to "blocked", which will prevent any more work from being taken form them.
-This way, only progress can be made, which causes the space requirements to drop, after which the partitions will be unblocked, and work will resume being taken from them.
+This way, only positive progress can be made by succeeding records, which causes the space requirements to drop.
+After dropping, the partitions will be unblocked - and work will resume being taken from them.
 
 ===== Interaction
 
 The interaction between these two systems is that if the offset backpressure turns on, partition work polling will stop (for that partition), but other partitions will continue.
-So this cause a knock on affect to the poller, as work from the buffers will slow down.
-However, as long as other partitions are running ok, the buffered records will still be getting drained from other partitions, and so the poller will not be paused.
+This causes a knock on affect to the poller, as work taken from the buffers will slow down.
+However, as long as other partitions are running ok, the total buffered records will still be getting drained from other partitions, and so the poller will not be paused.
 
 === Vert.x Architecture
 
