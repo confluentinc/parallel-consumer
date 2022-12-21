@@ -866,7 +866,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // use a small set of keys, over a large set of records
         final int keySetSize = 4;
         var keys = Range.range(keySetSize).listAsIntegers();
-        final int total = 100_000;
+        final int total = 400_000;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
         records.forEach((key, value) -> log.debug("Key {} has {} records", key, value.size()));
