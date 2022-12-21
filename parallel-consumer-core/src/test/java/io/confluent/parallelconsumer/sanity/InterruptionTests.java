@@ -28,6 +28,7 @@ class InterruptionTests {
             synchronized (lock) {
                 lock.wait(1);
                 // lock.wait(0); // zero causes it to wait forever
+            }
         } catch (InterruptedException e) {
             log.debug("", e);
         }

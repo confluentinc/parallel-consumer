@@ -23,9 +23,15 @@ class ConsumerFacadeTest extends BrokerIntegrationTest {
 
     AbstractParallelEoSStreamProcessor<String, String> pc;
 
-    ConsumerFacade<String, String> cf;
+    PCConsumerAPI cf;
 
     TopicPartition tp;
+
+    ConsumerFacadeTest() {
+        pc = getKcu().buildPc();
+        cf = pc.consumerApiAccess().partialKafkaConsumer();
+        ;
+    }
 
     @Test
     void assignment() {
@@ -33,13 +39,13 @@ class ConsumerFacadeTest extends BrokerIntegrationTest {
         assertTruth(assignment).isNotEmpty();
     }
 
-    @Test
-    void subscribe() {
-    }
-
-    @Test
-    void testSubscribe() {
-    }
+//    @Test
+//    void subscribe() {
+//    }
+//
+//    @Test
+//    void testSubscribe() {
+//    }
 
     @Test
     void seek() {
@@ -61,79 +67,79 @@ class ConsumerFacadeTest extends BrokerIntegrationTest {
         }
     }
 
-    @Test
-    void position() {
-    }
-
-    @Test
-    void metrics() {
-    }
-
-    @Test
-    void listTopics() {
-    }
-
-    @Test
-    void currentLag() {
-    }
-
-    @Test
-    void endOffsets() {
-    }
-
-    @Test
-    void beginningOffsets() {
-    }
-
-    @Test
-    void offsetsForTimes() {
-    }
-
-    @Test
-    void committed() {
-    }
-
-    @Test
-    void seekToEnd() {
-    }
-
-    @Test
-    void seekToBeginning() {
-    }
-
-    @Test
-    void assign() {
-    }
-
-    @Test
-    void testSubscribe1() {
-    }
-
-    @Test
-    void testSubscribe2() {
-    }
-
-    @Test
-    void poll() {
-    }
-
-    @Test
-    void testPoll() {
-    }
-
-    @Test
-    void commitSync() {
-    }
-
-    @Test
-    void resume() {
-    }
-
-    @Test
-    void pause() {
-    }
-
-    @Test
-    void wakeup() {
-    }
+//    @Test
+//    void position() {
+//    }
+//
+//    @Test
+//    void metrics() {
+//    }
+//
+//    @Test
+//    void listTopics() {
+//    }
+//
+//    @Test
+//    void currentLag() {
+//    }
+//
+//    @Test
+//    void endOffsets() {
+//    }
+//
+//    @Test
+//    void beginningOffsets() {
+//    }
+//
+//    @Test
+//    void offsetsForTimes() {
+//    }
+//
+//    @Test
+//    void committed() {
+//    }
+//
+//    @Test
+//    void seekToEnd() {
+//    }
+//
+//    @Test
+//    void seekToBeginning() {
+//    }
+//
+//    @Test
+//    void assign() {
+//    }
+//
+//    @Test
+//    void testSubscribe1() {
+//    }
+//
+//    @Test
+//    void testSubscribe2() {
+//    }
+//
+//    @Test
+//    void poll() {
+//    }
+//
+//    @Test
+//    void testPoll() {
+//    }
+//
+//    @Test
+//    void commitSync() {
+//    }
+//
+//    @Test
+//    void resume() {
+//    }
+//
+//    @Test
+//    void pause() {
+//    }
+//
+//    @Test
+//    void wakeup() {
+//    }
 }

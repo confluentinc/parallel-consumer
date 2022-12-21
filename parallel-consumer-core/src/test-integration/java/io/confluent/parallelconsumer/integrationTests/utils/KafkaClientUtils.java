@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
@@ -56,12 +57,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class KafkaClientUtils implements AutoCloseable {
 
     public static final int MAX_POLL_RECORDS = 10_000;
+
     public static final String GROUP_ID_PREFIX = "group-1-";
 
     class PCVersion {
         public static final String V051 = "0.5.1";
     }
-
 
     private final KafkaContainer kContainer;
 
@@ -331,6 +332,10 @@ public class KafkaClientUtils implements AutoCloseable {
 
     public ParallelEoSStreamProcessor<String, String> buildPc(ProcessingOrder key) {
         return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500);
+    }
+
+    public AbstractParallelEoSStreamProcessor<String, String> buildPc() {
+        return buildPc(ProcessingOrder.KEY);
     }
 
     public KafkaConsumer<String, String> getLastConsumerConstructed() {

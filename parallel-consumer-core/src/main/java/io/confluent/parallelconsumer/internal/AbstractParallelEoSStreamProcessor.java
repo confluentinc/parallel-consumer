@@ -244,7 +244,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         this.brokerPollSubsystem = module.brokerPoller(this);
 
-        this.consumerFacade = new ConsumerFacade(brokerPollSubsystem);
+        this.consumerFacade = new ConsumerAccessImpl<>(brokerPollSubsystem);
 
         this.rebalanceHandler = module.parallelEoSStreamProcessor;
 
