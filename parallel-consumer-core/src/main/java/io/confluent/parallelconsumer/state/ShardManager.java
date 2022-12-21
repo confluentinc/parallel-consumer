@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -26,7 +27,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static lombok.AccessLevel.PROTECTED;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Shards are local queues of work to be processed.
@@ -40,14 +41,15 @@ import static lombok.AccessLevel.PROTECTED;
  * @author Antony Stubbs
  */
 @Slf4j
+@FieldDefaults(level = PRIVATE, makeFinal = true)
 public class ShardManager<K, V> {
 
-    private final PCModule<K, V> module;
+    PCModule<K, V> module;
 
     @Getter
-    private final ParallelConsumerOptions<?, ?> options;
+    ParallelConsumerOptions<?, ?> options;
 
-    private final WorkManager<K, V> wm;
+    WorkManager<K, V> wm;
 
     /**
      * Map of Object keys to Shard
@@ -61,15 +63,20 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // todo performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    @Getter(PROTECTED)
-    protected Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
+    /**
+     * todo docs
+     */
     // todo audit
     @Getter
     @NonFinal
     int numberRecordsOutForProcessing = 0;
 
-    // thread safe? consumer and controller both access - consumer upon partition revocation
+    /**
+     * todo docs
+     */
+    // thread safe? consumer and controller both access - consumer upon partition revocation and should throttle
     @NonFinal
     long totalSizeOfAllShards;
 
@@ -127,17 +134,14 @@ public class ShardManager<K, V> {
         return ShardKey.of(wc, options.getOrdering());
     }
 
-    /**
-     * Mostly used for lggogin. An approximation.
-     */
     public long getTotalSizeOfAllShards() {
         return totalSizeOfAllShards;
-//        cache this?
-//        return processingShards.values().parallelStream()
-//                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
-//                .sum();
     }
 
+    public boolean workIsWaitingToBeProcessed() {
+        return processingShards.values().parallelStream()
+                .anyMatch(ProcessingShard::isWorkWaitingToBeProcessed);
+    }
 
     /**
      * Remove only the work shards which are referenced from work from revoked partitions
@@ -152,11 +156,6 @@ public class ShardManager<K, V> {
         for (ConsumerRecord<K, V> consumerRecord : polledRecordsFromPartition) {
             removeWorkFromShardFor(consumerRecord);
         }
-    }
-
-    public boolean workIsWaitingToBeProcessed() {
-        return processingShards.values().parallelStream()
-                .anyMatch(ProcessingShard::isWorkWaitingToBeProcessed);
     }
 
     /**
