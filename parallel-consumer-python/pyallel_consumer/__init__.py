@@ -40,13 +40,15 @@ def _find_jre(java_home: str) -> str:
 
 @wraps(jdk.install)
 def _install_jre(version: str = '17', *args, **kwargs) -> str:
-    logging.info('Installing JRE')
+    print('Installing JRE')
     try:
         jre_install_dir = jdk.install(version, *args, jre=True, **kwargs)
     except PermissionError as e:
+        print(str(e))
         jre_install_dir = Path(e.filename.split('/Contents/')[0])
+        print(f'Assuming install dir is {jre_install_dir}')
     jvm_path = Path(jre_install_dir) / 'Contents/Home/lib/libjli.dylib'
-    assert jvm_path.exists()
+    assert jvm_path.exists(), f'{jvm_path} does not exist'
     return str(jvm_path)
 
 
