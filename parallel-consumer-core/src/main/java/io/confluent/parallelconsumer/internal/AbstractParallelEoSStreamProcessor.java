@@ -712,7 +712,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getTotalSizeOfAllShards(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     /**
@@ -724,7 +724,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
+                        wm.getTotalSizeOfAllShards(),
                         options.getTargetAmountOfRecordsInFlight());
                 brokerPollSubsystem.wakeupIfPaused();
             }
