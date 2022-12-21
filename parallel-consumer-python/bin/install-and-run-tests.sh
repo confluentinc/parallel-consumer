@@ -5,7 +5,7 @@
 
 set -x
 
-python setup.py bdist_wheel
+python3 setup.py bdist_wheel
 WHEEL_PATH=$(ls ./dist/*.whl)
 pip install $WHEEL_PATH
 pip install -r ./tests/requirements.txt
