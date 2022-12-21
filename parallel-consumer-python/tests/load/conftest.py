@@ -16,7 +16,7 @@ from testcontainers.kafka import KafkaContainer
 
 from pyallel_consumer import start_jvm
 from tests import timeit
-from tests.kafka import create_topic, create_client_properties
+from tests.kafka_utils import create_topic, create_client_properties
 
 start_jvm()
 
@@ -100,7 +100,7 @@ def publish_messages(producer: KafkaProducer, topic_name: str, num_messages: int
 
 
 @fixture
-def loaded_topic(kafka_container, common_props, producer, num_messages) -> str:
+def loaded_topic(common_props, producer, num_messages) -> str:
     topic_name = f'{Path(__file__).stem}-{randint(0, maxsize)}'
     create_topic(topic_name, common_props, num_partitions=1)
 
