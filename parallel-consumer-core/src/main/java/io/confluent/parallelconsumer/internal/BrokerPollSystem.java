@@ -203,22 +203,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     /**
-     * If we are currently processing too many records, we must stop polling for more from the broker. But we must also
-     * make sure we maintain the keep alive with the broker so as not to cause a rebalance.
-     * <p>
-     * Pauses all assignments.
-     */
-    private void managePauseOfSubscription() {
-        boolean throttle = shouldThrottle();
-        log.trace("Need to throttle: {}", throttle);
-        if (throttle) {
-            doPauseMaybe();
-        } else {
-            resumeIfPaused();
-        }
-    }
-
-    /**
      * If we haven't tried to pause too frequently, pause all the subscriptions.
      *
      * @see #pauseLimiter
@@ -237,6 +221,20 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                             pauseLimiter.getRate());
                 }
             }
+        }
+    }
+
+    /**
+     * Pause all assignments
+     */
+    private void doPause() {
+        if (pausedForThrottling) {
+            log.debug("Already paused, skipping");
+        } else {
+            pausedForThrottling = true;
+            log.debug("Pausing subs");
+            Set<TopicPartition> assignment = consumerManager.assignment();
+            consumerManager.pause(assignment);
         }
     }
 
@@ -272,16 +270,18 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     /**
-     * Pause all assignments
+     * If we are currently processing too many records, we must stop polling for more from the broker. But we must also
+     * make sure we maintain the keep alive with the broker so as not to cause a rebalance.
+     * <p>
+     * Pauses all assignments.
      */
-    private void doPause() {
-        if (pausedForThrottling) {
-            log.debug("Already paused, skipping");
+    private void managePauseOfSubscription() {
+        boolean throttle = shouldThrottle();
+        log.trace("Need to throttle: {}", throttle);
+        if (throttle) {
+            doPauseMaybe();
         } else {
-            pausedForThrottling = true;
-            log.debug("Pausing subs");
-            Set<TopicPartition> assignment = consumerManager.assignment();
-            consumerManager.pause(assignment);
+            resumeIfPaused();
         }
     }
 
