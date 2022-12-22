@@ -296,7 +296,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         subscribe(Collections.singletonList(topic));
     }
 
-    // replace with facade delegate
+    // replace with facade delegate - in controller refactor branch
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
