@@ -63,29 +63,20 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     @Override
+    public Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action) {
+        FunctionWithException<T, Class<Void>> funcWrap = actor -> {
+            action.accept(actor);
+            return Void.TYPE;
+        };
+        return askImmediately(funcWrap);
+    }
+
+    @Override
     public <R> Future<R> ask(FunctionWithException<T, R> action) {
         CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
         Runnable runnable = createRunnable(action, future);
         getActionMailbox().add(runnable);
         return future;
-    }
-
-    private <R> Runnable createRunnable(FunctionWithException<T, R> action, CompletableFuture<R> future) {
-        return () -> {
-            try {
-                var apply = action.apply(actorRef);
-                future.complete(apply);
-            } catch (Exception e) {
-                log.error("Error in actor task", e);
-                future.completeExceptionally(e);
-            }
-        };
-    }
-
-    private void checkState(ActorState targetState) {
-        if (!targetState.equals(state.get())) {
-            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
-        }
     }
 
     private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
@@ -107,6 +98,18 @@ public class ActorImpl<T> implements Actor<T> {
         return future;
     }
 
+    private <R> Runnable createRunnable(FunctionWithException<T, R> action, CompletableFuture<R> future) {
+        return () -> {
+            try {
+                var apply = action.apply(actorRef);
+                future.complete(apply);
+            } catch (Exception e) {
+                log.error("Error in actor task", e);
+                future.completeExceptionally(e);
+            }
+        };
+    }
+
     @Override
     public <R> Future<R> askImmediately(FunctionWithException<T, R> action) {
         CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
@@ -115,19 +118,16 @@ public class ActorImpl<T> implements Actor<T> {
         return future;
     }
 
-    @Override
-    public Future<Class<Void>> tellImmediatelyWithAck(Consumer<T> action) {
-        FunctionWithException<T, Class<Void>> funcWrap = actor -> {
-            action.accept(actor);
-            return Void.TYPE;
-        };
-        return askImmediately(funcWrap);
-    }
-
     // todo only used from one place which is deprecated
     @Override
     public boolean isEmpty() {
         return this.getActionMailbox().isEmpty();
+    }
+
+    @Override
+    public void processBlocking(Duration timeout) throws InterruptedException {
+        process();
+        maybeBlockUntilAction(timeout);
     }
 
     @Override
@@ -153,9 +153,19 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     @Override
-    public void processBlocking(Duration timeout) throws InterruptedException {
+    public String getActorName() {
+        return actorRef.getClass().getSimpleName();
+    }
+
+    @Override
+    public void close() {
+        state.set(ActorState.CLOSED);
         process();
-        maybeBlockUntilAction(timeout);
+    }
+
+    @Override
+    public void start() {
+        state.set(ActorState.ACCEPTING_MESSAGES);
     }
 
     /**
@@ -180,26 +190,16 @@ public class ActorImpl<T> implements Actor<T> {
         command.run();
     }
 
+    private void checkState(ActorState targetState) {
+        if (!targetState.equals(state.get())) {
+            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
+        }
+    }
+
     @Override
     public void interrupt(Reason reason) {
         log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
         getActionMailbox().add(() -> interruptInternalSync(reason));
-    }
-
-    @Override
-    public String getActorName() {
-        return actorRef.getClass().getSimpleName();
-    }
-
-    @Override
-    public void close() {
-        state.set(ActorState.CLOSED);
-        process();
-    }
-
-    @Override
-    public void start() {
-        state.set(ActorState.ACCEPTING_MESSAGES);
     }
 
     /**
