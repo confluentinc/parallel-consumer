@@ -1079,7 +1079,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      * Visible for testing
      */
     protected void commitOffsetsThatAreReady() throws InterruptedException, TimeoutException {
-        if (state.equals(UNUSED)) {
+        if (state.equals(UNUSED) || !wm.isDirty()) {
             return;
         }
 

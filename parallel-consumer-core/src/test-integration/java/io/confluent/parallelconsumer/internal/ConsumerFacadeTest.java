@@ -4,9 +4,13 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.common.TopicPartition;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
@@ -17,11 +21,12 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
  * @author Antony Stubbs
  * @see ConsumerFacade
  */
+@Slf4j
 class ConsumerFacadeTest extends BrokerIntegrationTest {
 
     Consumer<String, String> realConsumer = getKcu().getConsumer();
 
-    AbstractParallelEoSStreamProcessor<String, String> pc;
+    ParallelEoSStreamProcessor<String, String> pc;
 
     PCConsumerAPI cf;
 
@@ -30,13 +35,28 @@ class ConsumerFacadeTest extends BrokerIntegrationTest {
     ConsumerFacadeTest() {
         pc = getKcu().buildPc();
         cf = pc.consumerApiAccess().partialKafkaConsumer();
-        ;
+
+        pc.start();
+
+        pc.subscribe("test");
+        pc.poll(recordContexts -> {
+            log.debug("Got records: {}", recordContexts);
+        });
+
     }
 
+    @AfterEach
+    void tearDown() {
+        pc.close();
+    }
+
+    @SneakyThrows
     @Test
     void assignment() {
         Set<?> assignment = cf.assignment();
         assertTruth(assignment).isNotEmpty();
+
+        assertTruth(pc).isNotClosedOrFailed();
     }
 
 //    @Test

@@ -302,11 +302,11 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
 
     // todo move to Actor?
     private <R> R blockingAsk(FunctionWithException<BrokerPollSystem<K, V>, R> poller) throws InterruptedException, ExecutionException, TimeoutException {
-        Future<R> ask = consumer().ask(poller);
+        Future<R> ask = polllerActor().ask(poller);
         return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    private Actor<BrokerPollSystem<K, V>> consumer() {
+    private Actor<BrokerPollSystem<K, V>> polllerActor() {
         return basePollerRef.getMyActor();
     }
 
