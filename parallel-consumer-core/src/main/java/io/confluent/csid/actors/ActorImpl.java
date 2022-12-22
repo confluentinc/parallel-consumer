@@ -153,6 +153,7 @@ public class ActorImpl<T> implements Actor<T> {
             }
         }
         log.debug("State {} reached", state.get());
+        future.complete(null);
         return future;
     }
 
@@ -262,10 +263,13 @@ public class ActorImpl<T> implements Actor<T> {
         command.run();
     }
 
+    @SneakyThrows
     private void checkState(ActorState targetState) {
-        if (!targetState.equals(state.get())) {
-            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
-        }
+        var ready = waitForState
+                ? waitForState(targetState)
+                : errorIfNotState(targetState);
+
+        var o = ready.get(stateTimeout.toMillis(), MILLISECONDS);
     }
 
     @Override
