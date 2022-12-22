@@ -260,7 +260,7 @@ class ProducerManagerTest {
         try (var pc = module.pc()) {
             pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
-            pc.setState(State.running);
+            pc.setState(State.RUNNING);
 
             // "send" one record
             EpochAndRecordsMap<String, String> freshWork = mu.createFreshWork();

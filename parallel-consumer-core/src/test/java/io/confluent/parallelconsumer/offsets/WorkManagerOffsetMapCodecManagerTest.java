@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,7 +28,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.xerial.snappy.SnappyOutputStream;
 import pl.tlinkowski.unij.api.UniLists;
-import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.io.ByteArrayOutputStream;
@@ -238,13 +236,6 @@ class WorkManagerOffsetMapCodecManagerTest {
     }
 
     @Test
-    @Disabled("TODO: Blocker: Not implemented yet")
-    void truncationOnCommit() {
-        wm.onOffsetCommitSuccess(UniMaps.of());
-        assertThat(true).isFalse();
-    }
-
-    @Test
     void base64Encoding() {
         // encode
         String originalString = "TEST";
@@ -367,6 +358,48 @@ class WorkManagerOffsetMapCodecManagerTest {
         EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(pack);
         String deserialisedBitSet = encodedOffsetPair.getDecodedString();
         assertThat(deserialisedBitSet).isEqualTo(input);
+    }
+
+/**
+* Tests for friendly errors when Kafka Streams (as far as we can guess) magic numbers are found in the offset metadata.
+*/
+    @SneakyThrows
+    @Test
+    void deserialiseKafkaStreamsV1() {
+        final var input = ByteBuffer.allocate(32);
+        // magic number
+        input.put((byte) 1);
+        // timestamp
+        input.putLong(System.currentTimeMillis());
+
+        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
+        assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
+                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
+    }
+
+    @SneakyThrows
+    @Test
+    void deserialiseKafkaStreamsV2() {
+        final var input = ByteBuffer.allocate(32);
+        // magic number
+        input.put((byte) 2);
+        // timestamp
+        input.putLong(System.currentTimeMillis());
+        // metadata
+        // number of entries
+        input.putInt(1);
+        // key size
+        input.putInt(1);
+        // key
+        input.put((byte) 'a');
+        // value
+        input.putLong(1L);
+
+        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
+        assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
+                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
     }
 
     @SneakyThrows
