@@ -66,7 +66,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<K, V> options;
 
     /**
      * Injectable clock for testing
@@ -295,6 +295,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     }
 
     @Override
+    public void subscribe(String topic) {
+        subscribe(Collections.singletonList(topic));
+    }
+
+    // replace with facade delegate
+    @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
         consumer.subscribe(topics, this.rebalanceHandler);
@@ -425,7 +431,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
                 close.get(timeout.toMillis(), MILLISECONDS);
             } else {
                 // control loop not running, perform the close directly
-                doClose(timeout);
+                closeResources(timeout);
             }
 
             processCloseState(timeout);
@@ -460,7 +466,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
             switch (drainMode) {
                 case DRAIN -> {
                     log.info("Will wait for all in flight to complete before");
-                    transitionToDrainingAsync(new Reason("Closing"));
+                    transitionToDraining(new Reason("Closing"));
                 }
                 case DONT_DRAIN -> {
                     log.info("Not waiting for remaining queued to complete, will finish in flight, then close...");
@@ -473,6 +479,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
+        cleanup(timeout);
+
+        closeResources(timeout);
+
+        //
+        log.debug("Close complete.");
+        this.state = CLOSED;
+
+        if (this.getFailureCause() != null) {
+            log.error("PC closed due to error: {}", getFailureCause(), null);
+        }
+    }
+
+    private void cleanup(Duration timeout) throws InterruptedException, TimeoutException {
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerThreadPool.shutdownNow();
         if (!unfinished.isEmpty()) {
@@ -502,7 +522,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         // last commit
         commitOffsetsThatAreReady();
+    }
 
+    private void closeResources(Duration timeout) throws TimeoutException, ExecutionException {
         // only broker poller, and hence consumer, once `Committer` has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
@@ -517,14 +539,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         //
         producerManager.ifPresent(x -> x.close(timeout));
-
-        //
-        log.debug("Close complete.");
-        this.state = CLOSED;
-
-        if (this.getFailureCause() != null) {
-            log.error("PC closed due to error: {}", getFailureCause(), null);
-        }
     }
 
     /**
@@ -548,7 +562,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         return isRecordsAwaitingProcessing || threadsDone;
     }
 
-    private void transitionToDrainingAsync(Reason reason) {
+    private void transitionToDraining(Reason reason) {
         transitionToState(reason, State.DRAINING);
     }
 
@@ -601,10 +615,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
-            addInstanceMDC();
-            log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
+            addInstanceMDC();
+            log.info("Control loop starting up...");
             while (state != CLOSED) {
                 log.debug("Control loop start");
                 try {
@@ -683,7 +697,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getTotalSizeOfAllShards(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     /**
@@ -695,7 +709,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
+                        wm.getTotalSizeOfAllShards(),
                         options.getTargetAmountOfRecordsInFlight());
                 brokerPollSubsystem.wakeupIfPaused();
             }
@@ -866,7 +880,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
      */
     protected void checkPipelinePressure() {
-        if (log.isTraceEnabled())
+        if (log.isTraceEnabled()) {
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
                             "if (isPoolQueueLow() {} && lastWorkRequestWasFulfilled {}))",
                     getNumberOfUserFunctionsQueued(),
@@ -874,6 +888,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
                     dynamicExtraLoadFactor.getCurrentFactor(),
                     isPoolQueueLow(),
                     lastWorkRequestWasFulfilled);
+        }
 
         if (isPoolQueueLow() && lastWorkRequestWasFulfilled) {
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
@@ -916,8 +931,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     }
 
     private void transitionToClosing() {
-        String msg = "Transitioning to closing...";
-        log.debug(msg);
+        log.debug("Transitioning to closing...");
         if (state == UNUSED) {
             state = CLOSED;
         } else {
@@ -1220,6 +1234,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         controller.commitOffsetsThatAreReady();
     }
 
+    @ThreadSafe
     @Override
     public void pauseIfRunning() {
         getMyActor().tellImmediately(me -> {
@@ -1232,6 +1247,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         });
     }
 
+    @ThreadSafe
     @Override
     public void resumeIfPaused() {
         getMyActor().tellImmediately(me -> {

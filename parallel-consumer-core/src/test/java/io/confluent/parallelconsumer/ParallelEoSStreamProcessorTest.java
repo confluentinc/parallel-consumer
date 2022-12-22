@@ -125,7 +125,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         awaitLatch(startBarrierLatch);
 
         // zero records waiting, 2 out for processing
-        assertThat(parallelConsumer.getWm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
+        assertThat(parallelConsumer.getWm().getTotalSizeOfAllShards()).isZero();
         assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1

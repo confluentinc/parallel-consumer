@@ -15,7 +15,7 @@ import java.util.Optional;
  *
  * @author Antony Stubbs
  */
-public interface ControllerInternalAPI<K, V> extends IThreadSafeAPI, ConsumerRebalanceListener {
+public interface ControllerInternalAPI<K, V> extends ThreadSafeAPI, ConsumerRebalanceListener {
 
     /**
      * Thread safe async sending of results from worker thread
@@ -27,7 +27,7 @@ public interface ControllerInternalAPI<K, V> extends IThreadSafeAPI, ConsumerReb
      * Thread safe async sending of newly polled records
      */
     @ThreadSafe
-    // make sense to annotate the interface?
+    // todo resolve: make sense to annotate the interface?
     void sendNewPolledRecordsAsync(EpochAndRecordsMap<K, V> polledRecords);
 
     /**
