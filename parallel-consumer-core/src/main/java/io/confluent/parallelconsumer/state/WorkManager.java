@@ -9,7 +9,6 @@ import io.confluent.parallelconsumer.internal.*;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -35,7 +34,7 @@ import static lombok.AccessLevel.PUBLIC;
  * @author Antony Stubbs
  */
 @Slf4j
-public class WorkManager<K, V> implements ConsumerRebalanceListener {
+public class WorkManager<K, V> { //implements ConsumerRebalanceListener {
 
     @NonNull
     @Getter
@@ -80,8 +79,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Load offset map for assigned partitions
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+//    @Override
+    public void onPartitionsAssigned(CommitData partitions) {
         pm.onPartitionsAssigned(partitions);
     }
 
@@ -92,7 +91,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see AbstractParallelEoSStreamProcessor#onPartitionsRevoked
      */
-    @Override
+//    @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         pm.onPartitionsRevoked(partitions);
     }

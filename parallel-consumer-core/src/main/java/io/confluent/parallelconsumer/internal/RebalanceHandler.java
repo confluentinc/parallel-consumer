@@ -5,10 +5,12 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import lombok.RequiredArgsConstructor;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.common.TopicPartition;
 
 import java.util.Collection;
+import java.util.HashSet;
 
 /**
  * Separate out concerns from the Controller, and so the user doesn't have access to the public rebalance interface
@@ -23,6 +25,8 @@ import java.util.Collection;
 @RequiredArgsConstructor
 public abstract class RebalanceHandler implements ConsumerRebalanceListener {
 
+    private final Consumer<?, ?> consumer;
+
     @ThreadSafe
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
@@ -35,10 +39,16 @@ public abstract class RebalanceHandler implements ConsumerRebalanceListener {
     @ThreadSafe
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        onPartitionsAssignedTellAsync(partitions);
+        var raw = consumer.committed(new HashSet<>(partitions));
+        var pastCommitData = new CommitData(raw);
+        onPartitionsAssignedTellAsync(pastCommitData);
     }
 
+//    private Consumer<?, ?> consumer() {
+//        return consumer;
+//    }
+
     @ThreadSafe
-    protected abstract void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions);
+    protected abstract void onPartitionsAssignedTellAsync(CommitData partitions);
 
 }

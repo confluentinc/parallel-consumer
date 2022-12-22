@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.offsets;
 
 import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.CommitData;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -121,7 +122,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 .build();
         module = new PCModuleTestEnv(options);
         wm = module.workManager();
-        wm.onPartitionsAssigned(UniLists.of(tp));
+        wm.onPartitionsAssigned(new CommitData(tp));
         offsetCodecManager = new OffsetMapCodecManager<>(module);
     }
 

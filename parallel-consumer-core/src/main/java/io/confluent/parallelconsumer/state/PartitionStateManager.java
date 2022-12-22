@@ -10,7 +10,6 @@ import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
@@ -30,7 +29,7 @@ import java.util.stream.Collectors;
  * @see PartitionState
  */
 @Slf4j
-public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
+public class PartitionStateManager<K, V> { //implements ConsumerRebalanceListener {
 
     public static final double USED_PAYLOAD_THRESHOLD_MULTIPLIER_DEFAULT = 0.75;
 
@@ -86,14 +85,14 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Load offset map for assigned assignedPartitions
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> assignedPartitions) {
+//    @Override
+    public void onPartitionsAssigned(CommitData assignedPartitions) {
         log.info("Assigned {} total ({} new) partition(s) {}",
                 getNumberOfAssignedPartitions(),
                 assignedPartitions.size(),
                 assignedPartitions);
 
-        for (final TopicPartition partitionKey : assignedPartitions) {
+        for (TopicPartition partitionKey : assignedPartitions.keySet()) {
             boolean isAlreadyAssigned = this.partitionStates.containsKey(partitionKey);
             if (isAlreadyAssigned) {
                 PartitionState<K, V> previouslyAssignedState = partitionStates.get(partitionKey);
@@ -107,7 +106,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             }
         }
 
-        incrementPartitionAssignmentEpoch(assignedPartitions);
+        incrementPartitionAssignmentEpoch(assignedPartitions.keySet());
 
         try {
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(module); // todo remove throw away instance creation - #233
@@ -126,7 +125,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see AbstractParallelEoSStreamProcessor#onPartitionsRevoked
      */
-    @Override
+//    @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.info("Partitions revoked: {}", partitions);
 
@@ -188,8 +187,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         return partitionsAssignmentEpochs.get(partition);
     }
 
-    private void incrementPartitionAssignmentEpoch(final Collection<TopicPartition> partitions) {
-        for (final TopicPartition partition : partitions) {
+    private void incrementPartitionAssignmentEpoch(Collection<TopicPartition> partitions) {
+        for (TopicPartition partition : partitions) {
             Long epoch = partitionsAssignmentEpochs.getOrDefault(partition, PartitionState.KAFKA_OFFSET_ABSENCE);
             epoch++;
             partitionsAssignmentEpochs.put(partition, epoch);

@@ -207,6 +207,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      * @see ParallelConsumerOptions
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
+        super(module.consumer());
+
         Objects.requireNonNull(newOptions, "Options must be supplied");
 
         controllerApi = this;
@@ -355,7 +357,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         }
     }
 
-    protected void onPartitionsAssignedTellAsync(Collection<TopicPartition> partitions) {
+    @Override
+    protected void onPartitionsAssignedTellAsync(CommitData partitions) {
         getMyActor().tellImmediately(controller -> controller.onPartitionsAssignedInternal(partitions));
     }
 
@@ -364,9 +367,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      *
      * @see WorkManager#onPartitionsAssigned
      */
-    private void onPartitionsAssignedInternal(Collection<TopicPartition> partitions) {
+    private void onPartitionsAssignedInternal(CommitData partitions) {
         wm.onPartitionsAssigned(partitions);
-        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
+        usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions.keySet()));
         // todo interrupting can be removed after improvements/rebalance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
     }

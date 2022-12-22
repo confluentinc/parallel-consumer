@@ -4,15 +4,14 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.internal.CommitData;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
-import lombok.NonNull;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.errors.WakeupException;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -106,29 +105,27 @@ public class OffsetMapCodecManager<K, V> {
     /**
      * Load all the previously completed offsets that were not committed
      */
-    // todo this is the only method that needs the consumer - offset encoding is being conflated with decoding upon assignment #233
-    // todo make package private?
-    // todo rename
-    public Map<TopicPartition, PartitionState<K, V>> loadPartitionStateForAssignment(final Collection<TopicPartition> assignment) {
-        // load last committed state / metadata from consumer
-        // todo this should be controlled for - improve consumer management so that this can't happen
-        Map<TopicPartition, OffsetAndMetadata> partitionLastCommittedOffsets = null;
-        int attempts = 0;
-        while (partitionLastCommittedOffsets == null) {
-            WakeupException lastWakeupException = null;
-            try {
-                partitionLastCommittedOffsets = module.consumer().committed(new HashSet<>(assignment));
-            } catch (WakeupException exception) {
-                log.debug("Woken up trying to get assignment", exception);
-                lastWakeupException = exception;
-            }
-            attempts++;
-            if (attempts > 10) // shouldn't need more than 1 ever
-                throw new InternalRuntimeException("Failed to get partition assignment - continuously woken up.", lastWakeupException);
-        }
+    // todo make package private? - is in different package from state manager
+    public Map<TopicPartition, PartitionState<K, V>> loadPartitionStateForAssignment(CommitData assignment) {
+//        // load last committed state / metadata from consumer
+//        // todo this should be controlled for - improve consumer management so that this can't happen
+//        Map<TopicPartition, OffsetAndMetadata> partitionLastCommittedOffsets = null;
+//        int attempts = 0;
+//        while (partitionLastCommittedOffsets == null) {
+//            WakeupException lastWakeupException = null;
+//            try {
+//                partitionLastCommittedOffsets = module.consumer().committed(new HashSet<>(assignment));
+//            } catch (WakeupException exception) {
+//                log.debug("Woken up trying to get assignment", exception);
+//                lastWakeupException = exception;
+//            }
+//            attempts++;
+//            if (attempts > 10) // shouldn't need more than 1 ever
+//                throw new InternalRuntimeException("Failed to get partition assignment - continuously woken up.", lastWakeupException);
+//        }
 
         var partitionStates = new HashMap<TopicPartition, PartitionState<K, V>>();
-        partitionLastCommittedOffsets.forEach((tp, offsetAndMeta) -> {
+        assignment.forEach((tp, offsetAndMeta) -> {
             if (offsetAndMeta != null) {
                 try {
                     PartitionState<K, V> state = decodePartitionState(tp, offsetAndMeta);
@@ -143,7 +140,7 @@ public class OffsetMapCodecManager<K, V> {
 
         // assigned partitions for which there has never been a commit
         // for each assignment with no commit history, enter a default entry. Catches multiple other cases.
-        assignment.stream()
+        assignment.getOffsetsToCommit().keySet().stream()
                 .filter(topicPartition -> !partitionStates.containsKey(topicPartition))
                 .forEach(topicPartition -> {
                     var psm = module.workManager().getPm();

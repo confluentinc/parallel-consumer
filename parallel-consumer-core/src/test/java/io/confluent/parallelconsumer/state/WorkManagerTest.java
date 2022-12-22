@@ -11,6 +11,7 @@ import io.confluent.csid.utils.Range;
 import io.confluent.parallelconsumer.FakeRuntimeException;
 import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.CommitData;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
@@ -33,7 +34,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.threeten.extra.MutableClock;
-import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
@@ -96,7 +96,7 @@ public class WorkManagerTest {
     }
 
     private void assignPartition(final int partition) {
-        wm.onPartitionsAssigned(UniLists.of(topicPartitionOf(partition)));
+        wm.onPartitionsAssigned(new CommitData(topicPartitionOf(partition)));
     }
 
     @NotNull

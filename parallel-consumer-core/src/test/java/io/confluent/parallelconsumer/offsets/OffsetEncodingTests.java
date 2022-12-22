@@ -8,6 +8,7 @@ import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
+import io.confluent.parallelconsumer.internal.CommitData;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
@@ -188,7 +189,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             final PCModule<String, String> moduleTwo = new PCModule<>(newOptions);
             WorkManager<String, String> wmm = moduleTwo.workManager();
-            wmm.onPartitionsAssigned(UniSets.of(new TopicPartition(INPUT_TOPIC, 0)));
+            wmm.onPartitionsAssigned(new CommitData(new TopicPartition(INPUT_TOPIC, 0)));
             wmm.registerWork(new EpochAndRecordsMap<>(testRecords, wmm.getPm()));
 
             List<WorkContainer<String, String>> work = wmm.getWorkIfAvailable();
@@ -234,7 +235,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
         {
             final PCModule<String, String> moduleThree = new PCModule<>(options);
             var newWm = moduleThree.workManager();
-            newWm.onPartitionsAssigned(UniSets.of(tp));
+            newWm.onPartitionsAssigned(new CommitData(tp));
 
             //
             var pm = newWm.getPm();
