@@ -662,13 +662,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         //
         final boolean shouldTryCommitNow = maybeAcquireCommitLock();
 
-        log.trace("Loop: Process actor queue");
-        try {
-            processActorMessageQueueBlocking();
-        } catch (InterruptedException e) {
-            log.warn("Interrupted processing work in control loop, skipping...");
-            Thread.currentThread().interrupt();
-        }
+        //
+        processActorMessageQueueBlocking();
 
         //
         if (shouldTryCommitNow) {
@@ -948,8 +943,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      * Visible for testing.
      */
     private void processActorMessageQueueBlocking() throws InterruptedException {
-        Duration timeToBlockFor = calculateTimeUntilNextAction();
-        getMyActor().processBlocking(timeToBlockFor);
+        log.trace("Loop: Process actor queue");
+        try {
+            Duration timeToBlockFor = calculateTimeUntilNextAction();
+            getMyActor().processBlocking(timeToBlockFor);
+        } catch (InterruptedException e) {
+            log.warn("Interrupted processing work in control loop...");
+            throw e;
+        }
     }
 
     private void handleWorkResult(WorkContainer<K, V> work) {
