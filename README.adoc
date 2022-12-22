@@ -72,9 +72,11 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        parallelConsumer.poll(record ->
-                log.info("Concurrently processing a record: {}", record)
-        );
+        parallelConsumer.poll(record ->{
+            if (RandomUtils.nextInt() % 3 == 0)
+                throw new PCRetriableException();
+            log.info("Concurrently processing a record: {}", record);
+        });
 ----
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
@@ -433,30 +435,27 @@ Where `${project.version}` is the version to be used:
 [source,java,indent=0]
 ----
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
-       // Producer<String, String> kafkaProducer = getKafkaProducer();
-        Metrics.addRegistry(metricsRegistry);
-        new KafkaClientMetrics(kafkaConsumer).bindTo(Metrics.globalRegistry);
-        new JvmMemoryMetrics().bindTo(Metrics.globalRegistry);
-        new JvmHeapPressureMetrics().bindTo(Metrics.globalRegistry);
-        new JvmGcMetrics().bindTo(Metrics.globalRegistry);
-        new JvmThreadMetrics().bindTo(Metrics.globalRegistry);
-
-      //  new KafkaClientMetrics(kafkaProducer).bindTo(Metrics.globalRegistry);
+        Producer<String, String> kafkaProducer = getKafkaProducer();
 
         var options = ParallelConsumerOptions.<String, String>builder()
-                .ordering(KEY) // <2>
+                .ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED) // <2>
                 .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
-                //.producer(kafkaProducer)
+                .producer(kafkaProducer)
+                .meterRegistry(metricsRegistry)
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
-        pcMetricsTracker = new PCMetricsTracker(((AbstractParallelEoSStreamProcessor)eosStreamProcessor)::calculateMetricsWithIncompletes,
+        pcMetricsTracker = new PCMetricsTracker(eosStreamProcessor::calculateMetricsWithIncompletes,
                             UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
-        pcMetricsTracker.bindTo(Metrics.globalRegistry);
+
+        UniLists.of(pcMetricsTracker, new KafkaClientMetrics(kafkaConsumer), new JvmMemoryMetrics(),
+                        new JvmHeapPressureMetrics(), new JvmGcMetrics(), new JvmThreadMetrics())
+                    .stream().forEach(m -> m.bindTo(metricsRegistry));
+
         return eosStreamProcessor;
 ----
 
@@ -502,9 +501,11 @@ This is the only thing you need to do, in order to get massively concurrent proc
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.poll(record ->
-                log.info("Concurrently processing a record: {}", record)
-        );
+        parallelConsumer.poll(record ->{
+            if (RandomUtils.nextInt() % 3 == 0)
+                throw new PCRetriableException();
+            log.info("Concurrently processing a record: {}", record);
+        });
 
 See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 

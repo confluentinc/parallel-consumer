@@ -122,7 +122,7 @@ public class CoreApp {
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
         var options = ParallelConsumerOptions.<String, String>builder()
-                .ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED) // <2>
+                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY) // <2>
                 .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
