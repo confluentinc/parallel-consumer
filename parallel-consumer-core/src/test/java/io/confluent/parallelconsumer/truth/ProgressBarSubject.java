@@ -37,6 +37,6 @@ public class ProgressBarSubject extends ProgressBarParentSubject implements User
         var totalElapsed = actual.getTotalElapsed();
         var finalRate = current / totalElapsed.getSeconds();
 
-        check("finalRate").that(finalRate).isAtLeast(atLeastRate);
+        check("calculateFinalRate").that(finalRate).isAtLeast(atLeastRate);
     }
 }

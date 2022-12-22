@@ -17,10 +17,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serdes;
 import org.assertj.core.api.Assumptions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
@@ -862,6 +859,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
      */
     @SneakyThrows
     @Test
+    @Tag("performance")
     void lessKeysThanThreads() {
         setupParallelConsumerInstance(ParallelConsumerOptions.<String, String>builder()
                 .ordering(KEY)
