@@ -81,86 +81,6 @@ public class ActorImpl<T> implements Actor<T> {
         return future;
     }
 
-    @Override
-    public <R> Future<R> askImmediately(FunctionWithException<T, R> action) {
-        CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
-        var task = createRunnable(action, future);
-        getActionMailbox().addFirst(task);
-        return future;
-    }
-
-    @Override
-    public void process() {
-        BlockingQueue<Runnable> mailbox = this.getActionMailbox();
-
-        // check for more work to batch up, there may be more work queued up behind the head that we can also take
-        // see how big the queue is now, and poll that many times
-        int size = mailbox.size();
-        log.trace("Processing mailbox - draining {}...", size);
-        Deque<Runnable> work = new ArrayDeque<>(size);
-        mailbox.drainTo(work, size);
-
-        log.trace("Running {} drained actions...", work.size());
-        for (var action : work) {
-            execute(action);
-        }
-    }
-
-    @Override
-    public void processBlocking(Duration timeout) throws InterruptedException {
-        process();
-        maybeBlockUntilAction(timeout);
-    }
-
-    /**
-     * May return without executing any scheduled actions
-     *
-     * @param timeout time to block for if mailbox is empty
-     */
-    private void maybeBlockUntilAction(Duration timeout) throws InterruptedException {
-        if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
-            log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
-        }
-        Runnable polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
-
-        if (polled != null) {
-            log.debug("Message received in mailbox, processing");
-            execute(polled);
-            process();
-        }
-    }
-
-    private void execute(@NonNull final Runnable command) {
-        command.run();
-    }
-
-    @Override
-    public String getActorName() {
-        return actorRef.getClass().getSimpleName();
-    }
-
-    @Override
-    public int getSize() {
-        return this.getActionMailbox().size();
-    }
-
-    // todo only used from one place which is deprecated
-    @Override
-    public boolean isEmpty() {
-        return this.getActionMailbox().isEmpty();
-    }
-
-    @Override
-    public void start() {
-        state.set(ActorState.ACCEPTING_MESSAGES);
-    }
-
-    @Override
-    public void close() {
-        state.set(ActorState.CLOSED);
-        process();
-    }
-
     private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
         if (targetState.equals(state.get())) {
             return new CompletableFuture<>();
@@ -190,6 +110,86 @@ public class ActorImpl<T> implements Actor<T> {
                 future.completeExceptionally(e);
             }
         };
+    }
+
+    @Override
+    public <R> Future<R> askImmediately(FunctionWithException<T, R> action) {
+        CompletableFuture<R> future = checkStateFuture(ActorState.ACCEPTING_MESSAGES);
+        var task = createRunnable(action, future);
+        getActionMailbox().addFirst(task);
+        return future;
+    }
+
+    // todo only used from one place which is deprecated
+    @Override
+    public boolean isEmpty() {
+        return this.getActionMailbox().isEmpty();
+    }
+
+    @Override
+    public void processBlocking(Duration timeout) throws InterruptedException {
+        process();
+        maybeBlockUntilAction(timeout);
+    }
+
+    @Override
+    public int getSize() {
+        return this.getActionMailbox().size();
+    }
+
+    @Override
+    public void process() {
+        BlockingQueue<Runnable> mailbox = this.getActionMailbox();
+
+        // check for more work to batch up, there may be more work queued up behind the head that we can also take
+        // see how big the queue is now, and poll that many times
+        int size = mailbox.size();
+        log.trace("Processing mailbox - draining {}...", size);
+        Deque<Runnable> work = new ArrayDeque<>(size);
+        mailbox.drainTo(work, size);
+
+        log.trace("Running {} drained actions...", work.size());
+        for (var action : work) {
+            execute(action);
+        }
+    }
+
+    @Override
+    public String getActorName() {
+        return actorRef.getClass().getSimpleName();
+    }
+
+    @Override
+    public void close() {
+        state.set(ActorState.CLOSED);
+        process();
+    }
+
+    @Override
+    public void start() {
+        state.set(ActorState.ACCEPTING_MESSAGES);
+    }
+
+    /**
+     * May return without executing any scheduled actions
+     *
+     * @param timeout time to block for if mailbox is empty
+     */
+    private void maybeBlockUntilAction(Duration timeout) throws InterruptedException {
+        if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
+            log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
+        }
+        Runnable polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+
+        if (polled != null) {
+            log.debug("Message received in mailbox, processing");
+            execute(polled);
+            process();
+        }
+    }
+
+    private void execute(@NonNull final Runnable command) {
+        command.run();
     }
 
     private void checkState(ActorState targetState) {
