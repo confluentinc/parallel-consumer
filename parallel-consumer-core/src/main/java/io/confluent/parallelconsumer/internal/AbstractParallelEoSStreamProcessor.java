@@ -446,7 +446,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
                 close.get(timeout.toMillis(), MILLISECONDS);
             } else {
                 // control loop not running, perform the close directly
-                doClose(timeout);
+                closeResources(timeout);
             }
 
             processCloseState(timeout);
@@ -494,6 +494,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
+        cleanup(timeout);
+
+        closeResources(timeout);
+
+        //
+        log.debug("Close complete.");
+        this.state = CLOSED;
+
+        if (this.getFailureCause() != null) {
+            log.error("PC closed due to error: {}", getFailureCause(), null);
+        }
+    }
+
+    private void cleanup(Duration timeout) throws InterruptedException, TimeoutException {
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerThreadPool.shutdownNow();
         if (!unfinished.isEmpty()) {
@@ -523,7 +537,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         // last commit
         commitOffsetsThatAreReady();
+    }
 
+    private void closeResources(Duration timeout) throws TimeoutException, ExecutionException {
         // only broker poller, and hence consumer, once `Committer` has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
         brokerPollSubsystem.closeAndWait();
@@ -538,14 +554,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
 
         //
         producerManager.ifPresent(x -> x.close(timeout));
-
-        //
-        log.debug("Close complete.");
-        this.state = CLOSED;
-
-        if (this.getFailureCause() != null) {
-            log.error("PC closed due to error: {}", getFailureCause(), null);
-        }
     }
 
     /**
