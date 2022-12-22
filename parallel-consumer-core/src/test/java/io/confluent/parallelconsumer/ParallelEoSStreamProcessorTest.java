@@ -39,6 +39,7 @@ import static io.confluent.csid.utils.KafkaTestUtils.checkExactOrdering;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
+import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -899,6 +900,10 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
         log.debug("Testing...");
         checkExactOrdering(results, records);
+
+        assertTruth(bar).isFinalRateAtLeast(10000);
+
+        log.debug("Final rate was: {} msg/s", finalRate);
     }
 
 }
