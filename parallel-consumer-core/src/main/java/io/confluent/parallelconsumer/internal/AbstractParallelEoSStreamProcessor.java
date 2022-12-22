@@ -643,8 +643,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
-
-        getMyActor().start();
     }
 
     /**
@@ -1263,8 +1261,4 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         });
     }
 
-    // todo remove - for tests that call controlLoop directly
-    public void start() {
-        getMyActor().start();
-    }
 }

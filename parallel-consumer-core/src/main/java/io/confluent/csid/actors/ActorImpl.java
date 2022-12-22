@@ -235,9 +235,7 @@ public class ActorImpl<T> implements Actor<T> {
         }
     }
 
-    // todo private through process
-    @Override
-    public void start() {
+    private void start() {
         transitionStateTo(ActorState.ACCEPTING_MESSAGES);
     }
 

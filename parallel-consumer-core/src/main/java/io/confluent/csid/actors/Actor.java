@@ -129,14 +129,6 @@ public interface Actor<T> extends Interruptible, ThreadSafeAPI {
     boolean isEmpty();
 
     /**
-     * Start accepting messages.
-     * <p>
-     * Any messages sent before this will be rejected, as there's a chance they may never be processed.
-     */
-    // todo shouldn't this be triggerd through first process call?
-    void start();
-
-    /**
      * Stop accepting any further messages, and then process any messages in the queue.
      */
     void close();
