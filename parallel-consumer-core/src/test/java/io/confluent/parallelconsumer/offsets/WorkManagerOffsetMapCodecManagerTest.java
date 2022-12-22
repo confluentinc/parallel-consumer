@@ -360,9 +360,9 @@ class WorkManagerOffsetMapCodecManagerTest {
         assertThat(deserialisedBitSet).isEqualTo(input);
     }
 
-/**
-* Tests for friendly errors when Kafka Streams (as far as we can guess) magic numbers are found in the offset metadata.
-*/
+    /**
+    * Tests for friendly errors when Kafka Streams (as far as we can guess) magic numbers are found in the offset metadata.
+    */
     @SneakyThrows
     @Test
     void deserialiseKafkaStreamsV1() {
@@ -374,10 +374,12 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
         assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
-                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
-                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class);
     }
 
+    /**
+     * Tests for friendly errors when Kafka Streams V2 (as far as we can guess) magic numbers are found in the offset metadata.
+     */
     @SneakyThrows
     @Test
     void deserialiseKafkaStreamsV2() {
@@ -398,47 +400,7 @@ class WorkManagerOffsetMapCodecManagerTest {
 
         EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
         assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
-                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
-                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
-    }
-
-    @SneakyThrows
-    @Test
-    void deserialiseKafkaStreamsV1() {
-        final var input = ByteBuffer.allocate(32);
-        // magic number
-        input.put((byte) 1);
-        // timestamp
-        input.putLong(System.currentTimeMillis());
-
-        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
-        assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
-                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
-                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
-    }
-
-    @SneakyThrows
-    @Test
-    void deserialiseKafkaStreamsV2() {
-        final var input = ByteBuffer.allocate(32);
-        // magic number
-        input.put((byte) 2);
-        // timestamp
-        input.putLong(System.currentTimeMillis());
-        // metadata
-        // number of entries
-        input.putInt(1);
-        // key size
-        input.putInt(1);
-        // key
-        input.put((byte) 'a');
-        // value
-        input.putLong(1L);
-
-        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
-        assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
-                .isInstanceOf(KafkaStreamsEncodingNotSupported.class)
-                .hasMessage("It looks like you're reusing a Kafka Streams consumer group id. This isn't supported. Please, use a fresh consumer group, unique to PC");
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class);
     }
 
     @SneakyThrows

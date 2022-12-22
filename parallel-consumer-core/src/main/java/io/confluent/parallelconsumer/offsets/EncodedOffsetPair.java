@@ -115,8 +115,7 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
             case KafkaStreams, KafkaStreamsV2 ->
-                    throw new KafkaStreamsEncodingNotSupported(
-                            "It looks like you might be reusing a Kafka Streams consumer group id, as KS magic numbers were found in the serialised payload, instead of our own. Using PC on top of KS commit data isn't supported. Please, use a fresh consumer group, unique to PC.");
+                    throw new KafkaStreamsEncodingNotSupported();
             default ->
                     throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };

@@ -13,4 +13,9 @@ import lombok.experimental.StandardException;
  */
 @StandardException
 public class KafkaStreamsEncodingNotSupported extends EncodingNotSupportedException{
+    private static final String ERROR_MESSAGE = "It looks like you might be reusing a Kafka Streams consumer group id, as KS magic numbers were found in the serialised payload, instead of our own. Using PC on top of KS commit data isn't supported. Please, use a fresh consumer group, unique to PC.";
+
+    public KafkaStreamsEncodingNotSupported() {
+        super(ERROR_MESSAGE);
+    }
 }
