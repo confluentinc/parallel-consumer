@@ -7,6 +7,7 @@ package io.confluent.csid.actors;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.utils.Time;
 
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -16,6 +17,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -50,6 +53,26 @@ public class ActorImpl<T> implements Actor<T> {
     @Getter(AccessLevel.PRIVATE)
     private final LinkedBlockingDeque<Runnable> actionMailbox = new LinkedBlockingDeque<>();
 
+    /**
+     * Guards state transitions
+     */
+    private final ReentrantLock stateLock = new ReentrantLock();
+
+    /**
+     * For notifying waiting threads that our state has changed
+     */
+    private final Condition stateChanged = stateLock.newCondition();
+
+    /**
+     * Timeout for state change waiting
+     */
+    private final Duration stateTimeout = Duration.ofSeconds(10);
+
+    /**
+     * If true, blocks calls to the actor until it is accepting messages
+     */
+    boolean waitForState = true;
+
     @Override
     public void tell(final Consumer<T> action) {
         checkState(ActorState.ACCEPTING_MESSAGES);
@@ -80,6 +103,12 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     private <R> CompletableFuture<R> checkStateFuture(ActorState targetState) {
+        return waitForState
+                ? waitForState(targetState)
+                : errorIfNotState(targetState);
+    }
+
+    private <R> CompletableFuture<R> errorIfNotState(ActorState targetState) {
         if (targetState.equals(state.get())) {
             return new CompletableFuture<>();
         }
@@ -96,6 +125,32 @@ public class ActorImpl<T> implements Actor<T> {
         // CompletableFuture.failedFuture(result); @since 1.9
         var future = new CompletableFuture<R>();
         future.completeExceptionally(result);
+        return future;
+    }
+
+    private <R> CompletableFuture<R> waitForState(ActorState targetState) {
+        // return a completable future that will complete when the state is reached
+        // or fail if the state is not reached within the timeout
+        var future = new CompletableFuture<R>();
+        log.debug("Waiting for state {} to be reached", targetState);
+        var timer = Time.SYSTEM.timer(stateTimeout);
+        while (!state.get().equals(targetState)) {
+            stateLock.lock();
+            try {
+                stateChanged.await(stateTimeout.toMillis(), MILLISECONDS);
+            } catch (InterruptedException e) {
+                future.completeExceptionally(e);
+                return future;
+            } finally {
+                stateLock.unlock();
+            }
+
+            if (timer.isExpired()) {
+                future.completeExceptionally(new InternalRuntimeException(msg("Timed out waiting for state {} to be reached", targetState)));
+                return future;
+            }
+        }
+        log.debug("State {} reached", state.get());
         return future;
     }
 
@@ -162,14 +217,25 @@ public class ActorImpl<T> implements Actor<T> {
 
     @Override
     public void close() {
-        state.set(ActorState.CLOSED);
+        var closed = ActorState.CLOSED;
+        transitionStateTo(closed);
         process();
+    }
+
+    private void transitionStateTo(ActorState closed) {
+        stateLock.lock();
+        try {
+            state.set(closed);
+            stateChanged.signalAll();
+        } finally {
+            stateLock.unlock();
+        }
     }
 
     // todo private through process
     @Override
     public void start() {
-        state.set(ActorState.ACCEPTING_MESSAGES);
+        transitionStateTo(ActorState.ACCEPTING_MESSAGES);
     }
 
     /**
