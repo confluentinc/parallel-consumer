@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.state.ModelUtils;
 import lombok.Getter;
@@ -334,7 +333,7 @@ public class KafkaClientUtils implements AutoCloseable {
         return buildPc(key, PERIODIC_CONSUMER_ASYNCHRONOUS, 500);
     }
 
-    public AbstractParallelEoSStreamProcessor<String, String> buildPc() {
+    public ParallelEoSStreamProcessor<String, String> buildPc() {
         return buildPc(ProcessingOrder.KEY);
     }
 
