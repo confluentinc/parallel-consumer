@@ -10,7 +10,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -152,7 +151,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see PartitionStateManager#onOffsetCommitSuccess(Map)
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    public void onOffsetCommitSuccess(CommitData committed) {
         pm.onOffsetCommitSuccess(committed);
     }
 
@@ -168,8 +167,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getNumberOfIncompleteOffsets();
     }
 
-    public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
-        return pm.collectDirtyCommitData();
+    public CommitData collectCommitDataForDirtyPartitions() {
+        var raw = pm.collectDirtyCommitData();
+        return new CommitData(raw);
     }
 
     /**

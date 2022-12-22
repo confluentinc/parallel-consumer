@@ -5,10 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.internal.BrokerPollSystem;
-import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
-import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.*;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import lombok.Getter;
 import lombok.Setter;
@@ -149,7 +146,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
      * When commits are made to broker, we can throw away all the individually tracked offsets before the committed
      * offset.
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    public void onOffsetCommitSuccess(CommitData committed) {
         // partitionOffsetHighWaterMarks this will get overwritten in due course
         committed.forEach((tp, meta) -> {
             var partition = getPartitionState(tp);

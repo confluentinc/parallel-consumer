@@ -626,7 +626,7 @@ public class WorkManagerTest {
 
         // drain commit queue
         var completedFutureOffsets = wm.collectCommitDataForDirtyPartitions();
-        assertThat(completedFutureOffsets).hasSize(1); // coalesces (see log)
+        assertThat(completedFutureOffsets.getOffsetsToCommit()).hasSize(1); // coalesces (see log)
         var sync = completedFutureOffsets.values().stream().findFirst().get();
         Truth.assertThat(sync.offset()).isEqualTo(3);
         Truth.assertThat(sync.metadata()).isEmpty();

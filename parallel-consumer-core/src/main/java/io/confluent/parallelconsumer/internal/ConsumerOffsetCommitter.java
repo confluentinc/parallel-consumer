@@ -10,11 +10,8 @@ import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
@@ -66,9 +63,9 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
-    void commit() throws TimeoutException, InterruptedException {
+    void commit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
         if (isOwner()) {
-            retrieveOffsetsAndCommit();
+            retrieveOffsetsAndCommit(offsetsToCommit);
         } else if (isSync()) {
             log.debug("Sync commit");
             commitAndWait();
@@ -82,7 +79,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     @Override
-    protected void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(CommitData offsetsToSend, ConsumerGroupMetadata groupMetadata) {
         if (offsetsToSend.isEmpty()) {
             log.trace("Nothing to commit");
             return;
@@ -95,7 +92,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //
                 log.debug("Committing offsets Async");
-                consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
+                consumerMgr.commitAsync(offsetsToSend.getOffsetsToCommit(), (offsets, exception) -> {
                     if (exception != null) {
                         log.error("Error committing offsets", exception);
                         // todo keep work in limbo until async response is received?
@@ -168,11 +165,11 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         return request;
     }
 
-    void maybeDoCommit() throws TimeoutException, InterruptedException {
+    void maybeDoCommit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
         CommitRequest poll = commitRequestQueue.poll();
         if (poll != null) {
             log.debug("Commit requested, performing...");
-            retrieveOffsetsAndCommit();
+            retrieveOffsetsAndCommit(offsetsToCommit);
             // only need to send a response if someone will be waiting
             if (isSync()) {
                 log.debug("Adding commit response to queue...");

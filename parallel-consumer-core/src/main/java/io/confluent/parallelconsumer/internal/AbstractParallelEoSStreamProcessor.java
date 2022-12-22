@@ -1069,7 +1069,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         }
 
         log.debug("Committing offsets that are ready...");
-        committer.retrieveOffsetsAndCommit();
+        var commitData = wm.collectCommitDataForDirtyPartitions();
+        committer.retrieveOffsetsAndCommit(commitData);
         updateLastCommitCheckTime();
         this.lastCommitTime = Instant.now();
     }

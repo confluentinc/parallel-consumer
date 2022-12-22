@@ -64,6 +64,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
     // todo remove direct access to WM in partition messages PR
+    //   needed for epoch lookup, and should throttle?, commit data lookup (remove in commit command PR)
     @NonNull
     private final WorkManager<K, V> wm;
 
@@ -119,7 +120,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 handlePoll();
 
 
-                maybeDoCommit();
+                var commitData = wm.collectCommitDataForDirtyPartitions();
+                maybeDoCommit(commitData);
 
                 switch (runState) {
                     case DRAINING -> {
@@ -299,6 +301,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    // todo should migrate to controller API
     private boolean shouldThrottle() {
         return wm.shouldThrottle();
     }
@@ -310,14 +313,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      */
     @SneakyThrows
     @Override
-    public void retrieveOffsetsAndCommit() {
+    public void retrieveOffsetsAndCommit(CommitData offsetsToCommit) {
         if (runState == RUNNING || runState == DRAINING || runState == CLOSING) {
             // {@link Optional#ifPresentOrElse} only @since 9
             ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
                 // shouldn't be here
                 throw new IllegalStateException("No committer configured");
             });
-            committer.commit();
+            committer.commit(offsetsToCommit);
         } else {
             throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
@@ -326,9 +329,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Will silently skip if not configured with a committer
      */
-    private void maybeDoCommit() throws TimeoutException, InterruptedException {
+    private void maybeDoCommit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
         if (committer.isPresent()) {
-            committer.get().maybeDoCommit();
+            committer.get().maybeDoCommit(offsetsToCommit);
         }
     }
 
