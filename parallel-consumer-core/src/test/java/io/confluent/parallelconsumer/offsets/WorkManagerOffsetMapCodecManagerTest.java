@@ -360,6 +360,9 @@ class WorkManagerOffsetMapCodecManagerTest {
         assertThat(deserialisedBitSet).isEqualTo(input);
     }
 
+/**
+* Tests for friendly errors when Kafka Streams (as far as we can guess) magic numbers are found in the offset metadata.
+*/
     @SneakyThrows
     @Test
     void deserialiseKafkaStreamsV1() {
