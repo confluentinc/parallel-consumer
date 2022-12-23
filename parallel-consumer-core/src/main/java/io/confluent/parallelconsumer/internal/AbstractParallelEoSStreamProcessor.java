@@ -301,7 +301,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         subscribe(Collections.singletonList(topic));
     }
 
-    // replace with facade delegate
+    // replace with facade delegate - in controller refactor branch
     @Override
     public void subscribe(Collection<String> topics) {
         log.debug("Subscribing to {}", topics);
@@ -643,8 +643,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
-
-        getMyActor().start();
     }
 
     /**
@@ -664,13 +662,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         //
         final boolean shouldTryCommitNow = maybeAcquireCommitLock();
 
-        log.trace("Loop: Process actor queue");
-        try {
-            processActorMessageQueueBlocking();
-        } catch (InterruptedException e) {
-            log.warn("Interrupted processing work in control loop, skipping...");
-            Thread.currentThread().interrupt();
-        }
+        //
+        processActorMessageQueueBlocking();
 
         //
         if (shouldTryCommitNow) {
@@ -950,8 +943,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
      * Visible for testing.
      */
     private void processActorMessageQueueBlocking() throws InterruptedException {
-        Duration timeToBlockFor = calculateTimeUntilNextAction();
-        getMyActor().processBlocking(timeToBlockFor);
+        log.trace("Loop: Process actor queue");
+        try {
+            Duration timeToBlockFor = calculateTimeUntilNextAction();
+            getMyActor().processBlocking(timeToBlockFor);
+        } catch (InterruptedException e) {
+            log.warn("Interrupted processing work in control loop...");
+            throw e;
+        }
     }
 
     private void handleWorkResult(WorkContainer<K, V> work) {
@@ -1264,8 +1263,4 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> extends Rebalance
         });
     }
 
-    // todo remove - for tests that call controlLoop directly
-    public void start() {
-        getMyActor().start();
-    }
 }

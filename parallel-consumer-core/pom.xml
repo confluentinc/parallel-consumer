@@ -129,6 +129,7 @@
                         <package>io.confluent.csid</package>
                     </packages>
                     <classes>
+                        <class>me.tongfei.progressbar.ProgressBar</class>
                         <class>io.confluent.csid.actors.Actor</class>
                         <class>io.confluent.csid.actors.ActorImpl</class>
                         <class>io.confluent.parallelconsumer.PollContext</class>

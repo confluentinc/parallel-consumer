@@ -69,6 +69,7 @@ public class ShardManager<K, V> {
      * todo docs
      */
     // todo audit
+    // todo not thread safe?
     @Getter
     @NonFinal
     int numberRecordsOutForProcessing = 0;
@@ -76,8 +77,9 @@ public class ShardManager<K, V> {
     /**
      * todo docs
      */
-    // thread safe? consumer and controller both access - consumer upon partition revocation and should throttle
+    // not thread safe? consumer and controller both access - consumer upon partition revocation and should throttle
     @NonFinal
+    @Getter
     long totalSizeOfAllShards;
 
     /**
@@ -133,10 +135,6 @@ public class ShardManager<K, V> {
 
     ShardKey computeShardKey(ConsumerRecord<?, ?> wc) {
         return ShardKey.of(wc, options.getOrdering());
-    }
-
-    public long getTotalSizeOfAllShards() {
-        return totalSizeOfAllShards;
     }
 
     public boolean workIsWaitingToBeProcessed() {

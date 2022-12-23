@@ -34,7 +34,6 @@ class ActorImplTest {
     ActorImpl<Greeter> actor = new ActorImpl<>(greeter);
 
     public ActorImplTest() {
-        actor.start();
     }
 
     @Test

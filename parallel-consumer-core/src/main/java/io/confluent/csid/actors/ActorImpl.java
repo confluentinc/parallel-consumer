@@ -153,6 +153,7 @@ public class ActorImpl<T> implements Actor<T> {
             }
         }
         log.debug("State {} reached", state.get());
+        future.complete(null);
         return future;
     }
 
@@ -184,8 +185,12 @@ public class ActorImpl<T> implements Actor<T> {
 
     @Override
     public void processBlocking(Duration timeout) throws InterruptedException {
-        process();
-        maybeBlockUntilAction(timeout);
+        var processed = process();
+
+        if (processed <= 0) {
+            // wait for a message to arrive
+            maybeBlockUntilAction(timeout);
+        }
     }
 
     @Override
@@ -194,7 +199,7 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     @Override
-    public void process() {
+    public int process() {
         start();
 
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
@@ -210,6 +215,8 @@ public class ActorImpl<T> implements Actor<T> {
         for (var action : work) {
             execute(action);
         }
+
+        return work.size();
     }
 
     @Override
@@ -234,9 +241,7 @@ public class ActorImpl<T> implements Actor<T> {
         }
     }
 
-    // todo private through process
-    @Override
-    public void start() {
+    private void start() {
         transitionStateTo(ActorState.ACCEPTING_MESSAGES);
     }
 
@@ -249,11 +254,12 @@ public class ActorImpl<T> implements Actor<T> {
         if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
             log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
         }
-        Runnable polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+        Runnable triggerPoll = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
 
-        if (polled != null) {
-            log.debug("Message received in mailbox, processing");
-            execute(polled);
+        if (triggerPoll != null) {
+            log.debug("Trigger message received in mailbox, processing");
+            execute(triggerPoll);
+            // process remaining messages, if any
             process();
         }
     }
@@ -262,10 +268,13 @@ public class ActorImpl<T> implements Actor<T> {
         command.run();
     }
 
+    @SneakyThrows
     private void checkState(ActorState targetState) {
-        if (!targetState.equals(state.get())) {
-            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
-        }
+        var ready = waitForState
+                ? waitForState(targetState)
+                : errorIfNotState(targetState);
+
+        var o = ready.get(stateTimeout.toMillis(), MILLISECONDS);
     }
 
     @Override

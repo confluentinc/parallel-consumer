@@ -307,11 +307,6 @@ public class KafkaTestUtils {
                 next = sequence.poll();
                 var thisValue = Integer.parseInt(StringUtils.substringBefore(next.value(), ","));
                 var lastValuePlusOne = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
-                boolean isLinear = thisValue == lastValuePlusOne;
-                if (!isLinear) {
-                    log.error("This value {} is not linear with last value {}", thisValue, lastValuePlusOne);
-                    log.error("This value {} is not linear with last value {}", thisValue, lastValuePlusOne);
-                }
                 assertThat(thisValue).isEqualTo(lastValuePlusOne);
                 last = next;
             }

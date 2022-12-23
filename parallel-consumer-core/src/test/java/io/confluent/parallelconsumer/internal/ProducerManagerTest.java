@@ -258,7 +258,7 @@ class ProducerManagerTest {
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         try (var pc = module.pc()) {
-            pc.start();
+//            pc.start();
             pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
             pc.setState(State.RUNNING);
