@@ -104,12 +104,14 @@ public interface Actor<T> extends Interruptible, ThreadSafeAPI {
      * In other words - processes all elements currently in the queue, but not new ones which are added during
      * processing (the execution of this method). We do this so that we finish predictably and have no chance of taking
      * forever (which could happen if messages were continuously added between polling the queue for new messages).
+     *
+     * @return the number of records processed
      */
-    void process();
+    int process();
 
     /**
-     * Blocking version of {@link #process()}, will process messages, then block until either a new message arrives, or
-     * the timeout is reached.
+     * Blocking version of {@link #process()}, will process messages if they exist, or block until either a new message
+     * arrives, or the timeout is reached.
      */
     void processBlocking(Duration timeout) throws InterruptedException;
 

@@ -870,7 +870,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // use a small set of keys, over a large set of records
         final int keySetSize = 4;
         var keys = Range.range(keySetSize).listAsIntegers();
-        final int total = 100_0;
+        final int total = 100_000;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
         records.forEach((key, value) -> log.debug("Key {} has {} records", key, value.size()));
@@ -896,8 +896,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
-        parallelConsumer.closeDrainFirst();
         bar.close();
+
+        parallelConsumer.closeDrainFirst();
 
         // check ordering is exact - remove sequenceSize?
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
