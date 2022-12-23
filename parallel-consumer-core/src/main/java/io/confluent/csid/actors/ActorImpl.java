@@ -142,7 +142,7 @@ public class ActorImpl<T> implements Actor<T> {
         }
 
         var future = new CompletableFuture<R>();
-        log.debug("Waiting for state {} to be reached", targetState);
+        log.debug("Waiting on actor {} for state {} to be reached", getActorName(), targetState);
         var timer = Time.SYSTEM.timer(stateTimeout);
         while (!state.get().equals(targetState)) {
             stateLock.lock();
