@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -41,6 +42,7 @@ class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         return streaming;
     }
 
+    @SneakyThrows
     @Test
     void testStream() {
         var latch = new CountDownLatch(1);

@@ -52,9 +52,18 @@ public class ProcessingShard<K, V> {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
-    public boolean workIsWaitingToBeProcessed() {
-        return entries.values().parallelStream()
-                .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
+    /**
+     * If ordering is UNORDERED, this is just an approximation
+     */
+    public boolean isWorkWaitingToBeProcessed() {
+        if (options.getOrdering() == UNORDERED) {
+            // in UNORDERED mode, we can approximate that is the shard (partition) isn't empty, it probably has work to do - this
+            // function is only used to test if we should linger, so this is a good enough approximation
+            return !entries.isEmpty();
+        } else {
+            // KEY and PARTITION ordering, only need to check the head, as it's the only possible entry to take
+            return entries.firstEntry() != null && entries.firstEntry().getValue().isAvailableToTakeAsWork();
+        }
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
@@ -75,12 +84,21 @@ public class ProcessingShard<K, V> {
         return entries.isEmpty();
     }
 
-    public long getCountOfWorkAwaitingSelection() {
-        return entries.values().stream()
-                // todo missing pm.isBlocked(topicPartition) ?
-                .filter(WorkContainer::isAvailableToTakeAsWork)
-                .count();
-    }
+    // not used
+//    /**
+//     * The number of entries in the shard.
+//     * <p>
+//     * Used to filter by only entries available to be processed - but that doesn't make sense, as in KEY and PARTITION
+//     * ordering, only the head of the shard could be unavailable, so we iterate over the whole shard for nothing. In
+//     * UNORDERED mode, the whole shard may be unavailable, but as ths is only used to check if the poller should
+//     * throttle, we can't just continue buffering more records, as we'll run out of memory - should wait until the
+//     * currently buffered limits are processed.
+//     *
+//     * @return the number of entries in the shard
+//     */
+//    public long getCountOfWorkAwaitingSelection() {
+//        return entries.size();
+//    }
 
     public long getCountOfWorkTracked() {
         return entries.size();
@@ -161,6 +179,13 @@ public class ProcessingShard<K, V> {
 
     private boolean isOrderRestricted() {
         return options.getOrdering() != UNORDERED;
+    }
+
+    public long getCountOfWorkAwaitingSelection() {
+        return entries.values().stream()
+                // todo missing pm.isBlocked(topicPartition) ?
+                .filter(WorkContainer::isAvailableToTakeAsWork)
+                .count();
     }
 
 }

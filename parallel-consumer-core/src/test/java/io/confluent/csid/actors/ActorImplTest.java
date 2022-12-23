@@ -37,18 +37,6 @@ class ActorImplTest {
         actor.start();
     }
 
-    @Data
-    public static class Greeter {
-
-        public static final String PREFIX = "kiwi-";
-
-        String told = "";
-
-        public String greet(String msg) {
-            return PREFIX + msg;
-        }
-    }
-
     @Test
     void tell() {
         actor.tell(g -> g.setTold(MESSAGE));
@@ -61,8 +49,8 @@ class ActorImplTest {
     void ask() {
         Future<String> tell = actor.ask(g -> g.greet(MESSAGE));
         actor.process();
-        String s = tell.get();
-        assertThat(s).isEqualTo(Greeter.PREFIX + MESSAGE);
+        String answer = tell.get();
+        assertThat(answer).isEqualTo(Greeter.PREFIX + MESSAGE);
     }
 
     @SneakyThrows
@@ -132,5 +120,17 @@ class ActorImplTest {
         actor.process();
         assertThatThrownBy(fut::get)
                 .hasMessageContaining("test");
+    }
+
+    @Data
+    public static class Greeter {
+
+        public static final String PREFIX = "kiwi-";
+
+        String told = "";
+
+        public String greet(String msg) {
+            return PREFIX + msg;
+        }
     }
 }

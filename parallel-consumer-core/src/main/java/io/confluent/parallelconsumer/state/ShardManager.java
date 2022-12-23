@@ -12,6 +12,8 @@ import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
+import static lombok.AccessLevel.PRIVATE;
 
 /**
  * Shards are local queues of work to be processed.
@@ -38,14 +41,15 @@ import static java.util.Optional.of;
  * @author Antony Stubbs
  */
 @Slf4j
+@FieldDefaults(level = PRIVATE, makeFinal = true)
 public class ShardManager<K, V> {
 
-    private final PCModule<K, V> module;
+    PCModule<K, V> module;
 
     @Getter
-    private final ParallelConsumerOptions<?, ?> options;
+    ParallelConsumerOptions<?, ?> options;
 
-    private final WorkManager<K, V> wm;
+    WorkManager<K, V> wm;
 
     /**
      * Map of Object keys to Shard
@@ -58,8 +62,25 @@ public class ShardManager<K, V> {
      * @see K
      * @see WorkManager#getWorkIfAvailable()
      */
-    // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    // todo performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
+    Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+
+    /**
+     * todo docs
+     */
+    // todo audit
+    // todo not thread safe?
+    @Getter
+    @NonFinal
+    // todo never updated
+    int numberRecordsOutForProcessing = 0;
+
+    /**
+     * todo docs
+     */
+    // not thread safe? consumer and controller both access - consumer upon partition revocation and should throttle
+    @NonFinal
+    long totalShardEntriesNotInFlight;
 
     /**
      * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
@@ -84,13 +105,14 @@ public class ShardManager<K, V> {
      * Read optimised view of {@link WorkContainer}s that need retrying.
      */
     @Getter(AccessLevel.PACKAGE) // visible for testing
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
+            NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
      * shard.
      */
-    private Optional<ShardKey> iterationResumePoint = Optional.empty();
+    @NonFinal
+    Optional<ShardKey> iterationResumePoint = Optional.empty();
 
     public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
         this.module = module;
@@ -115,19 +137,20 @@ public class ShardManager<K, V> {
         return ShardKey.of(wc, options.getOrdering());
     }
 
-    /**
-     * @return Work ready in the processing shards, awaiting selection as work to do
-     */
+
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
                 .sum();
     }
 
+    public long getTotalShardEntriesNotInFlight() {
+        return totalShardEntriesNotInFlight;
+    }
+
     public boolean workIsWaitingToBeProcessed() {
-        Collection<ProcessingShard<K, V>> allShards = processingShards.values();
-        return allShards.parallelStream()
-                .anyMatch(ProcessingShard::workIsWaitingToBeProcessed);
+        return processingShards.values().parallelStream()
+                .anyMatch(ProcessingShard::isWorkWaitingToBeProcessed);
     }
 
     /**
@@ -155,6 +178,7 @@ public class ShardManager<K, V> {
             // remove the work
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
+            totalShardEntriesNotInFlight--;
 
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
@@ -175,6 +199,8 @@ public class ShardManager<K, V> {
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
+
+        totalShardEntriesNotInFlight++;
     }
 
     void removeShardIfEmpty(ShardKey key) {
@@ -200,6 +226,7 @@ public class ShardManager<K, V> {
             //
             shardOptional.get().onSuccess(wc);
             removeShardIfEmpty(key);
+//            totalSizeOfAllShards--;
         } else {
             log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());
         }
@@ -211,6 +238,7 @@ public class ShardManager<K, V> {
     public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
+        totalShardEntriesNotInFlight++;
     }
 
     /**
@@ -255,6 +283,9 @@ public class ShardManager<K, V> {
 
         //
         updateResumePoint(next);
+
+        //
+        totalShardEntriesNotInFlight -= workFromAllShards.size();
 
         return workFromAllShards;
     }

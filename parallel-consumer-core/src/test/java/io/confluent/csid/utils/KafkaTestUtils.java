@@ -294,10 +294,8 @@ public class KafkaTestUtils {
      */
     // todo move to specific assertion utils class, along with other legacy assertion utils?
     public static <T> void checkExactOrdering(Map<String, Queue<PollContext<String, String>>> results,
-                                              HashMap<Integer, List<T>> originalRecords) {
-        originalRecords.entrySet().forEach(entry -> {
-            var originalRecordList = entry.getValue();
-            var originalKey = entry.getKey();
+                                              Map<Integer, List<T>> originalRecords) {
+        originalRecords.forEach((originalKey, originalRecordList) -> {
             var sequence = results.get(originalKey.toString());
             assertThat(sequence).hasSameSizeAs(originalRecordList);
             assertThat(sequence.size()).describedAs("Sanity: is same size as original list").isEqualTo(originalRecordList.size());
@@ -307,13 +305,12 @@ public class KafkaTestUtils {
             PollContext<String, String> next = null;
             while (!sequence.isEmpty()) {
                 next = sequence.poll();
-                var thisValue = Integer.parseInt(org.apache.commons.lang3.StringUtils.substringBefore(next.value(), ","));
+                var thisValue = Integer.parseInt(StringUtils.substringBefore(next.value(), ","));
                 var lastValuePlusOne = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
                 assertThat(thisValue).isEqualTo(lastValuePlusOne);
                 last = next;
             }
             log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", originalKey, next.value());
-
         });
     }
 }

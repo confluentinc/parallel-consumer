@@ -72,11 +72,30 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
 
         var completes = LongStreamEx.of(numberOfRecords).filter(x -> !blockedOffsets.contains(x)).boxed().toList();
 
+
+        {
+            var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
+            var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+            var totalSizeOfAllShardsOldOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        }
+
         List<WorkContainer<String, String>> workIfAvailable = wm.getWorkIfAvailable();
         assertTruth(workIfAvailable).hasSize(numberOfRecords);
 
+        {
+            var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
+            var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+            var totalSizeOfAllShardsOldOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        }
+
         List<WorkContainer<String, String>> toSucceed = workIfAvailable.stream().filter(x -> !blockedOffsets.contains(x.offset())).collect(Collectors.toList());
         toSucceed.forEach(wm::onSuccessResult);
+
+        {
+            var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
+            var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+            var totalSizeOfAllShardsOldOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        }
 
         try {
 
@@ -207,9 +226,13 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
 
     private void sendRecordsToWM(int numberOfRecords, WorkManager<String, String> wm) {
         log.debug("~Sending {} more records", numberOfRecords);
+        var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
+        var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
         wm.registerWork(new EpochAndRecordsMap<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
-        Truth.assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(numberOfRecords);
+        var totalSizeOfAllShardsOldTwo = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        Truth.assertThat(wm.getTotalSizeOfAllShards()).isEqualTo(numberOfRecords);
+
     }
 
 }

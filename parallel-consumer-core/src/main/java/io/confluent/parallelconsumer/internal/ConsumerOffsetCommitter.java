@@ -10,11 +10,8 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -55,11 +52,11 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      * @see CommitMode
      */
     // todo this should be package private, and should not need to expose a thread safe interface - bubble up to broker system instead - see Controller refactor
-    void commit() throws TimeoutException, InterruptedException {
+    void commit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
         if (isCurrentThreadOwner()) {
             // todo why? when am i the owner? audit - i think never
             // commit directly with consumer
-            retrieveOffsetsAndCommit();
+            retrieveOffsetsAndCommit(offsetsToCommit);
         }
 
         Future<Class<Void>> ask = commitRequestSend();
@@ -79,7 +76,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
     }
 
     @Override
-    protected void commitOffsets(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend, final ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(CommitData offsetsToSend, ConsumerGroupMetadata groupMetadata) {
         if (offsetsToSend.isEmpty()) {
             log.trace("Nothing to commit");
             return;
@@ -92,7 +89,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
             case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //
                 log.debug("Committing offsets Async");
-                consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
+                consumerMgr.commitAsync(offsetsToSend.getOffsetsToCommit(), (offsets, exception) -> {
                     if (exception != null) {
                         log.error("Error committing offsets", exception);
                         // todo keep work in limbo until async response is received?
@@ -171,12 +168,12 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 //    }
 
     // removed as the commiter will do the commit directly if instructed through messaging
-    void maybeDoCommit() throws TimeoutException, InterruptedException {
+    void maybeDoCommit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
 //        // todo poll mail box instead
 //        CommitRequest poll = commitRequestQueue.poll();
 //        if (poll != null) {
 //            log.debug("Commit requested, performing...");
-//            retrieveOffsetsAndCommit();
+//            retrieveOffsetsAndCommit(offsetsToCommit);
 //            // only need to send a response if someone will be waiting
 //            if (isSync()) {
 //                log.debug("Adding commit response to queue...");

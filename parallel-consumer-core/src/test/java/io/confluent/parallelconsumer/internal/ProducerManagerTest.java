@@ -221,7 +221,7 @@ class ProducerManagerTest {
 
         assertThat(producerManager).isTransactionCommittingInProgress();
 
-        producerManager.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+        producerManager.commitOffsets(new CommitData(), new ConsumerGroupMetadata(""));
 
         assertThat(producerManager).isTransactionCommittingInProgress();
 
@@ -244,7 +244,7 @@ class ProducerManagerTest {
             assertThat(producerManager).transactionOpen();
             producerManager.preAcquireOffsetsToCommit();
             assertThat(producerManager).transactionOpen();
-            producerManager.commitOffsets(UniMaps.of(), new ConsumerGroupMetadata(""));
+            producerManager.commitOffsets(new CommitData(), new ConsumerGroupMetadata(""));
             assertThat(producerManager).transactionNotOpen();
             assertThat(producerManager).stateIs(COMMIT);
         }
@@ -258,7 +258,7 @@ class ProducerManagerTest {
                 .commitMode(PERIODIC_TRANSACTIONAL_PRODUCER));
 
         try (var pc = module.pc()) {
-            pc.start();
+//            pc.start();
             pc.subscribe(UniLists.of(mu.getTopic()));
             pc.onPartitionsAssigned(mu.getPartitions());
             pc.setState(State.RUNNING);

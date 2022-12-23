@@ -17,6 +17,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.awaitility.core.ConditionTimeoutException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -33,17 +34,22 @@ import static org.assertj.core.util.Lists.list;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+@Tag("performance")
 @Slf4j
 class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> {
 
     public List<String> consumedKeys = Collections.synchronizedList(new ArrayList<>());
+
     public List<String> producedKeysAcknowledged = Collections.synchronizedList(new ArrayList<>());
+
     public AtomicInteger processedCount = new AtomicInteger(0);
+
     public AtomicInteger producedCount = new AtomicInteger(0);
 
     int maxPoll = 500; // 500 is the kafka default
 
     CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_SYNC;
+
     ProcessingOrder order = ProcessingOrder.KEY;
 
 

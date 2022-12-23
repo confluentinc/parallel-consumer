@@ -4,6 +4,8 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.internal.ThreadSafeAPI;
+
 import java.time.Duration;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
@@ -54,7 +56,7 @@ import java.util.function.Consumer;
  * @author Antony Stubbs
  * @see ActorImpl
  */
-public interface Actor<T> extends Interruptible {
+public interface Actor<T> extends Interruptible, ThreadSafeAPI {
 
     /**
      * Exceptions in execution will be logged
@@ -91,22 +93,6 @@ public interface Actor<T> extends Interruptible {
     <R> Future<R> askImmediately(FunctionWithException<T, R> action);
 
     /**
-     * @return true if the queue is empty
-     */
-    boolean isEmpty();
-
-    /**
-     * Blocking version of {@link #process()}, will process messages, then block until either a new message arrives, or
-     * the timeout is reached.
-     */
-    void processBlocking(Duration timeout) throws InterruptedException;
-
-    /**
-     * @return the number of actions in the queue
-     */
-    int getSize();
-
-    /**
      * Processes the closures in the queued, in bounded element space.
      * <p>
      * Given the elements currently in the queue at the beginning of the method, processes them, but no more.
@@ -114,8 +100,16 @@ public interface Actor<T> extends Interruptible {
      * In other words - processes all elements currently in the queue, but not new ones which are added during
      * processing (the execution of this method). We do this so that we finish predictably and have no chance of taking
      * forever (which could happen if messages were continuously added between polling the queue for new messages).
+     *
+     * @return the number of records processed
      */
-    void process();
+    int process();
+
+    /**
+     * Blocking version of {@link #process()}, will process messages if they exist, or block until either a new message
+     * arrives, or the timeout is reached.
+     */
+    void processBlocking(Duration timeout) throws InterruptedException;
 
     /**
      * The identifier of the actor
@@ -123,15 +117,27 @@ public interface Actor<T> extends Interruptible {
     String getActorName();
 
     /**
-     * Stop accepting any further messages, and then process any messages in the queue.
+     * @return the number of actions in the queue
      */
-    void close();
+    int getSize();
 
     /**
-     * Start accepting messages.
+     * @return true if the queue is empty
+     */
+    boolean isEmpty();
+
+    /**
+     * Indicate your intent to start processing. Automatically called from {@link #process()}.
+     * <p>
+     * Useful for when you will start processing, but can't call the {@link #process()} method yet.
      * <p>
      * Any messages sent before this will be rejected, as there's a chance they may never be processed.
      */
     void start();
+
+    /**
+     * Stop accepting any further messages, and then process any messages in the queue.
+     */
+    void close();
 
 }
