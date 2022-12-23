@@ -131,6 +131,15 @@ public interface Actor<T> extends Interruptible, ThreadSafeAPI {
     boolean isEmpty();
 
     /**
+     * Indicate your intent to start processing. Automatically called from {@link #process()}.
+     * <p>
+     * Useful for when you will start processing, but can't call the {@link #process()} method yet.
+     * <p>
+     * Any messages sent before this will be rejected, as there's a chance they may never be processed.
+     */
+    void start();
+
+    /**
      * Stop accepting any further messages, and then process any messages in the queue.
      */
     void close();

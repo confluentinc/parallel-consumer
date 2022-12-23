@@ -102,6 +102,7 @@ class VertxConcurrencyIT extends BrokerIntegrationTest {
 
         stubServer.addMockServiceRequestListener(new RequestListener() {
 
+            @SneakyThrows
             @Override
             public void requestReceived(final Request request, final Response response) {
                 log.debug("req: {}", request);

@@ -22,6 +22,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
+import static io.confluent.csid.actors.ActorImpl.ActorState.CLOSED;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -130,9 +131,16 @@ public class ActorImpl<T> implements Actor<T> {
         return future;
     }
 
+    /**
+     * Return a completable future that will complete when the state is reached,
+     * <p>
+     * Or fail if the state is not reached within the timeout.
+     */
     private <R> CompletableFuture<R> waitForState(ActorState targetState) {
-        // return a completable future that will complete when the state is reached
-        // or fail if the state is not reached within the timeout
+        if (CLOSED.equals(state.get())) {
+            return errorIfNotState(targetState);
+        }
+
         var future = new CompletableFuture<R>();
         log.debug("Waiting for state {} to be reached", targetState);
         var timer = Time.SYSTEM.timer(stateTimeout);
@@ -153,7 +161,6 @@ public class ActorImpl<T> implements Actor<T> {
             }
         }
         log.debug("State {} reached", state.get());
-        future.complete(null);
         return future;
     }
 
@@ -201,7 +208,10 @@ public class ActorImpl<T> implements Actor<T> {
     @Override
     public int process() {
         start();
+        return processWithoutStarting();
+    }
 
+    private int processWithoutStarting() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
         // check for more work to batch up, there may be more work queued up behind the head that we can also take
@@ -226,22 +236,22 @@ public class ActorImpl<T> implements Actor<T> {
 
     @Override
     public void close() {
-        var closed = ActorState.CLOSED;
-        transitionStateTo(closed);
-        process();
+        transitionStateTo(CLOSED);
+        processWithoutStarting();
     }
 
-    private void transitionStateTo(ActorState closed) {
+    private void transitionStateTo(ActorState newState) {
         stateLock.lock();
         try {
-            state.set(closed);
+            state.set(newState);
             stateChanged.signalAll();
         } finally {
             stateLock.unlock();
         }
     }
 
-    private void start() {
+    @Override
+    public void start() {
         transitionStateTo(ActorState.ACCEPTING_MESSAGES);
     }
 
@@ -274,7 +284,10 @@ public class ActorImpl<T> implements Actor<T> {
                 ? waitForState(targetState)
                 : errorIfNotState(targetState);
 
-        var o = ready.get(stateTimeout.toMillis(), MILLISECONDS);
+        // get state in case it was an error - enables us to reuse the same functions for ask and tell
+        if (ready.isCompletedExceptionally()) {
+            ready.get();
+        }
     }
 
     @Override

@@ -181,4 +181,11 @@ public class ProcessingShard<K, V> {
         return options.getOrdering() != UNORDERED;
     }
 
+    public long getCountOfWorkAwaitingSelection() {
+        return entries.values().stream()
+                // todo missing pm.isBlocked(topicPartition) ?
+                .filter(WorkContainer::isAvailableToTakeAsWork)
+                .count();
+    }
+
 }

@@ -222,7 +222,11 @@ public class WorkManager<K, V> { //implements ConsumerRebalanceListener {
     }
 
     public long getTotalSizeOfAllShards() {
-        return sm.getTotalSizeOfAllShards();
+        return sm.getTotalShardEntriesNotInFlight();
+    }
+
+    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
 
     public boolean hasIncompleteOffsets() {
@@ -230,7 +234,7 @@ public class WorkManager<K, V> { //implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        return sm.getTotalSizeOfAllShards() > 0;
+        return sm.getTotalShardEntriesNotInFlight() > 0;
     }
 
     public void handleFutureResult(WorkContainer<K, V> wc) {
@@ -264,7 +268,9 @@ public class WorkManager<K, V> { //implements ConsumerRebalanceListener {
     }
 
     public int getNumberRecordsOutForProcessing() {
-        return sm.getNumberRecordsOutForProcessing();
+        var numberRecordsOutForProcessing1 = sm.getNumberRecordsOutForProcessing();
+//        return sm.getNumberRecordsOutForProcessing();
+        return numberRecordsOutForProcessing;
     }
 
 }
