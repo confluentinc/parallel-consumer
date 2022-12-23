@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
@@ -22,7 +23,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
  * @see ConsumerFacade
  */
 @Slf4j
-class ConsumerFacadeTest extends BrokerIntegrationTest {
+class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
 
     Consumer<String, String> realConsumer = getKcu().getConsumer();
 
@@ -32,13 +33,15 @@ class ConsumerFacadeTest extends BrokerIntegrationTest {
 
     TopicPartition tp;
 
-    ConsumerFacadeTest() {
+    @BeforeEach
+    void setup() {
         pc = getKcu().buildPc();
         cf = pc.consumerApiAccess().partialKafkaConsumer();
 
-        pc.start();
+        setupTopic();
 
-        pc.subscribe("test");
+        var topic = getTopic();
+        pc.subscribe(topic);
         pc.poll(recordContexts -> {
             log.debug("Got records: {}", recordContexts);
         });
@@ -53,9 +56,9 @@ class ConsumerFacadeTest extends BrokerIntegrationTest {
     @SneakyThrows
     @Test
     void assignment() {
-        Set<?> assignment = cf.assignment();
+        var assignment = cf.assignment();
         assertTruth(assignment).isNotEmpty();
-
+        assertTruth(assignment).containsExactly(new TopicPartition(getTopic(), 0));
         assertTruth(pc).isNotClosedOrFailed();
     }
 

@@ -98,7 +98,11 @@ public abstract class BrokerIntegrationTest<K, V> {
     }
 
     protected void setupTopic() {
-        String name = LoadTest.class.getSimpleName();
+        setupTopic(LoadTest.class);
+    }
+
+    protected void setupTopic(Class<?> loadTestClass) {
+        String name = loadTestClass.getSimpleName();
         setupTopic(name);
     }
 
