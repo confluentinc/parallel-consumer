@@ -26,7 +26,7 @@ public class EpochAndRecordsMap<K, V> {
     public EpochAndRecordsMap(ConsumerRecords<K, V> poll, PartitionStateManager<K, V> pm) {
         poll.partitions().forEach(partition -> {
             var records = poll.records(partition);
-            Long epochOfPartition = pm.getEpochOfPartition(partition);
+            var epochOfPartition = pm.getEpochOfPartition(partition);
             RecordsAndEpoch entry = new RecordsAndEpoch(partition, epochOfPartition, records);
             recordMap.put(partition, entry);
         });
@@ -63,9 +63,17 @@ public class EpochAndRecordsMap<K, V> {
 
     @Value
     public class RecordsAndEpoch {
+
         @NonNull TopicPartition topicPartition;
+
         @NonNull Long epochOfPartitionAtPoll;
+
         @NonNull List<ConsumerRecord<K, V>> records;
     }
 
+    @Value
+    private class PartitionEpoch {
+
+        @NonNull Long epoch;
+    }
 }

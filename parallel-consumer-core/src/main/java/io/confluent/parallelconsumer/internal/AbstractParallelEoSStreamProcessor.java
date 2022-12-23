@@ -11,6 +11,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.state.WorkManagerIPCAPI;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -127,7 +128,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
     @Getter(PUBLIC)
     protected final WorkManager<K, V> wm;
 
-    private final BrokerPollSystem<K, V> brokerPollSubsystem;
+    protected final WorkManagerIPCAPI workManagerIPCAPI;
+
+    private final BrokerPollerAPI brokerPollSubsystem;
 
     /**
      * Useful for testing async code
@@ -226,6 +229,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
         workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
         this.wm = module.workManager();
+        this.workManagerIPCAPI = wm;
 
         this.brokerPollSubsystem = module.brokerPoller(this);
 
@@ -336,7 +340,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
             commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
-            wm.onPartitionsRevoked(partitions);
+            workManagerIPCAPI.onPartitionsRevoked(partitions);
         } catch (Exception e) {
             throw new InternalRuntimeException("onPartitionsRevoked event error", e);
         }
@@ -356,7 +360,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-        wm.onPartitionsAssigned(partitions);
+        workManagerIPCAPI.onPartitionsAssigned(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsAssigned(partitions));
         // todo interrupting can be removed after improvements/rebalance-messages is merged
         notifySomethingToDo(new Reason("New partitions assigned"));
@@ -370,7 +374,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements
      */
     @Override
     public void onPartitionsLost(Collection<TopicPartition> partitions) {
-        wm.onPartitionsLost(partitions);
+        workManagerIPCAPI.onPartitionsLost(partitions);
         usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsLost(partitions));
     }
 

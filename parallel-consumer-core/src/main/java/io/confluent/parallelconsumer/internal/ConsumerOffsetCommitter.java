@@ -66,6 +66,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
      *
      * @see CommitMode
      */
+    @ThreadSafe
     void commit() throws TimeoutException, InterruptedException {
         if (isOwner()) {
             retrieveOffsetsAndCommit();

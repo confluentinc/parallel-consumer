@@ -91,6 +91,7 @@ public interface DrainingCloseable extends Closeable {
      *
      * @return the number of consumed but outstanding records to process
      */
+    // todo move - doesn't belong here?
     long workRemaining();
 
 }

@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.state.WorkManagerIPCAPI;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -35,7 +36,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * @param <V>
  */
 @Slf4j
-public class BrokerPollSystem<K, V> implements OffsetCommitter {
+public class BrokerPollSystem<K, V> implements BrokerPollerAPI, OffsetCommitter {
 
     private final ConsumerManager<K, V> consumerManager;
 
@@ -48,6 +49,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * temporarily stops polling and work registration, the {@code paused} flag is used internally to pause
      * subscriptions if polling needs to be throttled.
      */
+    @ThreadSafe
     @Getter
     private volatile boolean pausedForThrottling = false;
 
@@ -65,7 +67,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     // todo remove direct access to WM in partition messages PR
     @NonNull
-    private final WorkManager<K, V> wm;
+    private final WorkManagerIPCAPI<K, V> wm;
 
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, ControllerInternalAPI<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
@@ -81,6 +83,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    @ThreadSafe
     public void start(String managedExecutorService) {
         ExecutorService executorService;
         try {
@@ -93,6 +96,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         this.pollControlThreadFuture = Optional.of(submit);
     }
 
+    @ThreadSafe
+    @Override
     public void supervise() {
         if (pollControlThreadFuture.isPresent()) {
             Future<Boolean> booleanFuture = pollControlThreadFuture.get();
@@ -189,6 +194,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         log.debug("Poll completed");
 
         // build records map
+//        return new EpochAndRecordsMap<>(poll, wm.getEpochOfPartition(partition));
         return new EpochAndRecordsMap<>(poll, wm.getPm());
     }
 
@@ -239,6 +245,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    @Override
+    @ThreadSafe
     public void closeAndWait() throws TimeoutException, ExecutionException {
         log.debug("Requesting broker polling system to close...");
         transitionToClosing();
@@ -308,6 +316,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      *
      * @see CommitMode
      */
+    @ThreadSafe
     @SneakyThrows
     @Override
     public void retrieveOffsetsAndCommit() {
@@ -335,6 +344,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     /**
      * Wakeup if colling the broker
      */
+    @ThreadSafe
     public void wakeupIfPaused() {
         if (pausedForThrottling)
             consumerManager.wakeup();

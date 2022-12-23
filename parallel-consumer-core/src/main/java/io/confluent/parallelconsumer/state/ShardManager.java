@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.internal.ThreadSafe;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.experimental.FieldDefaults;
@@ -144,6 +145,7 @@ public class ShardManager<K, V> {
                 .sum();
     }
 
+    @ThreadSafe
     public long getTotalShardEntriesNotInFlight() {
         return totalShardEntriesNotInFlight;
     }

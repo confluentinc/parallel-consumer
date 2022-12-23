@@ -36,7 +36,7 @@ import static lombok.AccessLevel.PUBLIC;
  * @author Antony Stubbs
  */
 @Slf4j
-public class WorkManager<K, V> implements ConsumerRebalanceListener {
+public class WorkManager<K, V> implements WorkManagerIPCAPI, ConsumerRebalanceListener {
 
     @NonNull
     @Getter
@@ -208,6 +208,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
     }
 
+    @ThreadSafe
     public boolean shouldThrottle() {
         return isSufficientlyLoaded();
     }
@@ -216,6 +217,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
      *         should be downloaded (or pipelined in the Consumer)
      */
+    @ThreadSafe
     public boolean isSufficientlyLoaded() {
         return getTotalSizeOfAllShards() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
@@ -236,6 +238,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
+    @ThreadSafe
     public long getTotalSizeOfAllShards() {
         return sm.getTotalShardEntriesNotInFlight();
     }
