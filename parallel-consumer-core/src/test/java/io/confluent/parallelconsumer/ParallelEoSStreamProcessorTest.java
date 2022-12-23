@@ -900,8 +900,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         checkExactOrdering(results, records);
 
         assertTruth(bar).isFinalRateAtLeast(10000);
-
-        log.debug("Final rate was: {} msg/s", finalRate);
     }
 
 }
