@@ -107,10 +107,10 @@ public interface PCConsumerAPI {
     Map<TopicPartition, Long> beginningOffsets(Collection collection);
 
     @SneakyThrows
-    Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map timestampsToSearch, Duration timeout);
+    Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch, Duration timeout);
 
     @SneakyThrows
-    Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map timestampsToSearch);
+    Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch);
 
     @SneakyThrows
     Map<TopicPartition, OffsetAndMetadata> committed(Set set, Duration timeout);

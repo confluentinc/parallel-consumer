@@ -5,18 +5,25 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import com.google.common.truth.Truth;
+import com.google.common.truth.Truth8;
+import io.confluent.parallelconsumer.ManagedTruth;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.common.Metric;
+import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.TopicPartition;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import pl.tlinkowski.unij.api.UniLists;
+import pl.tlinkowski.unij.api.UniMaps;
 
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -123,38 +130,61 @@ class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
         }
     }
 
-//    @Test
-//    void position() {
-//    }
-//
-//    @Test
-//    void metrics() {
-//    }
-//
-//    @Test
-//    void listTopics() {
-//    }
-//
-//    @Test
-//    void currentLag() {
-//    }
-//
-//    @Test
-//    void endOffsets() {
-//    }
-//
-//    @Test
-//    void beginningOffsets() {
-//    }
-//
-//    @Test
-//    void offsetsForTimes() {
-//    }
-//
-//    @Test
-//    void committed() {
-//    }
-//
+    @Test
+    void position() {
+        var position = cf.position(getTopicPartition());
+        Truth.assertThat(position).isEqualTo(42L);
+    }
+
+    @Test
+    void metrics() {
+        Map<MetricName, ? extends Metric> metrics = cf.metrics();
+        assertTruth(metrics).isNotEmpty();
+        Truth.assertThat(metrics.size()).isGreaterThan(100);
+    }
+
+    @Test
+    void listTopics() {
+        var stringListMap = cf.listTopics();
+        assertTruth(stringListMap).isNotEmpty();
+        Truth.assertThat(stringListMap.size()).isGreaterThan(2);
+        assertTruth(stringListMap.keySet()).contains(getTopic());
+    }
+
+    @Test
+    void currentLag() {
+        var lag = cf.currentLag(getTopicPartition());
+        Truth8.assertThat(lag).isPresent();
+        Truth.assertThat(lag.getAsLong()).isEqualTo(0L);
+    }
+
+    @Test
+    void endOffsets() {
+        var endOffsets = cf.endOffsets(UniLists.of(getTopicPartition()));
+        Truth.assertThat(endOffsets.entrySet().iterator().next().getValue()).isEqualTo(4);
+    }
+
+    @Test
+    void beginningOffsets() {
+        var beginningOffsets = cf.beginningOffsets(UniLists.of(getTopicPartition()));
+        Truth.assertThat(beginningOffsets).hasSize(1);
+        Truth.assertThat(beginningOffsets.entrySet().iterator().next().getValue()).isEqualTo(0);
+    }
+
+    @Test
+    void offsetsForTimes() {
+        var lag = cf.offsetsForTimes(UniMaps.of(getTopicPartition(), 0L));
+        Truth.assertThat(lag).hasSize(1);
+        var offsetAndTimestamp = lag.get(getTopicPartition());
+        Truth.assertThat(offsetAndTimestamp.offset()).isEqualTo(-4);
+    }
+
+    @Test
+    void committed() {
+        var lag = cf.committed(getTopicPartition());
+        ManagedTruth.assertThat(lag).isNull();
+    }
+
 //    @Test
 //    void seekToEnd() {
 //    }

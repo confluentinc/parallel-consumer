@@ -210,7 +210,7 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
 
     @SneakyThrows
     @Override
-    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map timestampsToSearch) {
+    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch) {
         return blockingAskConsumer(consumer -> consumer.offsetsForTimes(timestampsToSearch));
     }
 

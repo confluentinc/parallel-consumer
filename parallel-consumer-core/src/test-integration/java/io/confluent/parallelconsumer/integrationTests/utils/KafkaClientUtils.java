@@ -196,7 +196,7 @@ public class KafkaClientUtils implements AutoCloseable {
         properties.putAll(options);
 
         KafkaConsumer<K, V> kvKafkaConsumer = new KafkaConsumer<>(properties);
-        log.debug("New consume {}", kvKafkaConsumer);
+        log.debug("New consumer {}", kvKafkaConsumer);
         return kvKafkaConsumer;
     }
 
