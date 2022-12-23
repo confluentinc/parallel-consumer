@@ -71,6 +71,7 @@ public class ShardManager<K, V> {
     // todo audit
     @Getter
     @NonFinal
+    // todo never updated
     int numberRecordsOutForProcessing = 0;
 
     /**
@@ -78,7 +79,7 @@ public class ShardManager<K, V> {
      */
     // thread safe? consumer and controller both access - consumer upon partition revocation and should throttle
     @NonFinal
-    long totalSizeOfAllShards;
+    long totalShardEntriesNotInFlight;
 
     /**
      * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
@@ -135,8 +136,15 @@ public class ShardManager<K, V> {
         return ShardKey.of(wc, options.getOrdering());
     }
 
-    public long getTotalSizeOfAllShards() {
-        return totalSizeOfAllShards;
+
+    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+        return processingShards.values().stream()
+                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
+                .sum();
+    }
+
+    public long getTotalShardEntriesNotInFlight() {
+        return totalShardEntriesNotInFlight;
     }
 
     public boolean workIsWaitingToBeProcessed() {
@@ -169,7 +177,7 @@ public class ShardManager<K, V> {
             // remove the work
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
-            totalSizeOfAllShards--;
+            totalShardEntriesNotInFlight--;
 
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
@@ -191,7 +199,7 @@ public class ShardManager<K, V> {
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
 
-        totalSizeOfAllShards++;
+        totalShardEntriesNotInFlight++;
     }
 
     void removeShardIfEmpty(ShardKey key) {
@@ -217,7 +225,7 @@ public class ShardManager<K, V> {
             //
             shardOptional.get().onSuccess(wc);
             removeShardIfEmpty(key);
-            totalSizeOfAllShards--;
+//            totalSizeOfAllShards--;
         } else {
             log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());
         }
@@ -229,6 +237,7 @@ public class ShardManager<K, V> {
     public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
+        totalShardEntriesNotInFlight++;
     }
 
     /**
@@ -273,6 +282,9 @@ public class ShardManager<K, V> {
 
         //
         updateResumePoint(next);
+
+        //
+        totalShardEntriesNotInFlight -= workFromAllShards.size();
 
         return workFromAllShards;
     }

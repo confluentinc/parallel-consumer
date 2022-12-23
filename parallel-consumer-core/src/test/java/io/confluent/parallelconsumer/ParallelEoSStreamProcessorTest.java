@@ -89,6 +89,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     /**
      * Checks that - for messages that are currently undergoing processing, that no offsets for them are committed
      */
+    @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
@@ -111,7 +112,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // finish processing only msg 1
         parallelConsumer.poll(context -> {
-            log.debug("msg: {}", context);
+            log.debug("Received msg: {} {} {}", context.offset(), context.key(), context.value());
             startBarrierLatch.countDown();
             int offset = (int) context.offset();
             LatchTestUtils.awaitLatch(locks, offset);
@@ -130,6 +131,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // make sure offset 0 is committed (next expected), while the rest are not
         parallelConsumer.requestCommitAsap();
+        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
         awaitForCommitExact(0);
 
         // make sure no offsets are committed
@@ -654,6 +656,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
     }
 
+    @SneakyThrows
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     public void closeAfterSingleMessageShouldBeEventBasedFast(CommitMode commitMode) {
@@ -670,12 +673,20 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(msgCompleteBarrier);
 
+        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+
         // allow for offset to be committed
         awaitForOneLoopCycle();
 
+        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+
         parallelConsumer.requestCommitAsap();
 
+        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
+
         awaitForOneLoopCycle();
+
+        ManagedTruth.assertThat(parallelConsumer).isNotClosedOrFailed();
 
         await().untilAsserted(() ->
                 assertCommits(of(1)));
@@ -891,8 +902,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
-        parallelConsumer.closeDrainFirst();
         bar.close();
+
+        parallelConsumer.closeDrainFirst();
 
         // check ordering is exact - remove sequenceSize?
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
@@ -900,8 +912,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         checkExactOrdering(results, records);
 
         assertTruth(bar).isFinalRateAtLeast(10000);
-
-        log.debug("Final rate was: {} msg/s", finalRate);
     }
 
 }
