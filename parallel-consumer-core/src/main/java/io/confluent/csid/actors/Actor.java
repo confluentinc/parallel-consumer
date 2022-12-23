@@ -133,7 +133,6 @@ public interface Actor<T> extends Interruptible, ThreadSafeAPI {
      * <p>
      * Any messages sent before this will be rejected, as there's a chance they may never be processed.
      */
-    // todo shouldn't this be triggerd through first process call?
     void start();
 
     /**

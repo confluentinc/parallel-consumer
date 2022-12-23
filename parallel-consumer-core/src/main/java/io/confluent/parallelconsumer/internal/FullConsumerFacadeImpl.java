@@ -6,6 +6,8 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerException;
+import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -15,17 +17,21 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.util.Map;
 
+import static lombok.AccessLevel.PRIVATE;
+
 /**
  * @author Antony Stubbs
  * @see FullConsumerFacade
  */
 @Slf4j
 @ThreadSafe
+@FieldDefaults(makeFinal = true, level = PRIVATE)
 public class FullConsumerFacadeImpl<K, V> extends ConsumerFacadeForPCImpl<K, V> implements FullConsumerFacade<K, V> {
 
     /**
      * How to handle unsupported opertaions - error or No-op/swallow.
      */
+    @NonFinal
     UnsupportedReaction reaction = UnsupportedReaction.ERROR;
 
     public FullConsumerFacadeImpl(ParallelConsumer<K, V> pcApi, BrokerPollSystem<K, V> poller) {
@@ -98,3 +104,5 @@ public class FullConsumerFacadeImpl<K, V> extends ConsumerFacadeForPCImpl<K, V> 
         SWALLOW
     }
 }
+
+
