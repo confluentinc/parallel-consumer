@@ -153,7 +153,6 @@ public class ActorImpl<T> implements Actor<T> {
             }
         }
         log.debug("State {} reached", state.get());
-        future.complete(null);
         return future;
     }
 
@@ -274,7 +273,7 @@ public class ActorImpl<T> implements Actor<T> {
         var ready = waitForState
                 ? waitForState(targetState)
                 : errorIfNotState(targetState);
-
+        // get state in case it was an error - enables us to reuse the same functions for ask and tell
         var o = ready.get(stateTimeout.toMillis(), MILLISECONDS);
     }
 
