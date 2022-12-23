@@ -9,8 +9,6 @@ import io.confluent.parallelconsumer.internal.*;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
@@ -36,7 +34,7 @@ import static lombok.AccessLevel.PUBLIC;
  * @author Antony Stubbs
  */
 @Slf4j
-public class WorkManager<K, V> implements ConsumerRebalanceListener {
+public class WorkManager<K, V> { //implements ConsumerRebalanceListener {
 
     @NonNull
     @Getter
@@ -81,8 +79,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * Load offset map for assigned partitions
      */
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+//    @Override
+    public void onPartitionsAssigned(CommitData partitions) {
         pm.onPartitionsAssigned(partitions);
     }
 
@@ -93,7 +91,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see AbstractParallelEoSStreamProcessor#onPartitionsRevoked
      */
-    @Override
+//    @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         pm.onPartitionsRevoked(partitions);
     }
@@ -152,7 +150,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *
      * @see PartitionStateManager#onOffsetCommitSuccess(Map)
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+    public void onOffsetCommitSuccess(CommitData committed) {
         pm.onOffsetCommitSuccess(committed);
     }
 
@@ -168,8 +166,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.getNumberOfIncompleteOffsets();
     }
 
-    public Map<TopicPartition, OffsetAndMetadata> collectCommitDataForDirtyPartitions() {
-        return pm.collectDirtyCommitData();
+    public CommitData collectCommitDataForDirtyPartitions() {
+        var raw = pm.collectDirtyCommitData();
+        return new CommitData(raw);
     }
 
     /**
@@ -203,7 +202,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      *         should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
+        return getTotalSizeOfAllShards() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -222,6 +221,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
+    public long getTotalSizeOfAllShards() {
+        return sm.getTotalShardEntriesNotInFlight();
+    }
+
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
     }
@@ -231,7 +234,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection() > 0;
+        return sm.getTotalShardEntriesNotInFlight() > 0;
     }
 
     public void handleFutureResult(WorkContainer<K, V> wc) {
@@ -263,4 +266,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public boolean isDirty() {
         return pm.isDirty();
     }
+
+    public int getNumberRecordsOutForProcessing() {
+        var numberRecordsOutForProcessing1 = sm.getNumberRecordsOutForProcessing();
+//        return sm.getNumberRecordsOutForProcessing();
+        return numberRecordsOutForProcessing;
+    }
+
 }

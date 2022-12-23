@@ -12,11 +12,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.clients.producer.internals.RecordAccumulator;
 import org.apache.kafka.common.KafkaException;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.InvalidProducerEpochException;
 import org.apache.kafka.common.errors.ProducerFencedException;
@@ -26,7 +24,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -226,7 +223,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      * @see KafkaProducer#commitTransaction()
      */
     @Override
-    protected void commitOffsets(@NonNull Map<TopicPartition, OffsetAndMetadata> offsetsToSend, @NonNull ConsumerGroupMetadata groupMetadata) {
+    protected void commitOffsets(@NonNull CommitData offsetsToSend, @NonNull ConsumerGroupMetadata groupMetadata) {
         log.debug("Transactional offset commit starting");
         if (!options.isUsingTransactionalProducer()) {
             throw new IllegalStateException("Bug: cannot use if not using transactional producer");
@@ -240,7 +237,7 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
         //
         lazyMaybeBeginTransaction(); // if not using a produce flow or if no records sent yet, a tx will need to be started here (as no records are being produced)
         try {
-            producerWrapper.sendOffsetsToTransaction(offsetsToSend, groupMetadata);
+            producerWrapper.sendOffsetsToTransaction(offsetsToSend.getOffsetsToCommit(), groupMetadata);
         } catch (ProducerFencedException e) {
             // todo consider wrapping all client calls with a catch and new exception in the ProducerWrapper, so can get stack traces
             //  see APIException#fillInStackTrace

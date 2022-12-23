@@ -3,6 +3,7 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,9 +23,15 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 @Slf4j
 public class LatchTestUtils {
 
+    @SneakyThrows
     public static void awaitLatch(List<CountDownLatch> latches, int latchIndex) {
         log.trace("Waiting on latch {}", latchIndex);
-        awaitLatch(latches.get(latchIndex));
+        try {
+            awaitLatchWithException(latches.get(latchIndex));
+        } catch (TimeoutException e) {
+            log.error("Waiting on latch {} timed out!", latchIndex);
+            throw e;
+        }
         log.trace("Wait on latch {} finished.", latchIndex);
     }
 
@@ -33,8 +40,13 @@ public class LatchTestUtils {
         awaitLatch(latch, defaultTimeoutSeconds);
     }
 
-    @SneakyThrows
-    public static void awaitLatch(final CountDownLatch latch, final int seconds) {
+    public static void awaitLatchWithException(CountDownLatch latch) throws TimeoutException {
+        // latch timeouts should be longer, as they are never the root cause, and so can hide the root if time out too soone
+        awaitLatch(latch, defaultTimeoutSeconds * 2);
+    }
+
+    //    @SneakyThrows
+    public static void awaitLatch(final CountDownLatch latch, final int seconds) throws TimeoutException {
         log.trace("Waiting on latch with timeout {}s", seconds);
         Instant start = now();
         boolean latchReachedZero = false;

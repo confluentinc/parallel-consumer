@@ -64,6 +64,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private static Duration longPollTimeout = Duration.ofMillis(2000);
 
     // todo remove direct access to WM in partition messages PR
+    //   needed for epoch lookup, and should throttle?, commit data lookup (remove in commit command PR)
     @NonNull
     private final WorkManager<K, V> wm;
 
@@ -122,7 +123,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 handlePoll();
 
                 // old: - would check if it was asked
-                // maybeDoCommit();
+                // var commitData = wm.collectCommitDataForDirtyPartitions();
+                // maybeDoCommit(commitData);
 
                 getMyActor().process();
 
@@ -304,6 +306,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
+    // todo should migrate to controller API
     private boolean shouldThrottle() {
         return wm.shouldThrottle();
     }
@@ -316,15 +319,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @ThreadSafe
     @SneakyThrows
     @Override
-    public void retrieveOffsetsAndCommit() {
+    public void retrieveOffsetsAndCommit(CommitData offsetsToCommit) {
         if (runState == RUNNING || runState == DRAINING || runState == CLOSING) {
             // {@link Optional#ifPresentOrElse} only @since 9
             ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
                 // shouldn't be here
                 throw new IllegalStateException("No committer configured");
             });
-            // delegate
-            committer.commit();
+            committer.commit(offsetsToCommit);
         } else {
             throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
@@ -334,9 +336,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 //    /**
 //     * Will silently skip if not configured with a committer
 //     */
-    private void maybeDoCommit() throws TimeoutException, InterruptedException {
+    private void maybeDoCommit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
 //        if (committer.isPresent()) {
-            committer.get().maybeDoCommit();
+            committer.get().maybeDoCommit(offsetsToCommit);
         }
 //    }
 
@@ -348,35 +350,4 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             consumerManager.wakeup();
     }
 
-    /**
-     * Pause polling from the underlying Kafka Broker.
-     * <p>
-     * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#RUNNING running}, calling this method will be a no-op.
-     * </p>
-     */
-    public void pausePollingAndWorkRegistrationIfRunning() {
-        if (this.runState == State.RUNNING) {
-            log.info("Transitioning broker poll system to state paused.");
-            this.runState = State.PAUSED;
-        } else {
-            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.runState);
-        }
-    }
-
-    /**
-     * Resume polling from the underlying Kafka Broker.
-     * <p>
-     * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#PAUSED paused}, calling this method will be a no-op.
-     * </p>
-     */
-    public void resumePollingAndWorkRegistrationIfPaused() {
-        if (this.runState == State.PAUSED) {
-            log.info("Transitioning broker poll system to state running.");
-            this.runState = State.RUNNING;
-        } else {
-            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
-        }
-    }
 }

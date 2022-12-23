@@ -30,8 +30,8 @@ public class ConsumerManager<K, V> {
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
     /**
-     * Since Kakfa 2.7, multi-threaded access to consumer group metadata was blocked, so before and after polling, save
-     * a copy of the metadata.
+     * Since Kakfa 2.7, multithreaded access to consumer group metadata was blocked, so before and after polling, save a
+     * copy of the metadata.
      *
      * @since 2.7.0
      */
@@ -86,13 +86,13 @@ public class ConsumerManager<K, V> {
         }
     }
 
-    public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
+    public void commitSync(CommitData offsetsToCommit) {
         // we dont' want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {
             try {
-                consumer.commitSync(offsetsToSend);
+                consumer.commitSync(offsetsToCommit.getOffsetsToCommit());
                 inProgress = false;
             } catch (WakeupException w) {
                 log.debug("Got woken up, retry. errors: " + erroneousWakups + " none: " + noWakeups + " correct:" + correctPollWakeups, w);

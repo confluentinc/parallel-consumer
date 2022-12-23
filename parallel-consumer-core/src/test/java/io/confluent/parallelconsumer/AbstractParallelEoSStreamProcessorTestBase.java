@@ -34,7 +34,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -188,6 +187,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         myRecordProcessingAction = spy(ParallelEoSStreamProcessorTest.MyAction.class);
 
         when(consumerSpy.groupMetadata()).thenReturn(DEFAULT_GROUP_METADATA);
+
+        ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
     }
 
     /**
@@ -473,13 +474,6 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         log.debug("Releasing {}...", lockIndex);
         locks.get(lockIndex).countDown();
         awaitForSomeLoopCycles(1);
-    }
-
-    protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
-        pauseControlLoop();
-        awaitLatch(latch);
-        resumeControlLoop();
-        awaitForOneLoopCycle();
     }
 
     /**

@@ -14,7 +14,7 @@ import lombok.ToString;
  *
  * @author Antony Stubbs
  */
-// todo removable after actors fully merged
+// todo removable after actors fully merged? - target branch?
 public interface Interruptible {
 
     /**

@@ -5,6 +5,7 @@ package io.confluent.csid.actors;
  */
 
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
+import io.confluent.parallelconsumer.internal.ThreadSafe;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.utils.Time;
@@ -21,6 +22,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
+import static io.confluent.csid.actors.ActorImpl.ActorState.CLOSED;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -30,6 +32,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  */
 @Slf4j
 @ToString
+@ThreadSafe
 @EqualsAndHashCode
 @RequiredArgsConstructor
 public class ActorImpl<T> implements Actor<T> {
@@ -128,9 +131,16 @@ public class ActorImpl<T> implements Actor<T> {
         return future;
     }
 
+    /**
+     * Return a completable future that will complete when the state is reached,
+     * <p>
+     * Or fail if the state is not reached within the timeout.
+     */
     private <R> CompletableFuture<R> waitForState(ActorState targetState) {
-        // return a completable future that will complete when the state is reached
-        // or fail if the state is not reached within the timeout
+        if (CLOSED.equals(state.get())) {
+            return errorIfNotState(targetState);
+        }
+
         var future = new CompletableFuture<R>();
         log.debug("Waiting for state {} to be reached", targetState);
         var timer = Time.SYSTEM.timer(stateTimeout);
@@ -182,8 +192,12 @@ public class ActorImpl<T> implements Actor<T> {
 
     @Override
     public void processBlocking(Duration timeout) throws InterruptedException {
-        process();
-        maybeBlockUntilAction(timeout);
+        var processed = process();
+
+        if (processed <= 0) {
+            // wait for a message to arrive
+            maybeBlockUntilAction(timeout);
+        }
     }
 
     @Override
@@ -192,9 +206,12 @@ public class ActorImpl<T> implements Actor<T> {
     }
 
     @Override
-    public void process() {
+    public int process() {
         start();
+        return processWithoutStarting();
+    }
 
+    private int processWithoutStarting() {
         BlockingQueue<Runnable> mailbox = this.getActionMailbox();
 
         // check for more work to batch up, there may be more work queued up behind the head that we can also take
@@ -208,6 +225,8 @@ public class ActorImpl<T> implements Actor<T> {
         for (var action : work) {
             execute(action);
         }
+
+        return work.size();
     }
 
     @Override
@@ -217,22 +236,20 @@ public class ActorImpl<T> implements Actor<T> {
 
     @Override
     public void close() {
-        var closed = ActorState.CLOSED;
-        transitionStateTo(closed);
-        process();
+        transitionStateTo(CLOSED);
+        processWithoutStarting();
     }
 
-    private void transitionStateTo(ActorState closed) {
+    private void transitionStateTo(ActorState newState) {
         stateLock.lock();
         try {
-            state.set(closed);
+            state.set(newState);
             stateChanged.signalAll();
         } finally {
             stateLock.unlock();
         }
     }
 
-    // todo private through process
     @Override
     public void start() {
         transitionStateTo(ActorState.ACCEPTING_MESSAGES);
@@ -247,11 +264,12 @@ public class ActorImpl<T> implements Actor<T> {
         if (!timeout.isNegative() && getActionMailbox().isEmpty()) {
             log.debug("Actor mailbox empty, polling with timeout of {}", timeout);
         }
-        Runnable polled = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
+        Runnable triggerPoll = getActionMailbox().poll(timeout.toMillis(), MILLISECONDS);
 
-        if (polled != null) {
-            log.debug("Message received in mailbox, processing");
-            execute(polled);
+        if (triggerPoll != null) {
+            log.debug("Trigger message received in mailbox, processing");
+            execute(triggerPoll);
+            // process remaining messages, if any
             process();
         }
     }
@@ -260,16 +278,22 @@ public class ActorImpl<T> implements Actor<T> {
         command.run();
     }
 
+    @SneakyThrows
     private void checkState(ActorState targetState) {
-        if (!targetState.equals(state.get())) {
-            throw new InternalRuntimeException(msg("Actor in {} state, not {} target state", state.get(), targetState));
+        var ready = waitForState
+                ? waitForState(targetState)
+                : errorIfNotState(targetState);
+
+        // get state in case it was an error - enables us to reuse the same functions for ask and tell
+        if (ready.isCompletedExceptionally()) {
+            ready.get();
         }
     }
 
     @Override
     public void interrupt(Reason reason) {
         log.debug(msg("Adding interrupt signal to queue of {}: {}", getActorName(), reason));
-        getActionMailbox().add(() -> interruptInternalSync(reason));
+        getActionMailbox().add(() -> interruptInternal(reason));
     }
 
     /**
@@ -278,7 +302,7 @@ public class ActorImpl<T> implements Actor<T> {
      * Note: Might not have actually interrupted a sleeping {@link BlockingQueue#poll()} if there was also other work on
      * the queue.
      */
-    private void interruptInternalSync(Reason reason) {
+    private void interruptInternal(Reason reason) {
         log.debug("Interruption signal processed: {}", reason);
     }
 
