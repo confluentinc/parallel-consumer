@@ -34,6 +34,7 @@ class ActorImplTest {
     ActorImpl<Greeter> actor = new ActorImpl<>(greeter);
 
     public ActorImplTest() {
+        actor.start();
     }
 
     @Test
@@ -48,8 +49,8 @@ class ActorImplTest {
     void ask() {
         Future<String> tell = actor.ask(g -> g.greet(MESSAGE));
         actor.process();
-        String s = tell.get();
-        assertThat(s).isEqualTo(Greeter.PREFIX + MESSAGE);
+        String answer = tell.get();
+        assertThat(answer).isEqualTo(Greeter.PREFIX + MESSAGE);
     }
 
     @SneakyThrows

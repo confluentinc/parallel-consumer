@@ -241,7 +241,8 @@ public class ActorImpl<T> implements Actor<T> {
         }
     }
 
-    private void start() {
+    @Override
+    public void start() {
         transitionStateTo(ActorState.ACCEPTING_MESSAGES);
     }
 
