@@ -8,6 +8,7 @@ import io.confluent.csid.actors.ActorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 
@@ -36,6 +37,9 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
 
     // todo code smell - should be able to remove with bus now
     private Optional<Thread> owningThread = Optional.empty();
+
+    @Getter
+    private final ActorImpl<ConsumerOffsetCommitter<K, V>> myActor = new ActorImpl<>(this);
 
     public ConsumerOffsetCommitter(final ConsumerManager<K, V> newConsumer, final WorkManager<K, V> newWorkManager, ParallelConsumerOptions options) {
         super(newConsumer, newWorkManager);
@@ -116,7 +120,6 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         return Thread.currentThread().equals(owningThread.orElse(null));
     }
 
-    private final ActorImpl<ConsumerOffsetCommitter<K, V>> myActor = new ActorImpl<>(this);
 
 //    @SneakyThrows // remove
 //    private void commitAndWait() {

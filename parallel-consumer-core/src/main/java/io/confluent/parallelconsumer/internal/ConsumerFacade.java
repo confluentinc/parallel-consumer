@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.csid.actors.Actor;
 import io.confluent.csid.actors.FunctionWithException;
+import io.confluent.parallelconsumer.state.PartitionState;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -95,6 +96,9 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
 
     @Override
     public void seek(TopicPartition partition, long offset) {
+        PartitionState ps = null;
+        ps.seek(offset);
+        // todo how to do the sync barrier here - need to block consumer from adding new records after seek and before truncate?
         blockingAskConsumerVoid(consumer -> consumer.seek(partition, offset));
     }
 
@@ -283,11 +287,13 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
         blockingAskConsumerVoid(Consumer::wakeup);
     }
 
+    // todo move to actor?
     private <R> void blockingAskConsumerVoid(java.util.function.Consumer<Consumer<K, V>> ask) {
         java.util.function.Consumer<BrokerPollSystem<K, V>> wrap = poller -> ask.accept(poller.getConsumerManager().getConsumer());
         blockingAskVoid(wrap);
     }
 
+    // todo move to actor?
     @SneakyThrows
     private <R> void blockingAskVoid(java.util.function.Consumer<BrokerPollSystem<K, V>> ask) {
         blockingAsk(poller -> {
@@ -296,6 +302,7 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
         });
     }
 
+    // todo move to actor?
     private <R> R blockingAskConsumer(Function<Consumer<K, V>, R> ask) throws InterruptedException, ExecutionException, TimeoutException {
         return blockingAsk(poller -> ask.apply(poller.getConsumerManager().getConsumer()));
     }
@@ -306,6 +313,7 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
         return ask.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
+    // todo inline?
     private Actor<BrokerPollSystem<K, V>> polllerActor() {
         return basePollerRef.getMyActor();
     }

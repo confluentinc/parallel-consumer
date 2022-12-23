@@ -335,8 +335,7 @@ public class PartitionState<K, V> {
                     expectedBootstrapRecordOffset);
 
             // truncate
-            final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(bootstrapPolledOffset, false);
-            incompletesToPrune.forEach(incompleteOffsets::remove);
+            truncate(bootstrapPolledOffset);
         } else if (pollBelowExpected) {
             // reset to lower offset detected, so we need to reset our state to match
             log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
@@ -351,6 +350,11 @@ public class PartitionState<K, V> {
             var offsetData = OffsetMapCodecManager.HighestOffsetAndIncompletes.of();
             initStateFromOffsetData(offsetData);
         }
+    }
+
+    private void truncate(long bootstrapPolledOffset) {
+        final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(bootstrapPolledOffset, false);
+        incompletesToPrune.forEach(incompleteOffsets::remove);
     }
 
     /**
@@ -629,6 +633,10 @@ public class PartitionState<K, V> {
             return true;
         }
         return false;
+    }
+
+    public void seek(long offset) {
+        truncate(offset);
     }
 
 }

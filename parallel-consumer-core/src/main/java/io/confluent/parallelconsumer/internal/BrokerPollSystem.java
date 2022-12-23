@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TimeUtils;
 import io.confluent.csid.actors.ActorImpl;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -127,6 +126,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 // maybeDoCommit(commitData);
 
                 getMyActor().process();
+                committer.ifPresent(kvConsumerOffsetCommitter -> kvConsumerOffsetCommitter.getMyActor().process());
 
                 switch (runState) {
                     case DRAINING -> {
