@@ -12,7 +12,6 @@ import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.integrationTests.BrokerIntegrationTest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.TopicPartition;
@@ -36,27 +35,24 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * @author Antony Stubbs
- * @see ConsumerFacade
+ * @see ConsumerFacadeStrictImpl
  */
 @Slf4j
-class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
-
-    Consumer<String, String> realConsumer = getKcu().getConsumer();
+class PartialConsumerFacadeStrictImplTest extends BrokerIntegrationTest<String, String> {
 
     ParallelEoSStreamProcessor<String, String> pc;
 
-    PCConsumerAPI cf;
+    PCConsumerAPIStrict cf;
 
     AtomicInteger consumed = new AtomicInteger();
 
     Queue<PollContext<String, String>> all = new ConcurrentLinkedQueue();
 
-//    TopicPartition tp;
 
     @BeforeEach
     void setup() {
         pc = getKcu().buildPc();
-        cf = pc.consumerApiAccess().partialKafkaConsumer();
+        cf = pc.consumerApiAccess().partialStrictKafkaConsumer();
 
         setupTopic();
 
@@ -92,7 +88,11 @@ class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
     @Test
     void subscribe() {
         cf.subscribe(getTopicPartitionList());
-        assertTruth(null).hasSize(4);
+        throw new RuntimeException("Not implemented");
+    }
+
+    private List<TopicPartition> getTopicPartitionList() {
+        return UniLists.of(getTopicPartition());
     }
 
     @SneakyThrows
@@ -187,42 +187,30 @@ class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
     @Test
     void seekToEnd() {
         cf.seekToEnd(getTopicPartitionList());
-        assertTruth(null).hasSize(4);
-    }
-
-    private List<TopicPartition> getTopicPartitionList() {
-        return UniLists.of(getTopicPartition());
+        throw new RuntimeException("Not implemented");
     }
 
     @Test
     void seekToBeginning() {
         cf.seekToEnd(getTopicPartitionList());
-        assertTruth(null).hasSize(4);
+        throw new RuntimeException("Not implemented");
     }
 
     @Test
     void assign() {
         cf.assign(getTopicPartitionList());
-        assertTruth(null).hasSize(4);
-    }
-
-    @Test
-    void poll() {
+        throw new RuntimeException("Not implemented");
     }
 
     @Test
     void commitSync() {
-    }
-
-    @Test
-    void resume() {
-    }
-
-    @Test
-    void pause() {
+        cf.commitSync();
+        throw new RuntimeException("Not implemented");
     }
 
     @Test
     void wakeup() {
+        throw new RuntimeException("Not implemented");
     }
+
 }

@@ -79,4 +79,7 @@ public class JavaUtils {
         return Collectors.toCollection(TreeSet::new);
     }
 
+    public static boolean isEmpty(Collection<?> collection) {
+        return collection == null || collection.isEmpty();
+    }
 }

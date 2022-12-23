@@ -58,7 +58,7 @@ public class CoreApp {
 
         // example consumer API access
         var consumer = parallelConsumer.consumerApiAccess();
-        var partial = consumer.partialKafkaConsumer();
+        var partial = consumer.partialStrictKafkaConsumer();
         var full = consumer.fullConsumerFacade();
 
         var endOffsets = partial.endOffsets(UniSets.of());

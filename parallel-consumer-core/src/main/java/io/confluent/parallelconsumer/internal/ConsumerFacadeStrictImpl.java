@@ -28,12 +28,11 @@ import java.util.regex.Pattern;
 import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_TIMEOUT;
 
 /**
- * The part of the {@link Consumer} API that PC supports.
- * <p>
  * All methods are / must be thread safe.
  *
  * @author Antony Stubbs
- * @see PCConsumerAPI a restrucited Consumer API with only the supported functions.
+ * @see PCConsumerAPIStrict a restricted Consumer API with only the supported functions are implemented in the same
+ *         strict sense as {@link Consumer}.
  */
 // todo rename suffix Async (is it must implement consumer, but is an ASYNC implementation)
 @SuppressWarnings(
@@ -43,9 +42,11 @@ import static io.confluent.parallelconsumer.internal.DrainingCloseable.DEFAULT_T
 @Slf4j
 @RequiredArgsConstructor
 // todo which package? root or internal?
-public class ConsumerFacade<K, V> implements PCConsumerAPI {
+// todo better name - align with interface?
+@ThreadSafe
+public class ConsumerFacadeStrictImpl<K, V> implements PCConsumerAPIStrict {
 
-    private final BrokerPollSystem<K, V> basePollerRef;
+    private final BrokerPollSystem<K, V> poller;
 
     /**
      * Makes a blocking call to the consumer thread - will return once the other thread has looped over it's control
@@ -315,7 +316,7 @@ public class ConsumerFacade<K, V> implements PCConsumerAPI {
 
     // todo inline?
     private Actor<BrokerPollSystem<K, V>> polllerActor() {
-        return basePollerRef.getMyActor();
+        return poller.getMyActor();
     }
 
 }

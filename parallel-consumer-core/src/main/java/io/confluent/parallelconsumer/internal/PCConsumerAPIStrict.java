@@ -16,8 +16,10 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * The subset of functions accessible from the underlying {@link Consumer}. Naturally, cannot implement the [@link
- * Consumer} interface.
+ * The subset of functions accessible from the underlying {@link Consumer}. Only the methods where the implementation
+ * is
+ * <p>
+ * Naturally, cannot implement the [@link Consumer} interface.
  * <p>
  * This exposes a limited subset of the {@link Consumer} interface that is valid to be used within the PC context.
  * <p>
@@ -29,7 +31,8 @@ import java.util.regex.Pattern;
  * @param <V>
  * @author Antony Stubbs
  */
-public interface PCConsumerAPI {
+// todo needs a better name
+public interface PCConsumerAPIStrict extends ThreadSafeAPI {
 
     @SneakyThrows
     Set<TopicPartition> assignment();
