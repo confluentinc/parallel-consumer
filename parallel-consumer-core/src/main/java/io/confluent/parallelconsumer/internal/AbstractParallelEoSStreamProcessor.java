@@ -647,7 +647,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 try {
                     controlLoop(userFunctionWrapped, callback);
                 } catch (InterruptedException e) {
-                    log.debug("Control loop interrupted, closing");
+                    log.warn("Control loop interrupted, closing", e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT);
                 } catch (Exception e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
