@@ -891,8 +891,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
-        parallelConsumer.closeDrainFirst();
         bar.close();
+
+        parallelConsumer.closeDrainFirst();
 
         // check ordering is exact - remove sequenceSize?
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
