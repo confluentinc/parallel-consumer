@@ -326,21 +326,22 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 // shouldn't be here
                 throw new IllegalStateException("No committer configured");
             });
+            // delegate
             committer.commit(offsetsToCommit);
         } else {
             throw new IllegalStateException(msg("Can't commit - not running (state is: {}", runState));
         }
     }
 
-    // removed as the commiter will do the commit directly if instructed through messaging
+    // removed as the committer will do the commit directly if instructed through messaging
 //    /**
 //     * Will silently skip if not configured with a committer
 //     */
     private void maybeDoCommit(CommitData offsetsToCommit) throws TimeoutException, InterruptedException {
-//        if (committer.isPresent()) {
+        if (committer.isPresent()) {
             committer.get().maybeDoCommit(offsetsToCommit);
         }
-//    }
+    }
 
     /**
      * Wakeup if colling the broker
