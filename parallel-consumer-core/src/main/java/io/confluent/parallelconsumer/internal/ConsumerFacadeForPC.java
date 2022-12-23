@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -30,7 +31,7 @@ public interface ConsumerFacadeForPC extends PCConsumerAPIStrict {
      *
      * @param collection ignored
      */
-    void pause(Collection<?> collection);
+    void pause(Collection<TopicPartition> collection);
 
     /**
      * Like {@link Consumer#resume}, except it resumes ALL PARTITIONS through the PC controller. After enough back
@@ -40,7 +41,7 @@ public interface ConsumerFacadeForPC extends PCConsumerAPIStrict {
      *
      * @param collection ignored
      */
-    void resume(Collection<?> collection);
+    void resume(Collection<TopicPartition> collection);
 
 
     void close();

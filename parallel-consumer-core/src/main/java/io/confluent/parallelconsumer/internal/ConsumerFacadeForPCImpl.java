@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -31,7 +32,7 @@ public class ConsumerFacadeForPCImpl<K, V> extends ConsumerFacadeStrictImpl<K, V
     }
 
     @Override
-    public void pause(final Collection<?> collection) {
+    public void pause(final Collection<TopicPartition> collection) {
         warnInvalidUse(collection);
         pcApi.pauseIfRunning();
     }
@@ -43,7 +44,7 @@ public class ConsumerFacadeForPCImpl<K, V> extends ConsumerFacadeStrictImpl<K, V
     }
 
     @Override
-    public void resume(Collection<?> collection) {
+    public void resume(Collection<TopicPartition> collection) {
         warnInvalidUse(collection);
         pcApi.resumeIfPaused();
     }
