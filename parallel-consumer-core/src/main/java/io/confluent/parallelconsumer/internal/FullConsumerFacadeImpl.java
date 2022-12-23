@@ -13,7 +13,6 @@ import org.apache.kafka.clients.consumer.OffsetCommitCallback;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -75,17 +74,6 @@ public class FullConsumerFacadeImpl<K, V> extends ConsumerFacadeForPCImpl<K, V> 
         throwInvalidCall();
     }
 
-    // todo pass through to manually "blocking" or even really pausing partitions?
-    @Override
-    public void pause(final Collection collection) {
-        throwInvalidCall();
-    }
-
-    @Override
-    public void resume(final Collection collection) {
-        throwInvalidCall();
-    }
-
     // audit
     @Override
     public void enforceRebalance() {
@@ -97,17 +85,6 @@ public class FullConsumerFacadeImpl<K, V> extends ConsumerFacadeForPCImpl<K, V> 
     @Override
     public void enforceRebalance(String reason) {
         throwInvalidCall(); // ?
-    }
-
-    // option to have this shutdown PC?
-    @Override
-    public void close() {
-        throwInvalidCall();
-    }
-
-    @Override
-    public void close(final Duration timeout) {
-        throwInvalidCall();
     }
 
     public enum UnsupportedReaction {

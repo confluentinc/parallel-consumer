@@ -17,6 +17,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import pl.tlinkowski.unij.api.UniMaps;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
@@ -58,10 +59,14 @@ public class CoreApp {
 
         // example consumer API access
         var consumer = parallelConsumer.consumerApiAccess();
-        var partial = consumer.partialStrictKafkaConsumer();
+        var strict = consumer.partialStrictKafkaConsumer();
+        var fuzzy = consumer.consumerFacadeForPC();
         var full = consumer.fullConsumerFacade();
 
-        var endOffsets = partial.endOffsets(UniSets.of());
+
+        var endOffsets = strict.endOffsets(UniSets.of());
+        fuzzy.pause(of());
+        full.commitSync(UniMaps.of());
 
 
         // tag::example[]

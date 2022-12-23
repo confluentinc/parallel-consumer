@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.internal;
 
 import org.apache.kafka.clients.consumer.Consumer;
 
+import java.time.Duration;
 import java.util.Collection;
 
 /**
@@ -17,7 +18,8 @@ import java.util.Collection;
  * @author Antony Stubbs
  * @see PCConsumerAPIStrict
  */
-// todo needs a better name
+// todo def needs a better name
+// todo should this extend PCConsumerAPIStrict or not? If not, should there be another interface which does?
 public interface ConsumerFacadeForPC extends PCConsumerAPIStrict {
 
     /**
@@ -39,5 +41,10 @@ public interface ConsumerFacadeForPC extends PCConsumerAPIStrict {
      * @param collection ignored
      */
     void resume(Collection<?> collection);
+
+
+    void close();
+
+    void close(final Duration timeout);
 
 }

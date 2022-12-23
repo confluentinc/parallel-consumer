@@ -40,6 +40,7 @@ public interface ConsumerApiAccess<K, V> {
      *
      * @see ConsumerFacadeForPC
      */
+    // todo def needs a better name
     ConsumerFacadeForPC consumerFacadeForPC();
 
     /**
@@ -52,9 +53,6 @@ public interface ConsumerApiAccess<K, V> {
      * Use {@link #fullConsumerFacade()} if you need something that "is a"
      * {@link org.apache.kafka.clients.consumer.Consumer}, but won't have unsupported functions called.
      *
-     * @see PCConsumerAPIStrict
-     * @see ConsumerFacadeStrictImpl
-     * @see #fullConsumerFacade()
      * @see PCConsumerAPIStrict
      */
     PCConsumerAPIStrict partialStrictKafkaConsumer();

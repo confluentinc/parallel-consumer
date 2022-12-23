@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.ParallelConsumer;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
 import java.util.Collection;
 
 import static io.confluent.csid.utils.JavaUtils.isEmpty;
@@ -45,6 +46,17 @@ public class ConsumerFacadeForPCImpl<K, V> extends ConsumerFacadeStrictImpl<K, V
     public void resume(Collection<?> collection) {
         warnInvalidUse(collection);
         pcApi.resumeIfPaused();
+    }
+
+    // option to have this shutdown PC?
+    @Override
+    public void close() {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public void close(final Duration timeout) {
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
 }
