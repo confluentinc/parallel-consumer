@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniMaps;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -88,13 +89,11 @@ class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
         return new TopicPartition(getTopic(), 0);
     }
 
-//    @Test
-//    void subscribe() {
-//    }
-//
-//    @Test
-//    void testSubscribe() {
-//    }
+    @Test
+    void subscribe() {
+        cf.subscribe(getTopicPartitionList());
+        assertTruth(null).hasSize(4);
+    }
 
     @SneakyThrows
     @Test
@@ -160,13 +159,13 @@ class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
 
     @Test
     void endOffsets() {
-        var endOffsets = cf.endOffsets(UniLists.of(getTopicPartition()));
+        var endOffsets = cf.endOffsets(getTopicPartitionList());
         Truth.assertThat(endOffsets.entrySet().iterator().next().getValue()).isEqualTo(4);
     }
 
     @Test
     void beginningOffsets() {
-        var beginningOffsets = cf.beginningOffsets(UniLists.of(getTopicPartition()));
+        var beginningOffsets = cf.beginningOffsets(getTopicPartitionList());
         Truth.assertThat(beginningOffsets).hasSize(1);
         Truth.assertThat(beginningOffsets.entrySet().iterator().next().getValue()).isEqualTo(0);
     }
@@ -185,47 +184,45 @@ class ConsumerFacadeTest extends BrokerIntegrationTest<String, String> {
         ManagedTruth.assertThat(lag).isNull();
     }
 
-//    @Test
-//    void seekToEnd() {
-//    }
-//
-//    @Test
-//    void seekToBeginning() {
-//    }
-//
-//    @Test
-//    void assign() {
-//    }
-//
-//    @Test
-//    void testSubscribe1() {
-//    }
-//
-//    @Test
-//    void testSubscribe2() {
-//    }
-//
-//    @Test
-//    void poll() {
-//    }
-//
-//    @Test
-//    void testPoll() {
-//    }
-//
-//    @Test
-//    void commitSync() {
-//    }
-//
-//    @Test
-//    void resume() {
-//    }
-//
-//    @Test
-//    void pause() {
-//    }
-//
-//    @Test
-//    void wakeup() {
-//    }
+    @Test
+    void seekToEnd() {
+        cf.seekToEnd(getTopicPartitionList());
+        assertTruth(null).hasSize(4);
+    }
+
+    private List<TopicPartition> getTopicPartitionList() {
+        return UniLists.of(getTopicPartition());
+    }
+
+    @Test
+    void seekToBeginning() {
+        cf.seekToEnd(getTopicPartitionList());
+        assertTruth(null).hasSize(4);
+    }
+
+    @Test
+    void assign() {
+        cf.assign(getTopicPartitionList());
+        assertTruth(null).hasSize(4);
+    }
+
+    @Test
+    void poll() {
+    }
+
+    @Test
+    void commitSync() {
+    }
+
+    @Test
+    void resume() {
+    }
+
+    @Test
+    void pause() {
+    }
+
+    @Test
+    void wakeup() {
+    }
 }
