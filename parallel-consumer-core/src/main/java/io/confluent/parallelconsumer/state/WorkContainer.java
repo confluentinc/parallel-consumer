@@ -201,7 +201,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     @Override
     public String toString() {
-        return "WorkContainer(" + toTopicPartition(cr) + ":" + cr.offset() + ":" + cr.key() + ")";
+        return "WorkContainer(tp:" + toTopicPartition(cr) + ":o:" + cr.offset() + ":k:" + cr.key() + ")";
     }
 
     public Duration getTimeInFlight() {
