@@ -125,12 +125,12 @@ public class ProcessingShard<K, V> {
             var workContainer = iterator.next().getValue();
 
             if (pm.couldBeTakenAsWork(workContainer)) {
-
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
                 } else {
+                    log.trace("Skipping {} as work, not available to take as work", workContainer);
                     addToSlowWorkMaybe(slowWork, workContainer);
                 }
 
@@ -140,6 +140,15 @@ public class ProcessingShard<K, V> {
                     log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), getKey());
                     break;
                 }
+            } else {
+                // break, assuming all work in this shard, is for the same ShardKey, which is always on the same
+                //  partition (regardless of ordering mode - KEY, PARTITION or UNORDERED (which is parallel PARTITIONs)),
+                //  so no point continuing shard scanning. This only isn't true if a non standard partitioner produced the
+                //  recrods of the same key to different partitions. In which case, there's no way PC can make sure all
+                //  records of that belong to the shard are able to even be processed by the same PC instance, so it doesn't
+                //  matter.
+                log.trace("Partition for shard {} is blocked for work taking, stopping shard scan", this);
+                break;
             }
         }
 
