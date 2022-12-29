@@ -348,7 +348,6 @@ public class KafkaTestUtils {
             boolean isNotLinear = thisValue != lastValuePlusOne;
             if (isNotLinear) {
                 log.error("This value {} is not linear with last value {}", thisValue, lastValue);
-                log.error("");
             }
             assertThat(thisValue).as("polled sequence is sequential").isEqualTo(lastValuePlusOne);
             last = next;
