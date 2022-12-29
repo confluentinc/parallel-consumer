@@ -90,7 +90,7 @@ class CloseAndOpenOffsetTest extends BrokerIntegrationTest<String, String> {
     @EnumSource()
     @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
     void offsetsOpenClose(OffsetEncoding encoding) {
-        var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed);
+        var skip = UniLists.of(OffsetEncoding.ByteArray, OffsetEncoding.ByteArrayCompressed, OffsetEncoding.KafkaStreams, OffsetEncoding.KafkaStreamsV2);
         assumeFalse(skip.contains(encoding));
 
         // todo remove - not even relevant to this test? smelly
