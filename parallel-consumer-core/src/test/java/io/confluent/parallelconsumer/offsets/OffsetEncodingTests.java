@@ -134,7 +134,7 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
     @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
     void ensureEncodingGracefullyWorksWhenOffsetsAreVeryLargeAndNotSequential(OffsetEncoding encoding) {
         assumeThat("Codec skipped, not applicable", encoding,
-                not(in(of(ByteArray, ByteArrayCompressed)))); // byte array not currently used
+                not(in(of(ByteArray, ByteArrayCompressed, KafkaStreams, KafkaStreamsV2)))); // byte array not currently used
         var encodingsThatFail = UniLists.of(BitSet, BitSetCompressed, BitSetV2, RunLength, RunLengthCompressed);
 
         // todo don't use static public accessors to change things - makes parallel testing harder and is smelly
