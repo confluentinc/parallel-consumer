@@ -25,7 +25,6 @@ import org.testcontainers.utility.DockerImageName;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.commons.lang3.RandomUtils.nextInt;
@@ -116,9 +115,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
-            Void all = topics.all().get(1, TimeUnit.SECONDS);
-        } catch (ExecutionException e) {
-            // fine
+            Void all = topics.all().get(1, TimeUnit.MINUTES);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
