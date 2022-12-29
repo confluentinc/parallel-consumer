@@ -4,9 +4,11 @@ package io.confluent.csid.utils;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import lombok.experimental.UtilityClass;
 import org.slf4j.helpers.FormattingTuple;
 import org.slf4j.helpers.MessageFormatter;
 
+@UtilityClass
 public class StringUtils {
 
     /**
