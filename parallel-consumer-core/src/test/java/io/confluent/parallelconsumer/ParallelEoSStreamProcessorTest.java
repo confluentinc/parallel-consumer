@@ -36,7 +36,6 @@ import static io.confluent.csid.utils.KafkaTestUtils.checkExactOrdering;
 import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.LatchTestUtils.constructLatches;
-import static io.confluent.parallelconsumer.ManagedTruth.assertTruth;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -876,7 +875,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // use a small set of keys, over a large set of records
         final int keySetSize = 4;
         var keys = Range.range(keySetSize).listAsIntegers();
-        final int total = 100_000;
+        final int total = 50_000;
         log.debug("Generating {} records against {} keys...", total, keySetSize);
         var records = ktu.generateRecords(keys, total);
         records.forEach((key, value) -> log.debug("Key {} has {} records", key, value.size()));
