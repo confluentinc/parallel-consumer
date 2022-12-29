@@ -15,7 +15,7 @@ import java.util.Optional;
  *
  * @author Antony Stubbs
  */
-public interface ControllerInternalAPI<K, V> extends ThreadSafeAPI, ConsumerRebalanceListener {
+public interface ControllerInternalAPI<K, V> extends MultithreadingAPI, ConsumerRebalanceListener {
 
     /**
      * Thread safe async sending of results from worker thread

@@ -12,7 +12,7 @@ import java.util.concurrent.TimeoutException;
  *
  * @author Antony Stubbs
  */
-public interface BrokerPollerAPI extends OffsetCommitter, Supervisable, ThreadSafeAPI {
+public interface BrokerPollerAPI extends OffsetCommitter, Supervisable, MultithreadingAPI {
 
     /**
      * todo docs

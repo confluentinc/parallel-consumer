@@ -4,7 +4,7 @@ package io.confluent.csid.actors;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.internal.ThreadSafeAPI;
+import io.confluent.parallelconsumer.internal.MultithreadingAPI;
 
 import java.time.Duration;
 import java.util.concurrent.BlockingQueue;
@@ -56,7 +56,7 @@ import java.util.function.Consumer;
  * @author Antony Stubbs
  * @see ActorImpl
  */
-public interface Actor<T> extends Interruptible, ThreadSafeAPI {
+public interface Actor<T> extends Interruptible, MultithreadingAPI {
 
     /**
      * Exceptions in execution will be logged
