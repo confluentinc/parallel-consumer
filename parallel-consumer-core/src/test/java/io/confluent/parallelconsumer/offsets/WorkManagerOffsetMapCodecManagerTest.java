@@ -44,6 +44,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.of;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // todo refactor - remove tests which use hard coded state vs dynamic state - #compressionCycle, #selialiseCycle, #runLengthEncoding, #loadCompressedRunLengthRncoding
 @Slf4j
@@ -358,6 +359,49 @@ class WorkManagerOffsetMapCodecManagerTest {
         EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(pack);
         String deserialisedBitSet = encodedOffsetPair.getDecodedString();
         assertThat(deserialisedBitSet).isEqualTo(input);
+    }
+
+    /**
+    * Tests for friendly errors when Kafka Streams (as far as we can guess) magic numbers are found in the offset metadata.
+    */
+    @SneakyThrows
+    @Test
+    void deserialiseKafkaStreamsV1() {
+        final var input = ByteBuffer.allocate(32);
+        // magic number
+        input.put((byte) 1);
+        // timestamp
+        input.putLong(System.currentTimeMillis());
+
+        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
+        assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class);
+    }
+
+    /**
+     * Tests for friendly errors when Kafka Streams V2 (as far as we can guess) magic numbers are found in the offset metadata.
+     */
+    @SneakyThrows
+    @Test
+    void deserialiseKafkaStreamsV2() {
+        final var input = ByteBuffer.allocate(32);
+        // magic number
+        input.put((byte) 2);
+        // timestamp
+        input.putLong(System.currentTimeMillis());
+        // metadata
+        // number of entries
+        input.putInt(1);
+        // key size
+        input.putInt(1);
+        // key
+        input.put((byte) 'a');
+        // value
+        input.putLong(1L);
+
+        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
+        assertThatThrownBy(()->encodedOffsetPair.getDecodedIncompletes(0L))
+                .isInstanceOf(KafkaStreamsEncodingNotSupported.class);
     }
 
     @SneakyThrows
