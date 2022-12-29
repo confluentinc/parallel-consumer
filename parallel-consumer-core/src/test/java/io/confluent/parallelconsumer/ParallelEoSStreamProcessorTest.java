@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Deserializer;
@@ -26,7 +27,7 @@ import org.mockito.Mockito;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -49,7 +50,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 3, unit = MINUTES)
+@Timeout(value = 10, unit = MINUTES)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -876,29 +877,34 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // use a small set of keys, over a large set of records
         final int keySetSize = 4;
         var keys = Range.range(keySetSize).listAsIntegers();
-        final int total = 50_000;
+        final int total = 500_000; // record sending is excruciatingly "slow" due to the Mockito overhead
         log.debug("Generating {} records against {} keys...", total, keySetSize);
-        var records = ktu.generateRecords(keys, total);
-        records.forEach((key, value) -> log.debug("Key {} has {} records", key, value.size()));
-        log.debug("Sending...");
-        ktu.send(consumerSpy, records);
+        var records = ktu.generateRecords(Optional.of(consumerSpy), keys, total);
+        var resultsSequences = new ConcurrentHashMap<String, Deque<PollContext<String, String>>>();
+        records.forEach((key, value) -> {
+            log.debug("Key {} has {} records", key, value.size());
+            resultsSequences.computeIfAbsent(String.valueOf(key), ignore -> new ConcurrentLinkedDeque<>());
+        });
 
         var bar = ProgressBarUtils.getNewMessagesBar(log, total);
 
         // run
         log.debug("Consuming...");
-        var results = new ConcurrentHashMap<String, Queue<PollContext<String, String>>>();
         AtomicLong counter = new AtomicLong();
-        parallelConsumer.poll(recordContexts -> {
+        parallelConsumer.poll(current -> {
             counter.incrementAndGet();
             bar.step();
-            log.trace("Consumed {}", recordContexts);
-            results.computeIfAbsent(recordContexts.key(), ignore -> new ConcurrentLinkedQueue<>())
-                    .add(recordContexts);
+            log.trace("Consumed {}", current);
+            var resultPolledQueue = resultsSequences.get(current.key());
+            var previous = resultPolledQueue.peekLast();
+            if (previous != null) {
+                checkSequentialPoll(current, previous);
+            }
+            resultPolledQueue.add(current);
         });
 
         // count how many we've received so far
-        await().atMost(3, MINUTES)
+        await().atMost(10, MINUTES)
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 
@@ -909,9 +915,26 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         // check ordering is exact - remove sequenceSize?
         var sequenceSize = Math.max(total / keySetSize, 1); // if we have more keys than records, then we'll have a sequence size of 1, so round up
         log.debug("Testing...");
-        checkExactOrdering(results, records);
+        checkExactOrdering(resultsSequences, records);
 
-        assertTruth(bar).isFinalRateAtLeast(10000);
+        // poor person's performance regression check
+        var atLeastRate = 15000; // at least 10k records per second, observed locally at 22k
+        assertTruth(bar).isFinalRateAtLeast(atLeastRate);
+    }
+
+    private void checkSequentialPoll(PollContext<String, String> current, PollContext<String, String> previous) {
+        var previousValue = Integer.parseInt(StringUtils.substringBefore(previous.value(), ","));
+        var currentValue = Integer.parseInt(StringUtils.substringBefore(current.value(), ","));
+        var difference = currentValue - previousValue;
+        boolean isSequential = difference == 1;
+        if (!isSequential) {
+            log.error("This current value {} is not sequential with previous value {}. Difference in value is {}. Offsets are current: {} vs previous: {}",
+                    currentValue,
+                    previousValue,
+                    difference,
+                    current.offset(),
+                    previous.offset());
+        }
     }
 
 }

@@ -33,7 +33,7 @@
 
     <!-- primary -->
     <logger name="io.confluent.parallelconsumer" level="info"/>
-    <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
+<!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer" level="trace"/>-->
 
     <!--    <logger name="io.confluent.csid" level="trace"/>-->
@@ -46,8 +46,11 @@
 
     <!--    <logger name="io.confluent.csid.utils.LatchTestUtils" level="trace"/>-->
 
-        <logger name="io.confluent.parallelconsumer.internal.DynamicLoadFactor" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.internal.DynamicLoadFactor" level="debug"/>
 
+    <!--    <logger name="io.confluent.parallelconsumer.state.ProcessingShard" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionState" level="trace"/>-->
+    <!--    <logger name="io.confluent.parallelconsumer.state.PartitionStateManager" level="debug"/>-->
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
