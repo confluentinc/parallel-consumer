@@ -1,9 +1,10 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
+import com.google.common.eventbus.EventBus;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
@@ -32,6 +33,16 @@ public class PCModule<K, V> {
             meterRegistry = options().getMeterRegistry();
         }
         return meterRegistry;
+    }
+
+    EventBus eventBus;
+
+    public EventBus eventBus(){
+        if (eventBus == null) {
+            eventBus = options().getEventBus();
+        }
+
+        return eventBus;
     }
 
     protected ParallelConsumerOptions<K, V> optionsInstance;

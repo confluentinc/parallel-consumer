@@ -8,15 +8,11 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
 import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
-import io.micrometer.core.instrument.binder.logging.LogbackMetrics;
 import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.*;
@@ -156,8 +152,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
 
 
-            resultsFromUserFunction = userProcessingTimer.record(() -> usersFunction.apply(context));
+            var processingTimeAndResult = TimeUtils.timeWithMeta(() -> usersFunction.apply(context));
+            resultsFromUserFunction = processingTimeAndResult.getResult();
 
+            module.eventBus().post(MetricsEvent.builder().type(MetricsEvent.MetricsType.TIMER)
+                            .name(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME)
+                            .description("user function processing time")
+                            .timerValue(processingTimeAndResult.getElapsed())
+                            .build());
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
             }
@@ -334,11 +336,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         new ExecutorServiceMetrics(workerThreadPool, "pc-worker-executor", Collections.emptyList())
                 .bindTo(module.meterRegistry());
 
-        this.userProcessingTimer = io.micrometer.core.instrument.Timer.builder("pc.user.function.processing.time")
-                .description("user function processing time")
-                .publishPercentileHistogram(true)
-                .publishPercentiles(0.5,0.95,0.99,0.999)
-                .register(module.meterRegistry());
     }
 
     private void validateConfiguration() {
@@ -1199,9 +1196,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         lastCommitCheckTime = Instant.now();
     }
 
-    private io.micrometer.core.instrument.Timer userProcessingTimer;
-
-
     /**
      * Gather metrics from the {@link ParallelConsumer} and for monitoring.
      */
@@ -1211,9 +1205,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         addMetricsTo(metrics);
 
         getWm().addMetricsTo(metrics);
-
-        metrics.functionTimer(userProcessingTimer);
-        metrics.successCounter(successCounter);
 
         // should not create objects in metrics calculator method
         {
@@ -1244,16 +1235,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         addToMailbox(context, wc);
     }
 
-    Counter successCounter = Counter
-            .builder("instance")
-            .description("indicates instance count of the object")
-            .tags("dev", "performance")
-            .register(metricsRegistry);
-
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
         wc.onUserFunctionSuccess();
-        successCounter.increment();
     }
 
     protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {

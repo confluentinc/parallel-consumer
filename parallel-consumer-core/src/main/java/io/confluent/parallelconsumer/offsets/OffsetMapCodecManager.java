@@ -4,24 +4,22 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.TimeUtils;
+import io.confluent.parallelconsumer.MetricsEvent;
+import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
-import io.confluent.parallelconsumer.state.WorkContainer;
-import io.micrometer.core.instrument.*;
-import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.Tags;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
-import pl.tlinkowski.unij.api.UniLists;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -108,12 +106,6 @@ public class OffsetMapCodecManager<K, V> {
     // todo remove consumer #233
     public OffsetMapCodecManager(PCModule<K, V> module) {
         this.module = module;
-
-        avgEncodingTimeMeter = Timer.builder("pc.avg.encoding.time")
-                .description("Average time spend encoding offsets")
-                .publishPercentileHistogram(true)
-                .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                .register(module.meterRegistry());
     }
 
     /**
@@ -199,14 +191,6 @@ public class OffsetMapCodecManager<K, V> {
         String b64 = OffsetSimpleSerialisation.base64(compressedEncoding);
         return b64;
     }
-    private Timer avgEncodingTimeMeter;
-
-    private Counter getCounterMeterFor(String meterName, OffsetEncoding encoding) {
-        return Optional.ofNullable(module.meterRegistry().find(meterName)
-                        .tags("codec", encoding.name()).counter())
-                .orElseGet(()-> Counter.builder(meterName).tags("codec", encoding.name())
-                        .register(module.meterRegistry()));
-    }
 
     /**
      * Print out all the offset status into a String, and use X to effectively do run length encoding compression on the
@@ -230,7 +214,12 @@ public class OffsetMapCodecManager<K, V> {
         OffsetSimultaneousEncoder simultaneousEncoder = null;
         try {
             simultaneousEncoder =  new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
-            avgEncodingTimeMeter.recordCallable(simultaneousEncoder::invoke);
+
+            var encodingTime = TimeUtils.timeWithMeta(simultaneousEncoder::invoke).getElapsed();
+            module.eventBus().post(MetricsEvent.builder()
+                    .name(PCMetricsTracker.METRIC_NAME_OFFSETS_ENCODING_TIME)
+                    .timerValue(encodingTime)
+                    .type(MetricsEvent.MetricsType.TIMER));
          } catch (Exception e) {
             throw new InternalRuntimeException("Error encoding offsets", e);
         }
@@ -239,7 +228,11 @@ public class OffsetMapCodecManager<K, V> {
         if (forcedCodec.isPresent()) {
             var forcedOffsetEncoding = forcedCodec.get();
             log.debug("Forcing use of {}, for testing", forcedOffsetEncoding);
-            getCounterMeterFor("pc.encoding.usage", forcedOffsetEncoding).increment();
+            module.eventBus().post(MetricsEvent.builder()
+                            .name(PCMetricsTracker.METRIC_NAME_OFFSETS_ENCODING_USAGE)
+                            .tags(Tags.of("codec", forcedOffsetEncoding.name()))
+                            .value(1.0)
+                            .type(MetricsEvent.MetricsType.COUNTER));
 
             Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
             byte[] bytes = encodingMap.get(forcedOffsetEncoding);
@@ -247,8 +240,11 @@ public class OffsetMapCodecManager<K, V> {
                 throw new NoEncodingPossibleException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
             return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
         } else {
-            getCounterMeterFor("pc.encoding.usage", simultaneousEncoder.sortedEncodings.first().getEncoding())
-                    .increment();
+            module.eventBus().post(MetricsEvent.builder()
+                    .name(PCMetricsTracker.METRIC_NAME_OFFSETS_ENCODING_USAGE)
+                    .tags(Tags.of("codec", simultaneousEncoder.sortedEncodings.first().getEncoding().name()))
+                    .value(1.0)
+                    .type(MetricsEvent.MetricsType.COUNTER));
             return simultaneousEncoder.packSmallest();
         }
     }
