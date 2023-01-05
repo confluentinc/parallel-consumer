@@ -8,13 +8,6 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
-import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
-import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -51,15 +44,10 @@ import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
 /**
- * @author Antony Stubbs
  * @see ParallelConsumer
  */
-// metrics: avg time spend committing, avg user function running time, avg controller loop time
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
-
-    @Getter
-    private final SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
 
     public static final String MDC_INSTANCE_ID = "pcId";
 
@@ -70,7 +58,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
 
     @Getter(PROTECTED)
-    protected final ParallelConsumerOptions options;
+    protected final ParallelConsumerOptions<K, V> options;
 
     /**
      * Injectable clock for testing
@@ -127,75 +115,32 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     /**
-     * Run the supplied function.
+     * An inbound message to the controller.
+     * <p>
+     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
      */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
-        // call the user's function
-        List<R> resultsFromUserFunction;
-        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
+    @Value
+    @RequiredArgsConstructor(access = PRIVATE)
+    private static class ControllerEventMessage<K, V> {
 
-        try {
-            if (log.isDebugEnabled()) {
-                // first offset of the batch
-                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
-            }
-            log.trace("Pool received: {}", workContainerBatch);
+        WorkContainer<K, V> workContainer;
 
-            //
-            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
-            if (workIsStale) {
-                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
-                return null;
-            }
+        EpochAndRecordsMap<K, V> consumerRecords;
 
+        private boolean isWorkResult() {
+            return workContainer != null;
+        }
 
-            var processingTimeAndResult = TimeUtils.timeWithMeta(() -> usersFunction.apply(context));
-            resultsFromUserFunction = processingTimeAndResult.getResult();
+        private boolean isNewConsumerRecords() {
+            return !isWorkResult();
+        }
 
-            module.eventBus().post(MetricsEvent.builder().type(MetricsEvent.MetricsType.TIMER)
-                            .name(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME)
-                            .description("user function processing time")
-                            .timerValue(processingTimeAndResult.getElapsed())
-                            .build());
-            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
-                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
+        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
+            return new ControllerEventMessage<>(null, polledRecords);
+        }
 
-            // capture each result, against the input record
-            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {
-                log.trace("Running users call back...");
-                callback.accept(result);
-            }
-
-            // fail or succeed, either way we're done
-            for (var kvWorkContainer : workContainerBatch) {
-                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
-            }
-            log.trace("User function future registered");
-
-            return intermediateResults;
-        } catch (Exception e) {
-            // handle fail
-            var cause = e.getCause();
-            String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
-                    " mailbox. Context: {}", context, e);
-            if (cause instanceof PCRetriableException) {
-                log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
-            } else {
-                log.error(msg, e);
-            }
-
-            for (var wc : workContainerBatch) {
-                wc.onUserFunctionFailure(e);
-                addToMailbox(context, wc); // always add on error
-            }
-            throw e; // trow again to make the future failed
-        } finally {
-            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
+        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
+            return new ControllerEventMessage<K, V>(work, null);
         }
     }
 
@@ -245,7 +190,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public boolean isClosedOrFailed() {
-        boolean closed = state == State.closed;
+        boolean closed = state == State.CLOSED;
         boolean doneOrCancelled = false;
         if (this.controlThreadFuture.isPresent()) {
             Future<Boolean> threadFuture = controlThreadFuture.get();
@@ -267,7 +212,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see State
      */
     @Setter
-    private State state = State.unused;
+    private State state = State.UNUSED;
 
     /**
      * Wrapped {@link ConsumerRebalanceListener} passed in by a user that we can also call on events
@@ -278,9 +223,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private int numberOfAssignedPartitions;
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
-
-    @Getter(PROTECTED)
-    PCModule<K,V> module;
 
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
@@ -301,7 +243,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
-        this.module = module;
+
         options = newOptions;
         this.consumer = options.getConsumer();
 
@@ -332,10 +274,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
-
-        new ExecutorServiceMetrics(workerThreadPool, "pc-worker-executor", Collections.emptyList())
-                .bindTo(module.meterRegistry());
-
     }
 
     private void validateConfiguration() {
@@ -506,7 +444,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Close the system, without draining.
      *
-     * @see State#draining
+     * @see State#DRAINING
      */
     @Override
     public void close() {
@@ -518,7 +456,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     @SneakyThrows
     public void close(Duration timeout, DrainingMode drainMode) {
-        if (state == closed) {
+        if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
             log.info("Signaling to close...");
@@ -548,7 +486,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
-        while (!state.equals(closed)) {
+        while (!state.equals(CLOSED)) {
             try {
                 Future<Boolean> booleanFuture = this.controlThreadFuture.get();
                 log.debug("Blocking on control future");
@@ -609,7 +547,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         producerManager.ifPresent(x -> x.close(timeout));
 
         log.debug("Close complete.");
-        this.state = closed;
+        this.state = CLOSED;
 
         if (this.getFailureCause() != null) {
             log.error("PC closed due to error: {}", getFailureCause(), null);
@@ -639,7 +577,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void transitionToDraining() {
         log.debug("Transitioning to draining...");
-        this.state = State.draining;
+        this.state = State.DRAINING;
         notifySomethingToDo();
     }
 
@@ -678,11 +616,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected <R> void supervisorLoop(Function<PollContextInternal<K, V>, List<R>> userFunctionWrapped,
                                       Consumer<R> callback) {
-        if (state != State.unused) {
+        if (state != State.UNUSED) {
             throw new IllegalStateException(msg("Invalid state - you cannot call the poll* or pollAndProduce* methods " +
                     "more than once (they are asynchronous) (current state is {})", state));
         } else {
-            state = running;
+            state = RUNNING;
         }
 
         // broker poll subsystem
@@ -704,7 +642,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
             this.blockableControlThread = controlThread;
-            while (state != closed) {
+            while (state != CLOSED) {
                 log.debug("Control loop start");
                 try {
                     controlLoop(userFunctionWrapped, callback);
@@ -761,10 +699,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.trace("Current state: {}", state);
         switch (state) {
-            case draining -> {
+            case DRAINING -> {
                 drain();
             }
-            case closing -> {
+            case CLOSING -> {
                 doClose(DrainingCloseable.DEFAULT_TIMEOUT);
             }
         }
@@ -791,7 +729,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * todo move into {@link WorkManager} as it's specific to WM having enough work?
      */
     private void maybeWakeupPoller() {
-        if (state == running) {
+        if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
@@ -828,7 +766,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         int gotWorkCount = 0;
 
         //
-        if (state == running || state == draining) {
+        if (state == RUNNING || state == DRAINING) {
             int delta = calculateQuantityToRequest();
             var records = wm.getWorkIfAvailable(delta);
 
@@ -1013,10 +951,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void transitionToClosing() {
         log.debug("Transitioning to closing...");
-        if (state == State.unused) {
-            state = closed;
+        if (state == State.UNUSED) {
+            state = CLOSED;
         } else {
-            state = State.closing;
+            state = State.CLOSING;
         }
         notifySomethingToDo();
     }
@@ -1106,7 +1044,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private boolean isIdlingOrRunning() {
-        return state == running || state == draining || state == paused;
+        return state == RUNNING || state == DRAINING || state == PAUSED;
     }
 
     protected boolean isTimeToCommitNow() {
@@ -1169,7 +1107,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
             return minus;
         } else {
-            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", running, state);
+            log.debug("System not {} (state: {}), so don't wait to commit, only a small thread yield time", RUNNING, state);
             return Duration.ZERO;
         }
     }
@@ -1197,38 +1135,69 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
-     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
+     * Run the supplied function.
      */
-    public PCMetrics calculateMetrics() {
-        var metrics = PCMetrics.builder();
+    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
+                                                                                        Consumer<R> callback,
+                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
+        // call the user's function
+        List<R> resultsFromUserFunction;
+        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
 
-        addMetricsTo(metrics);
-
-        getWm().addMetricsTo(metrics);
-
-        // should not create objects in metrics calculator method
-        {
-            new JvmMemoryMetrics().bindTo(metricsRegistry);
-            new JvmThreadMetrics().bindTo(metricsRegistry);
-            new ProcessorMetrics().bindTo(metricsRegistry);
-
-
-            // need to add closables to close system on shutdown
-            {
-                new JvmGcMetrics().bindTo(metricsRegistry);
-                new KafkaClientMetrics(consumer).bindTo(metricsRegistry);
-                // can bind to wrapper?
-                //new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
-
-                // we don't use an admin client?
-                // new KafkaClientMetrics(admin).bindTo(metricsRegistry);
-
-                // can't for logback?
-                //new LogbackMetrics().bindTo(metricsRegistry);
+        try {
+            if (log.isDebugEnabled()) {
+                // first offset of the batch
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
             }
-        }
+            log.trace("Pool received: {}", workContainerBatch);
 
-        return metrics.build();
+            //
+            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
+            if (workIsStale) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
+                return null;
+            }
+
+            resultsFromUserFunction = usersFunction.apply(context);
+
+            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
+                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+            }
+
+            // capture each result, against the input record
+            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
+            for (R result : resultsFromUserFunction) {
+                log.trace("Running users call back...");
+                callback.accept(result);
+            }
+
+            // fail or succeed, either way we're done
+            for (var kvWorkContainer : workContainerBatch) {
+                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
+            }
+            log.trace("User function future registered");
+
+            return intermediateResults;
+        } catch (Exception e) {
+            // handle fail
+            var cause = e.getCause();
+            String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
+                    " mailbox. Context: {}", context, e);
+            if (cause instanceof PCRetriableException) {
+                log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
+            } else {
+                log.error(msg, e);
+            }
+
+            for (var wc : workContainerBatch) {
+                wc.onUserFunctionFailure(e);
+                addToMailbox(context, wc); // always add on error
+            }
+            throw e; // trow again to make the future failed
+        } finally {
+            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
+        }
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1317,9 +1286,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void pauseIfRunning() {
-        if (this.state == State.running) {
+        if (this.state == State.RUNNING) {
             log.info("Transitioning parallel consumer to state paused.");
-            this.state = State.paused;
+            this.state = State.PAUSED;
         } else {
             log.debug("Skipping transition of parallel consumer to state paused. Current state is {}.", this.state);
         }
@@ -1327,120 +1296,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     @Override
     public void resumeIfPaused() {
-        if (this.state == State.paused) {
+        if (this.state == State.PAUSED) {
             log.info("Transitioning parallel consumer to state running.");
-            this.state = State.running;
+            this.state = State.RUNNING;
             notifySomethingToDo();
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
-    }
-
-    /**
-     * An inbound message to the controller.
-     * <p>
-     * Currently, an Either type class, representing either newly polled records to ingest, or a work result.
-     */
-    @Value
-    @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
-
-        WorkContainer<K, V> workContainer;
-
-        EpochAndRecordsMap<K, V> consumerRecords;
-
-        private boolean isWorkResult() {
-            return workContainer != null;
-        }
-
-        private boolean isNewConsumerRecords() {
-            return !isWorkResult();
-        }
-
-
-//        CompositeMeterRegistry compositeRegistry = new CompositeMeterRegistry();
-
-//        compositeRegistry.add(oneSimpleMeter);
-//
-//        var registry = compositeRegistry;
-//
-//
-//        successCounter.increment(2.0);
-//
-//        assertTrue(successCounter.count() == 2);
-//
-//        successCounter.increment(-1);
-//
-//        assertTrue(successCounter.count() == 1);
-//
-//
-//        io.micrometer.core.instrument.Timer timer = registry.timer("app.event");
-//        timer.record(() -> {
-//            try {
-//                TimeUnit.MILLISECONDS.sleep(15);
-//            } catch (InterruptedException ignored) {
-//            }
-//        });
-//
-//        timer.record(30, TimeUnit.MILLISECONDS);
-//
-//
-//        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-//        List<String> list = new ArrayList<>(4);
-//
-//        Gauge gauge = Gauge
-//                .builder("cache.size", list, List::size)
-//                .register(registry);
-//
-//
-//        list.add("1");
-//
-//
-//        //
-//        DistributionSummary distributionSummary = DistributionSummary
-//                .builder("request.size")
-//                .baseUnit("bytes")
-//                .register(registry);
-//
-//        distributionSummary.record(3);
-//        distributionSummary.record(4);
-//        distributionSummary.record(5);
-//
-//
-//        Timer timer = new Timer
-//                .("test.timer")
-//                .publishPercentiles(0.3, 0.5, 0.95)
-//                .publishPercentileHistogram()
-//                .register(registry);
-
-
-       // new LogbackMetrics().bindTo(metricsRegistry);
-
-        private static <K, V> ControllerEventMessage<K, V> of(EpochAndRecordsMap<K, V> polledRecords) {
-            return new ControllerEventMessage<>(null, polledRecords);
-        }
-
-        public static <K, V> ControllerEventMessage<K, V> of(WorkContainer<K, V> work) {
-            return new ControllerEventMessage<K, V>(work, null);
-        }
-    }
-
-    /**
-     * todo docs
-     */
-    public PCMetrics calculateMetricsWithIncompletes() {
-        PCMetrics pcMetrics = calculateMetrics();
-        Map<TopicPartition, PCMetrics.PCPartitionMetrics> partitionMetrics = pcMetrics.getPartitionMetrics();
-
-        getWm().enrichWithIncompletes(partitionMetrics);
-
-        PCMetrics.PCMetricsBuilder<?, ?> metrics = pcMetrics.toBuilder();
-        return metrics.build();
-    }
-
-    protected void addMetricsTo(PCMetrics.PCMetricsBuilder<?, ? extends PCMetrics.PCMetricsBuilder<?, ?>> metrics) {
-        metrics.dynamicLoadFactor(dynamicExtraLoadFactor.getCurrentFactor());
-        metrics.pollerMetrics(brokerPollSubsystem.getMetrics());
     }
 
 }
