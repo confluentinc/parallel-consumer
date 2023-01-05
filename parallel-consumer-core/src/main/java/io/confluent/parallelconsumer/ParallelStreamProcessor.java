@@ -1,10 +1,11 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import lombok.Data;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -105,4 +106,6 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      * Gather metrics from the {@link ParallelConsumer} including incomplete offsets and for monitoring.
      */
     PCMetrics calculateMetricsWithIncompletes();
+
+    void registerMetricsTracker(MeterBinder binder);
 }

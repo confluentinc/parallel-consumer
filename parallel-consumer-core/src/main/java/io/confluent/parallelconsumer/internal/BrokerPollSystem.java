@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.PCMetrics;
@@ -342,13 +342,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * Pause polling from the underlying Kafka Broker.
      * <p>
      * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#running running}, calling this method will be a no-op.
+     * {@link io.confluent.parallelconsumer.internal.State#RUNNING running}, calling this method will be a no-op.
      * </p>
      */
     public void pausePollingAndWorkRegistrationIfRunning() {
-        if (this.runState == State.running) {
+        if (this.runState == RUNNING) {
             log.info("Transitioning broker poll system to state paused.");
-            this.runState = State.paused;
+            this.runState = PAUSED;
         } else {
             log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.runState);
         }
@@ -358,13 +358,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * Resume polling from the underlying Kafka Broker.
      * <p>
      * Note: If the poll system is currently not in state
-     * {@link io.confluent.parallelconsumer.internal.State#paused paused}, calling this method will be a no-op.
+     * {@link io.confluent.parallelconsumer.internal.State#PAUSED paused}, calling this method will be a no-op.
      * </p>
      */
     public void resumePollingAndWorkRegistrationIfPaused() {
-        if (this.runState == State.paused) {
+        if (this.runState == PAUSED) {
             log.info("Transitioning broker poll system to state running.");
-            this.runState = State.running;
+            this.runState = RUNNING;
         } else {
             log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
         }

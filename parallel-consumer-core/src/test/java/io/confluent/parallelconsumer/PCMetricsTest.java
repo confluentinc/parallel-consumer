@@ -1,13 +1,12 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.util.concurrent.TimeUnit;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -44,7 +43,7 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
             assertThat(pcPartitionMetrics).getNumberOfIncompletes().isEqualTo(0);
         });
 
-        final SimpleMeterRegistry metricsRegistry = parallelConsumer.getMetricsRegistry();
+        final SimpleMeterRegistry metricsRegistry = (SimpleMeterRegistry) this.getModule().meterRegistry();
         metricsRegistry.getMeters().forEach(meter -> {
             log.error("Meter: {}", meter);
         });
@@ -61,11 +60,5 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
             var incompletes = incompleteMetrics.get().getIncompleteOffsets();
             assertThat(incompletes).isEmpty();
         });
-
-        {
-            PCMetrics metrics = parallelConsumer.calculateMetricsWithIncompletes();
-            log.warn("timer: {} ms", metrics.getFunctionTimer().mean(TimeUnit.MILLISECONDS));
-            log.warn("Counter: {}", metrics.getSuccessCounter().count());
-        }
     }
 }

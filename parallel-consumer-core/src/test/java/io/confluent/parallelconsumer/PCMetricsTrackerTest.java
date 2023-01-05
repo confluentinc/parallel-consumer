@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.State;
@@ -32,8 +32,7 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
         registry = (SimpleMeterRegistry) this.getModule().meterRegistry();
         final int quantity = 10_000;
         final var pcMetricsTracker = new PCMetricsTracker(this.parallelConsumer::calculateMetricsWithIncompletes, commonTags);
-        pcMetricsTracker.bindTo(registry);
-        this.getModule().eventBus().register(pcMetricsTracker);
+        parallelConsumer.registerMetricsTracker(pcMetricsTracker);
         ktu.sendRecords(quantity);
 
         parallelConsumer.poll(recordContexts -> {
@@ -45,8 +44,8 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
         // metrics have some data
         await().untilAsserted(() -> {
             assertFalse(registry.getMeters().isEmpty());
-            assertEquals(State.running.ordinal(),
-                    registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_PC_STATUS, "status", State.running.name()));
+            assertEquals(State.RUNNING.ordinal(),
+                    registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_PC_STATUS, "status", State.RUNNING.name()));
             assertEquals(1, registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_NUMBER_SHARDS));
             assertEquals(2, registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_NUMBER_PARTITIONS));
         });
@@ -64,7 +63,7 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
 
             assertEquals(10_000, registeredCounterValueFor(PCMetricsTracker.METRIC_NAME_PROCESSED_RECORDS,
                     "epoch", "0", "topic", topicPartition.topic(), "partition", String.valueOf(topicPartition.partition())));
-            assertTrue(0 <= registeredTimerFor(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME));
+            assertTrue(0.0 < registeredTimerFor(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME));
         });
     }
 

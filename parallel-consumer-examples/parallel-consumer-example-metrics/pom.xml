@@ -13,8 +13,8 @@
         <version>0.5.2.5-SNAPSHOT</version>
     </parent>
 
-    <artifactId>parallel-consumer-example-core</artifactId>
-    <name>Confluent Parallel Consumer Example - Core</name>
+    <artifactId>parallel-consumer-example-metrics</artifactId>
+    <name>Confluent Parallel Consumer Example - Metrics</name>
 
     <dependencies>
         <!-- tag::exampleDep[] -->
@@ -22,6 +22,11 @@
             <groupId>io.confluent.parallelconsumer</groupId>
             <artifactId>parallel-consumer-core</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>1.8.2</version>
         </dependency>
         <!-- end::exampleDep[] -->
         <dependency>
@@ -34,6 +39,26 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>1.4.4</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.4.4</version>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

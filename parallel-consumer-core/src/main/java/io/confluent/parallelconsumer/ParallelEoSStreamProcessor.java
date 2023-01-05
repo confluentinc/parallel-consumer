@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -161,6 +162,12 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     public void pollAndProduce(Function<PollContext<K, V>, ProducerRecord<K, V>> userFunction,
                                Consumer<ConsumeProduceResult<K, V, K, V>> callback) {
         pollAndProduceMany(consumerRecord -> UniLists.of(userFunction.apply(consumerRecord)), callback);
+    }
+
+    @Override
+    public void registerMetricsTracker(MeterBinder binder) {
+        binder.bindTo(getModule().meterRegistry());
+        getModule().eventBus().register(binder);
     }
 
 }

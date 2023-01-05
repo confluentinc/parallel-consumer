@@ -1,15 +1,13 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.State;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.state.ShardKey;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
@@ -35,10 +33,6 @@ public class PCMetrics {
     Map<ShardKey, ShardMetrics> shardMetrics;
 
     PollerMetrics pollerMetrics;
-
-    Timer functionTimer;
-
-    Counter successCounter;
 
     /**
      * The number of partitions assigned to this consumer

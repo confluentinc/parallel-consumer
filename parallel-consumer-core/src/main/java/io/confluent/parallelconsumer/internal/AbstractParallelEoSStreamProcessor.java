@@ -1,13 +1,20 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.binder.BaseUnits;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
+import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -224,6 +231,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
+    @Getter(PROTECTED)
+    PCModule<K,V> module;
+
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
      * (e.g. we may want 10, but maybe there's a single partition and we're in partition mode - stepping up won't
@@ -243,7 +253,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
         Objects.requireNonNull(newOptions, "Options must be supplied");
-
+        this.module = module;
         options = newOptions;
         this.consumer = options.getConsumer();
 
@@ -274,6 +284,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+
+        new ExecutorServiceMetrics(workerThreadPool, "pc-worker-executor", Collections.emptyList())
+                .bindTo(module.meterRegistry());
+
     }
 
     private void validateConfiguration() {
@@ -1158,8 +1172,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
                 return null;
             }
-
-            resultsFromUserFunction = usersFunction.apply(context);
+            var resultWithDuration = TimeUtils.timeWithMeta(()->usersFunction.apply(context));
+            resultsFromUserFunction = resultWithDuration.getResult();
+            module.eventBus().post(MetricsEvent.builder().name(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME)
+                    .type(MetricsEvent.MetricsType.TIMER)
+                            .unit(BaseUnits.MILLISECONDS)
+                    .timerValue(resultWithDuration.getElapsed()).build());
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
@@ -1198,6 +1216,42 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } finally {
             context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
         }
+    }
+
+    /**
+     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
+     */
+    public PCMetrics calculateMetrics() {
+        var metrics = PCMetrics.builder();
+        var metricsRegistry = module.meterRegistry();
+
+        addMetricsTo(metrics);
+
+        getWm().addMetricsTo(metrics);
+
+        //TODO: should not create objects in metrics calculator method
+        {
+            new JvmMemoryMetrics().bindTo(metricsRegistry);
+            new JvmThreadMetrics().bindTo(metricsRegistry);
+            new ProcessorMetrics().bindTo(metricsRegistry);
+
+
+            // need to add closables to close system on shutdown
+            {
+                new JvmGcMetrics().bindTo(metricsRegistry);
+                new KafkaClientMetrics(consumer).bindTo(metricsRegistry);
+                // can bind to wrapper?
+                //new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
+
+                // we don't use an admin client?
+                // new KafkaClientMetrics(admin).bindTo(metricsRegistry);
+
+                // can't for logback?
+                //new LogbackMetrics().bindTo(metricsRegistry);
+            }
+        }
+
+        return metrics.build();
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1303,6 +1357,24 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } else {
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
+    }
+
+    /**
+     * todo docs
+     */
+    public PCMetrics calculateMetricsWithIncompletes() {
+        PCMetrics pcMetrics = calculateMetrics();
+        Map<TopicPartition, PCMetrics.PCPartitionMetrics> partitionMetrics = pcMetrics.getPartitionMetrics();
+
+        getWm().enrichWithIncompletes(partitionMetrics);
+
+        PCMetrics.PCMetricsBuilder<?, ?> metrics = pcMetrics.toBuilder();
+        return metrics.build();
+    }
+
+    protected void addMetricsTo(PCMetrics.PCMetricsBuilder<?, ? extends PCMetrics.PCMetricsBuilder<?, ?>> metrics) {
+        metrics.dynamicLoadFactor(dynamicExtraLoadFactor.getCurrentFactor());
+        metrics.pollerMetrics(brokerPollSubsystem.getMetrics());
     }
 
 }

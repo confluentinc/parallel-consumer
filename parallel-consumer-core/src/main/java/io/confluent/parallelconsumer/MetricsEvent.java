@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.binder.BaseUnits;
 import lombok.Builder;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
@@ -23,7 +22,7 @@ public class MetricsEvent {
     Double value;
 
     Duration timerValue;
-    BaseUnits unit;
+    String unit;
     @Builder.Default
     Tags tags = Tags.empty();
     @Builder.Default
