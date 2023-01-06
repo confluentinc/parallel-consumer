@@ -9,7 +9,13 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.MeterBinder;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -166,8 +172,12 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     @Override
     public void registerMetricsTracker(MeterBinder binder) {
-        binder.bindTo(getModule().meterRegistry());
+        var metricsRegistry = getModule().meterRegistry();
+
+        UniLists.of(binder, new JvmMemoryMetrics(), new JvmThreadMetrics(), new ProcessorMetrics(), new JvmGcMetrics(),
+                        new ExecutorServiceMetrics(this.getWorkerThreadPool(), "pc-user-function-executor", Tags.empty()))
+                .forEach(meterBinder -> meterBinder.bindTo(metricsRegistry));
+
         getModule().eventBus().register(binder);
     }
-
 }

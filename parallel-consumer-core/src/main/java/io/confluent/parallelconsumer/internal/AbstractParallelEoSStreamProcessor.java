@@ -10,11 +10,6 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.binder.BaseUnits;
 import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
-import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
-import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -107,6 +102,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The pool which is used for running the users' supplied function
      */
+    @Getter(PROTECTED)
     protected final ThreadPoolExecutor workerThreadPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
@@ -1228,28 +1224,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         addMetricsTo(metrics);
 
         getWm().addMetricsTo(metrics);
-
-        //TODO: should not create objects in metrics calculator method
-        {
-            new JvmMemoryMetrics().bindTo(metricsRegistry);
-            new JvmThreadMetrics().bindTo(metricsRegistry);
-            new ProcessorMetrics().bindTo(metricsRegistry);
-
-
-            // need to add closables to close system on shutdown
-            {
-                new JvmGcMetrics().bindTo(metricsRegistry);
-                new KafkaClientMetrics(consumer).bindTo(metricsRegistry);
-                // can bind to wrapper?
-                //new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
-
-                // we don't use an admin client?
-                // new KafkaClientMetrics(admin).bindTo(metricsRegistry);
-
-                // can't for logback?
-                //new LogbackMetrics().bindTo(metricsRegistry);
-            }
-        }
 
         return metrics.build();
     }

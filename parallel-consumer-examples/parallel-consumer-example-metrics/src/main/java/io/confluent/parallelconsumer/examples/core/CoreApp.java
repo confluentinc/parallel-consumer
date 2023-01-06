@@ -9,10 +9,6 @@ import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.micrometer.core.instrument.Tag;
-import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmHeapPressureMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
 import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
 import io.micrometer.prometheus.PrometheusConfig;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
@@ -106,13 +102,11 @@ public class CoreApp {
     @SuppressWarnings({"FeatureEnvy", "MagicNumber"})
     ParallelStreamProcessor<String, String> setupParallelConsumer() {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer(); // <1>
-        Producer<String, String> kafkaProducer = getKafkaProducer();
 
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY) // <2>
                 .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
-                .producer(kafkaProducer)
                 .meterRegistry(metricsRegistry)
                 .build();
 
@@ -121,12 +115,13 @@ public class CoreApp {
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
 
+        new KafkaClientMetrics(kafkaConsumer).bindTo(metricsRegistry);
+
         pcMetricsTracker = new PCMetricsTracker(eosStreamProcessor::calculateMetricsWithIncompletes,
                 UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
+
         eosStreamProcessor.registerMetricsTracker(pcMetricsTracker);
-        UniLists.of(new KafkaClientMetrics(kafkaConsumer), new JvmMemoryMetrics(),
-                        new JvmHeapPressureMetrics(), new JvmGcMetrics(), new JvmThreadMetrics())
-                .stream().forEach(m -> m.bindTo(metricsRegistry));
+
 
         return eosStreamProcessor;
     }

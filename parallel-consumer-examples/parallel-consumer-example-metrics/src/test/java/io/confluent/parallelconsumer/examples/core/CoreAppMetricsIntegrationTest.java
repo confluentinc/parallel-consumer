@@ -11,10 +11,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.clients.producer.MockProducer;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.serialization.Serdes;
 import org.awaitility.Awaitility;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
@@ -88,12 +85,6 @@ public class CoreAppMetricsIntegrationTest{
             when(mockConsumer.groupMetadata())
                     .thenReturn(new ConsumerGroupMetadata("groupid")); // todo fix AK mock consumer
             return mockConsumer;
-        }
-
-        @Override
-        Producer<String, String> getKafkaProducer() {
-            var stringSerializer = Serdes.String().serializer();
-            return new MockProducer<>(true, stringSerializer, stringSerializer);
         }
 
         @Override
