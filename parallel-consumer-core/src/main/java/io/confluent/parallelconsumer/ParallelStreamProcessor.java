@@ -107,5 +107,9 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
      */
     PCMetrics calculateMetricsWithIncompletes();
 
+    /**
+     * Registers a {@link MeterBinder} to collect instrumentation metrics.
+     * @param binder
+     */
     void registerMetricsTracker(MeterBinder binder);
 }

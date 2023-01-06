@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.core;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.sun.net.httpserver.HttpServer;
