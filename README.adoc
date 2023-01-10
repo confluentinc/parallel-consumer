@@ -1320,6 +1320,19 @@ So it's very efficient.
 
 http://www.apache.org/[Apache®], http://kafka.apache.org/[Apache Kafka], and http://kafka.apache.org/[Kafka®] are either registered trademarks or trademarks of the http://www.apache.org/[Apache Software Foundation] in the United States and/or other countries.
 
+== Tools
+
+image:https://www.yourkit.com/images/yklogo.png[link=https://www.yourkit.com/java/profiler/index.jsp,YourKit]
+
+Quite simply the best profiler for Java, and the only one I use.
+I have been using it for decades.
+Quick, easy to use but soo powerful.
+
+YourKit supports open source projects with innovative and intelligent tools for monitoring and profiling Java and .NET applications.
+
+YourKit is the creator of https://www.google.com/url?q=https://www.yourkit.com/java/profiler/&source=gmail-imap&ust=1670918364000000&usg=AOvVaw3kaQak_H7lmT_plCEzxvde[YourKit Java Profiler],
+https://www.google.com/url?q=https://www.yourkit.com/.net/profiler/&source=gmail-imap&ust=1670918364000000&usg=AOvVaw1ZgQhyH2rIOHTuqtTjFAsA[YourKit .NET Profiler], and https://www.google.com/url?q=https://www.yourkit.com/youmonitor/&source=gmail-imap&ust=1670918364000000&usg=AOvVaw13UzOhGkJLEn-Md3-GNjYB[YourKit YouMonitor].
+
 :leveloffset: +1
 :toc: macro
 :toclevels: 1
@@ -1386,13 +1399,11 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
-
 === Fixes
 
 * fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
 * fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
-
 
 == v0.5.2.2
 
@@ -1675,3 +1686,4 @@ without operational burden or harming the clusters performance
 ** Throttle control and broker liveliness management
 ** Clean draining shutdown cycle
 //:leveloffset: -1 - Duplicate key leveloffset (attempted merging values +1 and -1): https://github.com/whelk-io/asciidoc-template-maven-plugin/issues/118
+

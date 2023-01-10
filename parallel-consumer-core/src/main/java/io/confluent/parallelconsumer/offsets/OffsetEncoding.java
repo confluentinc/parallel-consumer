@@ -39,7 +39,15 @@ public enum OffsetEncoding {
      * switch from encoding run lengths as Shorts to Integers
      */
     RunLengthV2(v2, (byte) 'e'),
-    RunLengthV2Compressed(v2, (byte) 'p');
+    RunLengthV2Compressed(v2, (byte) 'p'),
+
+    /**
+     * Checks for pre-existing Kafka Streams metadata. Although the Kafka Streams magic numbers are annoyingly simple, ours are not, so should be safe to take this guess that they are indeed from Kafka Streams.
+     * <a href="https://github.com/apache/kafka/blob/cc77a38d280657a0e3969b255f103af4d11c7914/streams/src/main/java/org/apache/kafka/streams/processor/internals/TopicPartitionMetadata.java#L33">source from Kafka Streams code</a>
+     */
+    KafkaStreams(v1, (byte) 1),
+    KafkaStreamsV2(v2, (byte) 2);
+
 
     public enum Version {
         v1, v2

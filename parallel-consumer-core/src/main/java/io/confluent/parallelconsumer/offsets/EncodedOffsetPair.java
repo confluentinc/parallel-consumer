@@ -114,6 +114,8 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrapToIncompletes(BitSetV2, baseOffset, decompressZstd(data));
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
+            case KafkaStreams, KafkaStreamsV2 ->
+                    throw new KafkaStreamsEncodingNotSupported();
             default ->
                     throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };
