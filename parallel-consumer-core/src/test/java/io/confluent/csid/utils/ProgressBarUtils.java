@@ -29,7 +29,7 @@ public class ProgressBarUtils {
                 .setConsumer(delegatingProgressBarConsumer)
                 .setInitialMax(initialMax)
                 .showSpeed()
-                .setTaskName(DEFAULT_LABEL)
+                .setTaskName(name)
                 .setUnit("msg", 1)
                 .build();
     }

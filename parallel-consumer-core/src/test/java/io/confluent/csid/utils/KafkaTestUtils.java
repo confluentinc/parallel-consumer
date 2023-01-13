@@ -173,10 +173,18 @@ public class KafkaTestUtils {
         Assertions.assertThat(offset).isEqualTo(expected);
     }
 
-    public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
-        HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(defaultKeys, quantity);
+    public List<ConsumerRecord<String, String>> generateRecords(Optional<MockConsumer<String, String>> consumerSpy, int quantity) {
+        HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(consumerSpy, defaultKeys, quantity);
         Collection<List<ConsumerRecord<String, String>>> values = integerListHashMap.values();
         return flatten(values);
+    }
+
+    /**
+     * @deprecated see {@link #send(MockConsumer, HashMap)}
+     */
+    @Deprecated
+    public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
+        return generateRecords(Optional.empty(), quantity);
     }
 
     /**
@@ -193,8 +201,7 @@ public class KafkaTestUtils {
     public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(Optional<MockConsumer<String, String>> consumerSpy,
                                                                                   List<Integer> keys, int quantity) {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
-//        List<Integer> keyWork = UniLists.copyOf(keys);
-        var newMessagesBar = ProgressBarUtils.getNewMessagesBar(log, quantity);
+        var newMessagesBar = ProgressBarUtils.getNewMessagesBar("Generating", log, quantity);
         int globalCount = 0;
         while (globalCount < quantity) {
             Integer key = getRandomKey(keys);
@@ -207,9 +214,7 @@ public class KafkaTestUtils {
             if (consumerSpy.isPresent()) {
                 consumerSpy.get().addRecord(rec);
             }
-//            var consumerRecords = generateRecordsForKey(key, recsCountForThisKey);
             keyList.add(rec);
-//            keyRecords.put(key, consumerRecords);
             globalCount++;
             newMessagesBar.step();
         }
@@ -261,9 +266,15 @@ public class KafkaTestUtils {
     }
 
     /**
-     * NOTE: Be wary of using this, as ConsumerRecords are have their offset hard coded, so it's up to the user to
-     * ensure the records are in the order that matches the offset order for the target partition.
+     * NOTE: Be wary of using this, as ConsumerRecords have their offset hard coded, so it's up to the user to ensure
+     * the records are in the order that matches the offset order for the target partition. If the offsets in the
+     * virtual partition are not in sequential order, you will see strange test results, where the PC will be ignoring
+     * or dropping records as they're not in the correct offset order. Issues may not show up in some tests though.
+     *
+     * @deprecated records should be added to the MockConsumer as soon as they're created, in order to ensure offset
+     *         ordering is correct
      */
+    @Deprecated
     public void send(MockConsumer<String, String> consumerSpy, HashMap<?, List<ConsumerRecord<String, String>>> records) {
         for (List<ConsumerRecord<String, String>> value : records.values()) {
             send(consumerSpy, value);
@@ -275,7 +286,7 @@ public class KafkaTestUtils {
         // send records in `correct` offset order as declared by the input data, regardless of the order of the input list
         List<ConsumerRecord<String, String>> sorted = new ArrayList<>(records);
         sorted.sort(Comparator.comparingLong(ConsumerRecord::offset));
-        var newMessagesBar = ProgressBarUtils.getNewMessagesBar(log, records.size());
+        var newMessagesBar = ProgressBarUtils.getNewMessagesBar("Sending", log, records.size());
         for (ConsumerRecord<String, String> record : sorted) {
             newMessagesBar.step();
             consumerSpy.addRecord(record);
