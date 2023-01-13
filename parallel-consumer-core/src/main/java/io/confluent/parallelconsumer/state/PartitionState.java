@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
@@ -484,7 +484,10 @@ public class PartitionState<K, V> {
                     getTp(), metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
-            setAllowedMoreRecords(true);
+            if (allowedMoreRecords == false) {
+                // guard is useful for debugging to catch the transition from false to true
+                setAllowedMoreRecords(true);
+            }
             log.debug("Payload size {} within threshold {}", metaPayloadLength, getPressureThresholdValue());
         }
 
@@ -588,15 +591,17 @@ public class PartitionState<K, V> {
      */
     public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
         if (checkIfWorkIsStale(workContainer)) {
-            log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
+            log.trace("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
             return false;
         } else if (isAllowedMoreRecords()) {
+            log.trace("Partition is allowed more records. Taking work. WC: {}", workContainer);
             return true;
         } else if (isBlockingProgress(workContainer)) {
             // allow record to be taken, even if partition is blocked, as this record completion may reduce payload size requirement
+            log.trace("Partition is blocked, but this record is blocking progress. Taking work. WC: {}", workContainer);
             return true;
         } else {
-            log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
+            log.trace("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +
                             "record ({}) belongs to, due to offset encoding back pressure, is within the encoded payload already (offset lower than highest succeeded, " +
                             "not in flight ({}), continuing on to next container in shardEntry.",
                     workContainer.getTopicPartition(), workContainer.offset(), workContainer.isNotInFlight());

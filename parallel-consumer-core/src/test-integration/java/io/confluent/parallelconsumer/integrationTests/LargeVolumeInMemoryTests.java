@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
@@ -21,6 +21,7 @@ import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.assertj.core.util.Lists;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import pl.tlinkowski.unij.api.UniLists;
@@ -28,14 +29,13 @@ import pl.tlinkowski.unij.api.UniLists;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.GeneralTestUtils.time;
 import static io.confluent.csid.utils.Range.range;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.util.Comparator.comparing;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.waitAtMost;
 import static org.mockito.Mockito.mock;
@@ -56,28 +56,34 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
                 .commitMode(commitMode)
                 .build());
 
-//        int quantityOfMessagesToProduce = 1_000_000;
-        int quantityOfMessagesToProduce = 500;
+        // MockProducer#send() and Mockito are very slow, and very slow (thank you YourKit for profiling this)
+        // and seems to get slower the more records are sent, but YourKit won't profile inside #send - I don't know why
+        // All quantities do pass the test though.
+//        int quantityOfMessagesToProduce = 200_000;
+//        int quantityOfMessagesToProduce = 100_000;
+        int quantityOfMessagesToProduce = 5_000;
+//        int quantityOfMessagesToProduce = 10_000;
+//        int quantityOfMessagesToProduce = 500;
 
-        List<ConsumerRecord<String, String>> records = ktu.generateRecords(quantityOfMessagesToProduce);
-        ktu.send(consumerSpy, records);
+        ktu.generateRecords(Optional.of(consumerSpy), quantityOfMessagesToProduce);
 
-        CountDownLatch allMessagesConsumedLatch = new CountDownLatch(quantityOfMessagesToProduce);
+        ProgressBar progress = ProgressBarUtils.getNewMessagesBar("Processing", log, quantityOfMessagesToProduce);
 
+        AtomicInteger ackd = new AtomicInteger();
         parallelConsumer.pollAndProduceMany((rec) -> {
             ProducerRecord<String, String> mock = mock(ProducerRecord.class);
             return UniLists.of(mock);
         }, (x) -> {
-//            log.debug(x.toString());
-            allMessagesConsumedLatch.countDown();
+            progress.stepTo(ackd.incrementAndGet());
         });
 
         //
-        allMessagesConsumedLatch.await(defaultTimeoutSeconds, SECONDS);
-//        waitAtMost(defaultTimeout).until(() -> producerSpy.consumerGroupOffsetsHistory().size() > 0);
-
+        waitAtMost(defaultTimeout.multipliedBy(50))
+                .untilAsserted(() -> assertThat(ackd.get()).isEqualTo(quantityOfMessagesToProduce));
 
         parallelConsumer.close();
+        progress.close();
+
 
         // assert quantity of produced messages
         List<ProducerRecord<String, String>> history = producerSpy.history();
@@ -100,8 +106,6 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
             long mostRecentConsumerCommitOffset = new ArrayList<>(consumerCommitHistory.get(consumerCommitHistory.size() - 1).values()).get(0).offset(); // non-tx
             assertThat(mostRecentConsumerCommitOffset).isEqualTo(quantityOfMessagesToProduce);
         }
-
-        // TODO: Assert process ordering
     }
 
     private void assertCommitsAlwaysIncrease() {
@@ -151,13 +155,17 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         setupParallelConsumerInstance(baseOptions);
 
         Duration unorderedDuration = null;
-        for (var round : range(2)) { // warm up round first
+
+        // warm up
+        var numberOfWarmUpRoundsToPerform = 2;
+        for (var round : range(numberOfWarmUpRoundsToPerform)) { // warm up round first
             setupParallelConsumerInstance(baseOptions.toBuilder().ordering(UNORDERED).build());
-            log.debug("No order");
+            log.debug("Using UNORDERED mode");
             unorderedDuration = time(() -> testTiming(defaultNumKeys, quantityOfMessagesToProduce));
             log.info("Duration for Unordered processing in round {} with {} keys was {}", round, defaultNumKeys, unorderedDuration);
         }
 
+        // actual test
         var keyOrderingSizeToResults = new TreeMap<Integer, Duration>();
         for (var keySize : UniLists.of(1, 2, 5, 10, 20, 50, 100, 1_000)) {
             setupParallelConsumerInstance(baseOptions.toBuilder().ordering(KEY).build());
@@ -202,6 +210,18 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
     }
 
     /**
+     * Simple sanity test for the main test function
+     */
+    @Test
+    void testTimingTest() {
+        // test that the utility method works for a simple case
+        var quantityOfMessagesToProduce = 100;
+        var defaultNumKeys = 10;
+
+        testTiming(defaultNumKeys, quantityOfMessagesToProduce);
+    }
+
+    /**
      * Runs a round of consumption and returns the time taken
      */
     private void testTiming(int numberOfKeys, int quantityOfMessagesToProduce) {
@@ -211,38 +231,44 @@ class LargeVolumeInMemoryTests extends ParallelEoSStreamProcessorTestBase {
         super.injectWorkSuccessListener(parallelConsumer.getWm(), successfulWork);
 
         List<Integer> keys = Range.listOfIntegers(numberOfKeys);
-        HashMap<Integer, List<ConsumerRecord<String, String>>> records = ktu.generateRecords(keys, quantityOfMessagesToProduce);
-        ktu.send(consumerSpy, records);
+        ktu.generateRecords(Optional.of(consumerSpy), keys, quantityOfMessagesToProduce);
 
-        ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, quantityOfMessagesToProduce);
+        ProgressBar producerProgress = ProgressBarUtils.getNewMessagesBar("Production", log, quantityOfMessagesToProduce);
 
-        Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<ConsumerRecord<String, String>>();
+        Queue<ConsumerRecord<String, String>> processingCheck = new ConcurrentLinkedQueue<>();
+
+        var ackRecords = new ConcurrentLinkedQueue<>();
+        AtomicInteger count = new AtomicInteger();
 
         parallelConsumer.pollAndProduceMany((rec) -> {
+            count.incrementAndGet();
+
             processingCheck.add(rec.getSingleConsumerRecord());
+
+            log.debug("Processing: {} count: {}", rec.offset(), count.get());
+
             ThreadUtils.sleepQuietly(3);
             ProducerRecord<String, String> stub = new ProducerRecord<>(OUTPUT_TOPIC, "sk:" + rec.key(), "SourceV: " + rec.value());
-            bar.stepTo(producerSpy.history().size());
+            producerProgress.stepTo(producerSpy.history().size());
             return UniLists.of(stub);
         }, (x) -> {
             // noop
-//            log.debug(x.toString());
+            log.trace("ACK'd {}", x.getOut().value());
+            ackRecords.add(x);
         });
 
-        waitAtMost(defaultTimeout.multipliedBy(15)).untilAsserted(() -> {
-            // assertj's size checker uses an iterator so must be synchronised.
-            // .size() wouldn't need it but this output is nicer
-            synchronized (successfulWork) {
-                assertThat(successfulWork)
-                        .as("All expected messages were processed and successful")
-                        .hasSize(quantityOfMessagesToProduce);
-            }
+        waitAtMost(defaultTimeout.multipliedBy(2)).untilAsserted(() -> {
+            assertThat(ackRecords)
+                    .as("All expected messages were processed and successful")
+                    .hasSize(quantityOfMessagesToProduce);
 
             assertThat(producerSpy.history())
                     .as("Expected number of produced messages")
                     .hasSize(quantityOfMessagesToProduce);
         });
-        bar.close();
+
+        //
+        producerProgress.close();
 
         log.info("Closing async client");
         parallelConsumer.close();

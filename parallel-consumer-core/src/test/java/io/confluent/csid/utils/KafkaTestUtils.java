@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase;
@@ -173,19 +173,39 @@ public class KafkaTestUtils {
         Assertions.assertThat(offset).isEqualTo(expected);
     }
 
-    public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
-        HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(defaultKeys, quantity);
+    public List<ConsumerRecord<String, String>> generateRecords(Optional<MockConsumer<String, String>> consumerSpy, int quantity) {
+        HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(consumerSpy, defaultKeys, quantity);
         Collection<List<ConsumerRecord<String, String>>> values = integerListHashMap.values();
         return flatten(values);
     }
 
     /**
+     * Do not use - must instead send upon generating.
+     *
+     * @see #generateRecords(Optional, int)
+     * @deprecated Should not use - see {@link #send(MockConsumer, HashMap)}
+     */
+    @Deprecated
+    public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
+        return generateRecords(Optional.empty(), quantity);
+    }
+
+    /**
+     * @see #generateRecords(Optional, int)
+     * @deprecated see {@link #send(MockConsumer, HashMap)}
+     */
+    @Deprecated
+    public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(List<Integer> keys, int quantity) {
+        return generateRecords(Optional.empty(), keys, quantity);
+    }
+
+    /**
      * Randomly create records for randomly selected keys until requested quantity is reached.
      */
-    public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(List<Integer> keys, int quantity) {
+    public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(Optional<MockConsumer<String, String>> consumerSpy,
+                                                                                  List<Integer> keys, int quantity) {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
-//        List<Integer> keyWork = UniLists.copyOf(keys);
-
+        var newMessagesBar = ProgressBarUtils.getNewMessagesBar("Generating", log, quantity);
         int globalCount = 0;
         while (globalCount < quantity) {
             Integer key = getRandomKey(keys);
@@ -195,11 +215,14 @@ public class KafkaTestUtils {
             int keyCount = keyList.size();
             String value = keyCount + "," + globalCount;
             ConsumerRecord<String, String> rec = makeRecord(keyString, value);
-//            var consumerRecords = generateRecordsForKey(key, recsCountForThisKey);
+            if (consumerSpy.isPresent()) {
+                consumerSpy.get().addRecord(rec);
+            }
             keyList.add(rec);
-//            keyRecords.put(key, consumerRecords);
             globalCount++;
+            newMessagesBar.step();
         }
+        newMessagesBar.close();
         return keyRecords;
     }
 
@@ -246,11 +269,20 @@ public class KafkaTestUtils {
         return record;
     }
 
+    /**
+     * NOTE: Be wary of using this, as ConsumerRecords have their offset hard coded, so it's up to the user to ensure
+     * the records are in the order that matches the offset order for the target partition. If the offsets in the
+     * virtual partition are not in sequential order, you will see strange test results, where the PC will be ignoring
+     * or dropping records as they're not in the correct offset order. Issues may not show up in some tests though.
+     *
+     * @deprecated records should be added to the MockConsumer as soon as they're created, in order to ensure offset
+     *         ordering is correct
+     */
+    @Deprecated
     public void send(MockConsumer<String, String> consumerSpy, HashMap<?, List<ConsumerRecord<String, String>>> records) {
-        List<ConsumerRecord<String, String>> collect = records.entrySet().stream()
-                .flatMap(x -> x.getValue().stream())
-                .collect(Collectors.toList());
-        send(consumerSpy, collect);
+        for (List<ConsumerRecord<String, String>> value : records.values()) {
+            send(consumerSpy, value);
+        }
     }
 
     public void send(MockConsumer<String, String> consumerSpy, List<ConsumerRecord<String, String>> records) {
@@ -258,9 +290,12 @@ public class KafkaTestUtils {
         // send records in `correct` offset order as declared by the input data, regardless of the order of the input list
         List<ConsumerRecord<String, String>> sorted = new ArrayList<>(records);
         sorted.sort(Comparator.comparingLong(ConsumerRecord::offset));
+        var newMessagesBar = ProgressBarUtils.getNewMessagesBar("Sending", log, records.size());
         for (ConsumerRecord<String, String> record : sorted) {
+            newMessagesBar.step();
             consumerSpy.addRecord(record);
         }
+        newMessagesBar.close();
     }
 
 
@@ -292,30 +327,46 @@ public class KafkaTestUtils {
     /**
      * Checks that the ordering of the results is the same as the ordering of the input records
      */
-    // todo move to specific assertion utils class, along with other legacy assertion utils?
-    public static <T> void checkExactOrdering(Map<String, Queue<PollContext<String, String>>> results,
-                                              Map<Integer, List<T>> originalRecords) {
-        originalRecords.forEach((originalKey, originalRecordList) -> {
-            var sequence = results.get(originalKey.toString());
-            assertThat(sequence).hasSameSizeAs(originalRecordList);
-            assertThat(sequence.size()).describedAs("Sanity: is same size as original list").isEqualTo(originalRecordList.size());
-            log.debug("Key {} has same size of record as original - {}", originalKey, sequence.size());
-            // check the integer sequence of PollContext value is linear and is without gaps
-            var last = sequence.poll();
-            PollContext<String, String> next = null;
-            while (!sequence.isEmpty()) {
-                next = sequence.poll();
-                var thisValue = Integer.parseInt(StringUtils.substringBefore(next.value(), ","));
-                var lastValuePlusOne = Integer.parseInt(StringUtils.substringBefore(last.value(), ",")) + 1;
-                boolean isLinear = thisValue == lastValuePlusOne;
-                if (!isLinear) {
-                    log.error("This value {} is not linear with last value {}", thisValue, lastValuePlusOne);
-                    log.error("This value {} is not linear with last value {}", thisValue, lastValuePlusOne);
-                }
-                assertThat(thisValue).isEqualTo(lastValuePlusOne);
-                last = next;
-            }
-            log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", originalKey, next.value());
+    public static <T> void checkExactOrdering(Map<String, Deque<PollContext<String, String>>> results,
+                                              Map<Integer, List<ConsumerRecord<String, String>>> originalRecords) {
+        originalRecords.forEach((originalKey, originalRecordList) ->
+        {
+            var resultSequence = results.get(originalKey.toString());
+            isSequenceSequential(originalKey, resultSequence, originalRecordList);
         });
+    }
+
+    private static <T> void isSequenceSequential(Integer sequenceKey, Queue<PollContext<String, String>> polledSequence, List<ConsumerRecord<String, String>> originalSequence) {
+        assertThat(polledSequence).hasSameSizeAs(originalSequence);
+        assertThat(polledSequence)
+                .describedAs("Sanity: is same size as original list")
+                .hasSameSizeAs(originalSequence);
+        log.debug("Key {} has same size of record as original - {}", sequenceKey, polledSequence.size());
+
+        //
+        var sortedResult = new ArrayList<>(polledSequence);
+        assertThat(sortedResult)
+                .as("Results for key %s have same elements and are in the same order as the original records", sequenceKey)
+                .extracting(PollContext::value)
+                .containsExactlyElementsOf(originalSequence.stream()
+                        .map(ConsumerRecord::value).collect(Collectors.toList()));
+
+        // legacy / sanity manual check the integer polledSequence of PollContext value is linear and is without gaps
+        var resultIterator = polledSequence.iterator();
+        var last = resultIterator.next();
+        PollContext<String, String> next = null;
+        while (resultIterator.hasNext()) {
+            next = resultIterator.next();
+            var lastValue = Integer.parseInt(StringUtils.substringBefore(last.value(), ","));
+            var thisValue = Integer.parseInt(StringUtils.substringBefore(next.value(), ","));
+            var lastValuePlusOne = lastValue + 1;
+            boolean isNotLinear = thisValue != lastValuePlusOne;
+            if (isNotLinear) {
+                log.error("This value {} is not linear with last value {}", thisValue, lastValue);
+            }
+            assertThat(thisValue).as("polled sequence is sequential").isEqualTo(lastValuePlusOne);
+            last = next;
+        }
+        log.debug("Key {} a an exactly sequential series of values, ending in {} (starts at zero)", sequenceKey, next.value());
     }
 }
