@@ -43,7 +43,7 @@ import static io.confluent.parallelconsumer.offsets.OffsetEncoding.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.of;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 // todo refactor - remove tests which use hard coded state vs dynamic state - #compressionCycle, #selialiseCycle, #runLengthEncoding, #loadCompressedRunLengthRncoding
 @Slf4j
@@ -365,7 +365,7 @@ class WorkManagerOffsetMapCodecManagerTest {
     */
     @SneakyThrows
     @Test
-    void deserialiseKafkaStreamsV1() {
+    void deserialiseKafkaStreamsV1WithDefaultErrorPolicy() {
         final var input = ByteBuffer.allocate(32);
         // magic number
         input.put((byte) 1);
@@ -378,11 +378,32 @@ class WorkManagerOffsetMapCodecManagerTest {
     }
 
     /**
+     * Tests for ignoring when InvalidOffsetMetadataHandlingPolicy.IGNORE and Kafka Streams (as far as we can guess) magic numbers are found in the offset metadata.
+     */
+    @SneakyThrows
+    @Test
+    void deserialiseKafkaStreamsV1WithIgnoreErrorPolicy() {
+        final var input = ByteBuffer.allocate(32);
+        // magic number
+        input.put((byte) 1);
+        // timestamp
+        input.putLong(System.currentTimeMillis());
+
+        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
+
+        OffsetMapCodecManager.HighestOffsetAndIncompletes longs = encodedOffsetPair.getDecodedIncompletes(100L, ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.IGNORE);
+
+        assertThat(longs.getHighestSeenOffset()).isEqualTo(Optional.of(100L));
+        assertThat(longs.getIncompleteOffsets()).isEqualTo(Collections.emptySet());
+
+    }
+
+    /**
      * Tests for friendly errors when Kafka Streams V2 (as far as we can guess) magic numbers are found in the offset metadata.
      */
     @SneakyThrows
     @Test
-    void deserialiseKafkaStreamsV2() {
+    void deserialiseKafkaStreamsV2WithDefaultErrorPolicy() {
         final var input = ByteBuffer.allocate(32);
         // magic number
         input.put((byte) 2);

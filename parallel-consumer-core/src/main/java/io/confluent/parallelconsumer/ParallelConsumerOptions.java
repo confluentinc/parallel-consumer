@@ -301,6 +301,9 @@ public class ParallelConsumerOptions<K, V> {
 
     public static final Duration DEFAULT_STATIC_RETRY_DELAY = Duration.ofSeconds(1);
 
+    public enum InvalidOffsetMetadataHandlingPolicy { FAIL, IGNORE }
+    @Builder.Default
+    private final InvalidOffsetMetadataHandlingPolicy invalidOffsetMetadataPolicy = InvalidOffsetMetadataHandlingPolicy.FAIL;
     /**
      * When a message fails, how long the system should wait before trying that message again. Note that this will not
      * be exact, and is just a target.
