@@ -180,7 +180,10 @@ public class KafkaTestUtils {
     }
 
     /**
-     * @deprecated see {@link #send(MockConsumer, HashMap)}
+     * Do not use - must instead send upon generating.
+     *
+     * @see #generateRecords(Optional, int)
+     * @deprecated Should not use - see {@link #send(MockConsumer, HashMap)}
      */
     @Deprecated
     public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
@@ -188,6 +191,7 @@ public class KafkaTestUtils {
     }
 
     /**
+     * @see #generateRecords(Optional, int)
      * @deprecated see {@link #send(MockConsumer, HashMap)}
      */
     @Deprecated
