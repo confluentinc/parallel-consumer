@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import one.util.streamex.LongStreamEx;
 import one.util.streamex.StreamEx;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -70,32 +69,11 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
         var samplingOfShouldBeCompleteOffsets = UniLists.of(1L, 50L, 99L, (long) numberOfRecords - numberOfBlockedMessages);
         var blockedOffsets = UniLists.of(0L, 2L);
 
-        var completes = LongStreamEx.of(numberOfRecords).filter(x -> !blockedOffsets.contains(x)).boxed().toList();
-
-
-        {
-            var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
-            var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-            var totalSizeOfAllShardsOldOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-        }
-
         List<WorkContainer<String, String>> workIfAvailable = wm.getWorkIfAvailable();
         assertTruth(workIfAvailable).hasSize(numberOfRecords);
 
-        {
-            var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
-            var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-            var totalSizeOfAllShardsOldOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-        }
-
         List<WorkContainer<String, String>> toSucceed = workIfAvailable.stream().filter(x -> !blockedOffsets.contains(x.offset())).collect(Collectors.toList());
         toSucceed.forEach(wm::onSuccessResult);
-
-        {
-            var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
-            var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-            var totalSizeOfAllShardsOldOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-        }
 
         try {
 
@@ -226,11 +204,8 @@ class OffsetEncodingBackPressureUnitTest extends ParallelEoSStreamProcessorTestB
 
     private void sendRecordsToWM(int numberOfRecords, WorkManager<String, String> wm) {
         log.debug("~Sending {} more records", numberOfRecords);
-        var totalSizeOfAllShards = wm.getTotalSizeOfAllShards();
-        var totalSizeOfAllShardsOld = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         List<ConsumerRecord<String, String>> records = ktu.generateRecords(numberOfRecords);
         wm.registerWork(new EpochAndRecordsMap<>(new ConsumerRecords<>(UniMaps.of(topicPartition, records)), wm.getPm()));
-        var totalSizeOfAllShardsOldTwo = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         Truth.assertThat(wm.getTotalSizeOfAllShards()).isEqualTo(numberOfRecords);
 
     }

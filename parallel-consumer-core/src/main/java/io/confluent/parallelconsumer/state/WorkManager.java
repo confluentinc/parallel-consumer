@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -219,8 +219,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return dynamicLoadFactor.getCurrentFactor();
     }
 
-    public boolean workIsWaitingToBeProcessed() {
-        return sm.workIsWaitingToBeProcessed();
+    public boolean hasPendingWork() {
+        return sm.hasPendingWorkInAnyShard();
     }
 
     public boolean hasWorkInFlight() {
@@ -275,12 +275,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isDirty() {
         return pm.isDirty();
-    }
-
-    public int getNumberRecordsOutForProcessing() {
-        var numberRecordsOutForProcessing1 = sm.getNumberRecordsOutForProcessing();
-//        return sm.getNumberRecordsOutForProcessing();
-        return numberRecordsOutForProcessing;
     }
 
 }

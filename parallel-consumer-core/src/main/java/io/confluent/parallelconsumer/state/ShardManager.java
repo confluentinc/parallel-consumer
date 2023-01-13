@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
@@ -64,15 +64,6 @@ public class ShardManager<K, V> {
      */
     // todo performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
     Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
-
-    /**
-     * todo docs
-     */
-    // todo audit
-    @Getter
-    @NonFinal
-    // todo never updated
-    int numberRecordsOutForProcessing = 0;
 
     /**
      * todo docs
@@ -147,9 +138,9 @@ public class ShardManager<K, V> {
         return totalShardEntriesNotInFlight;
     }
 
-    public boolean workIsWaitingToBeProcessed() {
+    public boolean hasPendingWorkInAnyShard() {
         return processingShards.values().parallelStream()
-                .anyMatch(ProcessingShard::isWorkWaitingToBeProcessed);
+                .anyMatch(ProcessingShard::hasPendingWork);
     }
 
     /**

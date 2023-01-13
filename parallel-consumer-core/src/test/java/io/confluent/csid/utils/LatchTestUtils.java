@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import lombok.SneakyThrows;
@@ -45,7 +45,6 @@ public class LatchTestUtils {
         awaitLatch(latch, defaultTimeoutSeconds * 2);
     }
 
-    //    @SneakyThrows
     public static void awaitLatch(final CountDownLatch latch, final int seconds) throws TimeoutException {
         log.trace("Waiting on latch with timeout {}s", seconds);
         Instant start = now();

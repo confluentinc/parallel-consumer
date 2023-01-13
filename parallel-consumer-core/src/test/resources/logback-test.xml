@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (C) 2020-2022 Confluent, Inc.
+    Copyright (C) 2020-2023 Confluent, Inc.
 
 -->
 <configuration packagingData="true" scan="true" scanPeriod="5 seconds" debug="false">
@@ -95,7 +95,7 @@
 
     <!-- Tests    -->
     <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="debug"/>-->
-    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest" level="debug"/>
+    <!--    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTest" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.integrationTests.LargeVolumeInMemoryTests" level="debug"/>-->

@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
@@ -592,7 +592,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.debug("Interrupting {} thread in case it's waiting for work", blockableControlThread.getName());
                 blockableControlThread.interrupt();
             } else {
-                log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next looop.");
+                log.trace("Work mailbox not being polled currently, so thread not blocked, will come around to the mail box in the next loop.");
             }
         }
     }
@@ -1081,7 +1081,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lingeringOnCommitWouldBeBeneficial() {
         // work is waiting to be done
-        boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
+        boolean workIsWaitingToBeCompletedSuccessfully = wm.hasPendingWork();
         // no work is currently being done
         boolean workInFlight = wm.hasWorkInFlight();
         // work mailbox is empty
