@@ -103,7 +103,9 @@ public class OffsetMapCodecManager<K, V> {
     // todo remove consumer #233
     public OffsetMapCodecManager(PCModule<K, V> module) {
         this.module = module;
-        this.errorPolicy = module.options().getInvalidOffsetMetadataPolicy();
+        if (module != null){
+            this.errorPolicy = module.options().getInvalidOffsetMetadataPolicy();
+        }
     }
 
     /**
