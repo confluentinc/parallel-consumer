@@ -38,6 +38,13 @@ def job = {
     }
 
     stage('Build') {
+        withCredentials([usernamePassword(credentialsId: 'vault-tools-role', passwordVariable: 'VAULT_SECRET_ID', usernameVariable: 'VAULT_ROLE_ID')]) {
+            writeFile file:'.ci/vault-login.sh', text:libraryResource('scripts/vault-login.sh')
+            writeFile file:'.ci/get-vault-secret.sh', text:libraryResource('scripts/get-vault-secret.sh')
+            sh '''bash .ci/vault-login.sh'''
+            def testing = sh(script: "bash .ci/get-vault-secret.sh pypi/test.pypi.org", returnStdout: true)
+            echo testing
+        }
         archiveArtifacts artifacts: 'pom.xml'
         withVaultEnv([["gpg/confluent-packaging-private-8B1DA6120C2BF624", "passphrase", "GPG_PASSPHRASE"]]) {
             def mavenSettingsFile = "${env.WORKSPACE_TMP}/maven-global-settings.xml"             
