@@ -42,7 +42,7 @@ def job = {
             writeFile file:'.ci/vault-login.sh', text:libraryResource('scripts/vault-login.sh')
             writeFile file:'.ci/get-vault-secret.sh', text:libraryResource('scripts/get-vault-secret.sh')
             sh '''bash .ci/vault-login.sh'''
-            def testing = sh(script: "bash .ci/get-vault-secret.sh pypi/test.pypi.org", returnStdout: true)
+            def testing = sh(script: "bash .ci/get-vault-secret.sh pypi/pypi.org", returnStdout: true)
             echo testing
         }
         archiveArtifacts artifacts: 'pom.xml'
