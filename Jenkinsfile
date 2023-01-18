@@ -46,13 +46,13 @@ def job = {
                     withDockerServer([uri: dockerHost()]) {
                         def isPrBuild = env.CHANGE_TARGET ? true : false
                         def buildPhase = isPrBuild ? "install" : "deploy"
-                        pip install twine
+                        sh "pip install twine"
                         if (params.RELEASE_TAG.trim().equals('')) {
                             sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
 
                             withVaultEnv([["pypi/test.pypi.org", "user", "TWINE_USERNAME"],
                                           ["pypi/test.pypi.org", "password", "TWINE_PASSWORD"]]) {
-                              twine upload --repository-url https://test.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive
+                              sh "twine upload --repository-url https://test.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive"
                             }
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
@@ -61,7 +61,7 @@ def job = {
                           }
                           withVaultEnv([["pypi/pypi.org", "user", "TWINE_USERNAME"],
                                         ["pypi/pypi.org", "password", "TWINE_PASSWORD"]]) {
-                            twine upload --repository-url https://upload.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive
+                            sh "twine upload --repository-url https://upload.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive"
                           }
                         }
                         currentBuild.result = 'Success'
