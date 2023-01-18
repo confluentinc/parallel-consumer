@@ -40,7 +40,7 @@ def job = {
     stage('Build') {
         archiveArtifacts artifacts: 'pom.xml'
         withVaultEnv([["gpg/confluent-packaging-private-8B1DA6120C2BF624", "passphrase", "GPG_PASSPHRASE"]]) {
-            def mavenSettingsFile = "${env.WORKSPACE_TMP}/maven-global-settings.xml"             
+            def mavenSettingsFile = "${env.WORKSPACE_TMP}/maven-global-settings.xml"
             withMavenSettings("maven/jenkins_maven_global_settings", "settings", "MAVEN_GLOBAL_SETTINGS", mavenSettingsFile) {
                 withMaven(globalMavenSettingsFilePath: mavenSettingsFile) {
                     withDockerServer([uri: dockerHost()]) {
@@ -51,7 +51,10 @@ def job = {
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                           withGPGkey("gpg/confluent-packaging-private-8B1DA6120C2BF624") {
-                            sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                            withVaultEnv([["pypi/pypi.org", "user", "TWINE_USERNAME"],
+                                          ["pypi/pypi.org", "password", "TWINE_PASSWORD"]]) {
+                              sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                            }
                           }
                         }
                         currentBuild.result = 'Success'
@@ -59,6 +62,7 @@ def job = {
                 }
             }
         }
+
     }
 }
 runJob config, job
