@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020-2022 Confluent, Inc.
+# Copyright (C) 2020-2023 Confluent, Inc.
 #
 
 from examples.kafka import get_consumer, create_topic, get_producer

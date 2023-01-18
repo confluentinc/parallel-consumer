@@ -1350,6 +1350,12 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.3.0
+
+=== Features
+
+* Python client available as `pyallel_consumer` package
+
 == 0.5.2.5
 
 === Fixes
@@ -1357,10 +1363,6 @@ endif::[]
 * fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
 
 == 0.5.2.4
-
-=== Features
-
-* Python client available as pyallel_consumer package
 
 === Improvements
 
