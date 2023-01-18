@@ -4,7 +4,11 @@ Python wrapper for https://github.com/confluentinc/parallel-consumer[Confluent P
 
 == Installation
 
-Install directly from GitHub
+Install releases from https://pypi.org/project/pyallel-consumer/[PyPi]
+
+`pip install pyallel-consumer`
+
+Install dev version from GitHub
 
 `pip install -e 'git+https://github.com/confluentinc/parallel-consumer.git#egg=pyallel_consumer&subdirectory=parallel-consumer-python'`
 
@@ -61,10 +65,3 @@ Recommended (but can use other tools such as .venv):
 
 - Install test dependencies `pip install -r ./tests/requirements.txt`
 - Run tests `python -m pytest ./tests`
-
-== Publish Package
-
-- Build the package `python setup.py bdist_wheel`
-- Install https://twine.readthedocs.io/en/latest/[twine] the official PyPi upload tool `pip install twine`
-- Test upload with testpypi `twine upload -r testpypi ./dist/* --verbose`
-- Upload to pypi `twine upload -r pypi ./dist/* --verbose`

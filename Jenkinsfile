@@ -38,13 +38,6 @@ def job = {
     }
 
     stage('Build') {
-        withCredentials([usernamePassword(credentialsId: 'vault-tools-role', passwordVariable: 'VAULT_SECRET_ID', usernameVariable: 'VAULT_ROLE_ID')]) {
-            writeFile file:'.ci/vault-login.sh', text:libraryResource('scripts/vault-login.sh')
-            writeFile file:'.ci/get-vault-secret.sh', text:libraryResource('scripts/get-vault-secret.sh')
-            sh '''bash .ci/vault-login.sh'''
-            def testing = sh(script: "bash .ci/get-vault-secret.sh pypi/pypi.org", returnStdout: true)
-            echo testing
-        }
         archiveArtifacts artifacts: 'pom.xml'
         withVaultEnv([["gpg/confluent-packaging-private-8B1DA6120C2BF624", "passphrase", "GPG_PASSPHRASE"]]) {
             withVaultFile([["maven/jenkins_maven_global_settings", "settings_xml", "maven-global-settings.xml", "MAVEN_GLOBAL_SETTINGS_FILE"]]) {
@@ -52,12 +45,22 @@ def job = {
                     withDockerServer([uri: dockerHost()]) {
                         def isPrBuild = env.CHANGE_TARGET ? true : false
                         def buildPhase = isPrBuild ? "install" : "deploy"
+                        pip install twine
                         if (params.RELEASE_TAG.trim().equals('')) {
                             sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
+
+                            withVaultEnv([["pypi/test.pypi.org", "user", "TWINE_USERNAME"],
+                                          ["pypi/test.pypi.org", "password", "TWINE_PASSWORD"]]) {
+                              twine upload --repository-url https://test.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive
+                            }
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                           withGPGkey("gpg/confluent-packaging-private-8B1DA6120C2BF624") {
                             sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                          }
+                          withVaultEnv([["pypi/pypi.org", "user", "TWINE_USERNAME"],
+                                        ["pypi/pypi.org", "password", "TWINE_PASSWORD"]]) {
+                            twine upload --repository-url https://upload.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive
                           }
                         }
                         currentBuild.result = 'Success'
@@ -65,6 +68,7 @@ def job = {
                 }
             }
         }
+
     }
 }
 runJob config, job

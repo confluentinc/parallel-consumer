@@ -22,7 +22,7 @@ def run_command(*commands: str):
     return process.stdout.decode()
 
 
-version = '0.1.0a0'
+version = '0.1.0a1'
 
 project_root = Path(__file__).parent
 repo_root = project_root.parent
@@ -60,6 +60,7 @@ setup(
     packages=find_packages(exclude=['*tests*']),
     install_requires=requirements,
     package_data={'': ['**mvn/**', 'mvnw', 'mvnw.cmd', 'pom.xml', '*.jar']},
+    url='https://github.com/confluentinc/parallel-consumer/tree/master/parallel-consumer-python',
     long_description='Python wrapper for '
                      '[Confluent Parallel Consumer](https://github.com/confluentinc/parallel-consumer)',
     long_description_content_type='text/markdown',
