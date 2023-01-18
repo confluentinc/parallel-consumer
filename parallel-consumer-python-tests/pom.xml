@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright (C) 2020-2022 Confluent, Inc.
+    Copyright (C) 2020-2023 Confluent, Inc.
 
 -->
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
@@ -38,6 +38,12 @@
                         <goals>
                             <goal>exec</goal>
                         </goals>
+                        <configuration>
+                            <executable>bin/install-and-run-tests.sh</executable>
+                            <arguments>
+                                <argument>${skipITs}</argument>
+                            </arguments>
+                        </configuration>
                     </execution>
                 </executions>
                 <configuration>
