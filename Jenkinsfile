@@ -46,22 +46,15 @@ def job = {
                     withDockerServer([uri: dockerHost()]) {
                         def isPrBuild = env.CHANGE_TARGET ? true : false
                         def buildPhase = isPrBuild ? "install" : "deploy"
-                        sh "pip install twine"
                         if (params.RELEASE_TAG.trim().equals('')) {
                             sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
-
-                            withVaultEnv([["pypi/test.pypi.org", "user", "TWINE_USERNAME"],
-                                          ["pypi/test.pypi.org", "password", "TWINE_PASSWORD"]]) {
-                              sh "twine upload --repository-url https://test.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive"
-                            }
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                           withGPGkey("gpg/confluent-packaging-private-8B1DA6120C2BF624") {
-                            sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
-                          }
-                          withVaultEnv([["pypi/pypi.org", "user", "TWINE_USERNAME"],
-                                        ["pypi/pypi.org", "password", "TWINE_PASSWORD"]]) {
-                            sh "twine upload --repository-url https://upload.pypi.org/legacy/ ./parallel-consumer-python/dist/* --verbose --non-interactive"
+                            withVaultEnv([["pypi/pypi.org", "user", "TWINE_USERNAME"],
+                                          ["pypi/pypi.org", "password", "TWINE_PASSWORD"]]) {
+                              sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                            }
                           }
                         }
                         currentBuild.result = 'Success'

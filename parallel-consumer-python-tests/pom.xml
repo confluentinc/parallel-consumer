@@ -45,12 +45,18 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>upload-package</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bin/publish.sh</executable>
+                        </configuration>
+                    </execution>
                 </executions>
                 <configuration>
-                    <executable>bin/install-and-run-tests.sh</executable>
-                    <!--                    <arguments>-->
-                    <!--                        <argument>&lt;!&ndash; configure here arguments, if any &ndash;&gt;</argument>-->
-                    <!--                    </arguments>-->
                     <workingDirectory>../parallel-consumer-python/</workingDirectory>
                 </configuration>
             </plugin>
