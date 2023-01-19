@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -226,8 +226,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * Checking that there's no back pressure for the partition it belongs to is covered by
      * {@link PartitionStateManager#isAllowedMoreRecords(WorkContainer)}.
      */
-    // todo rename isReadyToProcess?
-    public boolean isAvailableToTakeAsWork() {
+    public boolean isValidForProcessing() {
         return isNotInFlight() && !isUserFunctionSucceeded() && isDelayPassed();
     }
 

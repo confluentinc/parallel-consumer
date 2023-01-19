@@ -62,7 +62,7 @@ public class ProcessingShard<K, V> {
             return !entries.isEmpty();
         } else {
             // KEY and PARTITION ordering, only need to check the head, as it's the only possible entry to take
-            return entries.firstEntry() != null && entries.firstEntry().getValue().isAvailableToTakeAsWork();
+            return entries.firstEntry() != null && entries.firstEntry().getValue().isValidForProcessing();
         }
     }
 
@@ -109,7 +109,7 @@ public class ProcessingShard<K, V> {
             var workContainer = iterator.next().getValue();
 
             if (pm.couldBeTakenAsWork(workContainer)) {
-                if (workContainer.isAvailableToTakeAsWork()) {
+                if (workContainer.isValidForProcessing()) {
                     log.trace("Taking {} as work", workContainer);
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
@@ -179,7 +179,7 @@ public class ProcessingShard<K, V> {
     public long getCountOfWorkAwaitingSelection() {
         return entries.values().stream()
                 .filter(work -> {
-                    if (work.isAvailableToTakeAsWork()) {
+                    if (work.isValidForProcessing()) {
                         var topicPartition = work.getTopicPartition();
                         return !pm.getPartitionState(topicPartition).isBlocked();
                     } else {
