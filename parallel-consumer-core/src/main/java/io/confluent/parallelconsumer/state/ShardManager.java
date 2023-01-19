@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -66,11 +67,15 @@ public class ShardManager<K, V> {
     Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
-     * todo docs
+     * A cache of the count of records in each shard that are not in flight, to avoid having to iterate over the shards
+     * to get the count
      */
-    // thread safe? consumer and controller both access - consumer upon partition revocation and should throttle
-    @NonFinal
-    long totalShardEntriesNotInFlight;
+    // Needs to be thread safe. Call hierarchy analysis shows it's accessed from both the bridge/poller thread (consumer) and controller.
+    // - kafka bridge / poller consumer managing thread from ConsumerCoordinator.invokePartitionsLost
+    // - controller thread from WM. register work, get work, work failure
+    // change back to a Long, when the partition rebalance branch is merged
+    // - (major: #200 Shared nothing architecture - Partition Events #270 - improvements/rebalance-messages)
+    AtomicLong totalShardEntriesNotInFlight = new AtomicLong();
 
     /**
      * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
@@ -133,9 +138,8 @@ public class ShardManager<K, V> {
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
                 .sum();
     }
-
     public long getTotalShardEntriesNotInFlight() {
-        return totalShardEntriesNotInFlight;
+        return totalShardEntriesNotInFlight.get();
     }
 
     public boolean hasPendingWorkInAnyShard() {
@@ -168,7 +172,7 @@ public class ShardManager<K, V> {
             // remove the work
             ProcessingShard<K, V> shard = processingShards.get(shardKey);
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
-            totalShardEntriesNotInFlight--;
+            totalShardEntriesNotInFlight.decrementAndGet();
 
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
@@ -190,7 +194,7 @@ public class ShardManager<K, V> {
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
 
-        totalShardEntriesNotInFlight++;
+        totalShardEntriesNotInFlight.incrementAndGet();
     }
 
     void removeShardIfEmpty(ShardKey key) {
@@ -216,7 +220,6 @@ public class ShardManager<K, V> {
             //
             shardOptional.get().onSuccess(wc);
             removeShardIfEmpty(key);
-//            totalSizeOfAllShards--;
         } else {
             log.trace("Dropping successful result for revoked partition {}. Record in question was: {}", key, wc.getCr());
         }
@@ -228,7 +231,7 @@ public class ShardManager<K, V> {
     public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
-        totalShardEntriesNotInFlight++;
+        totalShardEntriesNotInFlight.incrementAndGet();
     }
 
     /**
@@ -275,7 +278,7 @@ public class ShardManager<K, V> {
         updateResumePoint(next);
 
         //
-        totalShardEntriesNotInFlight -= workFromAllShards.size();
+        totalShardEntriesNotInFlight.updateAndGet(total -> total - workFromAllShards.size());
 
         return workFromAllShards;
     }
