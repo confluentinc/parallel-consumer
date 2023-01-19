@@ -132,12 +132,15 @@ public class ShardManager<K, V> {
         return ShardKey.of(wc, options.getOrdering());
     }
 
-
+    /**
+     * @return Work ready in the processing shards, awaiting selection as work to do
+     */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         return processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
                 .sum();
     }
+
     public long getTotalShardEntriesNotInFlight() {
         return totalShardEntriesNotInFlight.get();
     }
