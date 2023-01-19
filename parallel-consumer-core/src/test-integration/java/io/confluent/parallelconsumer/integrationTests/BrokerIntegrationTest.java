@@ -116,7 +116,7 @@ public abstract class BrokerIntegrationTest<K, V> {
         NewTopic e1 = new NewTopic(topic, numPartitions, (short) 1);
         CreateTopicsResult topics = kcu.getAdmin().createTopics(UniLists.of(e1));
         try {
-            Void all = topics.all().get(1, TimeUnit.SECONDS);
+            Void all = topics.all().get(1, TimeUnit.MINUTES);
         } catch (ExecutionException e) {
             // fine
         } catch (Exception e) {

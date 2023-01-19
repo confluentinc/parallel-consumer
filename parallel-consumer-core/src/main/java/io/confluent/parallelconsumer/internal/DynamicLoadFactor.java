@@ -59,7 +59,7 @@ public class DynamicLoadFactor {
      * 20,000 messages _queued_.
      * <p>
      * Expectation is some relatively small multiple of the degree of concurrency, enough that each time a thread
-     * finishes, theres at least one more entry for it in the queue.
+     * finishes, there's at least one more entry for it in the queue.
      */
     @Getter
     private final int maxFactor = 100;
@@ -72,7 +72,7 @@ public class DynamicLoadFactor {
     /**
      * Try to increase the loading factor
      *
-     * @return true if could step up
+     * @return true if it could step up
      */
     public boolean maybeStepUp() {
         if (couldStep()) {
