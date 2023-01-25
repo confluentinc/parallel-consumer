@@ -301,7 +301,27 @@ public class ParallelConsumerOptions<K, V> {
 
     public static final Duration DEFAULT_STATIC_RETRY_DELAY = Duration.ofSeconds(1);
 
-    public enum InvalidOffsetMetadataHandlingPolicy { FAIL, IGNORE }
+    /**
+     * Error handling strategy to use when invalid offsets metadata is encountered. This could happen accidentally or
+     * deliberately if the user attempts to reuse an existing consumer group id.
+     */
+    public enum InvalidOffsetMetadataHandlingPolicy {
+        /**
+         * Fails and shuts down the application. This is the default.
+         */
+        FAIL,
+        /**
+         * Ignore the error, logs a warning message and continue processing from the last committed offset.
+         */
+        IGNORE
+    }
+
+    /**
+     * Controls the error handling behaviour to use when invalid offsets metadata from a pre-existing consumer group is encountered.
+     * A potential scenario where this could occur is when a consumer group id from a Kafka Streams application is accidentally reused.
+     * <p>
+     * Default is {@link InvalidOffsetMetadataHandlingPolicy#FAIL}
+     */
     @Builder.Default
     private final InvalidOffsetMetadataHandlingPolicy invalidOffsetMetadataPolicy = InvalidOffsetMetadataHandlingPolicy.FAIL;
     /**
