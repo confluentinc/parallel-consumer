@@ -483,7 +483,10 @@ public class PartitionState<K, V> {
                     metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
-            setAllowedMoreRecords(true);
+            if (allowedMoreRecords == false) {
+                // guard is useful for debugging to catch the transition from false to true
+                setAllowedMoreRecords(true);
+            }
             log.debug("Payload size {} within threshold {}", metaPayloadLength, getPressureThresholdValue());
         }
 
@@ -590,9 +593,11 @@ public class PartitionState<K, V> {
             log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
             return false;
         } else if (isAllowedMoreRecords()) {
+            log.debug("Partition is allowed more records. Taking work. WC: {}", workContainer);
             return true;
         } else if (isBlockingProgress(workContainer)) {
             // allow record to be taken, even if partition is blocked, as this record completion may reduce payload size requirement
+            log.debug("Partition is blocked, but this record is blocking progress. Taking work. WC: {}", workContainer);
             return true;
         } else {
             log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +

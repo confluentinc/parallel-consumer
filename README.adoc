@@ -1317,6 +1317,11 @@ endif::[]
 === Fixes
 
 * fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
+* fix: After new performance fix PR#530 merges - corner case could cause out of order processing (#534)
+
+=== Improvements
+
+* perf: Adds a caching layer to work management to alleviate O(n) counting (#530)
 
 == 0.5.2.4
 
