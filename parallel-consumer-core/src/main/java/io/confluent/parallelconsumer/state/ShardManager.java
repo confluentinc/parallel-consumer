@@ -132,7 +132,10 @@ public class ShardManager<K, V> {
         return ShardKey.of(wc, options.getOrdering());
     }
 
+
     /**
+     * Can be slow - O(n processing shards + m work in shard) - only used in tests.
+     *
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {

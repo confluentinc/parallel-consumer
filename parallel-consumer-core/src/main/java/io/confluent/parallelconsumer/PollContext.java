@@ -185,6 +185,7 @@ public class PollContext<K, V> implements Iterable<RecordContext<K, V>> {
      * ConsumerRecord}s in this result set
      */
     public Map<TopicPartition, Set<RecordContext<K, V>>> getByTopicPartitionMap() {
+        // unwraps the internal view of the record to a user view
         return this.records.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey,
                                 set -> set.getValue().stream()

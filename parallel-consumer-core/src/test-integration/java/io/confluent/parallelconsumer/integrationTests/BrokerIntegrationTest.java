@@ -1,6 +1,6 @@
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 package io.confluent.parallelconsumer.integrationTests;
 /*-

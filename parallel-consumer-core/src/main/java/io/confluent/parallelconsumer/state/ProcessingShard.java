@@ -176,6 +176,9 @@ public class ProcessingShard<K, V> {
         return options.getOrdering() != UNORDERED;
     }
 
+    /**
+     * Can be slow - O(n) - only used in tests.
+     */
     public long getCountOfWorkAwaitingSelection() {
         return entries.values().stream()
                 .filter(work -> {
