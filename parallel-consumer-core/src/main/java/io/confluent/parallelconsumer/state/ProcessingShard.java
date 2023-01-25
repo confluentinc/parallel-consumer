@@ -176,20 +176,4 @@ public class ProcessingShard<K, V> {
         return options.getOrdering() != UNORDERED;
     }
 
-    /**
-     * Can be slow - O(n) - only used in tests.
-     */
-    public long getCountOfWorkAwaitingSelection() {
-        return entries.values().stream()
-                .filter(work -> {
-                    if (work.isValidForProcessing()) {
-                        var topicPartition = work.getTopicPartition();
-                        return !pm.getPartitionState(topicPartition).isBlocked();
-                    } else {
-                        return false;
-                    }
-                })
-                .count();
-    }
-
 }

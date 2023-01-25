@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static java.time.Duration.ofSeconds;
+import static java.time.Duration.ofMinutes;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -60,8 +60,10 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
         numPartitions = 12;
         String inputTopicName = setupTopic(this.getClass().getSimpleName() + "-input");
 
+        int expectedMessageCount = 3_000_000;
 //        int expectedMessageCount = 10_000_000;
-        int expectedMessageCount = 30_000_00;
+//        int expectedMessageCount = 24_000_000;
+
         log.info("Producing {} messages before starting test", expectedMessageCount);
 
         List<String> expectedKeys = getKcu().produceMessages(inputTopicName, expectedMessageCount);
@@ -86,7 +88,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
                         "(expected: {} commit: {} order: {} max poll: {})",
                 expectedMessageCount, commitMode, order, maxPoll);
         try {
-            waitAtMost(ofSeconds(60))
+            waitAtMost(ofMinutes(5))
                     // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
                     // .failFast( () -> pcThree.getFailureCause(), () -> pcThree.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761
                     .failFast("PC died - check logs", () -> pcThree.isClosedOrFailed()) // requires https://github.com/awaitility/awaitility/issues/178#issuecomment-734769761

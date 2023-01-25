@@ -235,14 +235,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return sm.getTotalShardEntriesNotInFlight();
     }
 
-    /**
-     * Can be slow - O(n) - only used in tests.
-     *
-     * @return Work ready in the processing shards, awaiting selection as work to do
-     */
-//    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
-//        return sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-//    }
     public boolean hasIncompleteOffsets() {
         return pm.hasIncompleteOffsets();
     }
