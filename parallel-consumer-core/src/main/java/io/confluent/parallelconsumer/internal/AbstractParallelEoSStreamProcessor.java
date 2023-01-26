@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
-import com.google.common.base.Suppliers;
+import io.confluent.csid.utils.Suppliers;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
