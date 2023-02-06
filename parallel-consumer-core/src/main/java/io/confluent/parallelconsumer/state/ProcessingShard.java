@@ -156,16 +156,23 @@ public class ProcessingShard<K, V> {
     }
 
     private void addToSlowWorkMaybe(Set<WorkContainer<?, ?>> slowWork, WorkContainer<?, ?> workContainer) {
-        var msgTemplate = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
         Duration timeInFlight = workContainer.getTimeInFlight();
-        var msg = msg(msgTemplate, workContainer, workContainer.isDelayPassed(), workContainer.isNotInFlight(), !workContainer.isUserFunctionSucceeded(), timeInFlight);
         Duration slowThreshold = options.getThresholdForTimeSpendInQueueWarning();
         if (isGreaterThan(timeInFlight, slowThreshold)) {
             slowWork.add(workContainer);
-            log.trace("Work has spent over " + slowThreshold + " in queue! " + msg);
+            if (log.isTraceEnabled()){
+                log.trace("Work has spent over " + slowThreshold + " in queue! " + cantTakeAsWorkMsg(workContainer, timeInFlight));
+            }
         } else {
-            log.trace(msg);
+            if (log.isTraceEnabled()) {
+                log.trace(cantTakeAsWorkMsg(workContainer, timeInFlight));
+            }
         }
+    }
+
+    private static String cantTakeAsWorkMsg(WorkContainer<?, ?> workContainer, Duration timeInFlight) {
+        var msgTemplate = "Can't take as work: Work ({}). Must all be true: Delay passed= {}. Is not in flight= {}. Has not succeeded already= {}. Time spent in execution queue: {}.";
+        return msg(msgTemplate, workContainer, workContainer.isDelayPassed(), workContainer.isNotInFlight(), !workContainer.isUserFunctionSucceeded(), timeInFlight);
     }
 
     private boolean isOrderRestricted() {
