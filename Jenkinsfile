@@ -51,9 +51,8 @@ def job = {
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                           withGPGkey("gpg/confluent-packaging-private-8B1DA6120C2BF624") {
-                            withVaultEnv([["pypi/pypi.org", "user", "TWINE_USERNAME"],
-                                          ["pypi/pypi.org", "password", "TWINE_PASSWORD"]]) {
-                              sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                            withVaultEnv([["pypi/pypi.org", "pyallel-consumer_apikey", "TWINE_PASSWORD"]]) {
+                              sh "export TWINE_USERNAME=__token__ && mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
                             }
                           }
                         }
