@@ -337,10 +337,13 @@ public class PartitionState<K, V> {
             incompletesToPrune.forEach(incompleteOffsets::remove);
         } else if (pollBelowExpected) {
             // reset to lower offset detected, so we need to reset our state to match
-            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
-                            "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}. " +
+            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) for partition {} of topic {} " +
+                            "- truncating state - all records above (including this) will be replayed. " +
+                            "Was expecting {} but bootstrap poll was {}. " +
                             "Could be caused by record retention or compaction and offset reset policy EARLIEST.",
                     bootstrapPolledOffset,
+                    this.tp.partition(),
+                    this.tp.topic(),
                     expectedBootstrapRecordOffset,
                     bootstrapPolledOffset
             );
