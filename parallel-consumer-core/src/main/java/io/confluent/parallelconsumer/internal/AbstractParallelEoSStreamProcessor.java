@@ -356,9 +356,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
+    @SneakyThrows
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
+        maybeAcquireCommitLock();
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
