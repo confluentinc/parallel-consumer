@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -209,7 +209,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
-     * should be downloaded (or pipelined in the Consumer)
+     *         should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
         return getNumberOfWorkQueuedInShardsAwaitingSelection() > (long) options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
@@ -247,6 +247,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         if (checkIfWorkIsStale(wc)) {
             // no op, partition has been revoked
             log.debug("Work result received, but from an old generation. Dropping work from revoked partition {}", wc);
+            wc.endFlight();
+            this.numberRecordsOutForProcessing--;
         } else {
             Optional<Boolean> userFunctionSucceeded = wc.getMaybeUserFunctionSucceeded();
             if (userFunctionSucceeded.isPresent()) {
