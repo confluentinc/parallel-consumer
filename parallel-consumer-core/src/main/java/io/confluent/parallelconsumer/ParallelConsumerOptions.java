@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -368,6 +368,12 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final Integer batchSize = 1;
+
+    @Builder.Default
+    private final Integer minBatchSize = 1;
+
+    @Builder.Default
+    private final Integer minBatchTimeoutInMillis = 0;
 
     /**
      * Configure the amount of delay a record experiences, before a warning is logged.
