@@ -96,12 +96,32 @@ public class ProcessingShard<K, V> {
         return entries.remove(offset);
     }
 
+
+    int getNumberOfAvailableWork(int workToGetDelta){
+        log.trace("Looking for max work on shardQueueEntry: {}", getKey());
+        int available = 0;
+        var iterator = entries.entrySet().iterator();
+        while (available < workToGetDelta && iterator.hasNext()) {
+            var workContainer = iterator.next().getValue();
+            if (pm.couldBeTakenAsWork(workContainer)) {
+                if (workContainer.isAvailableToTakeAsWork()) {
+                    available++;
+                }
+                if (isOrderRestricted()) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        return available;
+    }
+
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
 
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
-
         var iterator = entries.entrySet().iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
             var workContainer = iterator.next().getValue();

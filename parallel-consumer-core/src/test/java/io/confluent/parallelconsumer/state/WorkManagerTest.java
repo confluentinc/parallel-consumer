@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -39,6 +39,7 @@ import pl.tlinkowski.unij.api.UniMaps;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
@@ -105,22 +106,21 @@ public class WorkManagerTest {
     }
 
     private void registerSomeWork() {
-        registerSomeWork(0);
+        registerSomeWork(0, 3);
     }
 
     /**
      * Adds 3 units of work
      */
-    private void registerSomeWork(int partition) {
+    private void registerSomeWork(int partition, int numberOfRecords) {
         assignPartition(partition);
 
         String key = "key-0";
+        List<ConsumerRecord<String, String>> records  = IntStream.rangeClosed(1, numberOfRecords).boxed()
+                .map(i -> makeRec("" + i, key, partition)).collect(Collectors.toList());
 
-        var rec0 = makeRec("0", key, partition);
-        var rec1 = makeRec("1", key, partition);
-        var rec2 = makeRec("2", key, partition);
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
-        m.put(topicPartitionOf(partition), of(rec0, rec1, rec2));
+        m.put(topicPartitionOf(partition), records);
         var recs = new ConsumerRecords<>(m);
         wm.registerWork(new EpochAndRecordsMap(recs, wm.getPm()));
     }
@@ -223,6 +223,81 @@ public class WorkManagerTest {
         assertThat(successfulWork)
                 .extracting(x -> (int) x.getCr().offset())
                 .isEqualTo(of(0, 2, 1));
+    }
+
+//TODO change to parametrized
+
+    @Test
+
+    void minBatchSizeSmaller() {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .minBatchTimeoutInMillis(100)
+                .minBatchSize(5)
+                .batchSize(7)
+                .build());
+        //add first 3
+        registerSomeWork(0,4);
+        var gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).hasSize(0);//not enough work
+
+    }
+
+    @Test
+    void minBatchSizeInBetween() {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .minBatchTimeoutInMillis(100)
+                .minBatchSize(5)
+                .batchSize(7)
+                .build());
+        //add first 3
+        registerSomeWork(0,5);
+        var gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).hasSize(5);//not enough work
+
+    }
+
+    @Test
+    void moreThanBatchSizeInBetween() {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .minBatchTimeoutInMillis(100)
+                .minBatchSize(5)
+                .batchSize(7)
+                .build());
+        //add first 3
+        registerSomeWork(0,8);
+        var gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).hasSize(7);//not enough work
+    }
+
+    @Test
+    void moreThanBatchSize() {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .minBatchTimeoutInMillis(100)
+                .minBatchSize(5)
+                .batchSize(7)
+                .build());
+        //add first 3
+        registerSomeWork(0,22);
+        var gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).hasSize(21);//not enough work
+    }
+
+    @Test
+    void moreThanBatchSize3() {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(UNORDERED)
+                .minBatchTimeoutInMillis(100)
+                .minBatchSize(5)
+                .batchSize(7)
+                .build());
+        //add first 3
+        registerSomeWork(0,7 + 5 );
+        var gottenWork = wm.getWorkIfAvailable();
+        assertThat(gottenWork).hasSize(7 + 5 );//not enough work
     }
 
     private void succeed(WorkContainer<String, String> succeed) {
@@ -699,9 +774,9 @@ public class WorkManagerTest {
                 .ordering(PARTITION)
                 .build());
 
-        registerSomeWork(0);
-        registerSomeWork(1);
-        registerSomeWork(2);
+        registerSomeWork(0,3);
+        registerSomeWork(1,3);
+        registerSomeWork(2,3);
 
         var allWork = new ArrayList<WorkContainer<String, String>>();
 
