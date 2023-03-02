@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -172,9 +172,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected MockConsumer<String, String> setupClients() {
         instantiateConsumerProducer();
-
         ktu = new KafkaTestUtils(INPUT_TOPIC, CONSUMER_GROUP_ID, consumerSpy);
-
         return consumerSpy;
     }
 
