@@ -369,9 +369,27 @@ public class ParallelConsumerOptions<K, V> {
     @Builder.Default
     private final Integer batchSize = 1;
 
+    /**
+     The minimum number of batch to pass into the user functions.
+     <p>
+     If the available number of messages is less than {@code minBatchSize}, they will not be processed until more messages
+     arrive or {@code minBatchTimeoutInMillis} has passed.
+     <p>
+     Note that this parameter only takes effect if it is greater than 1 and the {@code minBatchTimeoutInMillis} parameter
+     is greater than 0.
+     @see ParallelConsumerOptions#getMinBatchTimeoutInMillis()
+     */
     @Builder.Default
     private final Integer minBatchSize = 1;
 
+    /**
+     The minimum time in milliseconds to wait before passing a batch of messages to the user functions, even if the
+     {@code minBatchSize} threshold has not been reached.
+     <p>
+     Note that this parameter only takes effect if it is greater than 0 and the {@code minBatchSize} parameter is greater
+     than 1.
+     @see ParallelConsumerOptions#getMinBatchSize()
+     */
     @Builder.Default
     private final Integer minBatchTimeoutInMillis = 0;
 
