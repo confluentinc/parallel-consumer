@@ -21,7 +21,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -233,45 +232,11 @@ public class ShardManager<K, V> {
                 new LoopingResumingIterator<>(iterationResumePoint, this.processingShards);
 
         //
-        int maxBatchSize = options.getBatchSize();
-        int minBatchSize = options.getMinBatchSize();
         List<WorkContainer<K, V>> workFromAllShards = new ArrayList<>();
         // loop over shards, and get work from each
         Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> next = shardQueueIterator.next();
-        List<ParallelConsumer.Tuple<Integer, ProcessingShard<K, V>>> buffer = new ArrayList<>();
         if (atLeastMinBatchSize){
-            Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> prevNext = next;
-            int currentFetchWork = 0;
-            int currentBatch = 0;
-            while (currentFetchWork < requestedMaxWorkToRetrieve && next.isPresent()) {
-                var shardEntry = next;
-                ProcessingShard<K, V> shard = shardEntry.get().getValue();
-
-                //
-                int remainingToGet = requestedMaxWorkToRetrieve - currentFetchWork;
-                var availableWork = shard.getNumberOfAvailableWork(remainingToGet);
-                currentBatch += availableWork;
-                currentFetchWork += availableWork;
-
-                if (currentBatch >= maxBatchSize ){
-                    int lastBatchSize = currentBatch % maxBatchSize;
-                    int leftover = lastBatchSize <= minBatchSize ? lastBatchSize : 0;
-                    buffer.add(ParallelConsumer.Tuple.pairOf(availableWork - lastBatchSize, shard));
-                    fetchWorkFromBuffer(workFromAllShards, buffer);
-                    buffer.clear();
-                    currentBatch = leftover;
-                    if (leftover > 0) buffer.add(ParallelConsumer.Tuple.pairOf(leftover, shard));
-                    prevNext = shardEntry;
-                }else{
-                    buffer.add(ParallelConsumer.Tuple.pairOf(availableWork, shard));
-                }
-                // next
-                next = shardQueueIterator.next();
-            }
-            if (currentBatch >= minBatchSize){//and it is smaller than batch size
-                fetchWorkFromBuffer(workFromAllShards, buffer);
-            }
-            next = prevNext;//we want to keep the pointer of last one we took data from if emp
+            next = getWorkWitMinBatchSize(requestedMaxWorkToRetrieve, shardQueueIterator, workFromAllShards, next);
         }else{
             while (workFromAllShards.size() < requestedMaxWorkToRetrieve && next.isPresent()) {
                 var shardEntry = next;
@@ -296,6 +261,46 @@ public class ShardManager<K, V> {
         updateResumePoint(next);
 
         return workFromAllShards;
+    }
+
+    private Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> getWorkWitMinBatchSize(
+            int requestedMaxWorkToRetrieve, LoopingResumingIterator<ShardKey, ProcessingShard<K, V>> shardQueueIterator,
+            List<WorkContainer<K, V>> workFromAllShards,
+            Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> next) {
+        List<ParallelConsumer.Tuple<Integer, ProcessingShard<K, V>>> buffer = new ArrayList<>();
+        int maxBatchSize = options.getBatchSize();
+        int minBatchSize = options.getMinBatchSize();
+        Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> prevNext = next;
+        int currentFetchWork = 0;
+        int currentBatch = 0;
+        while (currentFetchWork < requestedMaxWorkToRetrieve && next.isPresent()) {
+            var shardEntry = next;
+            ProcessingShard<K, V> shard = shardEntry.get().getValue();
+            int remainingToGet = requestedMaxWorkToRetrieve - currentFetchWork;
+            var availableWork = shard.getNumberOfAvailableWork(remainingToGet);
+            currentBatch += availableWork;
+            currentFetchWork += availableWork;
+
+            if (currentBatch >= maxBatchSize ){
+                int lastBatchSize = currentBatch % maxBatchSize;
+                int leftover = lastBatchSize <= minBatchSize ? lastBatchSize : 0;
+                buffer.add(ParallelConsumer.Tuple.pairOf(availableWork - lastBatchSize, shard));
+                fetchWorkFromBuffer(workFromAllShards, buffer);
+                buffer.clear();
+                currentBatch = leftover;
+                if (leftover > 0) buffer.add(ParallelConsumer.Tuple.pairOf(leftover, shard));
+                prevNext = shardEntry;
+            }else{
+                buffer.add(ParallelConsumer.Tuple.pairOf(availableWork, shard));
+            }
+            // next
+            next = shardQueueIterator.next();
+        }
+        if (currentBatch >= minBatchSize){//last batch and it is smaller than batch size
+            fetchWorkFromBuffer(workFromAllShards, buffer);
+        }
+        next = prevNext;//we want to keep the pointer of last one we took data from if emp
+        return next;
     }
 
     private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {

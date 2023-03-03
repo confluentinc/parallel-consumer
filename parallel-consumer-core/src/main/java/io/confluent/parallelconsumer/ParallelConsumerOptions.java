@@ -385,6 +385,8 @@ public class ParallelConsumerOptions<K, V> {
         return getBatchSize() > 1;
     }
 
+    public boolean isEnforceMinBatch() { return getMinBatchSize() > 1 && getMinBatchTimeoutInMillis() > 0; }
+
     @Builder.Default
     private final int maxFailureHistory = 10;
 

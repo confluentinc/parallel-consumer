@@ -50,8 +50,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private final ShardManager<K, V> sm;
 
 
-    // TODO ask if we really need here atomic long - I assume not but I was not sure
-    private AtomicLong lastTimeBatch = new AtomicLong(System.currentTimeMillis());
+    private final AtomicLong lastTimeBatch = new AtomicLong(System.currentTimeMillis());
 
 
     /**
@@ -136,7 +135,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         //
         var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve, atLeastMinBatchSize);
 
-        if (work.size() > 0 && options.getMinBatchSize() > 1){ //relevant flow
+        if (options.isEnforceMinBatch() && work.size() > 0){
             lastTimeBatch.set(System.currentTimeMillis());
         }
 
@@ -153,7 +152,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     private boolean isAtLeastMinBatchSize() {
-        return options.getMinBatchSize() > 1 && lastTimeBatch.get() + options.getMinBatchTimeoutInMillis() > System.currentTimeMillis();
+        return options.isEnforceMinBatch() && lastTimeBatch.get() + options.getMinBatchTimeoutInMillis() > System.currentTimeMillis();
     }
 
     public void onSuccessResult(WorkContainer<K, V> wc) {

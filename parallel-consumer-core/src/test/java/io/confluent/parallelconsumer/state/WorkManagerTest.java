@@ -30,7 +30,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.threeten.extra.MutableClock;
 import pl.tlinkowski.unij.api.UniLists;
@@ -40,6 +42,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
@@ -66,6 +69,9 @@ public class WorkManagerTest {
     int offset;
 
     PCModuleTestEnv module;
+
+    final static int minBatchSize = 5;
+    final static int maxBatchSize = 7;
 
     @BeforeEach
     public void setup() {
@@ -225,80 +231,33 @@ public class WorkManagerTest {
                 .isEqualTo(of(0, 2, 1));
     }
 
-//TODO change to parametrized
 
-    @Test
-
-    void minBatchSizeSmaller() {
+    @ParameterizedTest
+    @MethodSource("workArgsProvider")
+    void minBatchSizeTest(int numberOfRecords, int expected) {
         setupWorkManager(ParallelConsumerOptions.builder()
                 .ordering(UNORDERED)
                 .minBatchTimeoutInMillis(100)
-                .minBatchSize(5)
-                .batchSize(7)
+                .minBatchSize(minBatchSize)
+                .batchSize(maxBatchSize)
                 .build());
         //add first 3
-        registerSomeWork(0,4);
+        registerSomeWork(0,numberOfRecords);
         var gottenWork = wm.getWorkIfAvailable();
-        assertThat(gottenWork).hasSize(0);//not enough work
+        assertThat(gottenWork).hasSize(expected);//not enough work
 
     }
 
-    @Test
-    void minBatchSizeInBetween() {
-        setupWorkManager(ParallelConsumerOptions.builder()
-                .ordering(UNORDERED)
-                .minBatchTimeoutInMillis(100)
-                .minBatchSize(5)
-                .batchSize(7)
-                .build());
-        //add first 3
-        registerSomeWork(0,5);
-        var gottenWork = wm.getWorkIfAvailable();
-        assertThat(gottenWork).hasSize(5);//not enough work
-
+    private static Stream<Arguments> workArgsProvider() {
+        return Stream.of(
+                Arguments.of(minBatchSize - 1, 0),
+                Arguments.of(minBatchSize, minBatchSize),
+                Arguments.of(maxBatchSize + 1, maxBatchSize),
+                Arguments.of(maxBatchSize * 3 +1 , maxBatchSize * 3),
+                Arguments.of(maxBatchSize + minBatchSize, maxBatchSize + minBatchSize)
+        );
     }
 
-    @Test
-    void moreThanBatchSizeInBetween() {
-        setupWorkManager(ParallelConsumerOptions.builder()
-                .ordering(UNORDERED)
-                .minBatchTimeoutInMillis(100)
-                .minBatchSize(5)
-                .batchSize(7)
-                .build());
-        //add first 3
-        registerSomeWork(0,8);
-        var gottenWork = wm.getWorkIfAvailable();
-        assertThat(gottenWork).hasSize(7);//not enough work
-    }
-
-    @Test
-    void moreThanBatchSize() {
-        setupWorkManager(ParallelConsumerOptions.builder()
-                .ordering(UNORDERED)
-                .minBatchTimeoutInMillis(100)
-                .minBatchSize(5)
-                .batchSize(7)
-                .build());
-        //add first 3
-        registerSomeWork(0,22);
-        var gottenWork = wm.getWorkIfAvailable();
-        assertThat(gottenWork).hasSize(21);//not enough work
-    }
-
-    @Test
-    void moreThanBatchSize3() {
-        setupWorkManager(ParallelConsumerOptions.builder()
-                .ordering(UNORDERED)
-                .minBatchTimeoutInMillis(100)
-                .minBatchSize(5)
-                .batchSize(7)
-                .build());
-        //add first 3
-        registerSomeWork(0,7 + 5 );
-        var gottenWork = wm.getWorkIfAvailable();
-        assertThat(gottenWork).hasSize(7 + 5 );//not enough work
-    }
 
     private void succeed(WorkContainer<String, String> succeed) {
         succeed.onUserFunctionSuccess();
