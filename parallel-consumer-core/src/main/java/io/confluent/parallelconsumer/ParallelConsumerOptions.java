@@ -419,6 +419,23 @@ public class ParallelConsumerOptions<K, V> {
         Objects.requireNonNull(consumer, "A consumer must be supplied");
 
         transactionsValidation();
+        validateMinBatchParameters();
+    }
+
+    private void validateMinBatchParameters() {
+        if (isEnforceMinBatch()){
+            if (minBatchSize > batchSize)
+                throw new IllegalArgumentException(
+                        msg("minBatchSize can not by bigger than batchSize: {} > {}",
+                    minBatchSize,
+                    batchSize));
+        }
+        if (minBatchTimeoutInMillis < 0){
+            throw new IllegalArgumentException(
+                    msg("minBatchTimeoutInMillis should be non negative: {}",
+                            minBatchTimeoutInMillis
+                    ));
+        }
     }
 
     private void transactionsValidation() {
