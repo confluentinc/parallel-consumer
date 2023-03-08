@@ -14,6 +14,12 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.2.6
+
+=== Fixes
+
+* fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
+
 == 0.5.2.5
 
 === Fixes
