@@ -164,7 +164,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #processWorkCompleteMailBox
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
-
     private final OffsetCommitter committer;
 
     /**
@@ -351,6 +350,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         consumer.subscribe(pattern, this);
     }
 
+    AtomicBoolean isRebalanceInProgress = new AtomicBoolean(false);
     /**
      * Commit our offsets
      * <p>
@@ -360,19 +360,35 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
-        maybeAcquireCommitLock();
+        isRebalanceInProgress.set(true);
+        while (this.producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false))
+            Thread.sleep(100); //wait for the transaction to finish committing
+
+        // wait for the commit transaction to complete
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
             // commit any offsets from revoked partitions BEFORE truncation
+            this.producerManager.ifPresent(pm -> {
+                  try{
+                        pm.preAcquireOffsetsToCommit();
+                    } catch (ConcurrentModificationException exc) {
+                        log.warn("Concurrent modification exception while pre-acquiring offsets to commit {}", exc);
+                        throw exc;
+                    } catch (Exception exc){
+                        throw new InternalRuntimeException(exc);
+                    }
+            });
+
             commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
             wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
             throw new InternalRuntimeException("onPartitionsRevoked event error", e);
+        } finally {
+            isRebalanceInProgress.set(false);
         }
-
         //
         try {
             usersConsumerRebalanceListener.ifPresent(listener -> listener.onPartitionsRevoked(partitions));
@@ -679,7 +695,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                    Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
         maybeWakeupPoller();
 
-        //
         final boolean shouldTryCommitNow = maybeAcquireCommitLock();
 
         // make sure all work that's been completed are arranged ready for commit
@@ -750,7 +765,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return true if committing should either way be attempted now
      */
     private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
-        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty();
+        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty() && !isRebalanceInProgress.get();
         // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on
@@ -1142,36 +1157,45 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<PollContextInternal<K, V>, List<R>> usersFunction,
                                                                                         Consumer<R> callback,
                                                                                         List<WorkContainer<K, V>> workContainerBatch) {
-        if (log.isDebugEnabled()) {
-            // first offset of the batch
-            MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
-        }
-        log.trace("Pool received: {}", workContainerBatch);
-
-        /*
-         *  Handle stale work from the batch, before creating the internal context for running user function.
-         *  The context created is used by the "wrapped" user function to inject transactional producer synchronization.
-         */
-        final boolean containsStaleWork = wm.checkIfWorkIsStale(workContainerBatch);
-
-        if (containsStaleWork) {
-            handleStaleWork(workContainerBatch);
-        }
-
-        final List<WorkContainer<K, V>> activeWorkContainers = containsStaleWork ?
-                workContainerBatch
-                        .stream()
-                        .filter(wc -> !wm.checkIfWorkIsStale(wc))
-                        .collect(Collectors.toList())
-                : workContainerBatch;
-
-        final PollContextInternal<K, V> context = new PollContextInternal<>(activeWorkContainers);
+        // call the user's function
+        List<R> resultsFromUserFunction;
+        PollContextInternal<K, V> context = new PollContextInternal<>(workContainerBatch);
 
         try {
-            if (!activeWorkContainers.isEmpty()) {
-                return runUserFunctionInternal(usersFunction, context, callback, activeWorkContainers);
+            if (log.isDebugEnabled()) {
+                // first offset of the batch
+                MDC.put(MDC_WORK_CONTAINER_DESCRIPTOR, workContainerBatch.get(0).offset() + "");
             }
-            return Collections.emptyList();
+            log.trace("Pool received: {}", workContainerBatch);
+
+            //
+            boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
+            if (workIsStale) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", workContainerBatch);
+                return null;
+            }
+
+            resultsFromUserFunction = usersFunction.apply(context);
+
+            for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
+                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
+            }
+
+            // capture each result, against the input record
+            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
+            for (R result : resultsFromUserFunction) {
+                log.trace("Running users call back...");
+                callback.accept(result);
+            }
+
+            // fail or succeed, either way we're done
+            for (var kvWorkContainer : workContainerBatch) {
+                addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
+            }
+            log.trace("User function future registered");
+
+            return intermediateResults;
         } catch (Exception e) {
             // handle fail
             var cause = e.getCause();
@@ -1189,59 +1213,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
             throw e; // trow again to make the future failed
         } finally {
-            cleanUpContext(context);
+            context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
         }
-    }
-
-    /**
-     * Given the batch of work containers, publish stale work to feedback loop to be reduced from in progress work.
-     *
-     * @param workContainerBatch
-     */
-    protected void handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
-        final List<WorkContainer<K, V>> staleWorkContainers = workContainerBatch
-                .stream()
-                .filter(wm::checkIfWorkIsStale)
-                .collect(Collectors.toList());
-        final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
-        try {
-            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-            log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
-            staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
-        } finally {
-            cleanUpContext(internalContext);
-        }
-    }
-
-    protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> runUserFunctionInternal(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
-                                                                                    final PollContextInternal<K, V> context,
-                                                                                    final Consumer<R> callback,
-                                                                                    final List<WorkContainer<K, V>> activeWorkContainers) {
-        List<R> resultsFromUserFunction;
-        resultsFromUserFunction = usersFunction.apply(context);
-
-        for (final WorkContainer<K, V> kvWorkContainer : activeWorkContainers) {
-            onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-        }
-
-        // capture each result, against the input record
-        var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-        for (R result : resultsFromUserFunction) {
-            log.trace("Running users call back...");
-            callback.accept(result);
-        }
-
-        // fail or succeed, either way we're done
-        for (var kvWorkContainer : activeWorkContainers) {
-            addToMailBoxOnUserFunctionSuccess(context, kvWorkContainer, resultsFromUserFunction);
-        }
-        log.trace("User function future registered");
-
-        return intermediateResults;
-    }
-
-    private void cleanUpContext(final PollContextInternal<K, V> context) {
-        context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
