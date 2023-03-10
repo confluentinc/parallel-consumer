@@ -114,6 +114,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
+    private final AtomicBoolean isRebalanceInProgress = new AtomicBoolean(false);
     /**
      * An inbound message to the controller.
      * <p>
@@ -164,6 +165,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #processWorkCompleteMailBox
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
+
     private final OffsetCommitter committer;
 
     /**
@@ -350,7 +352,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         consumer.subscribe(pattern, this);
     }
 
-    AtomicBoolean isRebalanceInProgress = new AtomicBoolean(false);
     /**
      * Commit our offsets
      * <p>
@@ -364,7 +365,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         while (this.producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false))
             Thread.sleep(100); //wait for the transaction to finish committing
 
-        // wait for the commit transaction to complete
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
@@ -372,12 +372,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager.ifPresent(pm -> {
                   try{
                         pm.preAcquireOffsetsToCommit();
-                    } catch (ConcurrentModificationException exc) {
-                        log.warn("Concurrent modification exception while pre-acquiring offsets to commit {}", exc);
-                        throw exc;
-                    } catch (Exception exc){
+                  } catch (Exception exc){
                         throw new InternalRuntimeException(exc);
-                    }
+                  }
             });
 
             commitOffsetsThatAreReady();
