@@ -860,10 +860,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             listOfBatches.add(batchInConstruction);
         }
 
-        log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
-                sourceCollection.size(),
-                listOfBatches.size(),
-                listOfBatches.stream().map(List::size).collect(Collectors.toList()));
+        if (log.isDebugEnabled()) {
+            log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
+                    sourceCollection.size(),
+                    listOfBatches.size(),
+                    listOfBatches.stream().map(List::size).collect(Collectors.toList()));
+        }
         return listOfBatches;
     }
 
