@@ -114,6 +114,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter(PROTECTED)
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
+    private final AtomicBoolean isRebalanceInProgress = new AtomicBoolean(false);
     /**
      * An inbound message to the controller.
      * <p>
@@ -356,21 +357,35 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * <p>
      * Make sure the calling thread is the thread which performs commit - i.e. is the {@link OffsetCommitter}.
      */
+    @SneakyThrows
     @Override
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
+        isRebalanceInProgress.set(true);
+        while (this.producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false))
+            Thread.sleep(100); //wait for the transaction to finish committing
+
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
             // commit any offsets from revoked partitions BEFORE truncation
+            this.producerManager.ifPresent(pm -> {
+                  try{
+                        pm.preAcquireOffsetsToCommit();
+                  } catch (Exception exc){
+                        throw new InternalRuntimeException(exc);
+                  }
+            });
+
             commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
             wm.onPartitionsRevoked(partitions);
         } catch (Exception e) {
             throw new InternalRuntimeException("onPartitionsRevoked event error", e);
+        } finally {
+            isRebalanceInProgress.set(false);
         }
-
         //
         try {
             usersConsumerRebalanceListener.ifPresent(listener -> listener.onPartitionsRevoked(partitions));
@@ -677,7 +692,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                    Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
         maybeWakeupPoller();
 
-        //
         final boolean shouldTryCommitNow = maybeAcquireCommitLock();
 
         // make sure all work that's been completed are arranged ready for commit
@@ -748,7 +762,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return true if committing should either way be attempted now
      */
     private boolean maybeAcquireCommitLock() throws TimeoutException, InterruptedException {
-        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty();
+        final boolean shouldTryCommitNow = isTimeToCommitNow() && wm.isDirty() && !isRebalanceInProgress.get();
         // could do this optimistically as well, and only get the lock if it's time to commit, so is not frequent
         if (shouldTryCommitNow && options.isUsingTransactionCommitMode()) {
             // get into write lock queue, so that no new work can be started from here on
