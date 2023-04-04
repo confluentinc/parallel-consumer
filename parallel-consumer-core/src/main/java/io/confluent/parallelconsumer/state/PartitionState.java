@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.Offsets;
@@ -346,11 +346,12 @@ public class PartitionState<K, V> {
 
         if (pollAboveExpected) {
             // previously committed offset record has been removed from the topic, so we need to truncate up to it
-            log.warn("Truncating state - removing records lower than {} from partition {}. Offsets have been removed from the partition " +
+            log.warn("Truncating state - removing records lower than {} from partition {} of topic {}. Offsets have been removed from the partition " +
                             "by the broker or committed offset has been raised. Bootstrap polled {} but expected {} from loaded commit data. " +
                             "Could be caused by record retention or compaction and offset reset policy LATEST.",
                     bootstrapPolledOffset,
                     this.tp.partition(),
+                    this.tp.topic(),
                     bootstrapPolledOffset,
                     expectedBootstrapRecordOffset);
 
@@ -359,10 +360,12 @@ public class PartitionState<K, V> {
             incompletesToPrune.forEach(incompleteOffsets::remove);
         } else if (pollBelowExpected) {
             // reset to lower offset detected, so we need to reset our state to match
-            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) - truncating state - all records " +
+            log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) for partition {} of topic {} - truncating state - all records " +
                             "above (including this) will be replayed. Was expecting {} but bootstrap poll was {}. " +
                             "Could be caused by record retention or compaction and offset reset policy EARLIEST.",
                     bootstrapPolledOffset,
+                    this.tp.partition(),
+                    this.tp.topic(),
                     expectedBootstrapRecordOffset,
                     bootstrapPolledOffset
             );
@@ -511,7 +514,10 @@ public class PartitionState<K, V> {
                     metaPayloadLength, getPressureThresholdValue(), DefaultMaxMetadataSize);
 
         } else { // and thus (metaPayloadLength <= pressureThresholdValue)
-            setAllowedMoreRecords(true);
+            if (allowedMoreRecords == false) {
+                // guard is useful for debugging to catch the transition from false to true
+                setAllowedMoreRecords(true);
+            }
             log.debug("Payload size {} within threshold {}", metaPayloadLength, getPressureThresholdValue());
         }
 
@@ -618,9 +624,11 @@ public class PartitionState<K, V> {
             log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
             return false;
         } else if (isAllowedMoreRecords()) {
+            log.debug("Partition is allowed more records. Taking work. WC: {}", workContainer);
             return true;
         } else if (isBlockingProgress(workContainer)) {
             // allow record to be taken, even if partition is blocked, as this record completion may reduce payload size requirement
+            log.debug("Partition is blocked, but this record is blocking progress. Taking work. WC: {}", workContainer);
             return true;
         } else {
             log.debug("Not allowed more records for the partition ({}) as set from previous encode run (blocked), that this " +

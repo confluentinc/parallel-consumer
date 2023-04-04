@@ -1323,11 +1323,24 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.2.6
+
+=== Fixes
+
+* fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
+* fix: Transactional PConsumer stuck while rebalancing - related to (#541)
+
 == 0.5.2.5
 
 === Fixes
 
 * fixes: #195 NoSuchFieldException when using consumer inherited from KafkaConsumer (#469)
+* fix: After new performance fix PR#530 merges - corner case could cause out of order processing (#534)
+* fix: Cleanup WorkManager's count of in-progress work, when work is stale after partition revocation (#547)
+
+=== Improvements
+
+* perf: Adds a caching layer to work management to alleviate O(n) counting (#530)
 
 == 0.5.2.4
 
@@ -1368,11 +1381,13 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
+
 === Fixes
 
 * fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
 * fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
 
 == v0.5.2.2
 

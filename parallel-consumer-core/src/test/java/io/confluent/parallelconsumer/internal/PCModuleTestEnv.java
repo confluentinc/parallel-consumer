@@ -1,11 +1,12 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.ModelUtils;
+import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -14,6 +15,8 @@ import org.mockito.Mockito;
 import org.threeten.extra.MutableClock;
 
 import java.time.Clock;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Version of the {@link PCModule} in test contexts.
@@ -23,6 +26,20 @@ import java.time.Clock;
 public class PCModuleTestEnv extends PCModule<String, String> {
 
     ModelUtils mu = new ModelUtils(this);
+    Optional<CountDownLatch> workManagerController;
+    private WorkManager<String, String> workManager;
+    private final DynamicLoadFactor limitedDynamicLoadFactor = new LimitedDynamicExtraLoadFactor();
+
+    @Override
+    protected DynamicLoadFactor dynamicExtraLoadFactor() {
+        return limitedDynamicLoadFactor;
+    }
+
+    public PCModuleTestEnv(final ParallelConsumerOptions<String, String> optionsInstance,
+                           final CountDownLatch latch) {
+        super(optionsInstance);
+        this.workManagerController = Optional.of(latch);
+    }
 
     public PCModuleTestEnv(ParallelConsumerOptions<String, String> optionsInstance) {
         super(optionsInstance);
@@ -31,6 +48,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
 
         // overwrite super's with new instance
         super.optionsInstance = override;
+        this.workManagerController = Optional.empty();
     }
 
     private ParallelConsumerOptions<String, String> enhanceOptions(ParallelConsumerOptions<String, String> optionsInstance) {
@@ -61,11 +79,21 @@ public class PCModuleTestEnv extends PCModule<String, String> {
     ProducerWrapper<String, String> mockProduceWrap;
 
     @NonNull
-    private ProducerWrapper mockProducerWrapTransactional() {
+    private ProducerWrapper<String, String> mockProducerWrapTransactional() {
         if (mockProduceWrap == null) {
             mockProduceWrap = Mockito.spy(new ProducerWrapper<>(options(), true, producer()));
         }
         return mockProduceWrap;
+    }
+
+    @Override
+    public WorkManager<String, String> workManager() {
+        if (this.workManager == null) {
+            this.workManager = this.workManagerController.isPresent() ?
+                    new PausableWorkManager<>(this, dynamicExtraLoadFactor(), workManagerController.get())
+                    : super.workManager();
+        }
+        return workManager;
     }
 
     @Override
