@@ -1317,6 +1317,7 @@ endif::[]
 === Fixes
 
 * fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
+* fix: Transactional PConsumer stuck while rebalancing - related to (#541)
 
 == 0.5.2.5
 
