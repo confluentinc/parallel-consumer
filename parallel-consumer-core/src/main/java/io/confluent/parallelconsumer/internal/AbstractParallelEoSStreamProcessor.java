@@ -306,7 +306,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         ThreadFactory namingThreadFactory = r -> {
             Thread thread = finalDefaultFactory.newThread(r);
             String name = thread.getName();
-            thread.setName("pc-" + name);
+            thread.setName("pc-" + name + "-" + this.getMyId().orElse(""));
             return thread;
         };
         ThreadPoolExecutor.AbortPolicy rejectionHandler = new ThreadPoolExecutor.AbortPolicy();
@@ -655,7 +655,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             addInstanceMDC();
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
-            controlThread.setName("pc-control");
+            controlThread.setName("pc-control-" + this.myId.orElse(""));
             this.blockableControlThread = controlThread;
             while (state != CLOSED) {
                 log.debug("Control loop start");
