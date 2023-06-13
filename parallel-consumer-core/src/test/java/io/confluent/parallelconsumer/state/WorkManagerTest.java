@@ -49,6 +49,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOr
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.testcontainers.shaded.org.yaml.snakeyaml.tokens.Token.ID.Key;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
@@ -112,23 +113,30 @@ public class WorkManagerTest {
     }
 
     private void registerSomeWork() {
-        registerSomeWork(0, 3);
+        registerSomeWork(0, 3, false);
     }
 
     /**
      * Adds 3 units of work
      */
-    private void registerSomeWork(int partition, int numberOfRecords) {
+    private void registerSomeWork(int partition, int numberOfRecords, boolean randomKey) {
         assignPartition(partition);
 
-        String key = "key-0";
         List<ConsumerRecord<String, String>> records  = IntStream.rangeClosed(1, numberOfRecords).boxed()
-                .map(i -> makeRec("" + i, key, partition)).collect(Collectors.toList());
+                .map(i -> makeRec("" + i, getKey(randomKey), partition)).collect(Collectors.toList());
 
         Map<TopicPartition, List<ConsumerRecord<String, String>>> m = new HashMap<>();
         m.put(topicPartitionOf(partition), records);
         var recs = new ConsumerRecords<>(m);
         wm.registerWork(new EpochAndRecordsMap(recs, wm.getPm()));
+    }
+
+    @NotNull
+    private static String getKey(boolean randomKey) {
+        String random = randomKey ? "-" + UUID.randomUUID() : "";
+
+        String key = "key-0" + random;
+        return key;
     }
 
     private ConsumerRecord<String, String> makeRec(String value, String key, int partition) {
@@ -234,15 +242,16 @@ public class WorkManagerTest {
 
     @ParameterizedTest
     @MethodSource("workArgsProvider")
-    void minBatchSizeTest(int numberOfRecords, int expected) {
+    void minBatchSizeTest(int numberOfRecords, int expected, ParallelConsumerOptions.ProcessingOrder order,
+                          boolean isRandomKey) {
         setupWorkManager(ParallelConsumerOptions.builder()
-                .ordering(UNORDERED)
+                .ordering(order)
                 .minBatchTimeoutInMillis(100)
                 .minBatchSize(minBatchSize)
                 .batchSize(maxBatchSize)
                 .build());
         //add first 3
-        registerSomeWork(0,numberOfRecords);
+        registerSomeWork(0, numberOfRecords, isRandomKey);
         var gottenWork = wm.getWorkIfAvailable();
         assertThat(gottenWork).hasSize(expected);//not enough work
 
@@ -250,11 +259,21 @@ public class WorkManagerTest {
 
     private static Stream<Arguments> workArgsProvider() {
         return Stream.of(
-                Arguments.of(minBatchSize - 1, 0),
-                Arguments.of(minBatchSize, minBatchSize),
-                Arguments.of(maxBatchSize + 1, maxBatchSize),
-                Arguments.of(maxBatchSize * 3 +1 , maxBatchSize * 3),
-                Arguments.of(maxBatchSize + minBatchSize, maxBatchSize + minBatchSize)
+                Arguments.of(minBatchSize - 1, 0, UNORDERED, false),
+                Arguments.of(minBatchSize - 1, 0, KEY, false),
+                Arguments.of(minBatchSize - 1, 0, PARTITION, false),
+                Arguments.of(minBatchSize, minBatchSize, UNORDERED, false),
+                //Since in key and Partition there is no new data there will not be a new min batch
+                Arguments.of(minBatchSize, 0, KEY, false),
+                Arguments.of(minBatchSize, 0, PARTITION, false),
+                //When key is random we expect KEY to be the same as UNORDERED
+                Arguments.of(minBatchSize, minBatchSize, KEY, true),
+                Arguments.of(maxBatchSize + 1, maxBatchSize, UNORDERED, false),
+                Arguments.of(maxBatchSize + 1, maxBatchSize, KEY, true),
+                Arguments.of(maxBatchSize * 3 +1 , maxBatchSize * 3, UNORDERED, false),
+                Arguments.of(maxBatchSize * 3 +1 , maxBatchSize * 3, KEY, true),
+                Arguments.of(maxBatchSize + minBatchSize, maxBatchSize + minBatchSize, UNORDERED, false),
+                Arguments.of(maxBatchSize + minBatchSize, maxBatchSize + minBatchSize, KEY, true)
         );
     }
 
@@ -733,9 +752,9 @@ public class WorkManagerTest {
                 .ordering(PARTITION)
                 .build());
 
-        registerSomeWork(0,3);
-        registerSomeWork(1,3);
-        registerSomeWork(2,3);
+        registerSomeWork(0,3, false);
+        registerSomeWork(1,3, false);
+        registerSomeWork(2,3, false);
 
         var allWork = new ArrayList<WorkContainer<String, String>>();
 

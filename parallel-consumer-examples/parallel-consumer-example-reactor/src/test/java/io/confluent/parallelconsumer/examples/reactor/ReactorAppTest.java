@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.reactor;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.github.tomakehurst.wiremock.WireMockServer;
