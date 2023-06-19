@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -172,7 +172,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private EpochAndRecordsMap<K, V> pollBrokerForRecords() {
-        managePauseOfSubscription();
+
+        checkStateForPausingSubscriptions();
+
         log.debug("Subscriptions are paused: {}", pausedForThrottling);
 
         boolean pollTimeoutNormally = runState == RUNNING || runState == DRAINING;
@@ -186,6 +188,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
         // build records map
         return new EpochAndRecordsMap<>(poll, wm.getPm());
+    }
+
+    private void checkStateForPausingSubscriptions() {
+        if(runState == DRAINING) {
+            doPause();
+        }
+        else{
+            managePauseOfSubscription();
+        }
     }
 
     /**
