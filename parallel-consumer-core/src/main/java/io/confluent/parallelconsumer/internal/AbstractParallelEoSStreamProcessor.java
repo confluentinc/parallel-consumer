@@ -733,8 +733,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         // end of loop
-        log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+        if (log.isTraceEnabled()) {
+            log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
+                    wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+        }
     }
 
     /**
@@ -872,10 +874,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             listOfBatches.add(batchInConstruction);
         }
 
-        log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
-                sourceCollection.size(),
-                listOfBatches.size(),
-                listOfBatches.stream().map(List::size).collect(Collectors.toList()));
+        if (log.isDebugEnabled()) {
+            log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
+                    sourceCollection.size(),
+                    listOfBatches.size(),
+                    listOfBatches.stream().map(List::size).collect(Collectors.toList()));
+        }
         return listOfBatches;
     }
 
@@ -1097,16 +1101,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return true if waiting to commit would help performance
      */
     private boolean lingeringOnCommitWouldBeBeneficial() {
-        // work is waiting to be done
-        boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
-        // no work is currently being done
-        boolean workInFlight = wm.hasWorkInFlight();
-        // work mailbox is empty
-        boolean workWaitingInMailbox = !workMailBox.isEmpty();
-        boolean workWaitingToProcess = wm.hasIncompleteOffsets();
-        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
-                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
-        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
+        if (log.isTraceEnabled()) {
+            // work is waiting to be done
+            boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
+            // no work is currently being done
+            boolean workInFlight = wm.hasWorkInFlight();
+            // work mailbox is empty
+            boolean workWaitingInMailbox = !workMailBox.isEmpty();
+            boolean workWaitingToProcess = wm.hasIncompleteOffsets();
+            log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
+                    workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
+            boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
+        }
 
         // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
