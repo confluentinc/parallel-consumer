@@ -20,11 +20,12 @@ def config = jobConfig {
 }
 
 def job = {
+    def maven_command = sh(script: """if test -f "${env.WORKSPACE}/mvnw"; then echo "${env.WORKSPACE}/mvnw"; else echo "mvn"; fi""", returnStdout: true).trim()
     // If we have a RELEASE_TAG specified as a build parameter, test that the version in pom.xml matches the tag.
     if (!params.RELEASE_TAG.trim().equals('')) {
         sh "git checkout ${params.RELEASE_TAG}"
         def project_version = sh(
-                script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout | tail -1',
+                script: '${maven_command} help:evaluate -Dexpression=project.version -q -DforceStdout | tail -1',
                 returnStdout: true
         ).trim()
 
@@ -47,11 +48,11 @@ def job = {
                         def isPrBuild = env.CHANGE_TARGET ? true : false
                         def buildPhase = isPrBuild ? "install" : "deploy"
                         if (params.RELEASE_TAG.trim().equals('')) {
-                            sh "mvn --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
+                            sh "${maven_command} --batch-mode -Pjenkins -Pci -U dependency:analyze clean $buildPhase"
                         } else {
                             // it's a parameterized job, and we should deploy to maven central.
                           withGPGkey("gpg/confluent-packaging-private-8B1DA6120C2BF624") {
-                            sh "mvn --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
+                            sh "${maven_command} --batch-mode clean deploy -P maven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE"
                           }
                         }
                         currentBuild.result = 'Success'
