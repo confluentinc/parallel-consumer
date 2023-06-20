@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -109,6 +109,51 @@ public class OffsetEncodingTests extends ParallelEoSStreamProcessorTestBase {
                 assertThat(decodedBitsets.getIncompleteOffsets())
                         .as(encodingToUse.toString())
                         .containsExactlyInAnyOrderElementsOf(incompletes);
+            } else {
+                log.info("Encoding not performed: " + encodingToUse);
+            }
+        }
+
+        OffsetSimultaneousEncoder.compressionForced = false;
+    }
+
+    /**
+     * Verifying that encoding / decoding returns correct highest seen offset when nextExpectedOffset is below the
+     * baseOffsetToCommit
+     */
+    @SneakyThrows
+    @Test
+    @ResourceLock(value = OffsetSimultaneousEncoder.COMPRESSION_FORCED_RESOURCE_LOCK, mode = READ_WRITE)
+    void verifyEncodingWithNextExpectedBelowWatermark() {
+        long baseOffsetToCommit = 123L;
+        long highestSucceededOffset = 122L;
+        var incompletes = new TreeSet<>(UniSets.of(2345L, 8765L)); // no incompletes below low watermark or next expected
+
+        OffsetSimultaneousEncoder encoder = new OffsetSimultaneousEncoder(baseOffsetToCommit, highestSucceededOffset, incompletes);
+        OffsetSimultaneousEncoder.compressionForced = true;
+
+        //
+        encoder.invoke();
+        Map<OffsetEncoding, byte[]> encodingMap = encoder.getEncodingMap();
+
+        //
+        byte[] smallestBytes = encoder.packSmallest();
+        EncodedOffsetPair unwrap = EncodedOffsetPair.unwrap(smallestBytes);
+        OffsetMapCodecManager.HighestOffsetAndIncompletes decodedIncompletes = unwrap.getDecodedIncompletes(baseOffsetToCommit);
+        assertThat(decodedIncompletes.getIncompleteOffsets()).isEmpty();
+        assertThat(decodedIncompletes.getHighestSeenOffset().isPresent()).isTrue();
+        assertThat(decodedIncompletes.getHighestSeenOffset().get()).isEqualTo(highestSucceededOffset);
+
+        //
+        for (OffsetEncoding encodingToUse : OffsetEncoding.values()) {
+            log.info("Testing {}", encodingToUse);
+            byte[] bitsetBytes = encodingMap.get(encodingToUse);
+            if (bitsetBytes != null) {
+                EncodedOffsetPair bitsetUnwrap = EncodedOffsetPair.unwrap(encoder.packEncoding(new EncodedOffsetPair(encodingToUse, ByteBuffer.wrap(bitsetBytes))));
+                OffsetMapCodecManager.HighestOffsetAndIncompletes decodedBitsets = bitsetUnwrap.getDecodedIncompletes(baseOffsetToCommit);
+                assertThat(decodedBitsets.getIncompleteOffsets()).isEmpty();
+                assertThat(decodedBitsets.getHighestSeenOffset().isPresent()).isTrue();
+                assertThat(decodedBitsets.getHighestSeenOffset().get()).isEqualTo(highestSucceededOffset);
             } else {
                 log.info("Encoding not performed: " + encodingToUse);
             }

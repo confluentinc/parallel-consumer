@@ -8,7 +8,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.2.5-SNAPSHOT</version>
+        <version>0.5.2.6-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -26,13 +26,13 @@
         <dependency>
             <groupId>com.github.luben</groupId>
             <artifactId>zstd-jni</artifactId>
-            <version>1.5.2-4</version>
+            <version>1.5.5-4</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.xerial.snappy</groupId>
             <artifactId>snappy-java</artifactId>
-            <version>1.1.8.4</version>
+            <version>1.1.10.1</version>
             <scope>compile</scope>
         </dependency>
 
@@ -85,7 +85,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.5.1</version>
+            <version>42.6.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -96,7 +96,7 @@
         <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threeten-extra</artifactId>
-            <version>1.7.1</version>
+            <version>1.7.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
