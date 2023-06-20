@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -107,8 +107,11 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * @return true if closed cleanly
      */
     private boolean controlLoop() throws TimeoutException, InterruptedException {
-        Thread.currentThread().setName("pc-broker-poll-" + this.pc.getMyId().orElse(""));
-        pc.getMyId().ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
+        Thread.currentThread().setName("pc-broker-poll");
+        pc.getMyId().ifPresent(id -> {
+            Thread.currentThread().setName("pc-broker-poll-" + id);
+            MDC.put(MDC_INSTANCE_ID, id);
+        });
         log.trace("Broker poll control loop start");
         committer.ifPresent(ConsumerOffsetCommitter::claim);
         try {
