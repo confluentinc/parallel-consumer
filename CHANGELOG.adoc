@@ -21,6 +21,11 @@ endif::[]
 * fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
 * fix: Transactional PConsumer stuck while rebalancing - related to (#541)
 
+=== Dependencies
+
+* PL-211: Update dependencies from dependabot, Add mvnw, use mvnw in jenkins (#583)
+* PL-211: Update dependencies from dependabot (#589)
+
 == 0.5.2.5
 
 === Fixes
