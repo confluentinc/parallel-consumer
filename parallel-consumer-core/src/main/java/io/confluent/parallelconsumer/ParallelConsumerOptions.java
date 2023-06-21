@@ -426,7 +426,7 @@ public class ParallelConsumerOptions<K, V> {
         if (isEnforceMinBatch()){
             if (minBatchSize > batchSize)
                 throw new IllegalArgumentException(
-                        msg("minBatchSize can not by bigger than batchSize: {} > {}",
+                        msg("minBatchSize cannot be bigger than batchSize: {} > {}",
                     minBatchSize,
                     batchSize));
         }
