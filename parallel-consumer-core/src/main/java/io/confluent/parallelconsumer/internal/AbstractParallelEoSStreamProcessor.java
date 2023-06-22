@@ -307,6 +307,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Thread thread = finalDefaultFactory.newThread(r);
             String name = thread.getName();
             thread.setName("pc-" + name);
+            this.getMyId().ifPresent(id -> thread.setName("pc-" + name + "-" + id));
             return thread;
         };
         ThreadPoolExecutor.AbortPolicy rejectionHandler = new ThreadPoolExecutor.AbortPolicy();
@@ -656,6 +657,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
+            this.getMyId().ifPresent(id -> controlThread.setName("pc-control-" + id));
             this.blockableControlThread = controlThread;
             while (state != CLOSED) {
                 log.debug("Control loop start");
