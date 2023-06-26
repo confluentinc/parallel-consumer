@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import com.google.common.eventbus.Subscribe;
 import io.confluent.parallelconsumer.state.ShardKey;
 import io.micrometer.core.instrument.*;
 import io.micrometer.core.instrument.binder.MeterBinder;
@@ -28,27 +27,39 @@ import java.util.function.ToDoubleFunction;
  * @author Nacho Munoz
  */
 public class PCMetricsTracker implements MeterBinder, AutoCloseable {
+
     public static final long REFRESH_INTERVAL_SECONDS = 30;
+
     public static final long INITIAL_DELAY_SECONDS = 5;
+
     public static final String PC_METRIC_NAME_PREFIX = "pc";
+
     public static final String METRIC_NAME_PC_STATUS = PC_METRIC_NAME_PREFIX + ".status";
+
     public static final String METRIC_NAME_NUMBER_PARTITIONS = PC_METRIC_NAME_PREFIX + ".partitions";
+
     public static final String METRIC_NAME_NUMBER_PAUSED_PARTITIONS = PC_METRIC_NAME_PREFIX + ".paused.partitions";
+
+
     public static final String METRIC_NAME_NUMBER_SHARDS = PC_METRIC_NAME_PREFIX + ".shards";
+
     public static final String METRIC_NAME_SHARD_SIZE = PC_METRIC_NAME_PREFIX + ".shard.size";
+
     public static final String METRIC_NAME_AVERAGE_USER_PROCESSING_TIME = PC_METRIC_NAME_PREFIX + ".avg.processing.time";
+
     public static final String METRIC_NAME_AVERAGE_WAITING_TIME = PC_METRIC_NAME_PREFIX + ".avg.waiting.time";
+
     public static final String METRIC_NAME_TOTAL_INCOMPLETE_OFFSETS = PC_METRIC_NAME_PREFIX + ".incomplete.offsets.total";
+
     public static final String METRIC_NAME_INCOMPLETE_OFFSETS = PC_METRIC_NAME_PREFIX + ".incomplete.offsets.partition";
+
     public static final String METRIC_NAME_HIGHEST_COMPLETED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.complete.offset.partition";
+
     public static final String METRIC_NAME_HIGHEST_SEEN_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.seen.offset";
+
     public static final String METRIC_NAME_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.sequential.succeeded.offset.partition";
+
     public static final String METRIC_NAME_LAST_COMMITTED_OFFSET = PC_METRIC_NAME_PREFIX + ".latest.commited.offset.partition";
-    public static final  String METRIC_NAME_PROCESSED_RECORDS =  PC_METRIC_NAME_PREFIX + ".processed.records";
-    public static final String METRIC_NAME_FAILED_RECORDS =  PC_METRIC_NAME_PREFIX + ".failed.records";
-    public static final String METRIC_NAME_OFFSETS_ENCODING_TIME =  PC_METRIC_NAME_PREFIX + ".offsets.encoding.time";
-    public static final String METRIC_NAME_OFFSETS_ENCODING_USAGE =  PC_METRIC_NAME_PREFIX + ".offsets.encoding.usage";
-    public static final String METRIC_NAME_USER_FUNCTION_PROCESSING_TIME =  PC_METRIC_NAME_PREFIX + ".user.function.processing.time";
 
     private static final String METRIC_CATEGORY = "subsystem";
 
@@ -88,37 +99,6 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
         this.commonTags = tags;
     }
-
-    @Subscribe
-    public void eventHandler(final MetricsEvent event){
-        switch (event.getType()){
-            case COUNTER -> Optional.ofNullable(
-                    meterRegistry.find(event.getName()).tags(event.getTags()).counter()).orElseGet(()->
-                    bindAndGetCounter(event.getName(), event.getDescription(), event.getTags())).increment();
-             case TIMER -> Optional.ofNullable(
-                            meterRegistry.find(event.getName()).tags(event.getTags()).timer()).orElseGet(()->
-                             bindAndGetTimer(event.getName(), event.getDescription(), event.getTags()))
-                    .record(event.getTimerValue());
-             case GAUGE -> throw new UnsupportedOperationException("Not Implemented yet");
-        }
-    }
-
-    private Timer bindAndGetTimer(String name, String desc, Iterable<Tag> tags) {
-        return Timer.builder(name)
-                .description(desc)
-                .publishPercentileHistogram(true)
-                .publishPercentiles(0.5,0.95,0.99,0.999)
-                .tags(tags)
-                .register(this.meterRegistry);
-    }
-
-    private Counter bindAndGetCounter(String name, String desc, Iterable<Tag> tags) {
-        return Counter.builder(name)
-                .description(desc)
-                .tags(tags)
-                .register(this.meterRegistry);
-    }
-
 
     private void bindGauge(String name, String desc, ToDoubleFunction<PCMetricsTracker> fn, Iterable<Tag> tags) {
         var gauge = Gauge.builder(name, this, fn)

@@ -41,6 +41,7 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
             });
         });
 
+        pcMetricsTracker.bindTo(registry);
         // metrics have some data
         await().untilAsserted(() -> {
             assertFalse(registry.getMeters().isEmpty());
@@ -79,4 +80,5 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
         return Optional.ofNullable(registry.find(metricName).tags(tags).timer())
                 .map(timer -> timer.mean(TimeUnit.MILLISECONDS)).orElse(0.0);
     }
+}
 }

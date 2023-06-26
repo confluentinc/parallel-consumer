@@ -4,13 +4,10 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.MetricsEvent;
 import io.confluent.parallelconsumer.PCMetrics;
-import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.*;
-import io.micrometer.core.instrument.Tag;
-import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -70,6 +67,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
+    private Gauge inflightRecordsMeter;
+    private Gauge waitingRecordsMeter;
+
     public WorkManager(PCModule<K, V> module,
                        DynamicLoadFactor dynamicExtraLoadFactor) {
         this.module = module;
@@ -77,6 +77,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(module, this);
         this.pm = new PartitionStateManager<>(module, sm);
+
+        inflightRecordsMeter = Gauge.builder("pc.records.inflight", this::getNumberRecordsOutForProcessing)
+                .register(module.meterRegistry());
+        waitingRecordsMeter = Gauge.builder("pc.records.waiting", this::getNumberOfWorkQueuedInShardsAwaitingSelection)
+                .register(module.meterRegistry());
     }
 
     /**
@@ -152,13 +157,19 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 "epoch", String.valueOf(wc.getEpoch()));
     }
 
+    private Counter getCounterMeterFor(String meterName, WorkContainer<K,V> wc) {
+        final var wcTags = computeTagsForWorkContainer(wc);
+
+        return Optional.ofNullable(this.module.meterRegistry().find(meterName)
+                .tags(wcTags).counter())
+                .orElseGet(()-> Counter.builder(meterName).tags(wcTags).baseUnit("records")
+                        .register(this.module.meterRegistry()));
+    }
+
     public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
-        module.eventBus().post(MetricsEvent.builder()
-                .name(PCMetricsTracker.METRIC_NAME_PROCESSED_RECORDS)
-                .value(1.0)
-                .tags(Tags.of(computeTagsForWorkContainer(wc))).build());
+        getCounterMeterFor("pc.successfully.processed.records", wc).increment();
         wc.endFlight();
 
         // update as we go
@@ -182,10 +193,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        module.eventBus().post(MetricsEvent.builder()
-                .name(PCMetricsTracker.METRIC_NAME_FAILED_RECORDS)
-                .value(1.0)
-                .tags(Tags.of(computeTagsForWorkContainer(wc))).build());
+        getCounterMeterFor("pc.failed.processed.records", wc).increment();
         wc.endFlight();
         pm.onFailure(wc);
         sm.onFailure(wc);

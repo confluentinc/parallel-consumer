@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import com.google.common.eventbus.EventBus;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -78,12 +77,6 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
-
-    /**
-     * Metrics EventBus
-     */
-    @Builder.Default
-    private final EventBus eventBus = new EventBus("metrics");
 
     /**
      * The ordering guarantee to use.
