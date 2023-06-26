@@ -528,10 +528,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
-        List<Runnable> unfinished = workerThreadPool.get().shutdownNow();
-        if (!unfinished.isEmpty()) {
-            log.warn("Threads not done count: {}", unfinished.size());
-        }
+//        Initiates an orderly shutdown in which previously submitted tasks are executed, but no new tasks will be accepted.
+        workerThreadPool.get().shutdown();
 
         log.debug("Awaiting worker pool termination...");
         boolean interrupted = true;
@@ -541,7 +539,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 boolean terminationFinishedWithoutTimeout = workerThreadPool.get().awaitTermination(toSeconds(timeout), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
+                    // Cancel/Re-Cancel if current thread also interrupted
+                    List<Runnable> unfinished = workerThreadPool.get().shutdownNow();
+                    if (!unfinished.isEmpty()) {
+                        log.warn("Thread execution pool termination await timeout ({})! Threads not done count: {}", timeout, unfinished.size());
+                    }
                 }
             } catch (InterruptedException e) {
                 log.error("InterruptedException", e);
