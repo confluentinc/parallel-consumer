@@ -16,7 +16,7 @@ public interface DrainingCloseable extends Closeable {
          */
         DRAIN,
         /**
-         * Stop downloading more messages, and stop procesing more messages in the queue, but finish processing messages
+         * Stop downloading more messages, and stop processing more messages in the queue, but finish processing messages
          * already being processed locally.
          */
         DONT_DRAIN
