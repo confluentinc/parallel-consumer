@@ -114,6 +114,9 @@
         <mockito.version>5.4.0</mockito.version>
         <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>1.0.0</jabel.version>
+        <micrometer-core.version>1.10.2</micrometer-core.version>
+        <micrometer-registry-atlas.version>1.9.5</micrometer-registry-atlas.version>
+
     </properties>
 
     <profiles>
@@ -387,6 +390,16 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-core</artifactId>
+                <version>${micrometer-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-atlas</artifactId>
+                <version>${micrometer-registry-atlas.version}</version>
+            </dependency>
             <!-- External -->
             <dependency>
                 <groupId>org.testcontainers</groupId>

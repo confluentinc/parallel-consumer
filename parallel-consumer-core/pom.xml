@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright (C) 2020-2022 Confluent, Inc.
+    Copyright (C) 2020-2023 Confluent, Inc.
 
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -38,13 +38,11 @@
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
-            <version>1.10.2</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-atlas</artifactId>
-            <version>1.9.5</version>
         </dependency>
 
         <!-- Testing -->
@@ -147,12 +145,6 @@
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
                         <class>io.confluent.parallelconsumer.PCMetrics</class>
                         <class>io.confluent.parallelconsumer.Offsets</class>
-<!--                        <class>io.confluent.parallelconsumer.OffsetsSubject</class>-->
-<!--                        <class>io.confluent.parallelconsumer.PCMetricsSubject</class>-->
-<!--                        <class>io.confluent.parallelconsumer.PCPartitionMetricsSubject</class>-->
-<!--                        <class>io.confluent.parallelconsumer.CompressionStatsSubject</class>-->
-<!--                        <class>io.confluent.parallelconsumer.CommitModeSubject</class>-->
-
                     </classes>
                     <legacyClasses>
                         <!-- todo check legacy is recursive -->

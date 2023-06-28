@@ -6,9 +6,6 @@ package io.confluent.parallelconsumer.offsets;
 
 import io.confluent.csid.utils.MathUtils;
 import io.confluent.csid.utils.Range;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Metrics;
-import io.micrometer.core.instrument.binder.BaseUnits;
 import lombok.Getter;
 import lombok.ToString;
 
