@@ -55,7 +55,7 @@
         <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
         <url>https://github.com/confluentinc/parallel-consumer.git</url>
-        <tag>0.5.2.5</tag>
+        <tag>0.5.2.6</tag>
     </scm>
 
     <distributionManagement>

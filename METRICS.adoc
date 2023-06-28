@@ -4,6 +4,12 @@ This document is intended to gather a few initial metrics that can be used to mo
 
 ### Shard Manager
 
+**Number Of Shards**
+
+Gauge `pc_shards`
+
+Overall number of sharded queues
+
 **Shard Size**
 
 Gauge `pc_shard_size{shard="shardName"}`
@@ -12,11 +18,11 @@ Number of records queued for processing in a given shard
 
 **User Function Processing Time**
 
-Timer `pc_user_function_processing_time_seconds`
+Timer `pc_user_function_processing_time`
 
-Distribution of execution times for user-provided function for record processing.
+Distribution of execution times for user-provided function for record processing (in seconds).
 
-**Waiting Queue Time**
+***Waiting Queue Time** - Not implemented yet
 
 Timer `pc_waiting_queue_time_seconds`
 
@@ -38,7 +44,7 @@ Offset of the last record successfully processed by the user function.
 
 **Highest Sequential Offset (a.k.a Highest Committable Offset)**
 
-Gauge `pc_highest_sequential_offset_partition{topic="topicName", partition="partitionNumber"}`
+Gauge `pc_highest_sequential_succeeded_offset_partition{topic="topicName", partition="partitionNumber"}`
 
 Offset of the last record successfully processed by the user function, for which all previous records to this offset were marked as successfully processed.
 
@@ -46,7 +52,10 @@ Offset of the last record successfully processed by the user function, for which
 
 Gauge `pc_incomplete_offsets_partition{topic="topicName", partition="partitionNumber"}`
 
+Gauge `pc_incomplete_offsets_total`
+
 Number of record offsets not marked for committing.
+
 
 **Highest Seen Offset**
 
@@ -54,7 +63,7 @@ Gauge `pc_highest_seen_offset_partition{topic="topicName", partition="partitionN
 
 The offset of the last record added to the shard processing queue.
 
-**Current Epoch**
+**Current Epoch** - Not implemented
 
 Gauge `pc_current_epoch_partition{topic="topicName", partition="partitionNumber"}`
 
@@ -63,11 +72,11 @@ Represents the epoch of the partition assignment, used to fence off invalid work
 
 ### Encoding Compression Stats
 
-**Offsets Metadata Encoding Time**
+**Offsets Encoding Time**
 
-Timer `pc_offsets_metadata_encoding_time_seconds`
+Timer `pc_offsets_encoding_time`
 
-Distribution of time spent encoding offsets metadata.
+Distribution of time spent encoding offsets metadata in seconds.
 
 **Encoding Usage**
 
@@ -79,9 +88,14 @@ Distribution of the number of times a given encoding was used.
 
 Gauge `pc_metadata_space_used`
 
-Percentage distribution of the space used by the encoded offsets metadata. Maximum space for OffsetMetadata is 4096 bytes.
+Percentage distribution of ratio between space used by the encoded offsets metadata and maximum space for OffsetMetadata (which is 4096 bytes).
 
-**Offsets Metadata Compression Ratio**
+**Offsets Metadata Payload Ratio**
+
+Gauge `pc_payload_ratio_used`
+Percentage distribution of ratio between offset metadata payload size and offsets encoded.
+
+**Offsets Metadata Compression Ratio** - Not implemented
 
 Gauge `pc_metadata_compression_ratio`
 
@@ -91,29 +105,29 @@ Distribution of encoded offsets compression ratio.
 
 **Total In-flight Records**
 
-Gauge `pc_records_inflight`
+Gauge `pc_inflight_records`
 
 Total number of records currently being processed or waiting for retry.
 
 **Total Records Awaiting Selection**
 
-Gauge `pc_records_awaiting_selection`
+Gauge `pc_waiting_records`
 
 Total number of records waiting to be selected for processing.
 
 **Successfully Processed Records**
 
-Counter `pc_successfully_processed_records_total{partition="partitionNumber", topic="topicName"}`
+Counter `pc_processed_records{epoch="epochNumber", partition="partitionNumber", topic="topicName"}`
 
 Total number of records successfully processed.
 
 **Failed Records**
 
-Counter `pc_failed_processed_records_total{partition="partitionNumber", topic="topicName"}`
+Counter `pc_failed_records{epoch="epochNumber", partition="partitionNumber", topic="topicName"}`
 
 Total number of records failed to be processed.
 
-**Slow Records**
+**Slow Records** -- Not implemented
 
 Counter `pc_slow_processed_records_total{partition="partitionNumber", topic="topicName"}`
 

@@ -5,9 +5,12 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.parallelconsumer.PCMetrics;
+import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.*;
-import io.micrometer.core.instrument.*;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -60,15 +63,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     @Getter
     private int numberRecordsOutForProcessing = 0;
-    private PCModule<K,V> module;
+    private PCModule<K, V> module;
     /**
      * Useful for testing
      */
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
-
-    private Gauge inflightRecordsMeter;
-    private Gauge waitingRecordsMeter;
 
     public WorkManager(PCModule<K, V> module,
                        DynamicLoadFactor dynamicExtraLoadFactor) {
@@ -77,11 +77,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(module, this);
         this.pm = new PartitionStateManager<>(module, sm);
-
-        inflightRecordsMeter = Gauge.builder("pc.records.inflight", this::getNumberRecordsOutForProcessing)
-                .register(module.meterRegistry());
-        waitingRecordsMeter = Gauge.builder("pc.records.waiting", this::getNumberOfWorkQueuedInShardsAwaitingSelection)
-                .register(module.meterRegistry());
     }
 
     /**
@@ -151,25 +146,26 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
         return work;
     }
-    private Iterable<Tag> computeTagsForWorkContainer(WorkContainer<K,V> wc){
-        return Tags.of("partition",String.valueOf(wc.getTopicPartition().partition()),
+
+    private Iterable<Tag> computeTagsForWorkContainer(WorkContainer<K, V> wc) {
+        return Tags.of("partition", String.valueOf(wc.getTopicPartition().partition()),
                 "topic", wc.getTopicPartition().topic(),
                 "epoch", String.valueOf(wc.getEpoch()));
     }
 
-    private Counter getCounterMeterFor(String meterName, WorkContainer<K,V> wc) {
+    private Counter getCounterMeterFor(String meterName, WorkContainer<K, V> wc) {
         final var wcTags = computeTagsForWorkContainer(wc);
 
         return Optional.ofNullable(this.module.meterRegistry().find(meterName)
-                .tags(wcTags).counter())
-                .orElseGet(()-> Counter.builder(meterName).tags(wcTags).baseUnit("records")
+                        .tags(wcTags).tags().counter())
+                .orElseGet(() -> Counter.builder(meterName).tags(wcTags).baseUnit("records")
                         .register(this.module.meterRegistry()));
     }
 
     public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
-        getCounterMeterFor("pc.successfully.processed.records", wc).increment();
+        getCounterMeterFor(PCMetricsTracker.METRIC_NAME_PROCESSED_RECORDS, wc).increment();
         wc.endFlight();
 
         // update as we go
@@ -193,7 +189,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        getCounterMeterFor("pc.failed.processed.records", wc).increment();
+        getCounterMeterFor(PCMetricsTracker.METRIC_NAME_FAILED_RECORDS, wc).increment();
         wc.endFlight();
         pm.onFailure(wc);
         sm.onFailure(wc);
@@ -305,9 +301,16 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public void addMetricsTo(PCMetrics.PCMetricsBuilder<?, ? extends PCMetrics.PCMetricsBuilder<?, ?>> metrics) {
         metrics.partitionMetrics(getPm().getMetrics());
         metrics.shardMetrics(getSm().getMetrics());
+        metrics.workManagerMetrics(getMetrics());
     }
 
     public void enrichWithIncompletes(Map<TopicPartition, PCMetrics.PCPartitionMetrics> metrics) {
         getPm().enrichWithIncompletes(metrics);
+    }
+
+    private PCMetrics.WorkManagerMetrics getMetrics() {
+        return PCMetrics.WorkManagerMetrics.builder().
+        waitingRecords(getNumberOfWorkQueuedInShardsAwaitingSelection())
+                .inflightRecords(getNumberRecordsOutForProcessing()).build();
     }
 }

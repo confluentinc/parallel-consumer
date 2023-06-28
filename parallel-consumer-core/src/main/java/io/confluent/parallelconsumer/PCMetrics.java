@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor
 import io.confluent.parallelconsumer.internal.State;
 import io.confluent.parallelconsumer.offsets.OffsetEncoding;
 import io.confluent.parallelconsumer.state.ShardKey;
+import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Value;
 import lombok.experimental.SuperBuilder;
@@ -26,13 +27,16 @@ import java.util.Optional;
 public class PCMetrics {
 
     long dynamicLoadFactor;
-    long incrementingCountOfRecordsProcessed;
 
     Map<TopicPartition, PCPartitionMetrics> partitionMetrics;
 
     Map<ShardKey, ShardMetrics> shardMetrics;
 
     PollerMetrics pollerMetrics;
+
+    WorkManagerMetrics workManagerMetrics;
+
+    Timer functionTimer;
 
     /**
      * The number of partitions assigned to this consumer
@@ -81,6 +85,7 @@ public class PCMetrics {
             Offsets incompleteOffsets;
         }
 
+        //TODO: Not implemented yet
         @Value
         @SuperBuilder(toBuilder = true)
         public static class CompressionStats {
@@ -100,7 +105,9 @@ public class PCMetrics {
          * Number of records queued for processing in this shard
          */
         long shardSize;
+        //TODO: Not implemented yet
         long averageUserProcessingTime;
+        //TODO: Not implemented yet
         long averageTimeSpentInQueue;
     }
 
@@ -112,7 +119,16 @@ public class PCMetrics {
     public static class PollerMetrics {
         State state;
         boolean paused;
-        Map<TopicPartition, Boolean> pausedPartitions;
+        int numberOfPausedPartitions;
+    }
+
+    @Value
+    @SuperBuilder(toBuilder = true)
+    public static class WorkManagerMetrics {
+        int inflightRecords;
+        long waitingRecords;
+        int successfulRecordsCount;
+        int failedRecordsCount;
     }
 
 }

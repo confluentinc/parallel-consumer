@@ -173,11 +173,8 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     @Override
     public void registerMetricsTracker(MeterBinder binder) {
         var metricsRegistry = getModule().meterRegistry();
-
         UniLists.of(binder, new JvmMemoryMetrics(), new JvmThreadMetrics(), new ProcessorMetrics(), new JvmGcMetrics(),
                         new ExecutorServiceMetrics(this.getWorkerThreadPool(), "pc-user-function-executor", Tags.empty()))
                 .forEach(meterBinder -> meterBinder.bindTo(metricsRegistry));
-
-        getModule().eventBus().register(binder);
     }
 }

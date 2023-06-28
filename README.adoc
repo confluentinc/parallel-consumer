@@ -72,11 +72,9 @@ It also opens up new use cases like extreme parallelism, external data enrichmen
 .Consume many messages _concurrently_ with a *single* consumer instance:
 [source,java,indent=0]
 ----
-        parallelConsumer.poll(record ->{
-            if (RandomUtils.nextInt() % 3 == 0)
-                throw new PCRetriableException();
-            log.info("Concurrently processing a record: {}", record);
-        });
+        parallelConsumer.poll(record ->
+                log.info("Concurrently processing a record: {}", record)
+        );
 ----
 
 An overview article to the library can also be found on Confluent's https://www.confluent.io/blog/[blog]: https://www.confluent.io/blog/introducing-confluent-parallel-message-processing-client/[Introducing the Confluent Parallel Consumer].
@@ -438,23 +436,16 @@ Where `${project.version}` is the version to be used:
         Producer<String, String> kafkaProducer = getKafkaProducer();
 
         var options = ParallelConsumerOptions.<String, String>builder()
-                .ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED) // <2>
+                .ordering(KEY) // <2>
                 .maxConcurrency(1000) // <3>
                 .consumer(kafkaConsumer)
                 .producer(kafkaProducer)
-                .meterRegistry(metricsRegistry)
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =
                 ParallelStreamProcessor.createEosStreamProcessor(options);
 
         eosStreamProcessor.subscribe(of(inputTopic)); // <4>
-        pcMetricsTracker = new PCMetricsTracker(eosStreamProcessor::calculateMetricsWithIncompletes,
-                            UniLists.of(Tag.of("region", "eu-west-1"), Tag.of("instance", "pc1")));
-
-        UniLists.of(pcMetricsTracker, new KafkaClientMetrics(kafkaConsumer), new JvmMemoryMetrics(),
-                        new JvmHeapPressureMetrics(), new JvmGcMetrics(), new JvmThreadMetrics())
-                    .stream().forEach(m -> m.bindTo(metricsRegistry));
 
         return eosStreamProcessor;
 ----
@@ -501,11 +492,9 @@ This is the only thing you need to do, in order to get massively concurrent proc
 
 .Usage - print message content out to the console in parallel
 [source,java,indent=0]
-        parallelConsumer.poll(record ->{
-            if (RandomUtils.nextInt() % 3 == 0)
-                throw new PCRetriableException();
-            log.info("Concurrently processing a record: {}", record);
-        });
+        parallelConsumer.poll(record ->
+                log.info("Concurrently processing a record: {}", record)
+        );
 
 See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 
@@ -1330,7 +1319,7 @@ endif::[]
 * fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
 * fix: Transactional PConsumer stuck while rebalancing - related to (#541)
 
-== 0.5.2.5
+== 0.5.2.6
 
 === Fixes
 

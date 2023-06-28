@@ -122,7 +122,6 @@ public class CoreApp {
 
         eosStreamProcessor.registerMetricsTracker(pcMetricsTracker);
 
-
         return eosStreamProcessor;
     }
 

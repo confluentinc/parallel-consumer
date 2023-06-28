@@ -8,17 +8,6 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Metrics;
-import io.micrometer.core.instrument.binder.BaseUnits;
-import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
-import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
-import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
-import io.micrometer.core.instrument.binder.logging.LogbackMetrics;
-import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -244,7 +233,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final RateLimiter queueStatsLimiter = new RateLimiter();
 
     @Getter(PROTECTED)
-    PCModule<K,V> module;
+    PCModule<K, V> module;
 
     /**
      * Control for stepping loading factor - shouldn't step if work requests can't be fulfilled due to restrictions.
@@ -296,15 +285,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+    }
 
-        new ExecutorServiceMetrics(workerThreadPool, "pc-worker-executor", Collections.emptyList())
-                .bindTo(module.meterRegistry());
-
-        this.userProcessingTimer = io.micrometer.core.instrument.Timer.builder("pc.user.function.processing.time")
-                .description("user function processing time")
-                .publishPercentileHistogram(true)
-                .publishPercentiles(0.5,0.95,0.99,0.999)
-                .register(module.meterRegistry());
+    private io.micrometer.core.instrument.Timer userProcessingTimer() {
+        if (this.userProcessingTimer == null) {
+            this.userProcessingTimer = io.micrometer.core.instrument.Timer.builder(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME)
+                    .description("User function processing time")
+                    .publishPercentileHistogram(true)
+                    .publishPercentiles(0.5, 0.95, 0.99, 0.999)
+                    .register(module.meterRegistry());
+        }
+        return this.userProcessingTimer;
     }
 
     private void validateConfiguration() {
@@ -400,11 +391,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             // commit any offsets from revoked partitions BEFORE truncation
             this.producerManager.ifPresent(pm -> {
-                  try{
-                        pm.preAcquireOffsetsToCommit();
-                  } catch (Exception exc){
-                        throw new InternalRuntimeException(exc);
-                  }
+                try {
+                    pm.preAcquireOffsetsToCommit();
+                } catch (Exception exc) {
+                    throw new InternalRuntimeException(exc);
+                }
             });
 
             commitOffsetsThatAreReady();
@@ -1260,7 +1251,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                                                                     final Consumer<R> callback,
                                                                                     final List<WorkContainer<K, V>> activeWorkContainers) {
         List<R> resultsFromUserFunction;
-        resultsFromUserFunction = userProcessingTimer.record(() -> usersFunction.apply(context));
+        resultsFromUserFunction = userProcessingTimer().record(() -> usersFunction.apply(context));
 
 
         for (final WorkContainer<K, V> kvWorkContainer : activeWorkContainers) {
@@ -1294,36 +1285,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     public PCMetrics calculateMetrics() {
         var metrics = PCMetrics.builder();
-        var metricsRegistry = module.meterRegistry();
 
         addMetricsTo(metrics);
 
         getWm().addMetricsTo(metrics);
 
         metrics.functionTimer(userProcessingTimer);
-        metrics.successCounter(successCounter);
-
-        // should not create objects in metrics calculator method
-        {
-            new JvmMemoryMetrics().bindTo(metricsRegistry);
-            new JvmThreadMetrics().bindTo(metricsRegistry);
-            new ProcessorMetrics().bindTo(metricsRegistry);
-
-
-            // need to add closables to close system on shutdown
-            {
-                new JvmGcMetrics().bindTo(metricsRegistry);
-                new KafkaClientMetrics(consumer).bindTo(metricsRegistry);
-                // can bind to wrapper?
-                //new KafkaClientMetrics(producerManager.get().producerWrapper).bindTo(metricsRegistry);
-
-                // we don't use an admin client?
-                // new KafkaClientMetrics(admin).bindTo(metricsRegistry);
-
-                // can't for logback?
-                //new LogbackMetrics().bindTo(metricsRegistry);
-            }
-        }
 
         return metrics.build();
     }
@@ -1332,16 +1299,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         addToMailbox(context, wc);
     }
 
-    Counter successCounter = Counter
-            .builder("instance")
-            .description("indicates instance count of the object")
-            .tags("dev", "performance")
-            .register(metricsRegistry);
-
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
         wc.onUserFunctionSuccess();
-        successCounter.increment();
+        //successCounter.increment();
     }
 
     protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {

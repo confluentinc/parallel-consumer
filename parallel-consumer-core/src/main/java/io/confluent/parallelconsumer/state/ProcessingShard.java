@@ -29,7 +29,6 @@ import static lombok.AccessLevel.PRIVATE;
  * @author Antony Stubbs
  * @see ShardManager
  */
-// metrics: queue length, queue time, avg time spend in queue
 @Slf4j
 @RequiredArgsConstructor
 public class ProcessingShard<K, V> {
@@ -179,10 +178,9 @@ public class ProcessingShard<K, V> {
         var b = PCMetrics.ShardMetrics.builder();
         b.shardKey(getKey());
         b.shardSize(getCountOfWorkTracked());
-
-        //
-//        b.averageTimeSpentInQueue();
-//        b.averageUserProcessingTime();
+        //TODO: Not implemented yet
+        //b.averageTimeSpentInQueue();
+        //b.averageUserProcessingTime();
 
         return b.build();
     }

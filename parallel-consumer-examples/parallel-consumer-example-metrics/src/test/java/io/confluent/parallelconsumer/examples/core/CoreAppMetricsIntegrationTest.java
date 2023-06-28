@@ -77,9 +77,6 @@ public class CoreAppMetricsIntegrationTest{
 
     class CoreAppUnderTest extends CoreApp {
         LongPollingMockConsumer<String, String> mockConsumer = Mockito.spy(new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
-        TopicPartition tp = new TopicPartition(inputTopic, 0);
-        Consumer<String, String> consumer = null;
-
         @Override
         Consumer<String, String> getKafkaConsumer() {
             when(mockConsumer.groupMetadata())

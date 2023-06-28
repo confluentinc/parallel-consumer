@@ -172,9 +172,12 @@ public class KafkaTestUtils {
         long offset = (int) commits.get(commits.size() - 1).values().iterator().next().offset();
         Assertions.assertThat(offset).isEqualTo(expected);
     }
+    public List<ConsumerRecord<String, String>> generateRecords( int quantity) {
+        return generateRecords(0, quantity);
+    }
 
-    public List<ConsumerRecord<String, String>> generateRecords(int quantity) {
-        HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(defaultKeys, quantity);
+    public List<ConsumerRecord<String, String>> generateRecords(int partition, int quantity) {
+        HashMap<Integer, List<ConsumerRecord<String, String>>> integerListHashMap = generateRecords(partition, defaultKeys, quantity);
         Collection<List<ConsumerRecord<String, String>>> values = integerListHashMap.values();
         return flatten(values);
     }
@@ -182,7 +185,7 @@ public class KafkaTestUtils {
     /**
      * Randomly create records for randomly selected keys until requested quantity is reached.
      */
-    public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(List<Integer> keys, int quantity) {
+    public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(int partition, List<Integer> keys, int quantity) {
         var keyRecords = new HashMap<Integer, List<ConsumerRecord<String, String>>>(quantity);
 //        List<Integer> keyWork = UniLists.copyOf(keys);
 
@@ -194,7 +197,7 @@ public class KafkaTestUtils {
             final List<ConsumerRecord<String, String>> keyList = keyRecords.computeIfAbsent(key, (ignore) -> new ArrayList<>());
             int keyCount = keyList.size();
             String value = keyCount + "," + globalCount;
-            ConsumerRecord<String, String> rec = makeRecord(keyString, value);
+            ConsumerRecord<String, String> rec = makeRecord(partition, keyString, value);
 //            var consumerRecords = generateRecordsForKey(key, recsCountForThisKey);
             keyList.add(rec);
 //            keyRecords.put(key, consumerRecords);
@@ -202,8 +205,11 @@ public class KafkaTestUtils {
         }
         return keyRecords;
     }
+    public HashMap<Integer, List<ConsumerRecord<String, String>>> generateRecords(List<Integer> keys, int quantity) {
+        return generateRecords(0, keys, quantity);
+    }
 
-    private Integer removeRandomKey(List<Integer> keyWork) {
+        private Integer removeRandomKey(List<Integer> keyWork) {
         int i = (int) (random() * keyWork.size());
         Integer remove = keyWork.remove(i);
         return remove;

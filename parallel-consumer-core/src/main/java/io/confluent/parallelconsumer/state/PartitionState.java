@@ -6,6 +6,7 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.Offsets;
 import io.confluent.parallelconsumer.PCMetrics;
+import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
@@ -38,11 +39,6 @@ import static lombok.AccessLevel.*;
  * @author Antony Stubbs
  * @see PartitionStateManager
  */
-// todo class becoming large - possible to extract some functionality?
-// metrics: current diff between highest succeeded and committable offset (offset tracked range / state size), blocked
-// state,
-// number of tracked incompletes, average retry count? highest retry count in last 24 hours? lowest incomplete
-// offsets' retry count? consumer lag for partition, CURRENT-OFFSET LOG-END-OFFSET,
 @ToString
 @Slf4j
 public class PartitionState<K, V> {
@@ -167,6 +163,8 @@ public class PartitionState<K, V> {
     private DistributionSummary ratioOfPayloadUsed;
     private DistributionSummary ratioOfMetadataSpaceUsed;
 
+    private long lastCommittedOffset;
+
     public PartitionState(long newEpoch,
                           PCModule<K, V> pcModule,
                           TopicPartition topicPartition,
@@ -177,17 +175,28 @@ public class PartitionState<K, V> {
         this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
+    }
 
-        ratioOfPayloadUsed = DistributionSummary.builder("pc.payload.ratio.used")
-                .description("ratio between offset metadata payload size and offsets encoded")
-                .publishPercentileHistogram(true)
-                .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                .register(module.meterRegistry());
-        ratioOfMetadataSpaceUsed = DistributionSummary.builder("pc.metadata.space.used")
-                .description("ratio between offset metadata payload size and available space")
-                .publishPercentileHistogram(true)
-                .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                .register(module.meterRegistry());
+    private DistributionSummary ratioOfPayloadUsed() {
+        if (this.ratioOfPayloadUsed == null) {
+            this.ratioOfPayloadUsed = DistributionSummary.builder(PCMetricsTracker.METRIC_NAME_PAYLOAD_RATIO_USED)
+                    .description("ratio between offset metadata payload size and offsets encoded")
+                    .publishPercentileHistogram(true)
+                    .publishPercentiles(0.5, 0.95, 0.99, 0.999)
+                    .register(module.meterRegistry());
+        }
+        return this.ratioOfPayloadUsed;
+    }
+
+    private DistributionSummary ratioOfMetadataSpaceUsed() {
+        if (this.ratioOfMetadataSpaceUsed == null) {
+            this.ratioOfMetadataSpaceUsed = DistributionSummary.builder(PCMetricsTracker.METRIC_NAME_METADATA_SPACE_USED)
+                    .description("ratio between offset metadata payload size and available space")
+                    .publishPercentileHistogram(true)
+                    .publishPercentiles(0.5, 0.95, 0.99, 0.999)
+                    .register(module.meterRegistry());
+        }
+        return this.ratioOfMetadataSpaceUsed;
     }
 
     private void initStateFromOffsetData(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
@@ -209,6 +218,7 @@ public class PartitionState<K, V> {
     }
 
     public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
+        lastCommittedOffset = committed.offset();
         setClean();
     }
 
@@ -456,7 +466,6 @@ public class PartitionState<K, V> {
     }
 
 
-
     /**
      * Tries to encode the incomplete offsets for this partition. This may not be possible if there are none, or if no
      * encodings are possible ({@link NoEncodingPossibleException}. Encoding may not be possible of - see
@@ -476,8 +485,8 @@ public class PartitionState<K, V> {
             long offsetOfNextExpectedMessage = getOffsetToCommit();
             var offsetRange = getOffsetHighestSucceeded() - offsetOfNextExpectedMessage;
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
-            ratioOfPayloadUsed.record(offsetMapPayload.length() / (double) offsetRange);
-            ratioOfMetadataSpaceUsed.record(offsetMapPayload.length() / OffsetMapCodecManager.DefaultMaxMetadataSize);
+            ratioOfPayloadUsed().record(offsetMapPayload.length() / (double) offsetRange);
+            ratioOfMetadataSpaceUsed().record(offsetMapPayload.length() /(double) OffsetMapCodecManager.DefaultMaxMetadataSize);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
                 return empty();
@@ -668,12 +677,12 @@ public class PartitionState<K, V> {
         b.topicPartition(getTp());
 
         //
+        b.lastCommittedOffset(lastCommittedOffset);
         b.highestSeenOffset(getOffsetHighestSeen());
         b.epoch(getPartitionsAssignmentEpoch());
         b.highestCompletedOffset(getOffsetHighestSucceeded());
         b.highestSequentialSucceededOffset(getOffsetHighestSequentialSucceeded());
         b.numberOfIncompletes(incompleteOffsets.size());
-
         //
 //        b.compressionStats(getCompressionStats());
 

@@ -12,7 +12,6 @@ import org.apache.kafka.common.TopicPartition;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.Collections;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -55,11 +54,22 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
     public static final String METRIC_NAME_HIGHEST_COMPLETED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.complete.offset.partition";
 
-    public static final String METRIC_NAME_HIGHEST_SEEN_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.seen.offset";
+    public static final String METRIC_NAME_HIGHEST_SEEN_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.seen.offset.partition";
 
     public static final String METRIC_NAME_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET = PC_METRIC_NAME_PREFIX + ".highest.sequential.succeeded.offset.partition";
 
-    public static final String METRIC_NAME_LAST_COMMITTED_OFFSET = PC_METRIC_NAME_PREFIX + ".latest.commited.offset.partition";
+    public static final String METRIC_NAME_LAST_COMMITTED_OFFSET = PC_METRIC_NAME_PREFIX + ".latest.committed.offset.partition";
+
+    public static final String METRIC_NAME_PROCESSED_RECORDS = PC_METRIC_NAME_PREFIX + ".processed.records";
+    public static final String METRIC_NAME_FAILED_RECORDS = PC_METRIC_NAME_PREFIX + ".failed.records";
+    public static final String METRIC_NAME_INFLIGHT_RECORDS = PC_METRIC_NAME_PREFIX + ".inflight.records";
+    public static final String METRIC_NAME_WAITING_RECORDS = PC_METRIC_NAME_PREFIX + ".waiting.records";
+
+    public static final String METRIC_NAME_OFFSETS_ENCODING_TIME = PC_METRIC_NAME_PREFIX + ".offsets.encoding.time";
+    public static final String METRIC_NAME_OFFSETS_ENCODING_USAGE = PC_METRIC_NAME_PREFIX + ".offsets.encoding.usage";
+    public static final String METRIC_NAME_USER_FUNCTION_PROCESSING_TIME = PC_METRIC_NAME_PREFIX + ".user.function.processing.time";
+    public static final String METRIC_NAME_METADATA_SPACE_USED = PC_METRIC_NAME_PREFIX + ".metadata.space.used";
+    public static final String METRIC_NAME_PAYLOAD_RATIO_USED = "pc.payload.ratio.used";
 
     private static final String METRIC_CATEGORY = "subsystem";
 
@@ -106,7 +116,6 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
                 .tags(commonTags)
                 .tags(tags)
                 .register(this.meterRegistry);
-
         registeredMeterIds.add(gauge.getId());
     }
 
@@ -151,7 +160,7 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
                 tracker -> tracker.pcMetrics.getPartitionMetrics().get(tp).getHighestSeenOffset(),
                 partitionTags);
 
-        bindGauge(METRIC_NAME_LAST_COMMITTED_OFFSET, "Latest commited offset in the partition",
+        bindGauge(METRIC_NAME_LAST_COMMITTED_OFFSET, "Latest committed offset in the partition",
                 tracker -> tracker.pcMetrics.getPartitionMetrics().get(tp).getLastCommittedOffset(),
                 partitionTags);
     }
@@ -165,13 +174,15 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
                 tracker -> tracker.pcMetrics.getShardMetrics().get(key).getShardSize(),
                 shardTags);
 
-        bindTimeGauge(METRIC_NAME_AVERAGE_USER_PROCESSING_TIME, "Average user processing time",
-                tracker -> tracker.pcMetrics.getShardMetrics().get(key).getAverageUserProcessingTime(),
-                shardTags);
+        //TODO: Not implemented yet
+        //bindTimeGauge(METRIC_NAME_AVERAGE_USER_PROCESSING_TIME, "Average user processing time",
+        //        tracker -> tracker.pcMetrics.getShardMetrics().get(key).getAverageUserProcessingTime(),
+        //        shardTags);
 
-        bindTimeGauge(METRIC_NAME_AVERAGE_WAITING_TIME, "Average waiting time in the processing queue",
-                tracker -> tracker.pcMetrics.getShardMetrics().get(key).getAverageTimeSpentInQueue(),
-                shardTags);
+        //TODO: Not implemented yet
+        //bindTimeGauge(METRIC_NAME_AVERAGE_WAITING_TIME, "Average waiting time in the processing queue",
+        //        tracker -> tracker.pcMetrics.getShardMetrics().get(key).getAverageTimeSpentInQueue(),
+        //        shardTags);
     }
 
     private void defineMeters() {
@@ -194,13 +205,19 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
                     Collections.emptyList());
         }
 
+        bindGauge(METRIC_NAME_INFLIGHT_RECORDS, "Number of inflight records",
+                tracker -> tracker.pcMetrics.getWorkManagerMetrics().getInflightRecords(),
+                Collections.emptyList());
+        bindGauge(METRIC_NAME_WAITING_RECORDS, "Number of records awaiting selection",
+                tracker -> tracker.pcMetrics.getWorkManagerMetrics().getWaitingRecords(),
+                Collections.emptyList());
+
         bindGauge(METRIC_NAME_PC_STATUS, "PC Status",
                 tracker -> tracker.pcMetrics.getPollerMetrics().getState().ordinal(),
                 UniLists.of(Tag.of("status", pcMetrics.getPollerMetrics().getState().name())));
 
         bindGauge(METRIC_NAME_NUMBER_PAUSED_PARTITIONS, "Number of paused partitions",
-                tracker -> Optional.ofNullable(tracker.pcMetrics.getPollerMetrics().getPausedPartitions())
-                        .orElseGet(()->Collections.emptyMap()).size(),
+                tracker -> tracker.pcMetrics.getPollerMetrics().getNumberOfPausedPartitions(),
                 UniLists.of(Tag.of("status", pcMetrics.getPollerMetrics().getState().name())));
 
         if (partitionsMetricsCount != pcMetrics.getPartitionMetrics().size()) {
@@ -217,6 +234,7 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
     @Override
     public void bindTo(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
+        this.meterRegistry.config().commonTags(commonTags);
         defineMeters();
         this.scheduler.scheduleAtFixedRate(
                 this::defineMeters,
