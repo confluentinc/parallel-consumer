@@ -137,13 +137,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         var work = sm.getWorkIfAvailable(requestedMaxWorkToRetrieve);
 
         //
-        log.debug("Got {} of {} requested records of work. In-flight: {}, Awaiting in commit (partition) queues: {}",
-                work.size(),
-                requestedMaxWorkToRetrieve,
-                getNumberRecordsOutForProcessing(),
-                getNumberOfIncompleteOffsets());
+        if (log.isDebugEnabled()) {
+            log.debug("Got {} of {} requested records of work. In-flight: {}, Awaiting in commit (partition) queues: {}",
+                    work.size(),
+                    requestedMaxWorkToRetrieve,
+                    getNumberRecordsOutForProcessing(),
+                    getNumberOfIncompleteOffsets());
+        }
         numberRecordsOutForProcessing += work.size();
-
         return work;
     }
 

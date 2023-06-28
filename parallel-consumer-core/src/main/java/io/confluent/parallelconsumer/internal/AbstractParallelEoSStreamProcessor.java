@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.Suppliers;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -31,6 +32,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -47,7 +49,6 @@ import static lombok.AccessLevel.PROTECTED;
 /**
  * @see ParallelConsumer
  */
-// metrics: avg time spend committing, avg user function running time, avg controller loop time
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
@@ -105,8 +106,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The pool which is used for running the users' supplied function
      */
-    @Getter(PROTECTED)
-    protected final ThreadPoolExecutor workerThreadPool;
+    protected final Supplier<ThreadPoolExecutor> workerThreadPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -121,7 +121,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private final AtomicBoolean isRebalanceInProgress = new AtomicBoolean(false);
-
     /**
      * An inbound message to the controller.
      * <p>
@@ -269,7 +268,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
-        workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
+        workerThreadPool = Suppliers.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
 
         this.wm = module.workManager();
 
@@ -328,6 +327,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             Thread thread = finalDefaultFactory.newThread(r);
             String name = thread.getName();
             thread.setName("pc-" + name);
+            this.getMyId().ifPresent(id -> thread.setName("pc-" + name + "-" + id));
             return thread;
         };
         ThreadPoolExecutor.AbortPolicy rejectionHandler = new ThreadPoolExecutor.AbortPolicy();
@@ -391,11 +391,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             // commit any offsets from revoked partitions BEFORE truncation
             this.producerManager.ifPresent(pm -> {
-                try {
-                    pm.preAcquireOffsetsToCommit();
-                } catch (Exception exc) {
-                    throw new InternalRuntimeException(exc);
-                }
+                  try{
+                        pm.preAcquireOffsetsToCommit();
+                  } catch (Exception exc){
+                        throw new InternalRuntimeException(exc);
+                  }
             });
 
             commitOffsetsThatAreReady();
@@ -546,7 +546,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
-        List<Runnable> unfinished = workerThreadPool.shutdownNow();
+        List<Runnable> unfinished = workerThreadPool.get().shutdownNow();
         if (!unfinished.isEmpty()) {
             log.warn("Threads not done count: {}", unfinished.size());
         }
@@ -556,7 +556,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         while (interrupted) {
             log.debug("Still interrupted");
             try {
-                boolean terminationFinishedWithoutTimeout = workerThreadPool.awaitTermination(toSeconds(timeout), SECONDS);
+                boolean terminationFinishedWithoutTimeout = workerThreadPool.get().awaitTermination(toSeconds(timeout), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
                     log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
@@ -677,6 +677,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Control loop starting up...");
             Thread controlThread = Thread.currentThread();
             controlThread.setName("pc-control");
+            this.getMyId().ifPresent(id -> controlThread.setName("pc-control-" + id));
             this.blockableControlThread = controlThread;
             while (state != CLOSED) {
                 log.debug("Control loop start");
@@ -754,8 +755,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         // end of loop
-        log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+        if (log.isTraceEnabled()) {
+            log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
+                    wm.getNumberOfWorkQueuedInShardsAwaitingSelection(), wm.getNumberOfIncompleteOffsets(), wm.getNumberRecordsOutForProcessing(), state);
+        }
     }
 
     /**
@@ -816,7 +819,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         queueStatsLimiter.performIfNotLimited(() -> {
             int queueSize = getNumberOfUserFunctionsQueued();
             log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
-                    workerThreadPool.getActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+                    workerThreadPool.get().getActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
         });
 
         return gotWorkCount;
@@ -831,7 +834,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                         Consumer<R> callback,
                                         List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
-            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
+            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool.get());
 
             // perf: could inline makeBatches
             var batches = makeBatches(workToProcess);
@@ -858,7 +861,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                            final List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
         log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerThreadPool.submit(() -> {
+        Future outputRecordFuture = workerThreadPool.get().submit(() -> {
             addInstanceMDC();
             return runUserFunction(usersFunction, callback, batch);
         });
@@ -893,10 +896,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             listOfBatches.add(batchInConstruction);
         }
 
-        log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
-                sourceCollection.size(),
-                listOfBatches.size(),
-                listOfBatches.stream().map(List::size).collect(Collectors.toList()));
+        if (log.isDebugEnabled()) {
+            log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
+                    sourceCollection.size(),
+                    listOfBatches.size(),
+                    listOfBatches.stream().map(List::size).collect(Collectors.toList()));
+        }
         return listOfBatches;
     }
 
@@ -1009,7 +1014,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
             if (log.isDebugEnabled()) {
                 log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                        timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
+                        timeToBlockFor, workerThreadPool.get().getActiveCount(), getNumberOfUserFunctionsQueued());
             }
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
@@ -1109,7 +1114,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private int getNumberOfUserFunctionsQueued() {
-        return workerThreadPool.getQueue().size();
+        return workerThreadPool.get().getQueue().size();
     }
 
     /**
@@ -1118,16 +1123,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return true if waiting to commit would help performance
      */
     private boolean lingeringOnCommitWouldBeBeneficial() {
-        // work is waiting to be done
-        boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
-        // no work is currently being done
-        boolean workInFlight = wm.hasWorkInFlight();
-        // work mailbox is empty
-        boolean workWaitingInMailbox = !workMailBox.isEmpty();
-        boolean workWaitingToProcess = wm.hasIncompleteOffsets();
-        log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
-                workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
-        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
+        if (log.isTraceEnabled()) {
+            // work is waiting to be done
+            boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
+            // no work is currently being done
+            boolean workInFlight = wm.hasWorkInFlight();
+            // work mailbox is empty
+            boolean workWaitingInMailbox = !workMailBox.isEmpty();
+            boolean workWaitingToProcess = wm.hasIncompleteOffsets();
+            log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
+                    workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
+            boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
+        }
 
         // todo disable - commit frequency takes care of lingering? is this outdated?
         return false;
@@ -1302,7 +1309,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected void onUserFunctionSuccess(WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
         log.trace("User function success");
         wc.onUserFunctionSuccess();
-        //successCounter.increment();
     }
 
     protected void addToMailbox(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
