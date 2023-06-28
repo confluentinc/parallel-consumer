@@ -40,8 +40,6 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
     private SimpleMeterRegistry registry;
     private final List<Tag> commonTags = UniLists.of(Tag.of("instance", "pc1"));
 
-    private final String shardKeyFormat = "ShardKey.TopicPartitionKey(topicPartition=%s-%d)";
-
     @Test
     void metricsRegisterBinding() {
         registry = (SimpleMeterRegistry) this.getModule().meterRegistry();
@@ -72,15 +70,15 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
                         latch = latchPartition1;
                     }
                     //towards end of records in Partition 0 - throw RTE to get failed record to verify meter
-                    if (recordContext.partition() == 0 && counter.get() == (quantityP0 - 10) && !failedRecordDone.get()) {
-                        failedRecordDone.set(true);
-                        throw new RuntimeException("Failed a record to verify failed meter");
+                    if (recordContext.partition() == 0 && counter.get() > (quantityP0 - 300)) {
+                        if (!failedRecordDone.getAndSet(true)) {
+                            throw new RuntimeException("Failed a record to verify failed meter");
+                        }
                     }
                     if (counter.get() >= numberToBlockAt.get()) {
-                        log.info("BLOCKING P{}", recordContext.partition());
                         latch.await();
                     } else {
-                        Thread.sleep(1);
+                        Thread.sleep(5);
                     }
                     counter.incrementAndGet();
                 } catch (InterruptedException e) {
@@ -128,9 +126,7 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(registeredCounterValueFor(PCMetricsTracker.METRIC_NAME_PROCESSED_RECORDS,
                 "epoch", "0", "topic", topicPartition.topic(), "partition", String.valueOf(0)))
                 .isEqualTo(counterP0.get());
-        assertThat(registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_SHARD_SIZE,
-                "shard", String.format(shardKeyFormat, topicPartition.topic(), 0)))
-                .isEqualTo(remainingP0);
+
 
         //Assert same as above for Partition 1
         assertThat(registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_HIGHEST_COMPLETED_OFFSET, 1))
@@ -146,10 +142,9 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(registeredCounterValueFor(PCMetricsTracker.METRIC_NAME_PROCESSED_RECORDS,
                 "epoch", "0", "topic", topicPartition.topic(), "partition", String.valueOf(1)))
                 .isEqualTo(counterP1.get());
-        assertThat(registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_SHARD_SIZE,
-                "shard", String.format(shardKeyFormat, topicPartition.topic(), 1)))
-                .isEqualTo(remainingP1);
 
+        assertThat(registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_SHARD_SIZE))
+                .isEqualTo(remainingP0 + remainingP1);
         // non partition specific metrics
         assertThat(registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_TOTAL_INCOMPLETE_OFFSETS))
                 .isEqualTo(remainingP0 + remainingP1);

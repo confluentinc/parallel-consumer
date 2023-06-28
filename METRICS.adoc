@@ -12,9 +12,11 @@ Overall number of sharded queues
 
 **Shard Size**
 
-Gauge `pc_shard_size{shard="shardName"}`
+Gauge `pc_shards_size`
 
-Number of records queued for processing in a given shard
+Number of records queued for processing across all shards.
+
+* Note: Ideally would be recorded per shard - but given that in KEY ordering there can be a really large number of shards - cardinality can beome too high.
 
 **User Function Processing Time**
 

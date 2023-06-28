@@ -52,9 +52,6 @@ import static lombok.AccessLevel.PROTECTED;
 @Slf4j
 public abstract class AbstractParallelEoSStreamProcessor<K, V> implements ParallelConsumer<K, V>, ConsumerRebalanceListener, Closeable {
 
-    @Getter
-    private final SimpleMeterRegistry metricsRegistry = new SimpleMeterRegistry();
-
     public static final String MDC_INSTANCE_ID = "pcId";
 
     /**
@@ -106,6 +103,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The pool which is used for running the users' supplied function
      */
+    @Getter(PROTECTED)
     protected final Supplier<ThreadPoolExecutor> workerThreadPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();

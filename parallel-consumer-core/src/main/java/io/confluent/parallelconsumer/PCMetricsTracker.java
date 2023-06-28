@@ -42,7 +42,7 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
     public static final String METRIC_NAME_NUMBER_SHARDS = PC_METRIC_NAME_PREFIX + ".shards";
 
-    public static final String METRIC_NAME_SHARD_SIZE = PC_METRIC_NAME_PREFIX + ".shard.size";
+    public static final String METRIC_NAME_SHARD_SIZE = PC_METRIC_NAME_PREFIX + ".shards.size";
 
     public static final String METRIC_NAME_AVERAGE_USER_PROCESSING_TIME = PC_METRIC_NAME_PREFIX + ".avg.processing.time";
 
@@ -167,11 +167,13 @@ public class PCMetricsTracker implements MeterBinder, AutoCloseable {
 
     private void defineMetersShardManager(ShardKey key, PCMetrics.ShardMetrics sm) {
         final var shardTags = UniLists.of(
-                Tag.of(METRIC_CATEGORY, METRIC_SHARD_MANAGER_CATEGORY),
-                Tag.of(METRIC_SHARD_KEY, key.toString()));
+                Tag.of(METRIC_CATEGORY, METRIC_SHARD_MANAGER_CATEGORY)
+                //Tag.of(METRIC_SHARD_KEY, key.toString()) // not recording metrics per shard key as number of shard keys can be too large.
+        );
 
-        bindGauge(METRIC_NAME_SHARD_SIZE, "Shard size",
-                tracker -> tracker.pcMetrics.getShardMetrics().get(key).getShardSize(),
+        bindGauge(METRIC_NAME_SHARD_SIZE, "Shards size",
+                tracker -> tracker.pcMetrics.getShardMetrics().values().stream()
+                        .mapToLong(PCMetrics.ShardMetrics::getShardSize).sum(),
                 shardTags);
 
         //TODO: Not implemented yet
