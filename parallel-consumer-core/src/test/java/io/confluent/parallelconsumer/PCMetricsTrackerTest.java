@@ -9,6 +9,7 @@ import io.confluent.parallelconsumer.state.ShardKey;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.assertj.core.api.Assertions;
@@ -41,6 +42,7 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
     private final List<Tag> commonTags = UniLists.of(Tag.of("instance", "pc1"));
 
     @Test
+    @SneakyThrows
     void metricsRegisterBinding() {
         registry = (SimpleMeterRegistry) this.getModule().meterRegistry();
         final int quantityP0 = 1000;
@@ -104,6 +106,9 @@ class PCMetricsTrackerTest extends ParallelEoSStreamProcessorTestBase {
             log.info(registry.getMetersAsString());
             assertThat(registeredGaugeValueFor(PCMetricsTracker.METRIC_NAME_NUMBER_PAUSED_PARTITIONS)).isEqualTo(2);
         });
+
+        //Need to give a little bit of time as racing between scraping metrics and asserts below
+        Thread.sleep(1000);
         log.info(registry.getMetersAsString());
 
         int remainingP0 = quantityP0 - counterP0.get();
