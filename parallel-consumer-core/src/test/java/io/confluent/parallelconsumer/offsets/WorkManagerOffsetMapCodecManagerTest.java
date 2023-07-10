@@ -424,6 +424,34 @@ class WorkManagerOffsetMapCodecManagerTest {
                 .isInstanceOf(KafkaStreamsEncodingNotSupported.class);
     }
 
+    /**
+     * Tests for friendly errors when Kafka Streams V2 (as far as we can guess) magic numbers are found in the offset metadata.
+     */
+    @SneakyThrows
+    @Test
+    void deserialiseKafkaStreamsV2WithIgnoreErrorPolicy() {
+        final var input = ByteBuffer.allocate(32);
+        // magic number
+        input.put((byte) 2);
+        // timestamp
+        input.putLong(System.currentTimeMillis());
+        // metadata
+        // number of entries
+        input.putInt(1);
+        // key size
+        input.putInt(1);
+        // key
+        input.put((byte) 'a');
+        // value
+        input.putLong(1L);
+
+        EncodedOffsetPair encodedOffsetPair = EncodedOffsetPair.unwrap(input.array());
+        OffsetMapCodecManager.HighestOffsetAndIncompletes longs = encodedOffsetPair.getDecodedIncompletes(100L, ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.IGNORE);
+
+        assertThat(longs.getHighestSeenOffset()).isEqualTo(Optional.of(100L));
+        assertThat(longs.getIncompleteOffsets()).isEqualTo(Collections.emptySet());
+    }
+
     @SneakyThrows
     @Test
     void compressionCycle() {
