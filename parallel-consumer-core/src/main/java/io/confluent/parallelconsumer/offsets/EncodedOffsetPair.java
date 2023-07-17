@@ -1,9 +1,10 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
 import lombok.Getter;
@@ -101,8 +102,12 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
         return binaryArrayString;
     }
 
-    @SneakyThrows
     public HighestOffsetAndIncompletes getDecodedIncompletes(long baseOffset) {
+        return getDecodedIncompletes(baseOffset,  ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.FAIL);
+    }
+
+    @SneakyThrows
+    public HighestOffsetAndIncompletes getDecodedIncompletes(long baseOffset, ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy errorPolicy) {
         HighestOffsetAndIncompletes binaryArrayString = switch (encoding) {
 //            case ByteArray -> deserialiseByteArrayToBitMapString(data);
 //            case ByteArrayCompressed -> deserialiseByteArrayToBitMapString(decompressZstd(data));
@@ -114,8 +119,14 @@ public final class EncodedOffsetPair implements Comparable<EncodedOffsetPair> {
             case BitSetV2Compressed -> deserialiseBitSetWrapToIncompletes(BitSetV2, baseOffset, decompressZstd(data));
             case RunLengthV2 -> runLengthDecodeToIncompletes(encoding, baseOffset, data);
             case RunLengthV2Compressed -> runLengthDecodeToIncompletes(RunLengthV2, baseOffset, decompressZstd(data));
-            case KafkaStreams, KafkaStreamsV2 ->
+            case KafkaStreams, KafkaStreamsV2 ->{
+                if (errorPolicy == ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.IGNORE) {
+                    log.warn("Ignoring existing Kafka Streams offset metadata and reusing offsets");
+                    yield HighestOffsetAndIncompletes.of(baseOffset);
+                } else {
                     throw new KafkaStreamsEncodingNotSupported();
+                }
+            }
             default ->
                     throw new UnsupportedOperationException("Encoding (" + encoding.description() + ") not supported");
         };

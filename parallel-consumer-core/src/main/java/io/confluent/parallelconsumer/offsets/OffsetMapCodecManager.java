@@ -1,9 +1,10 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.state.PartitionState;
@@ -62,6 +63,8 @@ public class OffsetMapCodecManager<K, V> {
 
     private final PCModule module;
 
+    private static ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy errorPolicy = ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.FAIL;
+
     /**
      * Decoding result for encoded offsets
      */
@@ -100,6 +103,9 @@ public class OffsetMapCodecManager<K, V> {
     // todo remove consumer #233
     public OffsetMapCodecManager(PCModule<K, V> module) {
         this.module = module;
+        if (module != null){
+            this.errorPolicy = module.options().getInvalidOffsetMetadataPolicy();
+        }
     }
 
     /**
@@ -243,7 +249,7 @@ public class OffsetMapCodecManager<K, V> {
             return HighestOffsetAndIncompletes.of(highestSeenOffsetIsThen);
         } else {
             var result = EncodedOffsetPair.unwrap(decodedBytes);
-            return result.getDecodedIncompletes(nextExpectedOffset);
+            return result.getDecodedIncompletes(nextExpectedOffset, errorPolicy);
         }
     }
 
