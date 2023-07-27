@@ -45,7 +45,7 @@ public class CoreAppMetricsIntegrationTest{
         CoreAppUnderTest coreApp = new CoreAppUnderTest();
 
         final var expectedMetrics =
-                UniLists.of("pc_status","pc_partitions","pc_incomplete_offsets_total","pc_user_function_processing_time_seconds");
+                UniLists.of("pc_status","pc_partitions_number","pc_incomplete_offsets_total","pc_user_function_processing_time_seconds");
 
 
         coreApp.run();

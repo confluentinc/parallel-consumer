@@ -5,7 +5,6 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.DrainingCloseable;
-import io.micrometer.core.instrument.binder.MeterBinder;
 import lombok.Data;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -96,20 +95,4 @@ public interface ParallelStreamProcessor<K, V> extends ParallelConsumer<K, V>, D
         private final ProducerRecord<KK, VV> out;
         private final RecordMetadata meta;
     }
-
-    /**
-     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
-     */
-    PCMetrics calculateMetrics();
-
-    /**
-     * Gather metrics from the {@link ParallelConsumer} including incomplete offsets and for monitoring.
-     */
-    PCMetrics calculateMetricsWithIncompletes();
-
-    /**
-     * Registers a {@link MeterBinder} to collect instrumentation metrics.
-     * @param binder
-     */
-    void registerMetricsTracker(MeterBinder binder);
 }

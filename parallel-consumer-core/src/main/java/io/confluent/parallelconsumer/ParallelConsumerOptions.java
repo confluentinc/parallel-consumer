@@ -6,7 +6,8 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -23,6 +24,7 @@ import java.util.function.Function;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofMillis;
+import static java.util.Collections.emptyList;
 
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
@@ -76,7 +78,10 @@ public class ParallelConsumerOptions<K, V> {
      * Micrometer MeterRegistry
      */
     @Builder.Default
-    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final MeterRegistry meterRegistry = new CompositeMeterRegistry();
+
+    @Builder.Default
+    private final Iterable<Tag> metricsTags = emptyList();
 
     /**
      * The ordering guarantee to use.

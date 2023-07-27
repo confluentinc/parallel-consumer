@@ -1,16 +1,18 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
-import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Gauge;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -96,10 +98,14 @@ public class ShardManager<K, V> {
      */
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
+    private Gauge shardsSizeGauge;
+    private Gauge numberOfShardsGauge;
+
     public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
         this.module = module;
         this.wm = wm;
         this.options = module.options();
+        initMetrics();
     }
 
     /**
@@ -272,9 +278,11 @@ public class ShardManager<K, V> {
         }
     }
 
-    public Map<ShardKey, PCMetrics.ShardMetrics> getMetrics() {
-        return getProcessingShards().values().stream()
-                .map(ProcessingShard::getMetrics)
-                .collect(Collectors.toMap(PCMetrics.ShardMetrics::getShardKey, t -> t));
+    private void initMetrics() {
+        shardsSizeGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.SHARDS_SIZE,
+                this, shardManager -> shardManager.processingShards.values().stream()
+                        .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
+        numberOfShardsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
+                this, shardManager -> shardManager.processingShards.keySet().size());
     }
 }

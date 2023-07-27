@@ -4,10 +4,13 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Tag;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.Gauge;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -65,6 +68,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
+    private Gauge statusGauge;
+    private Gauge numPausedPartitionsGauge;
+
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
@@ -77,6 +83,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 committer = Optional.of(consumerCommitter);
             }
         }
+        initMetrics();
+    }
+
+    private void initMetrics() {
+        statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_STATUS, this, poller -> poller.runState.ordinal(), Tag.of("status", runState.name()));
+        numPausedPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUM_PAUSED_PARTITIONS,
+                this.consumerManager, consumerManager -> consumerManager.paused().size());
     }
 
     public void start(String managedExecutorService) {
@@ -370,13 +383,5 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         } else {
             log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
         }
-    }
-
-    public PCMetrics.PollerMetrics getMetrics() {
-        var b = PCMetrics.PollerMetrics.builder();
-        b.state(runState);
-        b.paused(isPausedForThrottling());
-        b.numberOfPausedPartitions(consumerManager.paused().size());
-        return b.build();
     }
 }

@@ -2,150 +2,194 @@
 
 This document is intended to gather a few initial metrics that can be used to monitor the performance and health of the parallel consumer.
 
+## Meters
+Following is meters defined by Parallel Consumer - grouped by Subsystem
+
+### Partition Manager
+
+**Number Of Partitions**
+
+Gauge `pc.partitions.number{subsystem=partitions}`
+
+Number of partitions
+
+**Partition Incomplete Offsets**
+
+Gauge `pc.partition.incomplete.offsets{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Number of incomplete offsets in the partition
+
+**Partition Highest Completed Offset**
+
+Gauge `pc.partition.highest.completed.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Highest completed offset in the partition
+
+**Partition Highest Sequential Succeeded Offset**
+
+Gauge `pc.partition.highest.sequential.succeeded.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Highest sequential succeeded offset in the partition
+
+**Partition Highest Seen Offset**
+
+Gauge `pc.partition.highest.seen.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Highest seen / consumed offset in the partition
+
+**Partition Last Committed Offset**
+
+Gauge `pc.partition.latest.committed.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Latest committed offset in the partition
+
+**Partition Assignment Epoch**
+
+Gauge `pc.partition.assignment.epoch{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Epoch of partition assignment
+
+### Processor
+
+**User Function Processing Time**
+
+Timer `pc.user.function.processing.time{subsystem=processor}`
+
+User function processing time
+
+**Dynamic Extra Load Factor**
+
+Gauge `pc.dynamic.load.factor{subsystem=processor}`
+
+Dynamic load factor - load of processing buffers
+
 ### Shard Manager
 
 **Number Of Shards**
 
-Gauge `pc_shards`
+Gauge `pc.shards{subsystem=shardmanager}`
 
-Overall number of sharded queues
+Number of shards
 
-**Shard Size**
+**Incomplete Offsets Total**
 
-Gauge `pc_shards_size`
+Gauge `pc.incomplete.offsets.total{subsystem=shardmanager}`
 
-Number of records queued for processing across all shards.
+Total number of incomplete offsets
 
-* Note: Ideally would be recorded per shard - but given that in KEY ordering there can be a really large number of shards - cardinality can beome too high.
+**Shards Size**
 
-**User Function Processing Time**
+Gauge `pc.shards.size{subsystem=shardmanager}`
 
-Timer `pc_user_function_processing_time`
-
-Distribution of execution times for user-provided function for record processing (in seconds).
-
-***Waiting Queue Time** - Not implemented yet
-
-Timer `pc_waiting_queue_time_seconds`
-
-Distribution of time records spend in the waiting for selection in the shard queue.
-
-### Partition Manager
-
-**Last Committed Offset**
-
-Gauge `pc_last_committed_offset_partition{topic="topicName", partition="partitionNumber"}`
-
-Last offset committed to the partition.
-
-**Highest Completed Offset**
-
-Gauge `pc_highest_completed_offset_partition{topic="topicName", partition="partitionNumber"}`
-
-Offset of the last record successfully processed by the user function.
-
-**Highest Sequential Offset (a.k.a Highest Committable Offset)**
-
-Gauge `pc_highest_sequential_succeeded_offset_partition{topic="topicName", partition="partitionNumber"}`
-
-Offset of the last record successfully processed by the user function, for which all previous records to this offset were marked as successfully processed.
-
-**Number of Incomplete Offsets**
-
-Gauge `pc_incomplete_offsets_partition{topic="topicName", partition="partitionNumber"}`
-
-Gauge `pc_incomplete_offsets_total`
-
-Number of record offsets not marked for committing.
-
-
-**Highest Seen Offset**
-
-Gauge `pc_highest_seen_offset_partition{topic="topicName", partition="partitionNumber"}`
-
-The offset of the last record added to the shard processing queue.
-
-**Current Epoch** - Not implemented
-
-Gauge `pc_current_epoch_partition{topic="topicName", partition="partitionNumber"}`
-
-Represents the epoch of the partition assignment, used to fence off invalid work from previous generations.
-
-
-### Encoding Compression Stats
-
-**Offsets Encoding Time**
-
-Timer `pc_offsets_encoding_time`
-
-Distribution of time spent encoding offsets metadata in seconds.
-
-**Encoding Usage**
-
-Counter `pc_encoding_usage{codec="BitSet|BitSetCompressed|BitSetV2Compressed|RunLength"}`
-
-Distribution of the number of times a given encoding was used.
-
-**Offsets Metadata Space Usage**
-
-Gauge `pc_metadata_space_used`
-
-Percentage distribution of ratio between space used by the encoded offsets metadata and maximum space for OffsetMetadata (which is 4096 bytes).
-
-**Offsets Metadata Payload Ratio**
-
-Gauge `pc_payload_ratio_used`
-Percentage distribution of ratio between offset metadata payload size and offsets encoded.
-
-**Offsets Metadata Compression Ratio** - Not implemented
-
-Gauge `pc_metadata_compression_ratio`
-
-Distribution of encoded offsets compression ratio.
+Number of records queued for processing across all shards
 
 ### Work Manager
 
-**Total In-flight Records**
+**Inflight Records**
 
-Gauge `pc_inflight_records`
+Gauge `pc.inflight.records{subsystem=workmanager}`
 
-Total number of records currently being processed or waiting for retry.
+Total number of records currently being processed or waiting for retry
 
-**Total Records Awaiting Selection**
+**Waiting Records**
 
-Gauge `pc_waiting_records`
+Gauge `pc.waiting.records{subsystem=workmanager}`
 
-Total number of records waiting to be selected for processing.
+Total number of records waiting to be selected for processing
 
-**Successfully Processed Records**
+**Processed Records**
 
-Counter `pc_processed_records{epoch="epochNumber", partition="partitionNumber", topic="topicName"}`
+Counter `pc.processed.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
 
-Total number of records successfully processed.
+Total number of records successfully processed
 
 **Failed Records**
 
-Counter `pc_failed_records{epoch="epochNumber", partition="partitionNumber", topic="topicName"}`
+Counter `pc.failed.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
 
-Total number of records failed to be processed.
+Total number of records failed to be processed
 
-**Slow Records** -- Not implemented
+**Slow Records**
 
-Counter `pc_slow_processed_records_total{partition="partitionNumber", topic="topicName"}`
+Counter `pc.slow.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
 
-Total number of records that spent more than the configured time threshold in the waiting queue. This setting defaults to 10 seconds.
+Total number of records that spent more than the configured time threshold in the waiting queue. This setting defaults to 10 seconds
 
 ### Broker Poller
 
-**Status**
+**Pc Status**
 
-Gauge `pc_status{status="running|closing|closed|draining|paused|closed"}`
+Gauge `pc.status{subsystem=poller, status="running|closing|closed|draining|paused|closed"}`
 
-Parallel Consumer status check
+PC Status
 
-**Number of Paused Partitions**
+**Num Paused Partitions**
 
-Gauge `pc_paused_partitions`
+Gauge `pc.partitions.paused{subsystem=poller}`
 
-Number of partitions paused by the broker poller as backpressure mechanism.
+Number of paused partitions
+
+### Offset Encoder
+
+**Offsets Encoding Time**
+
+Timer `pc.offsets.encoding.time{subsystem=offsetencoder}`
+
+Time spend encoding offsets
+
+**Offsets Encoding Usage**
+
+Counter `pc.offsets.encoding.usage{subsystem=offsetencoder, codec="BitSet|BitSetCompressed|BitSetV2Compressed|RunLength"}`
+
+Offset encoding usage per encoding type
+
+**Metadata Space Used**
+
+Distribution Summary `pc.metadata.space.used{subsystem=offsetencoder}`
+
+Ratio between offset metadata payload size and available space
+
+**Payload Ratio Used**
+
+Distribution Summary `pc.payload.ratio.used{subsystem=offsetencoder}`
+
+Ratio between offset metadata payload size and offsets encoded
+
+
+
+## Example setup steps
+Meter registry that metrics should be bound has to be set using Parallel Consumer Options along with any common tags that identify the PC instance.
+In addition if desired - KafkaConsumer, Producer can be bound to the registry as well as general JVM level binders.
+Following example illustrates setup of Parallel Consumer with Meter Registry and binds Kafka Consumer to that same registry as well.
+`parallel-consumer-examples/parallel-consumer-example-metrics/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java`
+[source,java,indent=0]
+----
+    ParallelStreamProcessor<String, String> setupParallelConsumer() {
+        Consumer<String, String> kafkaConsumer = getKafkaConsumer();
+        kafkaClientMetrics = new KafkaClientMetrics(kafkaConsumer); //<1>
+        kafkaClientMetrics.bindTo(meterRegistry);                   //<2>
+
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
+                .maxConcurrency(1000)
+                .consumer(kafkaConsumer)
+                .meterRegistry(meterRegistry)                       //<3>
+                .metricsTags(List.of(Tag.of("instance", "pc1")))    //<4>
+                .build();
+
+        ParallelStreamProcessor<String, String> eosStreamProcessor =
+                ParallelStreamProcessor.createEosStreamProcessor(options);
+
+        eosStreamProcessor.subscribe(of(inputTopic));
+
+
+        return eosStreamProcessor;
+    }
+----
+- (1) - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
+- (2) - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
+- (3) - Meter Registry is set through ParallelConsumerOptions.builder(), if not specified - will default to CompositeMeterRegistry - which is No-op.
+- (4) - Optional - "instance" tag with value of "pc1" is set through same builder - it will be added to all Parallel Consumer meters
+
+NOTE:: any additional binders / metrics need to be cleaned up appropriately - for example the Kafka Consumer Metrics registered above - need to be closed using `kafkaClientMetrics.close()` after calling shutting down Parallel Consumer as Parallel Consumer will close Kafka Consumer on shutdown.
 

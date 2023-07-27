@@ -4,9 +4,11 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Tag;
 import io.confluent.parallelconsumer.state.PartitionState;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
@@ -67,6 +69,9 @@ public class OffsetMapCodecManager<K, V> {
 
     private final PCModule module;
 
+    private Timer offsetEncodingTimer;
+    private final Map<OffsetEncoding, Counter> encodingCounters = new HashMap<>();
+
     /**
      * Decoding result for encoded offsets
      */
@@ -105,7 +110,11 @@ public class OffsetMapCodecManager<K, V> {
     // todo remove consumer #233
     public OffsetMapCodecManager(PCModule<K, V> module) {
         this.module = module;
+        initMeters();
+    }
 
+    private void initMeters() {
+        offsetEncodingTimer = PCMetrics.getInstance().getTimerFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_TIME);
     }
 
     /**
@@ -192,22 +201,6 @@ public class OffsetMapCodecManager<K, V> {
         return b64;
     }
 
-    private Counter getCounterMeterFor(String meterName, OffsetEncoding encoding) {
-        return Optional.ofNullable(module.meterRegistry().find(meterName)
-                        .tags("codec", encoding.name()).counter())
-                .orElseGet(() -> Counter.builder(meterName).tags("codec", encoding.name())
-                        .register(module.meterRegistry()));
-    }
-
-    private Timer getTimeMeterFor(String meterName, String desc) {
-        return Optional.ofNullable(module.meterRegistry().find(meterName).timer())
-                .orElseGet(() -> Timer.builder(meterName)
-                        .description(desc)
-                        .publishPercentileHistogram(true)
-                        .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                        .register(module.meterRegistry()));
-    }
-
     /**
      * Print out all the offset status into a String, and use X to effectively do run length encoding compression on the
      * string.
@@ -230,7 +223,7 @@ public class OffsetMapCodecManager<K, V> {
         OffsetSimultaneousEncoder simultaneousEncoder = null;
         try {
             simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
-            getTimeMeterFor(PCMetricsTracker.METRIC_NAME_OFFSETS_ENCODING_TIME, "Average time spend encoding offsets").recordCallable(simultaneousEncoder::invoke);
+            offsetEncodingTimer.recordCallable(simultaneousEncoder::invoke);
         } catch (Exception e) {
             throw new InternalRuntimeException("Error encoding offsets", e);
         }
@@ -239,7 +232,7 @@ public class OffsetMapCodecManager<K, V> {
         if (forcedCodec.isPresent()) {
             var forcedOffsetEncoding = forcedCodec.get();
             log.debug("Forcing use of {}, for testing", forcedOffsetEncoding);
-            getCounterMeterFor(PCMetricsTracker.METRIC_NAME_OFFSETS_ENCODING_USAGE, forcedOffsetEncoding).increment();
+            getCounterMeterForEncoding(forcedOffsetEncoding).increment();
 
             Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
             byte[] bytes = encodingMap.get(forcedOffsetEncoding);
@@ -247,10 +240,19 @@ public class OffsetMapCodecManager<K, V> {
                 throw new NoEncodingPossibleException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
             return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
         } else {
-            getCounterMeterFor(PCMetricsTracker.METRIC_NAME_OFFSETS_ENCODING_USAGE, simultaneousEncoder.sortedEncodings.first().getEncoding())
-                    .increment();
+            getCounterMeterForEncoding(simultaneousEncoder.sortedEncodings.first().getEncoding()).increment();
             return simultaneousEncoder.packSmallest();
         }
+    }
+
+    private Counter getCounterMeterForEncoding(OffsetEncoding encoding) {
+        Counter counter = encodingCounters.get(encoding);
+        if (counter == null) {
+            counter = PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_USAGE,
+                    Tag.of("encoding", encoding.name()));
+            encodingCounters.put(encoding, counter);
+        }
+        return counter;
     }
 
     /**

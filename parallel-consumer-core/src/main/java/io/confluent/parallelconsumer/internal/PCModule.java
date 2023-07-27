@@ -1,16 +1,13 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
-import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkManager;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tag;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
@@ -25,15 +22,6 @@ import java.time.Clock;
  * @author Antony Stubbs
  */
 public class PCModule<K, V> {
-
-    MeterRegistry meterRegistry;
-
-    public MeterRegistry meterRegistry() {
-        if (meterRegistry == null) {
-            meterRegistry = options().getMeterRegistry();
-        }
-        return meterRegistry;
-    }
 
     protected ParallelConsumerOptions<K, V> optionsInstance;
 

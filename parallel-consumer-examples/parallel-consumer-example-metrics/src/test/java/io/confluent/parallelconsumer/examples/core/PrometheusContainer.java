@@ -35,8 +35,7 @@ public class PrometheusContainer extends GenericContainer<PrometheusContainer> {
         this.withExposedPorts(new Integer[]{PROMETHEUS_PORT});
         this.withAccessToHost(true);
         this.withCopyFileToContainer(
-                MountableFile.forHostPath("src/test/resources"),
-                "/etc/prometheus");
+                MountableFile.forClasspathResource("prometheus.yml"),"/etc/prometheus/");
         this.withReuse(true);
     }
 

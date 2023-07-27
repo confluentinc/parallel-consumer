@@ -4,15 +4,16 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.Offsets;
-import io.confluent.parallelconsumer.PCMetrics;
-import io.confluent.parallelconsumer.PCMetricsTracker;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.confluent.parallelconsumer.offsets.NoEncodingPossibleException;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -160,10 +161,16 @@ public class PartitionState<K, V> {
     @Getter
     private final long partitionsAssignmentEpoch;
 
-    private DistributionSummary ratioOfPayloadUsed;
-    private DistributionSummary ratioOfMetadataSpaceUsed;
-
     private long lastCommittedOffset;
+    private Gauge lastCommittedOffsetGauge;
+    private Gauge highestSeenOffsetGauge;
+    private Gauge highestCompletedOffsetGauge;
+    private Gauge highestSequentialSucceededOffsetGauge;
+    private Gauge numberOfIncompletesGauge;
+    private Gauge ephochGauge;
+    private DistributionSummary ratioPayloadUsedDistributionSummary;
+    private DistributionSummary ratioMetadataSpaceUsedDistributionSummary;
+
 
     public PartitionState(long newEpoch,
                           PCModule<K, V> pcModule,
@@ -175,28 +182,7 @@ public class PartitionState<K, V> {
         this.partitionsAssignmentEpoch = newEpoch;
 
         initStateFromOffsetData(offsetData);
-    }
-
-    private DistributionSummary ratioOfPayloadUsed() {
-        if (this.ratioOfPayloadUsed == null) {
-            this.ratioOfPayloadUsed = DistributionSummary.builder(PCMetricsTracker.METRIC_NAME_PAYLOAD_RATIO_USED)
-                    .description("ratio between offset metadata payload size and offsets encoded")
-                    .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                    .register(module.meterRegistry());
-        }
-        return this.ratioOfPayloadUsed;
-    }
-
-    private DistributionSummary ratioOfMetadataSpaceUsed() {
-        if (this.ratioOfMetadataSpaceUsed == null) {
-            this.ratioOfMetadataSpaceUsed = DistributionSummary.builder(PCMetricsTracker.METRIC_NAME_METADATA_SPACE_USED)
-                    .description("ratio between offset metadata payload size and available space")
-                    .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                    .register(module.meterRegistry());
-        }
-        return this.ratioOfMetadataSpaceUsed;
+        initMetrics();
     }
 
     private void initStateFromOffsetData(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
@@ -485,8 +471,8 @@ public class PartitionState<K, V> {
             long offsetOfNextExpectedMessage = getOffsetToCommit();
             var offsetRange = getOffsetHighestSucceeded() - offsetOfNextExpectedMessage;
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
-            ratioOfPayloadUsed().record(offsetMapPayload.length() / (double) offsetRange);
-            ratioOfMetadataSpaceUsed().record(offsetMapPayload.length() /(double) OffsetMapCodecManager.DefaultMaxMetadataSize);
+            ratioPayloadUsedDistributionSummary.record(offsetMapPayload.length() / (double) offsetRange);
+            ratioMetadataSpaceUsedDistributionSummary.record(offsetMapPayload.length() / (double) OffsetMapCodecManager.DefaultMaxMetadataSize);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
                 return empty();
@@ -539,6 +525,7 @@ public class PartitionState<K, V> {
 
     public void onPartitionsRemoved(ShardManager<K, V> sm) {
         sm.removeAnyShardEntriesReferencedFrom(incompleteOffsets.values());
+        deregisterMetrics();
     }
 
     /**
@@ -672,31 +659,36 @@ public class PartitionState<K, V> {
         return false;
     }
 
-    public PCMetrics.PCPartitionMetrics getMetrics() {
-        var b = PCMetrics.PCPartitionMetrics.builder();
-        b.topicPartition(getTp());
-
-        //
-        b.lastCommittedOffset(lastCommittedOffset);
-        b.highestSeenOffset(getOffsetHighestSeen());
-        b.epoch(getPartitionsAssignmentEpoch());
-        b.highestCompletedOffset(getOffsetHighestSucceeded());
-        b.highestSequentialSucceededOffset(getOffsetHighestSequentialSucceeded());
-        b.numberOfIncompletes(incompleteOffsets.size());
-        //
-//        b.compressionStats(getCompressionStats());
-
-        //
-        return b.build();
+    private void initMetrics() {
+        TopicPartition topicPartition = getTp();
+        if (topicPartition == null) {
+            return;
+        }
+        Tag[] partitionStateTags = new Tag[]{Tag.of("topic", topicPartition.topic()), Tag.of("partition", String.valueOf(topicPartition.partition()))};
+        lastCommittedOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_LAST_COMMITTED_OFFSET,
+                this, partitionState -> partitionState.lastCommittedOffset, partitionStateTags);
+        highestSeenOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_SEEN_OFFSET,
+                this, PartitionState::getOffsetHighestSeen, partitionStateTags);
+        highestCompletedOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_COMPLETED_OFFSET,
+                this, PartitionState::getOffsetHighestSucceeded, partitionStateTags);
+        highestSequentialSucceededOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET,
+                this, PartitionState::getOffsetHighestSequentialSucceeded, partitionStateTags);
+        numberOfIncompletesGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_INCOMPLETE_OFFSETS,
+                this, partitionState -> partitionState.incompleteOffsets.size(), partitionStateTags);
+        ephochGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_ASSIGNMENT_EPOCH,
+                this, PartitionState::getPartitionsAssignmentEpoch, partitionStateTags);
+        ratioMetadataSpaceUsedDistributionSummary = PCMetrics.getInstance().getDistributionSummaryFromMetricDef(PCMetricsDef.METADATA_SPACE_USED, partitionStateTags);
+        ratioPayloadUsedDistributionSummary = PCMetrics.getInstance().getDistributionSummaryFromMetricDef(PCMetricsDef.PAYLOAD_RATIO_USED, partitionStateTags);
     }
 
-    private PCMetrics.PCPartitionMetrics.CompressionStats getCompressionStats() {
-        log.error("UnsupportedOperationException(\"Not implemented yet\");");
-        return PCMetrics.PCPartitionMetrics.CompressionStats.builder().build();
+    private void deregisterMetrics() {
+        PCMetrics.removeMeter(lastCommittedOffsetGauge);
+        PCMetrics.removeMeter(highestSeenOffsetGauge);
+        PCMetrics.removeMeter(highestCompletedOffsetGauge);
+        PCMetrics.removeMeter(highestSequentialSucceededOffsetGauge);
+        PCMetrics.removeMeter(numberOfIncompletesGauge);
+        PCMetrics.removeMeter(ephochGauge);
+        PCMetrics.removeMeter(ratioMetadataSpaceUsedDistributionSummary);
+        PCMetrics.removeMeter(ratioPayloadUsedDistributionSummary);
     }
-
-    public Offsets calculateIncompleteMetrics() {
-        return Offsets.from(getIncompleteOffsetsBelowHighestSucceeded());
-    }
-
 }

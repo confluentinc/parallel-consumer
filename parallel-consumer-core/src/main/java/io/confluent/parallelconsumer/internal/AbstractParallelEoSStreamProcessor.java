@@ -7,9 +7,12 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.utils.Suppliers;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -40,6 +43,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
+import static io.confluent.parallelconsumer.metrics.PCMetricsDef.METER_PREFIX;
 import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -119,6 +123,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final BlockingQueue<ControllerEventMessage<K, V>> workMailBox = new LinkedBlockingQueue<>(); // Thread safe, highly performant, non blocking
 
     private final AtomicBoolean isRebalanceInProgress = new AtomicBoolean(false);
+
     /**
      * An inbound message to the controller.
      * <p>
@@ -239,6 +244,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private boolean lastWorkRequestWasFulfilled = false;
 
+    private io.micrometer.core.instrument.Timer userProcessingTimer;
+    private Gauge loadFactorGauge;
+
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
     }
@@ -262,6 +270,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.info("Confluent Parallel Consumer initialise... groupId: {}, Options: {}",
                 newOptions.getConsumer().groupMetadata().groupId(),
                 newOptions);
+        //Initialize global metrics - should be initialized before any of the module objects are created so that meters can be bound in them.
+        PCMetrics.initialize(options.getMeterRegistry(), options.getMetricsTags());
 
 
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
@@ -282,18 +292,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             this.producerManager = Optional.empty();
             this.committer = this.brokerPollSubsystem;
         }
+        //Initialize metrics for this class once all the objects are created
+        initMetrics();
     }
 
-    private io.micrometer.core.instrument.Timer userProcessingTimer() {
-        if (this.userProcessingTimer == null) {
-            this.userProcessingTimer = io.micrometer.core.instrument.Timer.builder(PCMetricsTracker.METRIC_NAME_USER_FUNCTION_PROCESSING_TIME)
-                    .description("User function processing time")
-                    .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99, 0.999)
-                    .register(module.meterRegistry());
-        }
-        return this.userProcessingTimer;
+    private void initMetrics() {
+        this.userProcessingTimer = PCMetrics.getInstance().getTimerFromMetricDef(PCMetricsDef.USER_FUNCTION_PROCESSING_TIME);
+        this.loadFactorGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.DYNAMIC_EXTRA_LOAD_FACTOR,
+                dynamicExtraLoadFactor, DynamicLoadFactor::getCurrentFactor);
+        new ExecutorServiceMetrics(this.getWorkerThreadPool().get(), "pc-user-function-executor",
+                METER_PREFIX,
+                this.options.getMetricsTags()).bindTo(PCMetrics.getInstance().getMeterRegistry());
     }
+
 
     private void validateConfiguration() {
         options.validate();
@@ -389,11 +400,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             // commit any offsets from revoked partitions BEFORE truncation
             this.producerManager.ifPresent(pm -> {
-                  try{
-                        pm.preAcquireOffsetsToCommit();
-                  } catch (Exception exc){
-                        throw new InternalRuntimeException(exc);
-                  }
+                try {
+                    pm.preAcquireOffsetsToCommit();
+                } catch (Exception exc) {
+                    throw new InternalRuntimeException(exc);
+                }
             });
 
             commitOffsetsThatAreReady();
@@ -579,7 +590,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         maybeCloseConsumer();
 
         producerManager.ifPresent(x -> x.close(timeout));
-
+        PCMetrics.close();
         log.debug("Close complete.");
         this.state = CLOSED;
 
@@ -1256,7 +1267,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                                                                     final Consumer<R> callback,
                                                                                     final List<WorkContainer<K, V>> activeWorkContainers) {
         List<R> resultsFromUserFunction;
-        resultsFromUserFunction = userProcessingTimer().record(() -> usersFunction.apply(context));
+        resultsFromUserFunction = userProcessingTimer.record(() -> usersFunction.apply(context));
 
 
         for (final WorkContainer<K, V> kvWorkContainer : activeWorkContainers) {
@@ -1281,23 +1292,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private void cleanUpContext(final PollContextInternal<K, V> context) {
         context.getProducingLock().ifPresent(ProducerManager.ProducingLock::unlock);
-    }
-
-    private io.micrometer.core.instrument.Timer userProcessingTimer;
-
-    /**
-     * Gather metrics from the {@link ParallelConsumer} and for monitoring.
-     */
-    public PCMetrics calculateMetrics() {
-        var metrics = PCMetrics.builder();
-
-        addMetricsTo(metrics);
-
-        getWm().addMetricsTo(metrics);
-
-        metrics.functionTimer(userProcessingTimer);
-
-        return metrics.build();
     }
 
     protected void addToMailBoxOnUserFunctionSuccess(PollContextInternal<K, V> context, WorkContainer<K, V> wc, List<?> resultsFromUserFunction) {
@@ -1404,23 +1398,4 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
     }
-
-    /**
-     * todo docs
-     */
-    public PCMetrics calculateMetricsWithIncompletes() {
-        PCMetrics pcMetrics = calculateMetrics();
-        Map<TopicPartition, PCMetrics.PCPartitionMetrics> partitionMetrics = pcMetrics.getPartitionMetrics();
-
-        getWm().enrichWithIncompletes(partitionMetrics);
-
-        PCMetrics.PCMetricsBuilder<?, ?> metrics = pcMetrics.toBuilder();
-        return metrics.build();
-    }
-
-    protected void addMetricsTo(PCMetrics.PCMetricsBuilder<?, ? extends PCMetrics.PCMetricsBuilder<?, ?>> metrics) {
-        metrics.dynamicLoadFactor(dynamicExtraLoadFactor.getCurrentFactor());
-        metrics.pollerMetrics(brokerPollSubsystem.getMetrics());
-    }
-
 }

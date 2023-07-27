@@ -1,18 +1,20 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.Offsets;
-import io.confluent.parallelconsumer.PCMetrics;
-import io.confluent.parallelconsumer.PCMetrics.PCPartitionMetrics.IncompleteMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -68,9 +70,14 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
 
     private final PCModule<K, V> module;
 
+    private Gauge numberOfPartitionsGauge;
+    private Gauge totalIncompletesGauge;
+    private final Map<TopicPartition, Counter> slowWorkCounters = new HashMap<>();
+
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
         this.sm = sm;
         this.module = module;
+        initMetrics();
     }
 
     public PartitionState<K, V> getPartitionState(TopicPartition tp) {
@@ -113,10 +120,36 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(module); // todo remove throw away instance creation - #233
             var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
             this.partitionStates.putAll(partitionStates);
+            initPartitionCounters(assignedPartitions);
         } catch (Exception e) {
             log.error("Error in onPartitionsAssigned", e);
             throw e;
         }
+    }
+
+    private void initPartitionCounters(Collection<TopicPartition> assignedPartitions) {
+        assignedPartitions.forEach(topicPartition -> {
+            if (!slowWorkCounters.containsKey(topicPartition)) {
+                slowWorkCounters.put(topicPartition, PCMetrics.getInstance()
+                        .getCounterFromMetricDef(PCMetricsDef.SLOW_RECORDS,
+                                Tag.of("topic", topicPartition.topic()),
+                                Tag.of("partition", String.valueOf(topicPartition.partition())))
+                );
+            }
+        });
+    }
+
+    private void deregisterPartitionCounters(Collection<TopicPartition> removedPartitions) {
+        removedPartitions.forEach(topicPartition -> {
+            Counter counter = slowWorkCounters.remove(topicPartition);
+            if (counter != null) {
+                PCMetrics.removeMeter(counter);
+            }
+        });
+    }
+
+    public void incrementSlowWorkCounter(TopicPartition topicPartition) {
+        Optional.ofNullable(slowWorkCounters.get(topicPartition)).ifPresent(Counter::increment);
     }
 
     /**
@@ -141,6 +174,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
         incrementPartitionAssignmentEpoch(partitions);
         resetOffsetMapAndRemoveWork(partitions);
+        deregisterPartitionCounters(partitions);
     }
 
     /**
@@ -300,26 +334,12 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
                 .anyMatch(PartitionState::isDirty);
     }
 
-    public Map<TopicPartition, PCMetrics.PCPartitionMetrics> getMetrics() {
-        return getAssignedPartitions().values().stream()
-                .map(PartitionState::getMetrics)
-                .collect(Collectors.toMap(PCMetrics.PCPartitionMetrics::getTopicPartition, t -> t));
+    private void initMetrics() {
+        numberOfPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_PARTITIONS, this, pm -> getAssignedPartitions().size());
+        totalIncompletesGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.INCOMPLETE_OFFSETS_TOTAL,
+                this, partitionStateManager -> partitionStateManager.getAssignedPartitions().values().stream()
+                        .mapToInt(PartitionState::getNumberOfIncompleteOffsets)
+                        .sum()
+        );
     }
-
-    public void enrichWithIncompletes(final Map<TopicPartition, PCMetrics.PCPartitionMetrics> metrics) {
-        getAssignedPartitions().forEach((key, value) -> {
-            // code smell? - a kind of weird way to do this
-            Offsets incompleteOffsets = value.calculateIncompleteMetrics();
-            var pcMetrics = Optional.ofNullable(metrics.get(key));
-            pcMetrics.ifPresent(metrics1 -> {
-                // replace the metrics with the new one with the incomplete offsets added
-                var b = metrics1.toBuilder();
-                var incompleteMetrics = Optional.of(new IncompleteMetrics(incompleteOffsets));
-                var build = b.incompleteMetrics(incompleteMetrics).build();
-                // replace the old metrics with the new one
-                metrics.put(key, build);
-            });
-        });
-    }
-
 }

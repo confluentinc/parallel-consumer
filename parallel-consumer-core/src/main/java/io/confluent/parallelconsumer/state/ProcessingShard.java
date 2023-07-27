@@ -4,7 +4,6 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.parallelconsumer.PCMetrics;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.RateLimiter;
@@ -161,8 +160,11 @@ public class ProcessingShard<K, V> {
         Duration timeInFlight = workContainer.getTimeInFlight();
         Duration slowThreshold = options.getThresholdForTimeSpendInQueueWarning();
         if (isGreaterThan(timeInFlight, slowThreshold)) {
+            if (!slowWork.contains(workContainer)) {
+                pm.incrementSlowWorkCounter(workContainer.getTopicPartition());
+            }
             slowWork.add(workContainer);
-            if (log.isTraceEnabled()){
+            if (log.isTraceEnabled()) {
                 log.trace("Work has spent over " + slowThreshold + " in queue! " + cantTakeAsWorkMsg(workContainer, timeInFlight));
             }
         } else {
@@ -179,16 +181,5 @@ public class ProcessingShard<K, V> {
 
     private boolean isOrderRestricted() {
         return options.getOrdering() != UNORDERED;
-    }
-
-    public PCMetrics.ShardMetrics getMetrics() {
-        var b = PCMetrics.ShardMetrics.builder();
-        b.shardKey(getKey());
-        b.shardSize(getCountOfWorkTracked());
-        //TODO: Not implemented yet
-        //b.averageTimeSpentInQueue();
-        //b.averageUserProcessingTime();
-
-        return b.build();
     }
 }
