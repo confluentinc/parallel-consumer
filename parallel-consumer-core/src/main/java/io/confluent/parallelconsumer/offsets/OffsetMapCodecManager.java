@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.metrics.PCMetrics;
@@ -42,8 +43,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  *
  * @author Antony Stubbs
  */
-// metrics: avg time spend encoding, most common best encoder, number of times run length used, number of times
-// bitset used
+// metrics: avg time spend encoding, number of times each encoding used
 @Slf4j
 public class OffsetMapCodecManager<K, V> {
 
@@ -71,6 +71,8 @@ public class OffsetMapCodecManager<K, V> {
 
     private Timer offsetEncodingTimer;
     private final Map<OffsetEncoding, Counter> encodingCounters = new HashMap<>();
+
+    private static ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy errorPolicy = ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.FAIL;
 
     /**
      * Decoding result for encoded offsets
@@ -110,6 +112,9 @@ public class OffsetMapCodecManager<K, V> {
     // todo remove consumer #233
     public OffsetMapCodecManager(PCModule<K, V> module) {
         this.module = module;
+        if (module != null){
+            this.errorPolicy = module.options().getInvalidOffsetMetadataPolicy();
+        }
         initMeters();
     }
 
@@ -271,7 +276,7 @@ public class OffsetMapCodecManager<K, V> {
             return HighestOffsetAndIncompletes.of(highestSeenOffsetIsThen);
         } else {
             var result = EncodedOffsetPair.unwrap(decodedBytes);
-            return result.getDecodedIncompletes(nextExpectedOffset);
+            return result.getDecodedIncompletes(nextExpectedOffset, errorPolicy);
         }
     }
 

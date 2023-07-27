@@ -189,7 +189,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private EpochAndRecordsMap<K, V> pollBrokerForRecords() {
-        managePauseOfSubscription();
+
+        checkStateForPausingSubscriptions();
+
         log.debug("Subscriptions are paused: {}", pausedForThrottling);
 
         boolean pollTimeoutNormally = runState == RUNNING || runState == DRAINING;
@@ -203,6 +205,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
         // build records map
         return new EpochAndRecordsMap<>(poll, wm.getPm());
+    }
+
+    private void checkStateForPausingSubscriptions() {
+        if(runState == DRAINING) {
+            doPause();
+        }
+        else{
+            managePauseOfSubscription();
+        }
     }
 
     /**
