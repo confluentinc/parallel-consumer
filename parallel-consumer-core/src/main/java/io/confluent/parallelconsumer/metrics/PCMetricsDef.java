@@ -157,7 +157,7 @@ public enum PCMetricsDef {
     }
 
     private static String formatSubsystem(PCMetricsSubsystem sub) {
-        return String.format("### %s%n%n", toCamelCase(sub.name()));
+        return String.format("==== %s%n%n", toCamelCase(sub.name()));
     }
 
     private static String joinTagsForRendering(ParallelConsumer.Tuple<String, String>[] tags) {
