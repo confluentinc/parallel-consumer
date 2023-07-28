@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.examples.core;
+package io.confluent.parallelconsumer.examples.metrics;
 
 /*-
  * Copyright (C) 2020-2023 Confluent, Inc.
@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
 import io.micrometer.prometheus.PrometheusConfig;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
@@ -97,7 +98,7 @@ public class CoreApp {
                 .maxConcurrency(1000)
                 .consumer(kafkaConsumer)
                 .meterRegistry(meterRegistry)                     //<1>
-                .metricsTags(List.of(Tag.of("instance", "pc1")))    //<2>
+                .metricsTags(Tags.of(Tag.of("instance", "pc1")))    //<2>
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =

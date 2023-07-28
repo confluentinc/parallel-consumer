@@ -12,6 +12,7 @@ import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -246,6 +248,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private io.micrometer.core.instrument.Timer userProcessingTimer;
     private Gauge loadFactorGauge;
+    private Gauge statusGauge;
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -273,7 +276,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         //Initialize global metrics - should be initialized before any of the module objects are created so that meters can be bound in them.
         PCMetrics.initialize(options.getMeterRegistry(), options.getMetricsTags());
 
-
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
         workerThreadPool = Suppliers.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
@@ -300,11 +302,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         this.userProcessingTimer = PCMetrics.getInstance().getTimerFromMetricDef(PCMetricsDef.USER_FUNCTION_PROCESSING_TIME);
         this.loadFactorGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.DYNAMIC_EXTRA_LOAD_FACTOR,
                 dynamicExtraLoadFactor, DynamicLoadFactor::getCurrentFactor);
+        this.statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_STATUS, this, pc -> pc.state.getValue());
         new ExecutorServiceMetrics(this.getWorkerThreadPool().get(), "pc-user-function-executor",
                 METER_PREFIX,
                 this.options.getMetricsTags()).bindTo(PCMetrics.getInstance().getMeterRegistry());
     }
-
 
     private void validateConfiguration() {
         options.validate();

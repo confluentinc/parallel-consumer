@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.Builder;
 import lombok.Getter;
@@ -81,7 +82,7 @@ public class ParallelConsumerOptions<K, V> {
     private final MeterRegistry meterRegistry = new CompositeMeterRegistry();
 
     @Builder.Default
-    private final Iterable<Tag> metricsTags = emptyList();
+    private final Iterable<Tag> metricsTags = Tags.empty();
 
     /**
      * The ordering guarantee to use.

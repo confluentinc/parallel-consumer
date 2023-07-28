@@ -91,7 +91,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         pm.onPartitionsAssigned(partitions);
-        initCounterMetrics(partitions);
+        initTopicPartitionSpecificMetrics(partitions);
     }
 
     /**
@@ -117,7 +117,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        deregisterCounterMetrics(partitions);
+        deregisterTopicPartitionSpecificMetrics(partitions);
     }
 
     public void registerWork(EpochAndRecordsMap<K, V> records) {
@@ -158,7 +158,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
-        safelyIncrementCounter(succeededRecordsCounters, wc.getTopicPartition());
+        incrementCounterIfPresent(succeededRecordsCounters, wc.getTopicPartition());
 
         wc.endFlight();
 
@@ -183,7 +183,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        safelyIncrementCounter(failedRecordsCounters, wc.getTopicPartition());
+        incrementCounterIfPresent(failedRecordsCounters, wc.getTopicPartition());
         wc.endFlight();
         pm.onFailure(wc);
         sm.onFailure(wc);
@@ -299,7 +299,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
                 this, WorkManager::getNumberRecordsOutForProcessing);
     }
 
-    private void initCounterMetrics(Collection<TopicPartition> partitions) {
+    private void initTopicPartitionSpecificMetrics(Collection<TopicPartition> partitions) {
         partitions.forEach(topicPartition -> {
             if (!succeededRecordsCounters.containsKey(topicPartition)) {
                 succeededRecordsCounters.put(topicPartition, PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.PROCESSED_RECORDS, getWorkManagerCounterTags(topicPartition)));
@@ -310,7 +310,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         });
     }
 
-    private void safelyIncrementCounter(Map<TopicPartition, Counter> counterMap, TopicPartition topicPartition) {
+    private void incrementCounterIfPresent(Map<TopicPartition, Counter> counterMap, TopicPartition topicPartition) {
         Optional.ofNullable(counterMap.get(topicPartition)).ifPresent(Counter::increment);
     }
 
@@ -318,7 +318,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return new Tag[]{Tag.of("topic", topicPartition.topic()), Tag.of("partition", String.valueOf(topicPartition.partition()))};
     }
 
-    private void deregisterCounterMetrics(Collection<TopicPartition> partitions) {
+    private void deregisterTopicPartitionSpecificMetrics(Collection<TopicPartition> partitions) {
         partitions.forEach(topicPartition -> {
             Counter counter = succeededRecordsCounters.remove(topicPartition);
             if (counter != null) {

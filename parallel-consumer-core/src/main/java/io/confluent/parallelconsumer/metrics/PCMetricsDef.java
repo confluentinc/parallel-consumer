@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.metrics;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumer;
+import io.confluent.parallelconsumer.internal.State;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import lombok.Getter;
@@ -28,7 +29,8 @@ public enum PCMetricsDef {
     FAILED_RECORDS("failed.records", "Total number of records failed to be processed", PCMetricsSubsystem.WORK_MANAGER, COUNTER, topicPartitionTags()),
     SLOW_RECORDS("slow.records", "Total number of records that spent more than the configured time threshold in the waiting queue. This setting defaults to 10 seconds", PCMetricsSubsystem.WORK_MANAGER, COUNTER, topicPartitionTags()),
 
-    PC_STATUS("status", "PC Status", PCMetricsSubsystem.BROKER_POLLER, GAUGE, tag("status", "running|closing|closed|draining|paused|closed")),
+    PC_POLLER_STATUS("poller.status", "PC Broker Poller Status, reported as number with following mapping - " + getStateToValueListing(), PCMetricsSubsystem.BROKER_POLLER, GAUGE),
+    PC_STATUS("status", "PC Status, reported as number with following mapping - " + getStateToValueListing(), PCMetricsSubsystem.PROCESSOR, GAUGE),
     NUM_PAUSED_PARTITIONS("partitions.paused", "Number of paused partitions", PCMetricsSubsystem.BROKER_POLLER, GAUGE),
 
 
@@ -57,6 +59,10 @@ public enum PCMetricsDef {
     OFFSETS_ENCODING_USAGE("offsets.encoding.usage", "Offset encoding usage per encoding type", PCMetricsSubsystem.OFFSET_ENCODER, COUNTER, tag("codec", "BitSet|BitSetCompressed|BitSetV2Compressed|RunLength")),
     METADATA_SPACE_USED("metadata.space.used", "Ratio between offset metadata payload size and available space", PCMetricsSubsystem.OFFSET_ENCODER, DISTRIBUTION_SUMMARY),
     PAYLOAD_RATIO_USED("payload.ratio.used", "Ratio between offset metadata payload size and offsets encoded", PCMetricsSubsystem.OFFSET_ENCODER, DISTRIBUTION_SUMMARY);
+
+    private static String getStateToValueListing() {
+        return Arrays.stream(State.values()).map(state -> state.getValue() + ":" + state).collect(Collectors.joining(", "));
+    }
 
     private static ParallelConsumer.Tuple<String, String>[] topicPartitionTags() {
         return new ParallelConsumer.Tuple[]{tag("topic", "topicName"), tag("partition", "partitionNumber")};

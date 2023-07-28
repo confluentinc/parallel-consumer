@@ -174,7 +174,7 @@ Following example illustrates setup of Parallel Consumer with Meter Registry and
                 .maxConcurrency(1000)
                 .consumer(kafkaConsumer)
                 .meterRegistry(meterRegistry)                       //<3>
-                .metricsTags(List.of(Tag.of("instance", "pc1")))    //<4>
+                .metricsTags(Tags.of(Tag.of("instance", "pc1")))    //<4>
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =

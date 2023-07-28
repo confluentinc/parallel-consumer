@@ -87,7 +87,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private void initMetrics() {
-        statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_STATUS, this, poller -> poller.runState.ordinal(), Tag.of("status", runState.name()));
+        statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_POLLER_STATUS, this, poller -> poller.runState.getValue());
         numPausedPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUM_PAUSED_PARTITIONS,
                 this.consumerManager, consumerManager -> consumerManager.paused().size());
     }
@@ -208,10 +208,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private void checkStateForPausingSubscriptions() {
-        if(runState == DRAINING) {
+        if (runState == DRAINING) {
             doPause();
-        }
-        else{
+        } else {
             managePauseOfSubscription();
         }
     }

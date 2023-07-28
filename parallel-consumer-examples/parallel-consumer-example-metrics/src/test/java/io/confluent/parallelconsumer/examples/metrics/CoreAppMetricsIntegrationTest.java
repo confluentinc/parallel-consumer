@@ -1,4 +1,4 @@
-package io.confluent.parallelconsumer.examples.core;
+package io.confluent.parallelconsumer.examples.metrics;
 
 /*-
  * Copyright (C) 2020-2023 Confluent, Inc.
@@ -11,7 +11,6 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
@@ -88,7 +87,7 @@ public class CoreAppMetricsIntegrationTest{
         protected void postSetup() {
             super.postSetup();
 
-            mockConsumer.subscribeWithRebalanceAndAssignment(of(inputTopic), 1);
+            mockConsumer.subscribeWithRebalanceAndAssignment(UniLists.of(inputTopic), 1);
         }
     }
 }

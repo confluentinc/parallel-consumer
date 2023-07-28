@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static io.confluent.parallelconsumer.internal.State.PAUSED;
 import static io.confluent.parallelconsumer.internal.State.RUNNING;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -84,8 +85,7 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
         // metrics have some data
         await().atMost(Duration.ofSeconds(300)).pollInterval(Duration.ofSeconds(2)).untilAsserted(() -> {
             assertFalse(registry.getMeters().isEmpty());
-            assertEquals(RUNNING.ordinal(),
-                    registeredGaugeValueFor(PCMetricsDef.PC_STATUS, "status", RUNNING.name()));
+            assertEquals(RUNNING.getValue(), registeredGaugeValueFor(PCMetricsDef.PC_STATUS));
             assertEquals(2, registeredGaugeValueFor(PCMetricsDef.NUMBER_OF_SHARDS));
             assertEquals(2, registeredGaugeValueFor(PCMetricsDef.NUMBER_OF_PARTITIONS));
         });
@@ -119,7 +119,7 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
         assertThat(registeredGaugeValueFor(PCMetricsDef.PARTITION_LAST_COMMITTED_OFFSET, 0))
                 .isEqualTo(highestProcessedOffsetP0 + 1);
         assertThat(registeredCounterValueFor(PCMetricsDef.PROCESSED_RECORDS,
-                 "topic", topicPartition.topic(), "partition", String.valueOf(0)))
+                "topic", topicPartition.topic(), "partition", String.valueOf(0)))
                 .isEqualTo(counterP0.get());
 
 
@@ -165,8 +165,8 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
 
         assertThat(registeredGaugeValueFor(PCMetricsDef.NUMBER_OF_SHARDS))
                 .isEqualTo(2);
-        assertThat(registeredGaugeValueFor(PCMetricsDef.PC_STATUS, "status", RUNNING.name()))
-                .isEqualTo(1);
+        assertThat(registeredGaugeValueFor(PCMetricsDef.PC_STATUS))
+                .isEqualTo(RUNNING.getValue());
 
         // it would be remaining - inFlight, but because inFlight number depends on load factor which in turn depends on CPU core number - adding allowable offset.
         assertThat(registeredGaugeValueFor(PCMetricsDef.WAITING_RECORDS))
@@ -189,6 +189,46 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
             log.info(registry.getMetersAsString());
             assertThat(registeredCounterValueFor(PCMetricsDef.FAILED_RECORDS, "topic", topicPartition.topic(), "partition", String.valueOf(0)))
                     .isEqualTo(1);
+        });
+    }
+
+
+    @Test
+    @SneakyThrows
+    void pcStatusMetricUpdatesOnChange() {
+        final int quantity = 1000;
+
+        ktu.send(consumerSpy, ktu.generateRecords(0, quantity));
+
+        parallelConsumer.poll(recordContexts -> {
+            recordContexts.forEach(recordContext -> {
+                log.trace("Processing: {}", recordContext);
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        });
+
+        log.info(registry.getMetersAsString());
+        // metrics have some data
+        await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+            assertFalse(registry.getMeters().isEmpty());
+            assertEquals(RUNNING.getValue(),
+                    registeredGaugeValueFor(PCMetricsDef.PC_STATUS));
+        });
+
+        parallelConsumer.pauseIfRunning();
+        ktu.send(consumerSpy, ktu.generateRecords(0, 100));
+        await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+            assertEquals(PAUSED.getValue(),
+                    registeredGaugeValueFor(PCMetricsDef.PC_STATUS));
+        });
+        parallelConsumer.resumeIfPaused();
+        await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+            assertEquals(RUNNING.getValue(),
+                    registeredGaugeValueFor(PCMetricsDef.PC_STATUS));
         });
     }
 
