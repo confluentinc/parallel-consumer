@@ -6,7 +6,11 @@ package io.confluent.parallelconsumer.internal;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Tag;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.micrometer.core.instrument.Gauge;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -64,6 +68,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
+    private Gauge statusGauge;
+    private Gauge numPausedPartitionsGauge;
+
     public BrokerPollSystem(ConsumerManager<K, V> consumerMgr, WorkManager<K, V> wm, AbstractParallelEoSStreamProcessor<K, V> pc, final ParallelConsumerOptions<K, V> options) {
         this.wm = wm;
         this.pc = pc;
@@ -76,6 +83,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 committer = Optional.of(consumerCommitter);
             }
         }
+        initMetrics();
+    }
+
+    private void initMetrics() {
+        statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_POLLER_STATUS, this, poller -> poller.runState.getValue());
+        numPausedPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUM_PAUSED_PARTITIONS,
+                this.consumerManager, consumerManager -> consumerManager.paused().size());
     }
 
     public void start(String managedExecutorService) {
@@ -194,10 +208,9 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private void checkStateForPausingSubscriptions() {
-        if(runState == DRAINING) {
+        if (runState == DRAINING) {
             doPause();
-        }
-        else{
+        } else {
             managePauseOfSubscription();
         }
     }
@@ -350,4 +363,35 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             consumerManager.wakeup();
     }
 
+    /**
+     * Pause polling from the underlying Kafka Broker.
+     * <p>
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#RUNNING running}, calling this method will be a no-op.
+     * </p>
+     */
+    public void pausePollingAndWorkRegistrationIfRunning() {
+        if (this.runState == RUNNING) {
+            log.info("Transitioning broker poll system to state paused.");
+            this.runState = PAUSED;
+        } else {
+            log.info("Skipping transition of broker poll system to state paused. Current state is {}.", this.runState);
+        }
+    }
+
+    /**
+     * Resume polling from the underlying Kafka Broker.
+     * <p>
+     * Note: If the poll system is currently not in state
+     * {@link io.confluent.parallelconsumer.internal.State#PAUSED paused}, calling this method will be a no-op.
+     * </p>
+     */
+    public void resumePollingAndWorkRegistrationIfPaused() {
+        if (this.runState == PAUSED) {
+            log.info("Transitioning broker poll system to state running.");
+            this.runState = RUNNING;
+        } else {
+            log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
+        }
+    }
 }

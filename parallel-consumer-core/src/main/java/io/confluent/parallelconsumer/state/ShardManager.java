@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
@@ -10,6 +10,9 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Gauge;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -37,10 +40,12 @@ import static java.util.Optional.of;
  *
  * @author Antony Stubbs
  */
+// metrics: number of queues, average queue length
 @Slf4j
 public class ShardManager<K, V> {
 
     private final PCModule<K, V> module;
+
 
     @Getter
     private final ParallelConsumerOptions<?, ?> options;
@@ -59,6 +64,7 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
+    @Getter(AccessLevel.PRIVATE)
     private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
@@ -92,10 +98,14 @@ public class ShardManager<K, V> {
      */
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
+    private Gauge shardsSizeGauge;
+    private Gauge numberOfShardsGauge;
+
     public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
         this.module = module;
         this.wm = wm;
         this.options = module.options();
+        initMetrics();
     }
 
     /**
@@ -196,6 +206,7 @@ public class ShardManager<K, V> {
         // remove from processing queues
         var key = computeShardKey(wc);
         var shardOptional = getShard(key);
+
         if (shardOptional.isPresent()) {
             //
             shardOptional.get().onSuccess(wc);
@@ -267,4 +278,11 @@ public class ShardManager<K, V> {
         }
     }
 
+    private void initMetrics() {
+        shardsSizeGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.SHARDS_SIZE,
+                this, shardManager -> shardManager.processingShards.values().stream()
+                        .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
+        numberOfShardsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
+                this, shardManager -> shardManager.processingShards.keySet().size());
+    }
 }

@@ -9,6 +9,7 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.model.CommitHistory;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -473,6 +474,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         awaitForSomeLoopCycles(1);
     }
 
+    protected abstract PCModule getModule();
+
     protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
         pauseControlLoop();
         awaitLatch(latch);
@@ -488,4 +491,5 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
                 .about(LongPollingMockConsumerSubject.<String, String>mockConsumers())
                 .that(consumerSpy);
     }
+
 }

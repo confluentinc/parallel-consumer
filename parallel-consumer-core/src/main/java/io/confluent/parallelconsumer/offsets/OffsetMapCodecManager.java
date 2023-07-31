@@ -7,7 +7,12 @@ package io.confluent.parallelconsumer.offsets;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.InternalRuntimeException;
 import io.confluent.parallelconsumer.internal.PCModule;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Tag;
 import io.confluent.parallelconsumer.state.PartitionState;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -38,6 +43,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  *
  * @author Antony Stubbs
  */
+// metrics: avg time spend encoding, number of times each encoding used
 @Slf4j
 public class OffsetMapCodecManager<K, V> {
 
@@ -62,6 +68,9 @@ public class OffsetMapCodecManager<K, V> {
     public static final Charset CHARSET_TO_USE = UTF_8;
 
     private final PCModule module;
+
+    private Timer offsetEncodingTimer;
+    private final Map<OffsetEncoding, Counter> encodingCounters = new HashMap<>();
 
     private static ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy errorPolicy = ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.FAIL;
 
@@ -106,6 +115,11 @@ public class OffsetMapCodecManager<K, V> {
         if (module != null){
             this.errorPolicy = module.options().getInvalidOffsetMetadataPolicy();
         }
+        initMeters();
+    }
+
+    private void initMeters() {
+        offsetEncodingTimer = PCMetrics.getInstance().getTimerFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_TIME);
     }
 
     /**
@@ -214,7 +228,7 @@ public class OffsetMapCodecManager<K, V> {
         OffsetSimultaneousEncoder simultaneousEncoder = null;
         try {
             simultaneousEncoder = new OffsetSimultaneousEncoder(baseOffsetForPartition, highestSucceeded, incompleteOffsets);
-            simultaneousEncoder.invoke();
+            offsetEncodingTimer.recordCallable(simultaneousEncoder::invoke);
         } catch (Exception e) {
             throw new InternalRuntimeException("Error encoding offsets", e);
         }
@@ -223,14 +237,27 @@ public class OffsetMapCodecManager<K, V> {
         if (forcedCodec.isPresent()) {
             var forcedOffsetEncoding = forcedCodec.get();
             log.debug("Forcing use of {}, for testing", forcedOffsetEncoding);
+            getCounterMeterForEncoding(forcedOffsetEncoding).increment();
+
             Map<OffsetEncoding, byte[]> encodingMap = simultaneousEncoder.getEncodingMap();
             byte[] bytes = encodingMap.get(forcedOffsetEncoding);
             if (bytes == null)
                 throw new NoEncodingPossibleException(msg("Can't force an encoding that hasn't been run: {}", forcedOffsetEncoding));
             return simultaneousEncoder.packEncoding(new EncodedOffsetPair(forcedOffsetEncoding, ByteBuffer.wrap(bytes)));
         } else {
+            getCounterMeterForEncoding(simultaneousEncoder.sortedEncodings.first().getEncoding()).increment();
             return simultaneousEncoder.packSmallest();
         }
+    }
+
+    private Counter getCounterMeterForEncoding(OffsetEncoding encoding) {
+        Counter counter = encodingCounters.get(encoding);
+        if (counter == null) {
+            counter = PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_USAGE,
+                    Tag.of("encoding", encoding.name()));
+            encodingCounters.put(encoding, counter);
+        }
+        return counter;
     }
 
     /**

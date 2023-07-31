@@ -1,0 +1,19 @@
+#
+# Copyright (C) 2020-2023 Confluent, Inc.
+#
+
+global:
+  scrape_interval: 1s
+  scrape_timeout: 1s
+
+scrape_configs:
+  - job_name: services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - 'localhost:9090'
+  - job_name: 'pc'
+    metrics_path: '/prometheus'
+    static_configs:
+      - targets:
+          - 'host.testcontainers.internal:7001'

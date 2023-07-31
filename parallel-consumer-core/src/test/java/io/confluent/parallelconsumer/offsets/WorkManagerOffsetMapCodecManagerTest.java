@@ -75,7 +75,7 @@ class WorkManagerOffsetMapCodecManagerTest {
      */
     long highestSucceeded = 4;
 
-    PartitionState<String, String> state = new PartitionState<>(0, module, tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
+    PartitionState<String, String> state;
 
     @Mock
     ConsumerRecord<String, String> mockCr;
@@ -121,6 +121,7 @@ class WorkManagerOffsetMapCodecManagerTest {
                 .consumer(mockConsumer)
                 .build();
         module = new PCModuleTestEnv(options);
+        state = new PartitionState<>(0, module, tp, new OffsetMapCodecManager.HighestOffsetAndIncompletes(of(highestSucceeded), incompleteOffsets));
         wm = module.workManager();
         wm.onPartitionsAssigned(UniLists.of(tp));
         offsetCodecManager = new OffsetMapCodecManager<>(module);

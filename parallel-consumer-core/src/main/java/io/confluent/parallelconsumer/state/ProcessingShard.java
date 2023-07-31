@@ -26,6 +26,7 @@ import static lombok.AccessLevel.PRIVATE;
  * Models the queue of work to be processed, based on the {@link ProcessingOrder} modes.
  *
  * @author Antony Stubbs
+ * @see ShardManager
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -159,8 +160,11 @@ public class ProcessingShard<K, V> {
         Duration timeInFlight = workContainer.getTimeInFlight();
         Duration slowThreshold = options.getThresholdForTimeSpendInQueueWarning();
         if (isGreaterThan(timeInFlight, slowThreshold)) {
+            if (!slowWork.contains(workContainer)) {
+                pm.incrementSlowWorkCounter(workContainer.getTopicPartition());
+            }
             slowWork.add(workContainer);
-            if (log.isTraceEnabled()){
+            if (log.isTraceEnabled()) {
                 log.trace("Work has spent over " + slowThreshold + " in queue! " + cantTakeAsWorkMsg(workContainer, timeInFlight));
             }
         } else {
@@ -178,5 +182,4 @@ public class ProcessingShard<K, V> {
     private boolean isOrderRestricted() {
         return options.getOrdering() != UNORDERED;
     }
-
 }

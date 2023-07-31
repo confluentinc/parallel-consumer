@@ -496,7 +496,7 @@ This is the only thing you need to do, in order to get massively concurrent proc
                 log.info("Concurrently processing a record: {}", record)
         );
 
-See the link:./parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[core example] project, and it's test.
+See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[core example] project, and it's test.
 
 ==== Process and Produce a Response Message
 
@@ -1017,6 +1017,187 @@ For a code example, see the <<streams-usage-code>> section.
 
 .Example usage with Kafka Streams
 image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage,align="center"]
+[[mertics]]
+== Metrics
+
+Metrics collection subsystem is implemented using Micrometer. This allows for flexible configuration of target metrics backend to be used. See below on example of how to configure MeterRegistry for Parallel Consumer to use for metrics collection.
+
+=== Meters
+Following meters are defined by Parallel Consumer - grouped by Subsystem
+
+
+==== Partition Manager
+
+**Number Of Partitions**
+
+Gauge `pc.partitions.number{subsystem=partitions}`
+
+Number of partitions
+
+**Partition Incomplete Offsets**
+
+Gauge `pc.partition.incomplete.offsets{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Number of incomplete offsets in the partition
+
+**Partition Highest Completed Offset**
+
+Gauge `pc.partition.highest.completed.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Highest completed offset in the partition
+
+**Partition Highest Sequential Succeeded Offset**
+
+Gauge `pc.partition.highest.sequential.succeeded.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Highest sequential succeeded offset in the partition
+
+**Partition Highest Seen Offset**
+
+Gauge `pc.partition.highest.seen.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Highest seen / consumed offset in the partition
+
+**Partition Last Committed Offset**
+
+Gauge `pc.partition.latest.committed.offset{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Latest committed offset in the partition
+
+**Partition Assignment Epoch**
+
+Gauge `pc.partition.assignment.epoch{subsystem=partitions, topic="topicName", partition="partitionNumber"}`
+
+Epoch of partition assignment
+
+==== Processor
+
+**User Function Processing Time**
+
+Timer `pc.user.function.processing.time{subsystem=processor}`
+
+User function processing time
+
+**Dynamic Extra Load Factor**
+
+Gauge `pc.dynamic.load.factor{subsystem=processor}`
+
+Dynamic load factor - load of processing buffers
+
+**Pc Status**
+
+Gauge `pc.status{subsystem=processor}`
+
+PC Status, reported as number with following mapping - 0:UNUSED, 1:RUNNING, 2:PAUSED, 3:DRAINING, 4:CLOSING, 5:CLOSED
+
+==== Shard Manager
+
+**Number Of Shards**
+
+Gauge `pc.shards{subsystem=shardmanager}`
+
+Number of shards
+
+**Incomplete Offsets Total**
+
+Gauge `pc.incomplete.offsets.total{subsystem=shardmanager}`
+
+Total number of incomplete offsets
+
+**Shards Size**
+
+Gauge `pc.shards.size{subsystem=shardmanager}`
+
+Number of records queued for processing across all shards
+
+==== Work Manager
+
+**Inflight Records**
+
+Gauge `pc.inflight.records{subsystem=workmanager}`
+
+Total number of records currently being processed or waiting for retry
+
+**Waiting Records**
+
+Gauge `pc.waiting.records{subsystem=workmanager}`
+
+Total number of records waiting to be selected for processing
+
+**Processed Records**
+
+Counter `pc.processed.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
+
+Total number of records successfully processed
+
+**Failed Records**
+
+Counter `pc.failed.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
+
+Total number of records failed to be processed
+
+**Slow Records**
+
+Counter `pc.slow.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
+
+Total number of records that spent more than the configured time threshold in the waiting queue. This setting defaults to 10 seconds
+
+==== Broker Poller
+
+**Pc Poller Status**
+
+Gauge `pc.poller.status{subsystem=poller}`
+
+PC Broker Poller Status, reported as number with following mapping - 0:UNUSED, 1:RUNNING, 2:PAUSED, 3:DRAINING, 4:CLOSING, 5:CLOSED
+
+**Num Paused Partitions**
+
+Gauge `pc.partitions.paused{subsystem=poller}`
+
+Number of paused partitions
+
+==== Offset Encoder
+
+**Offsets Encoding Time**
+
+Timer `pc.offsets.encoding.time{subsystem=offsetencoder}`
+
+Time spend encoding offsets
+
+**Offsets Encoding Usage**
+
+Counter `pc.offsets.encoding.usage{subsystem=offsetencoder, codec="BitSet|BitSetCompressed|BitSetV2Compressed|RunLength"}`
+
+Offset encoding usage per encoding type
+
+**Metadata Space Used**
+
+Distribution Summary `pc.metadata.space.used{subsystem=offsetencoder}`
+
+Ratio between offset metadata payload size and available space
+
+**Payload Ratio Used**
+
+Distribution Summary `pc.payload.ratio.used{subsystem=offsetencoder}`
+
+Ratio between offset metadata payload size and offsets encoded
+
+=== Example Metrics setup steps
+Meter registry that metrics should be bound has to be set using Parallel Consumer Options along with any common tags that identify the PC instance.
+In addition, if desired - Kafka Consumer, Producer can be bound to the registry as well as general JVM metric, logging system and other common binders.
+
+Following example illustrates setup of Parallel Consumer with Meter Registry and binds Kafka Consumer to that same registry as well.
+
+[source,java,indent=0]
+----
+----
+<1> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
+<2> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
+<3> - Meter Registry is set through ParallelConsumerOptions.builder(), if not specified - will default to CompositeMeterRegistry - which is No-op.
+<4> - Optional - "instance" tag with value of "pc1" is set through same builder - it will be added to all Parallel Consumer meters
+
+NOTE:: any additional binders / metrics need to be cleaned up appropriately - for example the Kafka Consumer Metrics registered above - need to be closed using `kafkaClientMetrics.close()` after calling shutting down Parallel Consumer as Parallel Consumer will close Kafka Consumer on shutdown.
+
 
 [[roadmap]]
 == Roadmap
@@ -1313,11 +1494,20 @@ toc::[]
 endif::[]
 
 == 0.5.2.6
+=== Improvements
+
+* feature: Micrometer metrics (#594)
 
 === Fixes
 
+* fix: Drain mode shutdown doesn't pause consumption correctly (#552)
 * fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
 * fix: Transactional PConsumer stuck while rebalancing - related to (#541)
+
+=== Dependencies
+
+* PL-211: Update dependencies from dependabot, Add mvnw, use mvnw in jenkins (#583)
+* PL-211: Update dependencies from dependabot (#589)
 
 == 0.5.2.5
 

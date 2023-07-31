@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.offsets;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.MathUtils;
@@ -104,6 +104,7 @@ public class RunLengthEncoder extends OffsetEncoder {
 
         byte[] array = runLengthEncodedByteBuffer.array();
         encodedBytes = Optional.of(array);
+
         return array;
     }
 

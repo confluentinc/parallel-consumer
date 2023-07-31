@@ -6,6 +6,11 @@ package io.confluent.parallelconsumer.state;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.*;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
@@ -58,19 +63,26 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     @Getter
     private int numberRecordsOutForProcessing = 0;
-
+    private PCModule<K, V> module;
     /**
      * Useful for testing
      */
     @Getter(PUBLIC)
     private final List<Consumer<WorkContainer<K, V>>> successfulWorkListeners = new ArrayList<>();
 
+    private Gauge waitingRecordsNumberGauge;
+    private Gauge inflightRecordsNumberGauge;
+    private Map<TopicPartition, Counter> succeededRecordsCounters = new HashMap<>();
+    private Map<TopicPartition, Counter> failedRecordsCounters = new HashMap<>();
+
     public WorkManager(PCModule<K, V> module,
                        DynamicLoadFactor dynamicExtraLoadFactor) {
+        this.module = module;
         this.options = module.options();
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(module, this);
         this.pm = new PartitionStateManager<>(module, sm);
+        initMetrics();
     }
 
     /**
@@ -79,6 +91,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     @Override
     public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
         pm.onPartitionsAssigned(partitions);
+        initTopicPartitionSpecificMetrics(partitions);
     }
 
     /**
@@ -104,7 +117,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     void onPartitionsRemoved(final Collection<TopicPartition> partitions) {
-        // no-op - nothing to do
+        deregisterTopicPartitionSpecificMetrics(partitions);
     }
 
     public void registerWork(EpochAndRecordsMap<K, V> records) {
@@ -145,6 +158,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public void onSuccessResult(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
 
+        incrementCounterIfPresent(succeededRecordsCounters, wc.getTopicPartition());
+
         wc.endFlight();
 
         // update as we go
@@ -168,6 +183,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void onFailureResult(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
+        incrementCounterIfPresent(failedRecordsCounters, wc.getTopicPartition());
         wc.endFlight();
         pm.onFailure(wc);
         sm.onFailure(wc);
@@ -274,5 +290,44 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isDirty() {
         return pm.isDirty();
+    }
+
+    private void initMetrics() {
+        waitingRecordsNumberGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.WAITING_RECORDS,
+                this, WorkManager::getNumberOfWorkQueuedInShardsAwaitingSelection);
+        inflightRecordsNumberGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.INFLIGHT_RECORDS,
+                this, WorkManager::getNumberRecordsOutForProcessing);
+    }
+
+    private void initTopicPartitionSpecificMetrics(Collection<TopicPartition> partitions) {
+        partitions.forEach(topicPartition -> {
+            if (!succeededRecordsCounters.containsKey(topicPartition)) {
+                succeededRecordsCounters.put(topicPartition, PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.PROCESSED_RECORDS, getWorkManagerCounterTags(topicPartition)));
+            }
+            if (!failedRecordsCounters.containsKey(topicPartition)) {
+                failedRecordsCounters.put(topicPartition, PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.FAILED_RECORDS, getWorkManagerCounterTags(topicPartition)));
+            }
+        });
+    }
+
+    private void incrementCounterIfPresent(Map<TopicPartition, Counter> counterMap, TopicPartition topicPartition) {
+        Optional.ofNullable(counterMap.get(topicPartition)).ifPresent(Counter::increment);
+    }
+
+    private Tag[] getWorkManagerCounterTags(TopicPartition topicPartition) {
+        return new Tag[]{Tag.of("topic", topicPartition.topic()), Tag.of("partition", String.valueOf(topicPartition.partition()))};
+    }
+
+    private void deregisterTopicPartitionSpecificMetrics(Collection<TopicPartition> partitions) {
+        partitions.forEach(topicPartition -> {
+            Counter counter = succeededRecordsCounters.remove(topicPartition);
+            if (counter != null) {
+                PCMetrics.removeMeter(counter);
+            }
+            counter = failedRecordsCounters.remove(topicPartition);
+            if (counter != null) {
+                PCMetrics.removeMeter(counter);
+            }
+        });
     }
 }

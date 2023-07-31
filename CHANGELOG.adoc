@@ -15,9 +15,13 @@ toc::[]
 endif::[]
 
 == 0.5.2.6
+=== Improvements
+
+* feature: Micrometer metrics (#594)
 
 === Fixes
 
+* fix: Drain mode shutdown doesn't pause consumption correctly (#552)
 * fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
 * fix: Transactional PConsumer stuck while rebalancing - related to (#541)
 
