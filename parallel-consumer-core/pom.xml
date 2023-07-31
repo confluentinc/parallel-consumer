@@ -143,7 +143,6 @@
                         <class>io.confluent.parallelconsumer.state.ProcessingShard</class>
                         <class>io.confluent.parallelconsumer.state.ShardKey</class>
                         <class>io.confluent.parallelconsumer.offsets.OffsetEncoding</class>
-                        <class>io.confluent.parallelconsumer.Offsets</class>
                     </classes>
                     <legacyClasses>
                         <!-- todo check legacy is recursive -->
