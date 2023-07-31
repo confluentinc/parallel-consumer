@@ -90,6 +90,7 @@ public class CoreApp {
     }
 
     @SuppressWarnings({"FeatureEnvy", "MagicNumber" })
+    // tag::example[]
     ParallelStreamProcessor<String, String> setupParallelConsumer() {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
 
@@ -110,6 +111,7 @@ public class CoreApp {
         kafkaClientMetrics.bindTo(meterRegistry);                 //<4>
         return eosStreamProcessor;
     }
+    // end::example[]
 
     void close() {
         this.kafkaClientMetrics.close();
