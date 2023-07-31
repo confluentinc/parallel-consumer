@@ -17,7 +17,7 @@ endif::[]
 == 0.5.2.6
 === Improvements
 
-* feature: Micrometer metrics
+* feature: Micrometer metrics (#594)
 
 === Fixes
 
