@@ -1190,6 +1190,26 @@ Following example illustrates setup of Parallel Consumer with Meter Registry and
 
 [source,java,indent=0]
 ----
+    ParallelStreamProcessor<String, String> setupParallelConsumer() {
+        Consumer<String, String> kafkaConsumer = getKafkaConsumer();
+
+        var options = ParallelConsumerOptions.<String, String>builder()
+                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
+                .maxConcurrency(1000)
+                .consumer(kafkaConsumer)
+                .meterRegistry(meterRegistry)                     //<1>
+                .metricsTags(Tags.of(Tag.of("instance", "pc1")))    //<2>
+                .build();
+
+        ParallelStreamProcessor<String, String> eosStreamProcessor =
+                ParallelStreamProcessor.createEosStreamProcessor(options);
+
+        eosStreamProcessor.subscribe(of(inputTopic));
+
+        kafkaClientMetrics = new KafkaClientMetrics(kafkaConsumer); //<3>
+        kafkaClientMetrics.bindTo(meterRegistry);                 //<4>
+        return eosStreamProcessor;
+    }
 ----
 <1> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
 <2> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.

@@ -15,11 +15,11 @@ import java.util.function.ToDoubleFunction;
 
 import static java.util.Collections.emptyList;
 
-@Slf4j
 /**
  * Main metrics collection and initialization service.
  * Singleton - makes it easier to add metrics throughout the code
  */
+@Slf4j
 public class PCMetrics {
     private static PCMetrics instance;
 
