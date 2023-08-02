@@ -31,10 +31,12 @@ import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -101,8 +103,8 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
     }
 
     static Stream<Arguments> commitTimeoutParams() {
-        return Stream.of(Arguments.of(SMALL_TIMEOUT_MULTIPLIER, OFFSET_TO_ERROR, List.of(OFFSET_TO_ERROR)),
-                Arguments.of(LONG_TIMEOUT_MULTIPLIER, OFFSET_TO_GO_SLOW, List.of(OFFSET_TO_GO_SLOW, OFFSET_TO_ERROR)));
+        return Stream.of(Arguments.of(SMALL_TIMEOUT_MULTIPLIER, OFFSET_TO_ERROR, listOf(OFFSET_TO_ERROR)),
+                Arguments.of(LONG_TIMEOUT_MULTIPLIER, OFFSET_TO_GO_SLOW, listOf(OFFSET_TO_GO_SLOW, OFFSET_TO_ERROR)));
     }
 
     /**
@@ -275,6 +277,10 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
         // assert output topic
         assertConsumer.assertConsumedAtLeastOffset(OUTPUT_TOPIC, NUMBER_TO_SEND + EXTRA_TO_SEND); // happy path after retry, all records committed and read ok
+    }
+
+    static List<Integer> listOf (int... ints){
+        return Arrays.stream(ints).boxed().collect(Collectors.toList());
     }
 
 }
