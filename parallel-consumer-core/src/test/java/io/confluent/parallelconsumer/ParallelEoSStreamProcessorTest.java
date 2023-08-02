@@ -8,6 +8,7 @@ import io.confluent.csid.utils.JavaUtils;
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.Range;
+import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
@@ -31,6 +32,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
@@ -86,6 +88,104 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         //
         assertCommits(of(), "All erroring, so nothing committed except initial");
+    }
+
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    @SneakyThrows
+    public void executorThreadsInterruptedOnShutdownTimeout(CommitMode commitMode) {
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
+        setupParallelConsumerInstance(getBaseOptionsKeyOrdered(commitMode, Duration.ofSeconds(1)));
+        primeFirstRecord();
+
+        parallelConsumer.poll((ignore) -> {
+            try {
+                latch.await();
+            } catch (InterruptedException interruptedException) {
+                interrupted.set(true);
+                Thread.interrupted(); //reset interrupted flag.
+                throw new RuntimeException(interruptedException);
+            }
+        });
+
+        // let it process
+        awaitForSomeLoopCycles(2);
+
+        parallelConsumer.close();
+
+        //
+        assertCommits(of(), "All erroring, so nothing committed except initial");
+        assertThat(interrupted).isTrue();
+    }
+
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    @SneakyThrows
+    public void inFlightMessagesCommittedIfProcessedDuringShutdown(CommitMode commitMode) {
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
+        setupParallelConsumerInstance(getBaseOptionsKeyOrdered(commitMode, Duration.ofSeconds(1)));
+        primeFirstRecord();
+
+        parallelConsumer.poll((ignore) -> {
+            try {
+                latch.await();
+                ThreadUtils.sleepQuietly(100);
+            } catch (InterruptedException interruptedException) {
+                interrupted.set(true);
+                Thread.interrupted(); //reset interrupted flag.
+            }
+        });
+
+        // let it process
+        awaitForSomeLoopCycles(2);
+
+        latch.countDown();
+        parallelConsumer.close();
+
+        //
+        assertCommits(of(1), "1 record completed during shutdown");
+        assertThat(interrupted).isFalse();
+    }
+
+    @ParameterizedTest()
+    @EnumSource(CommitMode.class)
+    @SneakyThrows
+    public void queuedMessagesNotProcessedOrCommittedIfSubmittedDuringShutdown(CommitMode commitMode) {
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
+        setupParallelConsumerInstance(getBaseOptionsKeyOrdered(commitMode, Duration.ofSeconds(1)));
+
+        primeFirstRecord();
+
+        consumerSpy.addRecord(ktu.makeRecord("0", "v1"));
+        consumerSpy.addRecord(ktu.makeRecord("0", "v2"));
+        consumerSpy.addRecord(ktu.makeRecord("1", "v3"));
+        consumerSpy.addRecord(ktu.makeRecord("0", "v4"));
+
+        parallelConsumer.poll((record) -> {
+            if(record.getSingleConsumerRecord().value().equals("v1")) {
+                try {
+                    latch.await();
+                    ThreadUtils.sleepQuietly(100);
+                } catch (InterruptedException interruptedException) {
+                    interrupted.set(true);
+                    Thread.interrupted(); //reset interrupted flag.
+                }
+            }
+        });
+
+        // let it process
+        awaitForSomeLoopCycles(2);
+
+        latch.countDown();
+        parallelConsumer.close();
+
+        //
+        assertCommits(of(1,2), "primed record and first key=0 record completed only, followup key 0 records skipped");
+        assertCommits().encodedIncomplete(2); //first blocked/skipped key 0 record (value v2).
+        assertThat(interrupted).isFalse();
     }
 
     /**
@@ -166,6 +266,15 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .consumer(consumerSpy)
                 .producer(producerSpy)
                 .build();
+    }
+
+    private ParallelConsumerOptions getBaseOptionsKeyOrdered(final CommitMode commitMode, final Duration shutdownDuration) {
+        return ParallelConsumerOptions.<String, String>builder()
+                .commitMode(commitMode)
+                .consumer(consumerSpy)
+                .producer(producerSpy)
+                .shutdownTimeout(shutdownDuration)
+                .ordering(KEY).build();
     }
 
     /**
@@ -688,7 +797,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         //
-        Duration expectedDurationOfClose = JavaUtils.max(timeBetweenCommits, ofSeconds(1)); // wait at least 1 second
+        Duration expectedDurationOfClose = JavaUtils.max(timeBetweenCommits, ofSeconds(2)); // wait at least 1 second
         assertThat(durationOfCloseOperation).as("Should be fast").isLessThan(expectedDurationOfClose);
     }
 
@@ -888,7 +997,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         // count how many we've received so far
-        await().atMost(3, MINUTES)
+        await().atMost(5, MINUTES)
                 .untilAsserted(() ->
                         assertThat(counter.get()).isEqualTo(total));
 

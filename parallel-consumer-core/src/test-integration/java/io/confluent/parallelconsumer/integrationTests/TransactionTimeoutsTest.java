@@ -24,14 +24,18 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
@@ -52,9 +56,16 @@ import static pl.tlinkowski.unij.api.UniLists.of;
 @Slf4j
 class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
 
-    public static final int NUMBER_TO_SEND = 5;
+    private static final int NUMBER_TO_SEND = 5;
 
-    public static final int SMALL_TIMEOUT = 2;
+    private static final int SMALL_TIMEOUT_MULTIPLIER = 2;
+    private static final int LONG_TIMEOUT_MULTIPLIER = 50;
+
+    private static final int OFFSET_TO_ERROR = 12;
+
+    // allow the first offsets to succeed, which we can test
+    private static final int OFFSET_TO_GO_SLOW = NUMBER_TO_SEND + 3;
+
 
     private ParallelEoSStreamProcessor<String, String> pc;
 
@@ -89,6 +100,11 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
                 .allowEagerProcessingDuringTransactionCommit(true);
     }
 
+    static Stream<Arguments> commitTimeoutParams() {
+        return Stream.of(Arguments.of(SMALL_TIMEOUT_MULTIPLIER, OFFSET_TO_ERROR, List.of(OFFSET_TO_ERROR)),
+                Arguments.of(LONG_TIMEOUT_MULTIPLIER, OFFSET_TO_GO_SLOW, List.of(OFFSET_TO_GO_SLOW, OFFSET_TO_ERROR)));
+    }
+
     /**
      * Tests what happens with the commit stage times out.
      * <p>
@@ -103,45 +119,42 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
      * <p>
      * 50: triggers a timeout with a much longer deadlock
      *
-     * @param multiple Multiple values - but affect is the same. It's not worth trying to artifically create a scneario
+     * @param multiple Multiple values - but affect is the same. It's not worth trying to artificially create a scenario
      *                 where the sleep wakes up /after/ the commit lock has timed out - this would affectively be a semi
      *                 happy path, where the result record is produced, in time for the shutdown commit, or times out
      *                 the shutdown commit as well and so the transaction doesn't get committed and will eventually
      *                 abort:
      *                 <p>
-     *                 Small value: triggers a timeout, but gets committed in the shutdown commit, with the incomplete
-     *                 offsets correct - as the sleep gets interrupted by the shutdown process (and so result record
-     *                 never produced), marked as failed and committed as such.
+     *                 Small value: triggers a timeout, but gets committed in the shutdown commit, since sleep is
+     *                 shorter than shutdown timeout - result record is produced and committed as completed.
      *                 <p>
-     *                 Large value: same as the small version, as the sleep is also interrupted.
+     *                 Large value: same as the small version, but since sleep is longer than the shutdown timeout -
+     *                 sleep gets interrupted and committed as incomplete - result record never produced, marked as
+     *                 failed and committed as such.
      */
     @SneakyThrows
     @ParameterizedTest()
-    @ValueSource(ints = {
-            SMALL_TIMEOUT,
-            50
-    })
-    void commitTimeout(int multiple) {
+    @MethodSource("commitTimeoutParams")
+    void commitTimeout(int multiple, int expectedHighestSucceededCommittedOffset, List<Integer> expectedIncompletes) {
         var options = createOptions()
+                .shutdownTimeout(Duration.ofSeconds(5))
                 .allowEagerProcessingDuringTransactionCommit(false)
                 .build();
         setup(new PCModule<>(options));
 
-        // allow the first offsets to succeed, which we can test
-        final int offsetToGoVerySlow = NUMBER_TO_SEND + 3;
+
 
         String outputTopic = getTopic() + "-output";
-        int offsetToError = 12;
 
         pc.pollAndProduce(recordContexts -> {
             log.debug("Processing {}", recordContexts.offset());
             long offset = recordContexts.offset();
-            if (offset == offsetToGoVerySlow) {
+            if (offset == OFFSET_TO_GO_SLOW) {
                 // triggers deadlock as controller can't acquire commit lock fast enough due to this sleeping thread
-                log.debug("Processing offset {} - simulating a long processing phase with timeout multiple {}", offsetToGoVerySlow, multiple);
+                log.debug("Processing offset {} - simulating a long processing phase with timeout multiple {}", OFFSET_TO_GO_SLOW, multiple);
                 ThreadUtils.sleepQuietly(1000 * multiple);
-                log.debug("Processing offset {} - simulating a long processing phase COMPLETE", offsetToGoVerySlow);
-            } else if (offset == offsetToError) {
+                log.debug("Processing offset {} - simulating a long processing phase COMPLETE", OFFSET_TO_GO_SLOW);
+            } else if (offset == OFFSET_TO_ERROR) {
                 throw new FakeRuntimeException("fail");
             }
             return new ProducerRecord<>(outputTopic, "output-value,source-offset: " + offset);
@@ -157,16 +170,19 @@ class TransactionTimeoutsTest extends BrokerIntegrationTest<String, String> {
         pc.requestCommitAsap();
 
         // wait until pc dies from commit timeout
-        await().untilAsserted(() -> assertThat(pc).isClosedOrFailed());
+        await().atMost(Duration.ofSeconds(35)).untilAsserted(() -> assertThat(pc).isClosedOrFailed());
         assertThat(pc).getFailureCause().hasMessageThat().contains("timeout");
 
         // check what was committed at shutdown to the input topic, re-using same group id as PC, to access what was committed at shutdown commit attempt
         // 2nd commit attempt during shutdown will have succeeded
         var newConsumer = getKcu().createNewConsumer(originalGroupId);
+
         var assertCommittedToPartition = assertThat(newConsumer).hasCommittedToPartition(getTopic(), partitionNumber);
 
-        assertCommittedToPartition.offset(offsetToGoVerySlow);
-        assertCommittedToPartition.encodedIncomplete(offsetToGoVerySlow, offsetToError);
+        assertCommittedToPartition.offset(expectedHighestSucceededCommittedOffset);
+        //Check that incompletes match expected - either just failed offset (for case where processing finishes during shutdown timeout)
+        // or both offsetToError and offsetToGoVerySlow for case when sleep is longer than shutdown timeout and processing is interrupted by forced thread shutdown.
+        assertCommittedToPartition.encodedIncomplete(expectedIncompletes.stream().mapToInt(x->x).toArray());
     }
 
     /**

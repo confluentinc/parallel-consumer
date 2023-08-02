@@ -41,6 +41,7 @@ import static io.confluent.parallelconsumer.ManagedTruth.assertWithMessage;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static io.confluent.parallelconsumer.internal.ProducerWrapper.ProducerState.*;
 import static java.time.Duration.ofSeconds;
+import static java.util.Collections.emptyList;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -81,8 +82,6 @@ class ProducerManagerTest {
     private void setup(ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> optionsBuilder) {
         opts = optionsBuilder.build();
 
-        buildModule(opts);
-
         module = buildModule(opts);
 
         mu = new ModelUtils(module);
@@ -105,7 +104,7 @@ class ProducerManagerTest {
                         }
 
                         @Override
-                        public void close(final Duration timeout, final DrainingMode drainMode) {
+                        public void close() {
                         }
                     };
                 }
