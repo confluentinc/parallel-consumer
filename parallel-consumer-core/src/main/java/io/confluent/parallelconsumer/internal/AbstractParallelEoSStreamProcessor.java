@@ -730,12 +730,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     controlLoop(userFunctionWrapped, callback);
                 } catch (InterruptedException e) {
                     log.debug("Control loop interrupted, closing");
-                 //   Thread.interrupted(); //clear interrupted flag as during close need to acquire commit locks and interrupted flag will cause it to throw another interrupted exception.
+                    Thread.interrupted(); //clear interrupted flag as during close need to acquire commit locks and interrupted flag will cause it to throw another interrupted exception.
                     doClose(shutdownTimeout);
                 } catch (Exception e) {
-                 //   if (Thread.interrupted()) { //clear interrupted flag
-                 //       log.debug("Thread interrupted flag cleared in control loop error handling");
-                 //   }
+                    if (Thread.interrupted()) { //clear interrupted flag
+                        log.debug("Thread interrupted flag cleared in control loop error handling");
+                    }
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
                     doClose(shutdownTimeout); // attempt to close
