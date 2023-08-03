@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.metrics.PCMetrics;
 import io.confluent.parallelconsumer.metrics.PCMetricsDef;
-import io.micrometer.core.instrument.Tag;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Gauge;
 import lombok.Getter;
@@ -27,6 +26,7 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.DEFAULT_TIMEOUT;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -179,7 +179,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private void maybeCloseConsumerManager() {
         if (isResponsibleForCommits()) {
             log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
-            this.consumerManager.close(DrainingCloseable.DEFAULT_TIMEOUT);
+            this.consumerManager.close(DEFAULT_TIMEOUT);
             log.debug("Consumer closed.");
         }
     }
@@ -271,7 +271,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             boolean interrupted = true;
             while (interrupted) {
                 try {
-                    Boolean pollShutdownSuccess = pollControlResult.get(DrainingCloseable.DEFAULT_TIMEOUT.toMillis(), MILLISECONDS);
+                    Boolean pollShutdownSuccess = pollControlResult.get(DEFAULT_TIMEOUT.toMillis(), MILLISECONDS);
                     interrupted = false;
                     if (!pollShutdownSuccess) {
                         log.warn("Broker poll control thread not closed cleanly.");

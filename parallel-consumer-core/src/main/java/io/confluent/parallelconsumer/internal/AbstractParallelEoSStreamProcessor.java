@@ -12,7 +12,6 @@ import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +33,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -65,6 +63,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * user function.
      */
     private static final String MDC_WORK_CONTAINER_DESCRIPTOR = "offset";
+
+    /**
+     * Timeout used by various subsystems(BrokerPoller, Consumer) during shut down.
+     */
+    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
+
+    public static final Duration GRACE_PERIOD_FOR_OVERALL_SHUTDOWN = Duration.ofSeconds(10);
+
 
     @Getter(PROTECTED)
     protected final ParallelConsumerOptions<K, V> options;
@@ -250,6 +256,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Gauge loadFactorGauge;
     private Gauge statusGauge;
 
+    private Duration shutdownTimeout;
+
+    private Duration drainTimeout;
+
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
     }
@@ -264,6 +274,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Objects.requireNonNull(newOptions, "Options must be supplied");
         this.module = module;
         options = newOptions;
+        this.shutdownTimeout = options.getShutdownTimeout();
+        this.drainTimeout = options.getDrainTimeout();
         this.consumer = options.getConsumer();
 
         validateConfiguration();
@@ -495,14 +507,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Override
     public void close() {
-        // use a longer timeout, to cover for evey other step using the default
-        Duration timeout = DrainingCloseable.DEFAULT_TIMEOUT.multipliedBy(2);
-        closeDontDrainFirst(timeout);
+        closeDontDrainFirst();
+    }
+
+    @Override
+    public void close(Duration timeout, DrainingMode drainMode) {
+        shutdownTimeout = timeout;
+        close(drainMode);
     }
 
     @Override
     @SneakyThrows
-    public void close(Duration timeout, DrainingMode drainMode) {
+    public void close(DrainingMode drainMode) {
         if (state == CLOSED) {
             log.info("Already closed, checking end state..");
         } else {
@@ -512,20 +528,21 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 case DRAIN -> {
                     log.info("Will wait for all in flight to complete before");
                     transitionToDraining();
+                    waitForClose(drainTimeout.plus(shutdownTimeout).plus(GRACE_PERIOD_FOR_OVERALL_SHUTDOWN));
+
                 }
                 case DONT_DRAIN -> {
                     log.info("Not waiting for remaining queued to complete, will finish in flight, then close...");
                     transitionToClosing();
+                    waitForClose(shutdownTimeout.plus(GRACE_PERIOD_FOR_OVERALL_SHUTDOWN));
                 }
             }
-
-            waitForClose(timeout);
         }
 
         if (controlThreadFuture.isPresent()) {
             log.debug("Checking for control thread exception...");
             Future<?> future = controlThreadFuture.get();
-            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
+            future.get(shutdownTimeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
         }
 
         log.info("Close complete.");
@@ -536,7 +553,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         while (!state.equals(CLOSED)) {
             try {
                 Future<Boolean> booleanFuture = this.controlThreadFuture.get();
-                log.debug("Blocking on control future");
+                log.debug("Blocking on control future, for duration {} seconds", toSeconds(timeout));
                 boolean signaled = booleanFuture.get(toSeconds(timeout), SECONDS);
                 if (!signaled)
                     throw new TimeoutException("Timeout waiting for system to close (" + timeout + ")");
@@ -556,26 +573,40 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
+        // Drain and pause polling - keeps consumer alive for later commit, but paused
+        // drained messages will be sent to retry queue and not actually processed.
+        brokerPollSubsystem.drain();
+
         log.debug("Shutting down execution pool...");
-        List<Runnable> unfinished = workerThreadPool.get().shutdownNow();
-        if (!unfinished.isEmpty()) {
-            log.warn("Threads not done count: {}", unfinished.size());
+        //Clear scheduled but not started work in execution pool
+        workerThreadPool.get().getQueue().clear();
+        //request graceful shutdown
+        workerThreadPool.get().shutdown();
+        if (workerThreadPool.get().getActiveCount() > 0) {
+            log.info("Inflight work in execution pool: {}, letting to finish on shutdown with timeout: {}", workerThreadPool.get().getActiveCount(), timeout);
         }
 
         log.debug("Awaiting worker pool termination...");
-        boolean interrupted = true;
-        while (interrupted) {
-            log.debug("Still interrupted");
+        boolean awaitingInflightCompletion = true;
+        while (awaitingInflightCompletion) {
+            log.debug("Still awaiting completion of inflight work");
             try {
                 boolean terminationFinishedWithoutTimeout = workerThreadPool.get().awaitTermination(toSeconds(timeout), SECONDS);
-                interrupted = false;
+                awaitingInflightCompletion = false;
                 if (!terminationFinishedWithoutTimeout) {
-                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck?", timeout);
+                    log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked (test latch locks?) or otherwise stuck? Forcing shutdown of workers.", timeout);
+                    //Requesting threads shutdown immediately - inflight threads will be interrupted at this point.
+                    workerThreadPool.get().shutdownNow();
+                    //Give a second for any interrupt handling / resource cleanup in user functions
+                    workerThreadPool.get().awaitTermination(toSeconds(Duration.ofSeconds(1)), SECONDS);
                 }
             } catch (InterruptedException e) {
                 log.error("InterruptedException", e);
-                interrupted = true;
+                awaitingInflightCompletion = true;
             }
+        }
+        if (workerThreadPool.get().getActiveCount() > 0) {
+            log.warn("Clean execution pool termination failed - some threads still active despite await and interrupt - is user function swallowing interrupted exception? Threads still not done count: {}", workerThreadPool.get().getActiveCount());
         }
         log.debug("Worker pool terminated.");
 
@@ -583,6 +614,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         processWorkCompleteMailBox(Duration.ZERO);
 
         //
+        if( Thread.currentThread().isInterrupted()) {
+            log.warn("control thread interrupted - may lead to issues with transactional commit lock acquisition");
+        }
         commitOffsetsThatAreReady();
 
         // only close consumer once producer has committed it's offsets (tx'l)
@@ -696,11 +730,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     controlLoop(userFunctionWrapped, callback);
                 } catch (InterruptedException e) {
                     log.debug("Control loop interrupted, closing");
-                    doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+                    Thread.interrupted(); //clear interrupted flag as during close need to acquire commit locks and interrupted flag will cause it to throw another interrupted exception.
+                    doClose(shutdownTimeout);
                 } catch (Exception e) {
+                    if (Thread.interrupted()) { //clear interrupted flag
+                        log.debug("Thread interrupted flag cleared in control loop error handling");
+                    }
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
-                    doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
+                    doClose(shutdownTimeout); // attempt to close
                     throw failureReason;
                 }
             }
@@ -750,7 +788,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 drain();
             }
             case CLOSING -> {
-                doClose(DrainingCloseable.DEFAULT_TIMEOUT);
+                doClose(shutdownTimeout);
             }
         }
 
@@ -844,6 +882,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected <R> void submitWorkToPool(Function<PollContextInternal<K, V>, List<R>> usersFunction,
                                         Consumer<R> callback,
                                         List<WorkContainer<K, V>> workToProcess) {
+        if (state.equals(CLOSING) || state.equals(CLOSED)) {
+            log.debug("Not submitting new work as Parallel Consumer is in {} state, incoming work: {}, Pool stats: {}", state, workToProcess.size(), workerThreadPool.get());
+        }
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool.get());
 

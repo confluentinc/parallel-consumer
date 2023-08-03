@@ -1520,6 +1520,7 @@ endif::[]
 
 === Fixes
 
+* fix: Don't drain mode shutdown kills inflight threads (#559)
 * fix: Drain mode shutdown doesn't pause consumption correctly (#552)
 * fix: RunLength offset decoding returns 0 base offset after no-progress commit - related to (#546)
 * fix: Transactional PConsumer stuck while rebalancing - related to (#541)

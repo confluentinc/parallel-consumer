@@ -477,4 +477,18 @@ public class ParallelConsumerOptions<K, V> {
     public boolean isProducerSupplied() {
         return getProducer() != null;
     }
+
+    /**
+     * Timeout for shutting down execution pool during shutdown in DONT_DRAIN mode. Should be high enough to allow
+     * for inflight messages to finish processing, but low enough to kill any blocked thread to allow to rebalance in a timely manner,
+     * especially if shutting down on error.
+     */
+    @Builder.Default
+    public final Duration shutdownTimeout = Duration.ofSeconds(10);
+
+    /**
+     * Timeout for draining queue during shutdown in DRAIN mode. Should be high enough to allow for all queued messages to process.
+     */
+    @Builder.Default
+    public final Duration drainTimeout = Duration.ofSeconds(30);
 }
