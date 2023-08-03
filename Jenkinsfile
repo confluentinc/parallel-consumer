@@ -25,7 +25,7 @@ def job = {
     if (!params.RELEASE_TAG.trim().equals('')) {
         sh "git checkout ${params.RELEASE_TAG}"
         def project_version = sh(
-                script: '${maven_command} help:evaluate -Dexpression=project.version -q -DforceStdout | tail -1',
+                script: """${maven_command} help:evaluate -Dexpression=project.version -q -DforceStdout | tail -1""",
                 returnStdout: true
         ).trim()
 
