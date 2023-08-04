@@ -18,6 +18,8 @@ endif::[]
 === Improvements
 
 * feature: Micrometer metrics (#594)
+* feature: Adds an option to pass an invalid offset metadata error policy (#537), improves (#326)
+* feature: Lazy intialization of workerThreadPool (#531)
 
 === Fixes
 
