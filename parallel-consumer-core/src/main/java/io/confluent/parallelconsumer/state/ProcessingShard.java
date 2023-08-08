@@ -79,6 +79,8 @@ public class ProcessingShard<K, V> {
     public long getCountOfWorkAwaitingSelection() {
         return entries.values().stream()
                 // todo missing pm.isBlocked(topicPartition) ?
+                // exclude stale workContainers from counting
+                .filter(workContainer -> !pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer))
                 .filter(WorkContainer::isAvailableToTakeAsWork)
                 .count();
     }
@@ -102,6 +104,10 @@ public class ProcessingShard<K, V> {
 
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
+
+        if (removeStaledWorkContainersFromShard()) {
+            log.trace("have staled work containers removed");
+        }
 
         var iterator = entries.entrySet().iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
@@ -181,5 +187,16 @@ public class ProcessingShard<K, V> {
 
     private boolean isOrderRestricted() {
         return options.getOrdering() != UNORDERED;
+    }
+
+    // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:
+    // 1. block the new work containers to be picked and processed
+    // 2. will cause the consumer to paused consuming new messages indefinitely
+    private boolean removeStaledWorkContainersFromShard() {
+        return this.entries.entrySet()
+                .removeIf(entry -> {
+                    WorkContainer<K, V> workContainer = entry.getValue();
+                    return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
+                });
     }
 }
