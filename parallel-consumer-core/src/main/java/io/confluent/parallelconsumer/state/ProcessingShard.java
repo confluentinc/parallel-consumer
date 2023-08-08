@@ -79,6 +79,8 @@ public class ProcessingShard<K, V> {
     public long getCountOfWorkAwaitingSelection() {
         return entries.values().stream()
                 // todo missing pm.isBlocked(topicPartition) ?
+                // exclude stale workContainers from counting
+                .filter(workContainer -> !pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer))
                 .filter(WorkContainer::isAvailableToTakeAsWork)
                 .count();
     }
