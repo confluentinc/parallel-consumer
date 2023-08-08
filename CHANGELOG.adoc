@@ -14,6 +14,11 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.2.7
+
+=== Fixes
+* fix: Parallel consumer stops processing data sometimes (#606)
+
 == 0.5.2.6
 === Improvements
 
