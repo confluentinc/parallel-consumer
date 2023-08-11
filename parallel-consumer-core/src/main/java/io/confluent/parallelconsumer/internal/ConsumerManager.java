@@ -15,7 +15,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Delegate for {@link KafkaConsumer}
@@ -37,7 +36,7 @@ public class ConsumerManager<K, V> {
      */
     private ConsumerGroupMetadata metaCache;
 
-    private final AtomicReference<Set<TopicPartition>> pausedPartitionsCache = new AtomicReference<>();
+    private volatile int pausedPartitionSizeCache = 0;
 
     private int erroneousWakups = 0;
     private int correctPollWakeups = 0;
@@ -72,7 +71,7 @@ public class ConsumerManager<K, V> {
 
     protected void updateCache() {
         metaCache = consumer.groupMetadata();
-        pausedPartitionsCache.set(consumer.paused());
+        pausedPartitionSizeCache = consumer.paused().size();
     }
 
     /**
@@ -136,7 +135,11 @@ public class ConsumerManager<K, V> {
     }
 
     public Set<TopicPartition> paused() {
-        return pausedPartitionsCache.get();
+        return consumer.paused();
+    }
+
+    public int getPausedPartitionSize() {
+        return pausedPartitionSizeCache;
     }
 
     public void resume(final Set<TopicPartition> pausedTopics) {
