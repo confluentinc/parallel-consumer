@@ -80,7 +80,7 @@ public class ProcessingShard<K, V> {
         return entries.values().stream()
                 // todo missing pm.isBlocked(topicPartition) ?
                 // exclude stale workContainers from counting
-                .filter(workContainer -> !pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer))
+                .filter(workContainer -> !isWorkContainerStale(workContainer))
                 .filter(WorkContainer::isAvailableToTakeAsWork)
                 .count();
     }
@@ -105,13 +105,10 @@ public class ProcessingShard<K, V> {
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
-        if (removeStaledWorkContainersFromShard()) {
-            log.trace("have staled work containers removed");
-        }
-
         var iterator = entries.entrySet().iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
             var workContainer = iterator.next().getValue();
+
 
             if (pm.couldBeTakenAsWork(workContainer)) {
                 if (workContainer.isAvailableToTakeAsWork()) {
@@ -129,6 +126,11 @@ public class ProcessingShard<K, V> {
                     log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), getKey());
                     break;
                 }
+            } else if (isWorkContainerStale(workContainer)) {
+                // stale work containers are handled here
+                // the normal work containers' offset should be higher than stale work containers
+                // the break below should be happened after all stale work containers
+                log.trace("the work container {} is stale, continue scanning for the next", workContainer);
             } else {
                 // break, assuming all work in this shard, is for the same ShardKey, which is always on the same
                 //  partition (regardless of ordering mode - KEY, PARTITION or UNORDERED (which is parallel PARTITIONs)),
@@ -189,14 +191,8 @@ public class ProcessingShard<K, V> {
         return options.getOrdering() != UNORDERED;
     }
 
-    // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:
-    // 1. block the new work containers to be picked and processed
-    // 2. will cause the consumer to paused consuming new messages indefinitely
-    private boolean removeStaledWorkContainersFromShard() {
-        return this.entries.entrySet()
-                .removeIf(entry -> {
-                    WorkContainer<K, V> workContainer = entry.getValue();
-                    return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
-                });
+    // check if the work container is stale
+    private boolean isWorkContainerStale(WorkContainer<K, V> workContainer) {
+        return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
     }
 }
