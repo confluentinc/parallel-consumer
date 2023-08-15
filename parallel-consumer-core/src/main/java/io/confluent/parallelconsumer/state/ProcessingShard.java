@@ -99,6 +99,19 @@ public class ProcessingShard<K, V> {
         return entries.remove(offset);
     }
 
+
+    // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:
+    // 1. block the new work containers to be picked and processed
+    // 2. will cause the consumer to paused consuming new messages indefinitely
+    public boolean removeStaleWorkContainersFromShard() {
+        return this.entries.entrySet()
+                .removeIf(entry -> {
+                    WorkContainer<K, V> workContainer = entry.getValue();
+                    return isWorkContainerStale(workContainer);
+                });
+    }
+
+
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
 
@@ -126,11 +139,6 @@ public class ProcessingShard<K, V> {
                     log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), getKey());
                     break;
                 }
-            } else if (isWorkContainerStale(workContainer)) {
-                // stale work containers are handled here
-                // the normal work containers' offset should be higher than stale work containers
-                // the break below should be happened after all stale work containers
-                log.trace("the work container {} is stale, continue scanning for the next", workContainer);
             } else {
                 // break, assuming all work in this shard, is for the same ShardKey, which is always on the same
                 //  partition (regardless of ordering mode - KEY, PARTITION or UNORDERED (which is parallel PARTITIONs)),
