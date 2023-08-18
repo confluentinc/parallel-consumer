@@ -13,6 +13,11 @@ NOTE:: Dependency version bumps are not listed here.
 ifndef::github_name[]
 toc::[]
 endif::[]
+== 0.5.2.7
+
+=== Fixes
+
+* fix: Add synchronization to ensure proper intializaiton and closing of PCMetrics singleton. (#617)
 
 == 0.5.2.6
 === Improvements
