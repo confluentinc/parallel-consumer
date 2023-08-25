@@ -19,6 +19,7 @@ endif::[]
 === Fixes
 
 * fix: Return cached pausedPartitionSet (#618)
+* fix: Parallel consumer stops processing data sometimes (#606)
 
 == 0.5.2.6
 === Improvements
