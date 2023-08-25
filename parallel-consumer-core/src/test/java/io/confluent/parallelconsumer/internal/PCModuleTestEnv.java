@@ -101,7 +101,7 @@ public class PCModuleTestEnv extends PCModule<String, String> {
         ConsumerManager<String, String> consumerManager = super.consumerManager();
 
         // force update to set cache, otherwise maybe never called (fake consumer)
-        consumerManager.updateMetadataCache();
+        consumerManager.updateCache();
 
         return consumerManager;
     }
