@@ -19,6 +19,13 @@ endif::[]
 
 * fix: Add synchronization to ensure proper intializaiton and closing of PCMetrics singleton. (#617)
 
+== 0.5.2.7
+
+=== Fixes
+
+* fix: Return cached pausedPartitionSet (#618)
+* fix: Parallel consumer stops processing data sometimes (#606)
+
 == 0.5.2.6
 === Improvements
 

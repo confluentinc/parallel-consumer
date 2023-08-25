@@ -89,7 +89,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     private void initMetrics() {
         statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_POLLER_STATUS, this, poller -> poller.runState.getValue());
         numPausedPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUM_PAUSED_PARTITIONS,
-                this.consumerManager, consumerManager -> consumerManager.paused().size());
+                this.consumerManager, ConsumerManager::getPausedPartitionSize);
     }
 
     public void start(String managedExecutorService) {
