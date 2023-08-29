@@ -270,6 +270,16 @@ public class ShardManager<K, V> {
         return workFromAllShards;
     }
 
+    public boolean removeStaleContainers() {
+        boolean removed = processingShards.values().stream()
+                .map(ProcessingShard::removeStaleWorkContainersFromShard)
+                .anyMatch(res -> res.equals(true));
+        if (removed) {
+            log.debug("there are stale work containers removed");
+        }
+        return removed;
+    }
+
     private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {
         // if empty, iteration was exhausted and no resume point is needed
         iterationResumePoint = lastShard.map(Map.Entry::getKey);

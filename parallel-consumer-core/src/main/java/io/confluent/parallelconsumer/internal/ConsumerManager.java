@@ -1,8 +1,9 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -26,6 +27,7 @@ public class ConsumerManager<K, V> {
 
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
+
     /**
      * Since Kakfa 2.7, multi-threaded access to consumer group metadata was blocked, so before and after polling, save
      * a copy of the metadata.
@@ -33,6 +35,8 @@ public class ConsumerManager<K, V> {
      * @since 2.7.0
      */
     private ConsumerGroupMetadata metaCache;
+
+    private volatile int pausedPartitionSizeCache = 0;
 
     private int erroneousWakups = 0;
     private int correctPollWakeups = 0;
@@ -49,11 +53,11 @@ public class ConsumerManager<K, V> {
                 commitRequested = false;
             }
             pollingBroker.set(true);
-            updateMetadataCache();
+            updateCache();
             log.debug("Poll starting with timeout: {}", timeoutToUse);
             records = consumer.poll(timeoutToUse);
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
-            updateMetadataCache();
+            updateCache();
         } catch (WakeupException w) {
             correctPollWakeups++;
             log.debug("Awoken from broker poll");
@@ -65,8 +69,9 @@ public class ConsumerManager<K, V> {
         return records;
     }
 
-    protected void updateMetadataCache() {
+    protected void updateCache() {
         metaCache = consumer.groupMetadata();
+        pausedPartitionSizeCache = consumer.paused().size();
     }
 
     /**
@@ -131,6 +136,10 @@ public class ConsumerManager<K, V> {
 
     public Set<TopicPartition> paused() {
         return consumer.paused();
+    }
+
+    public int getPausedPartitionSize() {
+        return pausedPartitionSizeCache;
     }
 
     public void resume(final Set<TopicPartition> pausedTopics) {

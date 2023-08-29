@@ -121,6 +121,11 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             var partitionStates = om.loadPartitionStateForAssignment(assignedPartitions);
             this.partitionStates.putAll(partitionStates);
             initPartitionCounters(assignedPartitions);
+
+            // remove stale work containers after partition epoch changed
+            // because we will judge if container is stale or not by comparing between
+            // epoch from WorkContainer to partitionsAssignmentEpoch in PartitionState
+            sm.removeStaleContainers();
         } catch (Exception e) {
             log.error("Error in onPartitionsAssigned", e);
             throw e;
@@ -175,6 +180,11 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         incrementPartitionAssignmentEpoch(partitions);
         resetOffsetMapAndRemoveWork(partitions);
         deregisterPartitionCounters(partitions);
+
+        // remove stale work containers after partition epoch changed
+        // because we will judge if container is stale or not by comparing between
+        // epoch from WorkContainer to partitionsAssignmentEpoch in PartitionState
+        sm.removeStaleContainers();
     }
 
     /**
