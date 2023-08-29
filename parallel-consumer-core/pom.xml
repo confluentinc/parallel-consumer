@@ -40,10 +40,6 @@
             <artifactId>micrometer-core</artifactId>
             <scope>compile</scope>
         </dependency>
-        <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-atlas</artifactId>
-        </dependency>
 
         <!-- Testing -->
         <dependency>
