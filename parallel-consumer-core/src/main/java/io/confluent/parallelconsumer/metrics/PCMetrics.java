@@ -5,12 +5,11 @@ package io.confluent.parallelconsumer.metrics;
  */
 
 import io.micrometer.core.instrument.*;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.function.ToDoubleFunction;
 
 import static java.util.Collections.emptyList;
@@ -32,7 +31,7 @@ public class PCMetrics {
     /**
      * Tracking of registered meters for removal from registry on shutdown.
      */
-    private List<Meter.Id> registeredMeters = new ArrayList<>();
+    private List<Meter.Id> registeredMeters = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * Common metrics tags added to all meters - for example PC instance. Configurable through Parallel Consumer
@@ -52,7 +51,7 @@ public class PCMetrics {
      *                       {@link io.confluent.parallelconsumer.ParallelConsumerOptions} on PC initialization
      * @param commonTags:    set of tags to add to all meters - for example - PC instance.
      */
-    public static void initialize(MeterRegistry meterRegistry, Iterable<Tag> commonTags) {
+    public static synchronized void initialize(MeterRegistry meterRegistry, Iterable<Tag> commonTags) {
         if(instance != null){
             log.warn("Reinitializing PCMetrics without closing them first. Closing previous instance.");
             close();
@@ -166,15 +165,17 @@ public class PCMetrics {
     /**
      * Resets the singleton instance.
      */
-    public static void close() {
+    public static synchronized void close() {
         if (instance == null) {
             return;
         }
         log.debug("Resetting PCMetrics");
         // clean up the instance resources
         MeterRegistry registry = instance.getMeterRegistry();
-        instance.registeredMeters.forEach(registry::remove);
-        instance.registeredMeters.clear();
+        synchronized (instance.registeredMeters) {
+            instance.registeredMeters.forEach(registry::remove);
+            instance.registeredMeters.clear();
+        }
         // clear instance
         instance = null;
     }
