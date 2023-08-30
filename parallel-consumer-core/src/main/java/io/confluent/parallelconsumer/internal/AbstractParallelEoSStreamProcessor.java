@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.Suppliers;
+import io.confluent.csid.utils.SupplierUtils;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.metrics.PCMetrics;
@@ -290,7 +290,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
-        workerThreadPool = Suppliers.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
+        workerThreadPool = SupplierUtils.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
 
         this.wm = module.workManager();
 

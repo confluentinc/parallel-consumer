@@ -11,12 +11,12 @@ import java.util.function.Supplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class SuppliersTest {
+public class SupplierUtilsTest {
 
     @Test
     public void testMemoize() {
         UnderlyingSupplier underlyingSupplier = new UnderlyingSupplier();
-        Supplier<Integer> memoizedSupplier = Suppliers.memoize(underlyingSupplier);
+        Supplier<Integer> memoizedSupplier = SupplierUtils.memoize(underlyingSupplier);
         assertEquals(0, underlyingSupplier.calls); // the underlying supplier hasn't executed yet
         assertEquals(5, (int) memoizedSupplier.get());
 
@@ -28,20 +28,20 @@ public class SuppliersTest {
 
     @Test
     public void testMemoizeNullSupplier() {
-        assertThrows(NullPointerException.class, () -> Suppliers.memoize(null));
+        assertThrows(NullPointerException.class, () -> SupplierUtils.memoize(null));
     }
 
     @Test
     public void testMemoizeSupplierReturnsNull() {
         assertThrows(NullPointerException.class, () -> {
-            Supplier<?> supplier = Suppliers.memoize(() -> null);
+            Supplier<?> supplier = SupplierUtils.memoize(() -> null);
             supplier.get();
         });
     }
 
     @Test
     public void testMemoizeExceptionThrown() {
-        Supplier<Integer> memoizedSupplier = Suppliers.memoize(new ThrowingSupplier());
+        Supplier<Integer> memoizedSupplier = SupplierUtils.memoize(new ThrowingSupplier());
         assertThrows(IllegalStateException.class, memoizedSupplier::get);
     }
 
