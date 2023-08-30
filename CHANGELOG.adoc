@@ -25,6 +25,7 @@ endif::[]
 
 * fix: Return cached pausedPartitionSet (#618)
 * fix: Parallel consumer stops processing data sometimes (#606)
+* fix: Refactor metrics implementation to not use singleton - allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process, fixes (#617) improves on (#627)
 
 == 0.5.2.6
 === Improvements

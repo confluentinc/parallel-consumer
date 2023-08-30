@@ -3,45 +3,32 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.search.Search;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.producer.Producer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.*;
-import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
-import java.util.Collection;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.NEW_GROUP;
 import static io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils.GroupOption.REUSE_GROUP;
-import static io.confluent.parallelconsumer.metrics.PCMetrics.PC_INSTANCE_TAG;
+import static io.confluent.parallelconsumer.metrics.PCMetricsDef.PC_INSTANCE_TAG;
 import static io.confluent.parallelconsumer.metrics.PCMetricsDef.PROCESSED_RECORDS;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.number.OrderingComparison.greaterThan;
 
 @Slf4j
 class MultiInstanceMetricsTest extends BrokerIntegrationTest<String, String> {
