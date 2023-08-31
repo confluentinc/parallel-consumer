@@ -1,7 +1,8 @@
+package io.confluent.parallelconsumer.integrationTests;
+
 /*-
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
