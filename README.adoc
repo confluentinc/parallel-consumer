@@ -1521,7 +1521,7 @@ endif::[]
 * fix: Return cached pausedPartitionSet (#618)
 * fix: Parallel consumer stops processing data sometimes (#606)
 * fix: Add synchronization to ensure proper intializaiton and closing of PCMetrics singleton. (#617)
-* fix: Refactor metrics implementation to not use singleton - allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
+* fix: Refactor metrics implementation to not use singleton - improves meter separation, allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
 
 == 0.5.2.6
 === Improvements
