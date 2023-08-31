@@ -74,9 +74,12 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     private Gauge totalIncompletesGauge;
     private final Map<TopicPartition, Counter> slowWorkCounters = new HashMap<>();
 
+    private final PCMetrics pcMetrics;
+
     public PartitionStateManager(PCModule<K, V> module, ShardManager<K, V> sm) {
         this.sm = sm;
         this.module = module;
+        this.pcMetrics = module.pcMetrics();
         initMetrics();
     }
 
@@ -135,7 +138,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     private void initPartitionCounters(Collection<TopicPartition> assignedPartitions) {
         assignedPartitions.forEach(topicPartition -> {
             if (!slowWorkCounters.containsKey(topicPartition)) {
-                slowWorkCounters.put(topicPartition, PCMetrics.getInstance()
+                slowWorkCounters.put(topicPartition, pcMetrics
                         .getCounterFromMetricDef(PCMetricsDef.SLOW_RECORDS,
                                 Tag.of("topic", topicPartition.topic()),
                                 Tag.of("partition", String.valueOf(topicPartition.partition())))
@@ -148,7 +151,7 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
         removedPartitions.forEach(topicPartition -> {
             Counter counter = slowWorkCounters.remove(topicPartition);
             if (counter != null) {
-                PCMetrics.removeMeter(counter);
+                pcMetrics.removeMeter(counter);
             }
         });
     }
@@ -345,8 +348,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
     }
 
     private void initMetrics() {
-        numberOfPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_PARTITIONS, this, pm -> getAssignedPartitions().size());
-        totalIncompletesGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.INCOMPLETE_OFFSETS_TOTAL,
+        numberOfPartitionsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_PARTITIONS, this, pm -> getAssignedPartitions().size());
+        totalIncompletesGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.INCOMPLETE_OFFSETS_TOTAL,
                 this, partitionStateManager -> partitionStateManager.getAssignedPartitions().values().stream()
                         .mapToInt(PartitionState::getNumberOfIncompleteOffsets)
                         .sum()

@@ -68,6 +68,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final WorkManager<K, V> wm;
 
+    private final PCMetrics pcMetrics;
+
     private Gauge statusGauge;
     private Gauge numPausedPartitionsGauge;
 
@@ -83,12 +85,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 committer = Optional.of(consumerCommitter);
             }
         }
+        pcMetrics = pc.getModule().pcMetrics();
         initMetrics();
     }
 
     private void initMetrics() {
-        statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_POLLER_STATUS, this, poller -> poller.runState.getValue());
-        numPausedPartitionsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUM_PAUSED_PARTITIONS,
+        statusGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PC_POLLER_STATUS, this, poller -> poller.runState.getValue());
+        numPausedPartitionsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUM_PAUSED_PARTITIONS,
                 this.consumerManager, ConsumerManager::getPausedPartitionSize);
     }
 

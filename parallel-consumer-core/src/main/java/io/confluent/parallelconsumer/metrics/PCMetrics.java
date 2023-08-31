@@ -6,26 +6,28 @@ package io.confluent.parallelconsumer.metrics;
 
 import io.micrometer.core.instrument.*;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.search.Search;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.ToDoubleFunction;
 
-import static java.util.Collections.emptyList;
+import static java.util.Collections.singleton;
 
 /**
- * Main metrics collection and initialization service.
- * Singleton - makes it easier to add metrics throughout the code
+ * Main metrics collection and initialization service. Singleton - makes it easier to add metrics throughout the code
  */
 @Slf4j
 public class PCMetrics {
-    private static PCMetrics instance;
 
+    public static final String PC_INSTANCE_TAG = "pc-instance";
     /**
      * Meter registry used for metrics - set through init call on singleton initialization. Configurable through
      * Parallel Consumer Options.
      */
+    @Getter
     private MeterRegistry meterRegistry;
 
     /**
@@ -37,34 +39,62 @@ public class PCMetrics {
      * Common metrics tags added to all meters - for example PC instance. Configurable through Parallel Consumer
      * Options.
      */
+    @Getter
     private Iterable<Tag> commonTags;
 
-    private PCMetrics(MeterRegistry meterRegistry, Iterable<Tag> commonTags) {
-        this.meterRegistry = meterRegistry;
-        this.commonTags = commonTags;
-    }
+    @Getter
+    private Tag instanceTag;
+
+    private final AtomicBoolean isClosed = new AtomicBoolean(true);
 
     /**
-     * Singleton initialization - mandatory to be performed before using the singleton through {@link #getInstance()}.
-     *
      * @param meterRegistry: meterRegistry to use for meter registration - configured through
      *                       {@link io.confluent.parallelconsumer.ParallelConsumerOptions} on PC initialization
      * @param commonTags:    set of tags to add to all meters - for example - PC instance.
      */
-    public static synchronized void initialize(MeterRegistry meterRegistry, Iterable<Tag> commonTags) {
-        if(instance != null){
-            log.warn("Reinitializing PCMetrics without closing them first. Closing previous instance.");
-            close();
+    public PCMetrics(MeterRegistry meterRegistry, Iterable<Tag> commonTags, String instanceTag) {
+        this.meterRegistry = meterRegistry;
+        if (instanceTag != null) {
+            this.instanceTag = Tag.of(PC_INSTANCE_TAG, instanceTag);
+        } else {
+            this.instanceTag = generateUniqueInstanceTag();
         }
-        instance = new PCMetrics(meterRegistry, commonTags);
+        this.commonTags = combine(this.instanceTag, commonTags);
+        this.isClosed.set(false);
     }
 
-    public static PCMetrics getInstance() {
-        if (instance == null) {
-            log.warn("Warning - trying to use PCMetrics without first initializing it with MeterRegistry. Default noop meter registry will be used.");
-            initialize(new CompositeMeterRegistry(), emptyList());
-        }
-        return instance;
+    /**
+     * Combines instance tag and common tags specified while ensuring there are no tags with same tag key.
+     * @param instanceTag
+     * @param commonTags
+     * @return combined tag collection with unique tag keys
+     */
+    private Iterable<Tag> combine(Tag instanceTag, Iterable<Tag> commonTags) {
+        Set<String> tagKeys = new HashSet<>();
+        List<Tag> tags = new LinkedList<>();
+
+        tagKeys.add(instanceTag.getKey());
+        tags.add(instanceTag);
+        commonTags.forEach(tag -> {
+            if (!tagKeys.contains(tag.getKey())) {
+                tagKeys.add(tag.getKey());
+                tags.add(tag);
+            } else {
+                log.warn("Duplicate metrics tag specified : {}", tag.getKey());
+            }
+        });
+        return tags;
+    }
+
+
+    private Tag generateUniqueInstanceTag() {
+        boolean inUse;
+        Tag tagToUse;
+        do {
+            tagToUse = Tag.of(PC_INSTANCE_TAG, UUID.randomUUID().toString());
+            inUse = Search.in(meterRegistry).tags(singleton(instanceTag)).meter() != null;
+        } while (inUse);
+        return tagToUse;
     }
 
     /**
@@ -158,29 +188,22 @@ public class PCMetrics {
         return distributionSummary;
     }
 
-    public MeterRegistry getMeterRegistry() {
-        return this.meterRegistry;
-    }
-
     /**
-     * Resets the singleton instance.
+     * Closes PCMetrics object and cleans up all meters from registry - should be recreated before using it again.
      */
-    public static synchronized void close() {
-        if (instance == null) {
+    public void close() {
+        if (this.isClosed.getAndSet(true)) {
+            //Instance already closed - warn and ignore.
+            log.warn("Trying to close PCMetrics instance that is already closed.");
             return;
         }
-        log.debug("Resetting PCMetrics");
+        log.debug("Closing PCMetrics");
         // clean up the instance resources
-        MeterRegistry registry = instance.getMeterRegistry();
-        synchronized (instance.registeredMeters) {
-            instance.registeredMeters.forEach(registry::remove);
-            instance.registeredMeters.clear();
-        }
-        // clear instance
-        instance = null;
+        this.registeredMeters.forEach(this.meterRegistry::remove);
+        this.registeredMeters.clear();
     }
 
-    public static void removeMeter(Meter meter) {
+    public void removeMeter(Meter meter) {
         if (meter != null) {
             removeMeter(meter.getId());
         }
@@ -191,11 +214,24 @@ public class PCMetrics {
      *
      * @param meterId the meter id to remove.
      */
-    public static void removeMeter(Meter.Id meterId) {
-        log.debug("Removing meter: {}", meterId);
-        if (instance != null) {
-            instance.getMeterRegistry().remove(meterId);
-            instance.registeredMeters.remove(meterId);
+    public void removeMeter(Meter.Id meterId) {
+        if (this.isClosed.get()) {
+            //Already closed metrics subsystem - ignore
+            log.debug("Trying to remove meter when metrics subsystem is already closed. Meter Id {}", meterId);
+            return;
         }
+        log.debug("Removing meter: {}", meterId);
+        this.meterRegistry.remove(meterId);
+        this.registeredMeters.remove(meterId);
+    }
+
+    public void removeMetersByPrefixAndCommonTags(String meterNamePrefix) {
+        if (this.isClosed.get()) {
+            //Already closed metrics subsystem - ignore
+            log.debug("Trying to remove meters when metrics subsystem is already closed.");
+            return;
+        }
+        Search.in(meterRegistry).name(name -> name.startsWith(meterNamePrefix))
+                .tags(commonTags).meters().forEach(meterRegistry::remove);
     }
 }

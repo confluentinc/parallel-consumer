@@ -20,6 +20,7 @@ import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -83,6 +84,8 @@ public class ParallelConsumerOptions<K, V> {
 
     @Builder.Default
     private final Iterable<Tag> metricsTags = Tags.empty();
+
+    private final String pcInstanceTag;
 
     /**
      * The ordering guarantee to use.

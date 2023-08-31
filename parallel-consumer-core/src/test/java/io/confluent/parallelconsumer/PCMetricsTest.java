@@ -232,6 +232,7 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
         });
     }
 
+
     private double registeredGaugeValueFor(PCMetricsDef metricsDef, String... filterTags) {
         return Optional.ofNullable(registry.find(metricsDef.getName()).tags(filterTags).gauge()).map(Gauge::value).orElse(-1.0);
     }

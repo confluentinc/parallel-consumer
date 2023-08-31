@@ -72,6 +72,8 @@ public class OffsetMapCodecManager<K, V> {
     private Timer offsetEncodingTimer;
     private final Map<OffsetEncoding, Counter> encodingCounters = new HashMap<>();
 
+    private final PCMetrics pcMetrics;
+
     private static ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy errorPolicy = ParallelConsumerOptions.InvalidOffsetMetadataHandlingPolicy.FAIL;
 
     /**
@@ -115,11 +117,12 @@ public class OffsetMapCodecManager<K, V> {
         if (module != null){
             this.errorPolicy = module.options().getInvalidOffsetMetadataPolicy();
         }
+        pcMetrics = module.pcMetrics();
         initMeters();
     }
 
     private void initMeters() {
-        offsetEncodingTimer = PCMetrics.getInstance().getTimerFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_TIME);
+        offsetEncodingTimer = pcMetrics.getTimerFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_TIME);
     }
 
     /**
@@ -253,7 +256,7 @@ public class OffsetMapCodecManager<K, V> {
     private Counter getCounterMeterForEncoding(OffsetEncoding encoding) {
         Counter counter = encodingCounters.get(encoding);
         if (counter == null) {
-            counter = PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_USAGE,
+            counter = pcMetrics.getCounterFromMetricDef(PCMetricsDef.OFFSETS_ENCODING_USAGE,
                     Tag.of("encoding", encoding.name()));
             encodingCounters.put(encoding, counter);
         }

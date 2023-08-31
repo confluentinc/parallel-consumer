@@ -75,6 +75,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     private Map<TopicPartition, Counter> succeededRecordsCounters = new HashMap<>();
     private Map<TopicPartition, Counter> failedRecordsCounters = new HashMap<>();
 
+    private final PCMetrics pcMetrics;
+
     public WorkManager(PCModule<K, V> module,
                        DynamicLoadFactor dynamicExtraLoadFactor) {
         this.module = module;
@@ -82,6 +84,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         this.dynamicLoadFactor = dynamicExtraLoadFactor;
         this.sm = new ShardManager<>(module, this);
         this.pm = new PartitionStateManager<>(module, sm);
+        this.pcMetrics = module.pcMetrics();
         initMetrics();
     }
 
@@ -293,19 +296,19 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     private void initMetrics() {
-        waitingRecordsNumberGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.WAITING_RECORDS,
+        waitingRecordsNumberGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.WAITING_RECORDS,
                 this, WorkManager::getNumberOfWorkQueuedInShardsAwaitingSelection);
-        inflightRecordsNumberGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.INFLIGHT_RECORDS,
+        inflightRecordsNumberGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.INFLIGHT_RECORDS,
                 this, WorkManager::getNumberRecordsOutForProcessing);
     }
 
     private void initTopicPartitionSpecificMetrics(Collection<TopicPartition> partitions) {
         partitions.forEach(topicPartition -> {
             if (!succeededRecordsCounters.containsKey(topicPartition)) {
-                succeededRecordsCounters.put(topicPartition, PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.PROCESSED_RECORDS, getWorkManagerCounterTags(topicPartition)));
+                succeededRecordsCounters.put(topicPartition, pcMetrics.getCounterFromMetricDef(PCMetricsDef.PROCESSED_RECORDS, getWorkManagerCounterTags(topicPartition)));
             }
             if (!failedRecordsCounters.containsKey(topicPartition)) {
-                failedRecordsCounters.put(topicPartition, PCMetrics.getInstance().getCounterFromMetricDef(PCMetricsDef.FAILED_RECORDS, getWorkManagerCounterTags(topicPartition)));
+                failedRecordsCounters.put(topicPartition, pcMetrics.getCounterFromMetricDef(PCMetricsDef.FAILED_RECORDS, getWorkManagerCounterTags(topicPartition)));
             }
         });
     }
@@ -322,11 +325,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         partitions.forEach(topicPartition -> {
             Counter counter = succeededRecordsCounters.remove(topicPartition);
             if (counter != null) {
-                PCMetrics.removeMeter(counter);
+                pcMetrics.removeMeter(counter);
             }
             counter = failedRecordsCounters.remove(topicPartition);
             if (counter != null) {
-                PCMetrics.removeMeter(counter);
+                pcMetrics.removeMeter(counter);
             }
         });
     }

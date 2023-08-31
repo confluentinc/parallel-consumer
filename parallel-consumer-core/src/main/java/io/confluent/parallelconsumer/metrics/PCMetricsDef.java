@@ -70,7 +70,8 @@ public enum PCMetricsDef {
 
     private static final String SUBSYSTEM_TAG_KEY = "subsystem";
 
-    public static final String METER_PREFIX = "pc.";
+    private static final String METER_PREFIX = "pc.";
+    public static final String USER_FUNCTION_EXECUTOR_PREFIX = METER_PREFIX+"user.function.";
 
     @Getter
     private final String name;
