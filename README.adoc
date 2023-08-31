@@ -1192,13 +1192,14 @@ Following example illustrates setup of Parallel Consumer with Meter Registry and
 ----
     ParallelStreamProcessor<String, String> setupParallelConsumer() {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
-
+        String instanceId = UUID.randomUUID().toString();
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
                 .consumer(kafkaConsumer)
                 .meterRegistry(meterRegistry)                     //<1>
-                .metricsTags(Tags.of(Tag.of("instance", "pc1")))    //<2>
+                .metricsTags(Tags.of(Tag.of("common-tag", "tag1")))    //<2>
+                .pcInstanceTag(instanceId)                          //<3>
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =
@@ -1206,15 +1207,16 @@ Following example illustrates setup of Parallel Consumer with Meter Registry and
 
         eosStreamProcessor.subscribe(of(inputTopic));
 
-        kafkaClientMetrics = new KafkaClientMetrics(kafkaConsumer); //<3>
-        kafkaClientMetrics.bindTo(meterRegistry);                 //<4>
+        kafkaClientMetrics = new KafkaClientMetrics(kafkaConsumer); //<4>
+        kafkaClientMetrics.bindTo(meterRegistry);                 //<5>
         return eosStreamProcessor;
     }
 ----
 <1> - Meter Registry is set through ParallelConsumerOptions.builder(), if not specified - will default to CompositeMeterRegistry - which is No-op.
-<2> - Optional - "instance" tag with value of "pc1" is set through same builder - it will be added to all Parallel Consumer meters
-<3> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
-<4> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
+<2> - Optional - common tags can be specified through same builder - they will be added to all Parallel Consumer meters
+<3> - Optional - instance tag value can be specified - it has to be unique to ensure meter uniqueness in cases when multiple parallel consumer instances are recording metrics to the same meter registry. If instance tag is not specified - unique UUID value will be generated and used. Tag is created with tag key 'pcinstance'.
+<4> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
+<5> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
 
 NOTE:: any additional binders / metrics need to be cleaned up appropriately - for example the Kafka Consumer Metrics registered above - need to be closed using `kafkaClientMetrics.close()` after calling shutting down Parallel Consumer as Parallel Consumer will close Kafka Consumer on shutdown.
 
@@ -1512,13 +1514,14 @@ NOTE:: Dependency version bumps are not listed here.
 ifndef::github_name[]
 toc::[]
 endif::[]
-
 == 0.5.2.7
 
 === Fixes
 
 * fix: Return cached pausedPartitionSet (#618)
 * fix: Parallel consumer stops processing data sometimes (#606)
+* fix: Add synchronization to ensure proper intializaiton and closing of PCMetrics singleton. (#617)
+* fix: Refactor metrics implementation to not use singleton - allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
 
 == 0.5.2.6
 === Improvements
