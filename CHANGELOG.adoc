@@ -17,10 +17,15 @@ endif::[]
 
 === Fixes
 
-* fix: Return cached pausedPartitionSet (#618)
-* fix: Parallel consumer stops processing data sometimes (#606)
-* fix: Add synchronization to ensure proper intializaiton and closing of PCMetrics singleton. (#617)
-* fix: Refactor metrics implementation to not use singleton - improves meter separation, allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
+* fix: Return cached pausedPartitionSet (#620), resolves (#618)
+* fix: Parallel consumer stops processing data sometimes (#623), fixes (#606)
+* fix: Add synchronization to ensure proper intializaiton and closing of PCMetrics singleton (#627), fixes (#617)
+* fix: Readme - metrics example correction (#614)
+* fix: Remove micrometer-atlas dependency (#628), fixes (#625)
+
+=== Improvements
+
+* Refactored metrics implementation to not use singleton - improves meter separation, allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
 
 == 0.5.2.6
 === Improvements
