@@ -101,10 +101,13 @@ public class ShardManager<K, V> {
     private Gauge shardsSizeGauge;
     private Gauge numberOfShardsGauge;
 
+    private final PCMetrics pcMetrics;
+
     public ShardManager(final PCModule<K, V> module, final WorkManager<K, V> wm) {
         this.module = module;
         this.wm = wm;
         this.options = module.options();
+        this.pcMetrics = module.pcMetrics();
         initMetrics();
     }
 
@@ -289,10 +292,10 @@ public class ShardManager<K, V> {
     }
 
     private void initMetrics() {
-        shardsSizeGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.SHARDS_SIZE,
+        shardsSizeGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.SHARDS_SIZE,
                 this, shardManager -> shardManager.processingShards.values().stream()
                         .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
-        numberOfShardsGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
+        numberOfShardsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
                 this, shardManager -> shardManager.processingShards.keySet().size());
     }
 }
