@@ -1,20 +1,17 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
-import org.assertj.core.api.Assertions;
-import org.assertj.core.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.Arrays;
 import java.util.stream.Stream;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
@@ -119,7 +116,7 @@ class ShardKeyTest {
                 Arguments.of(new double[]{1, 2}, new double[]{1, 2}),
                 Arguments.of(new char[]{'1', '2'}, new char[]{'1', '2'}),
                 Arguments.of(new Object[]{null}, new Object[]{null})
-                );
+        );
     }
 
     /**
