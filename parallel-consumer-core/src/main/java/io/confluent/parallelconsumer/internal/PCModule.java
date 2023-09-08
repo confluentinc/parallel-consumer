@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.internal;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.metrics.PCMetrics;
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.Setter;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -105,5 +106,14 @@ public class PCModule<K, V> {
 
     public Clock clock() {
         return TimeUtils.getClock();
+    }
+
+    private PCMetrics pcMetrics;
+
+    public PCMetrics pcMetrics() {
+        if (pcMetrics == null) {
+            pcMetrics = new PCMetrics(options().getMeterRegistry(), optionsInstance.getMetricsTags(), optionsInstance.getPcInstanceTag());
+        }
+        return pcMetrics;
     }
 }

@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
@@ -20,6 +21,7 @@ import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -77,10 +79,22 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * Micrometer MeterRegistry
+     * <p>
+     * Optional - if not specified CompositeMeterRegistry will be used which is NoOp
      */
-    @Builder.Default
-    private final MeterRegistry meterRegistry = new CompositeMeterRegistry();
+    private final MeterRegistry meterRegistry;
 
+    /**
+     * PC Instance metrics tag value - if specified - should be unique to allow instance specific meters to be created
+     * and cleared. Used with Tag key {@link PCMetricsDef#PC_INSTANCE_TAG}
+     * <p>
+     * If not set - unique UUID will be generated for it
+     */
+    private final String pcInstanceTag;
+
+    /**
+     * Additional common metrics tags - will be added to all created meters
+     */
     @Builder.Default
     private final Iterable<Tag> metricsTags = Tags.empty();
 
@@ -331,8 +345,9 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     /**
-     * Controls the error handling behaviour to use when invalid offsets metadata from a pre-existing consumer group is encountered.
-     * A potential scenario where this could occur is when a consumer group id from a Kafka Streams application is accidentally reused.
+     * Controls the error handling behaviour to use when invalid offsets metadata from a pre-existing consumer group is
+     * encountered. A potential scenario where this could occur is when a consumer group id from a Kafka Streams
+     * application is accidentally reused.
      * <p>
      * Default is {@link InvalidOffsetMetadataHandlingPolicy#FAIL}
      */
@@ -479,15 +494,16 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     /**
-     * Timeout for shutting down execution pool during shutdown in DONT_DRAIN mode. Should be high enough to allow
-     * for inflight messages to finish processing, but low enough to kill any blocked thread to allow to rebalance in a timely manner,
-     * especially if shutting down on error.
+     * Timeout for shutting down execution pool during shutdown in DONT_DRAIN mode. Should be high enough to allow for
+     * inflight messages to finish processing, but low enough to kill any blocked thread to allow to rebalance in a
+     * timely manner, especially if shutting down on error.
      */
     @Builder.Default
     public final Duration shutdownTimeout = Duration.ofSeconds(10);
 
     /**
-     * Timeout for draining queue during shutdown in DRAIN mode. Should be high enough to allow for all queued messages to process.
+     * Timeout for draining queue during shutdown in DRAIN mode. Should be high enough to allow for all queued messages
+     * to process.
      */
     @Builder.Default
     public final Duration drainTimeout = Duration.ofSeconds(30);

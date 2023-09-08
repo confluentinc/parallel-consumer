@@ -10,7 +10,7 @@
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-parent</artifactId>
     <name>Confluent Parallel Consumer</name>
-    <version>0.5.2.7-SNAPSHOT</version>
+    <version>0.5.2.8-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
     <url>http://confluent.io</url>
@@ -107,7 +107,7 @@
 
         <!-- tests deps-->
         <junit.version>5.10.0-RC1</junit.version>
-        <junit.platform.version>1.10.0-RC1</junit.platform.version>
+        <junit.platform.version>1.10.0</junit.platform.version>
         <testcontainers.version>1.18.3</testcontainers.version>
         <truth.version>1.1.5</truth.version>
         <flogger.version>0.7.4</flogger.version>
@@ -115,8 +115,6 @@
         <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>1.0.0</jabel.version>
         <micrometer-core.version>1.10.2</micrometer-core.version>
-        <micrometer-registry-atlas.version>1.9.5</micrometer-registry-atlas.version>
-
     </properties>
 
     <profiles>
@@ -394,11 +392,6 @@
                 <groupId>io.micrometer</groupId>
                 <artifactId>micrometer-core</artifactId>
                 <version>${micrometer-core.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.micrometer</groupId>
-                <artifactId>micrometer-registry-atlas</artifactId>
-                <version>${micrometer-registry-atlas.version}</version>
             </dependency>
             <!-- External -->
             <dependency>
@@ -824,7 +817,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-site-plugin</artifactId>
-                <version>4.0.0-M8</version>
+                <version>4.0.0-M9</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -918,7 +911,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-site-plugin</artifactId>
-                    <version>4.0.0-M8</version>
+                    <version>4.0.0-M9</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

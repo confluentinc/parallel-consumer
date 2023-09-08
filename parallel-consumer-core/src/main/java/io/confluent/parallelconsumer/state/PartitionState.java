@@ -170,7 +170,7 @@ public class PartitionState<K, V> {
     private Gauge ephochGauge;
     private DistributionSummary ratioPayloadUsedDistributionSummary;
     private DistributionSummary ratioMetadataSpaceUsedDistributionSummary;
-
+    private final PCMetrics pcMetrics;
 
     public PartitionState(long newEpoch,
                           PCModule<K, V> pcModule,
@@ -180,7 +180,7 @@ public class PartitionState<K, V> {
 
         this.tp = topicPartition;
         this.partitionsAssignmentEpoch = newEpoch;
-
+        this.pcMetrics = module.pcMetrics();
         initStateFromOffsetData(offsetData);
         initMetrics();
     }
@@ -665,30 +665,30 @@ public class PartitionState<K, V> {
             return;
         }
         Tag[] partitionStateTags = new Tag[]{Tag.of("topic", topicPartition.topic()), Tag.of("partition", String.valueOf(topicPartition.partition()))};
-        lastCommittedOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_LAST_COMMITTED_OFFSET,
+        lastCommittedOffsetGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PARTITION_LAST_COMMITTED_OFFSET,
                 this, partitionState -> partitionState.lastCommittedOffset, partitionStateTags);
-        highestSeenOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_SEEN_OFFSET,
+        highestSeenOffsetGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_SEEN_OFFSET,
                 this, PartitionState::getOffsetHighestSeen, partitionStateTags);
-        highestCompletedOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_COMPLETED_OFFSET,
+        highestCompletedOffsetGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_COMPLETED_OFFSET,
                 this, PartitionState::getOffsetHighestSucceeded, partitionStateTags);
-        highestSequentialSucceededOffsetGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET,
+        highestSequentialSucceededOffsetGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PARTITION_HIGHEST_SEQUENTIAL_SUCCEEDED_OFFSET,
                 this, PartitionState::getOffsetHighestSequentialSucceeded, partitionStateTags);
-        numberOfIncompletesGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_INCOMPLETE_OFFSETS,
+        numberOfIncompletesGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PARTITION_INCOMPLETE_OFFSETS,
                 this, partitionState -> partitionState.incompleteOffsets.size(), partitionStateTags);
-        ephochGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PARTITION_ASSIGNMENT_EPOCH,
+        ephochGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PARTITION_ASSIGNMENT_EPOCH,
                 this, PartitionState::getPartitionsAssignmentEpoch, partitionStateTags);
-        ratioMetadataSpaceUsedDistributionSummary = PCMetrics.getInstance().getDistributionSummaryFromMetricDef(PCMetricsDef.METADATA_SPACE_USED, partitionStateTags);
-        ratioPayloadUsedDistributionSummary = PCMetrics.getInstance().getDistributionSummaryFromMetricDef(PCMetricsDef.PAYLOAD_RATIO_USED, partitionStateTags);
+        ratioMetadataSpaceUsedDistributionSummary = pcMetrics.getDistributionSummaryFromMetricDef(PCMetricsDef.METADATA_SPACE_USED, partitionStateTags);
+        ratioPayloadUsedDistributionSummary = pcMetrics.getDistributionSummaryFromMetricDef(PCMetricsDef.PAYLOAD_RATIO_USED, partitionStateTags);
     }
 
     private void deregisterMetrics() {
-        PCMetrics.removeMeter(lastCommittedOffsetGauge);
-        PCMetrics.removeMeter(highestSeenOffsetGauge);
-        PCMetrics.removeMeter(highestCompletedOffsetGauge);
-        PCMetrics.removeMeter(highestSequentialSucceededOffsetGauge);
-        PCMetrics.removeMeter(numberOfIncompletesGauge);
-        PCMetrics.removeMeter(ephochGauge);
-        PCMetrics.removeMeter(ratioMetadataSpaceUsedDistributionSummary);
-        PCMetrics.removeMeter(ratioPayloadUsedDistributionSummary);
+        pcMetrics.removeMeter(lastCommittedOffsetGauge);
+        pcMetrics.removeMeter(highestSeenOffsetGauge);
+        pcMetrics.removeMeter(highestCompletedOffsetGauge);
+        pcMetrics.removeMeter(highestSequentialSucceededOffsetGauge);
+        pcMetrics.removeMeter(numberOfIncompletesGauge);
+        pcMetrics.removeMeter(ephochGauge);
+        pcMetrics.removeMeter(ratioMetadataSpaceUsedDistributionSummary);
+        pcMetrics.removeMeter(ratioPayloadUsedDistributionSummary);
     }
 }

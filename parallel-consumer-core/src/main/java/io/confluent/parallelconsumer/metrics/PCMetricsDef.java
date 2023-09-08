@@ -60,6 +60,8 @@ public enum PCMetricsDef {
     METADATA_SPACE_USED("metadata.space.used", "Ratio between offset metadata payload size and available space", PCMetricsSubsystem.OFFSET_ENCODER, DISTRIBUTION_SUMMARY),
     PAYLOAD_RATIO_USED("payload.ratio.used", "Ratio between offset metadata payload size and offsets encoded", PCMetricsSubsystem.OFFSET_ENCODER, DISTRIBUTION_SUMMARY);
 
+    public static final String PC_INSTANCE_TAG = "pcinstance";
+
     private static String getStateToValueListing() {
         return Arrays.stream(State.values()).map(state -> state.getValue() + ":" + state).collect(Collectors.joining(", "));
     }
@@ -70,7 +72,8 @@ public enum PCMetricsDef {
 
     private static final String SUBSYSTEM_TAG_KEY = "subsystem";
 
-    public static final String METER_PREFIX = "pc.";
+    private static final String METER_PREFIX = "pc.";
+    public static final String USER_FUNCTION_EXECUTOR_PREFIX = METER_PREFIX+"user.function.";
 
     @Getter
     private final String name;

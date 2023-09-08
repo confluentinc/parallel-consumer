@@ -25,6 +25,7 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -93,13 +94,14 @@ public class CoreApp {
     // tag::example[]
     ParallelStreamProcessor<String, String> setupParallelConsumer() {
         Consumer<String, String> kafkaConsumer = getKafkaConsumer();
-
+        String instanceId = UUID.randomUUID().toString();
         var options = ParallelConsumerOptions.<String, String>builder()
                 .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
                 .maxConcurrency(1000)
                 .consumer(kafkaConsumer)
                 .meterRegistry(meterRegistry)                     //<1>
-                .metricsTags(Tags.of(Tag.of("instance", "pc1")))    //<2>
+                .metricsTags(Tags.of(Tag.of("common-tag", "tag1")))    //<2>
+                .pcInstanceTag(instanceId)                          //<3>
                 .build();
 
         ParallelStreamProcessor<String, String> eosStreamProcessor =
@@ -107,8 +109,8 @@ public class CoreApp {
 
         eosStreamProcessor.subscribe(of(inputTopic));
 
-        kafkaClientMetrics = new KafkaClientMetrics(kafkaConsumer); //<3>
-        kafkaClientMetrics.bindTo(meterRegistry);                 //<4>
+        kafkaClientMetrics = new KafkaClientMetrics(kafkaConsumer); //<4>
+        kafkaClientMetrics.bindTo(meterRegistry);                 //<5>
         return eosStreamProcessor;
     }
     // end::example[]
