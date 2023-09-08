@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.internal;
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.Suppliers;
+import io.confluent.csid.utils.SupplierUtils;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.metrics.PCMetrics;
@@ -43,7 +43,7 @@ import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
-import static io.confluent.parallelconsumer.metrics.PCMetricsDef.METER_PREFIX;
+import static io.confluent.parallelconsumer.metrics.PCMetricsDef.USER_FUNCTION_EXECUTOR_PREFIX;
 import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -260,6 +260,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private Duration drainTimeout;
 
+    private PCMetrics pcMetrics;
+
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
     }
@@ -286,11 +288,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 newOptions.getConsumer().groupMetadata().groupId(),
                 newOptions);
         //Initialize global metrics - should be initialized before any of the module objects are created so that meters can be bound in them.
-        PCMetrics.initialize(options.getMeterRegistry(), options.getMetricsTags());
+        pcMetrics = module.pcMetrics();
 
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
-        workerThreadPool = Suppliers.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
+        workerThreadPool = SupplierUtils.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
 
         this.wm = module.workManager();
 
@@ -311,13 +313,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void initMetrics() {
-        this.userProcessingTimer = PCMetrics.getInstance().getTimerFromMetricDef(PCMetricsDef.USER_FUNCTION_PROCESSING_TIME);
-        this.loadFactorGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.DYNAMIC_EXTRA_LOAD_FACTOR,
+        this.userProcessingTimer = pcMetrics.getTimerFromMetricDef(PCMetricsDef.USER_FUNCTION_PROCESSING_TIME);
+        this.loadFactorGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.DYNAMIC_EXTRA_LOAD_FACTOR,
                 dynamicExtraLoadFactor, DynamicLoadFactor::getCurrentFactor);
-        this.statusGauge = PCMetrics.getInstance().gaugeFromMetricDef(PCMetricsDef.PC_STATUS, this, pc -> pc.state.getValue());
+        this.statusGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.PC_STATUS, this, pc -> pc.state.getValue());
         new ExecutorServiceMetrics(this.getWorkerThreadPool().get(), "pc-user-function-executor",
-                METER_PREFIX,
-                this.options.getMetricsTags()).bindTo(PCMetrics.getInstance().getMeterRegistry());
+                USER_FUNCTION_EXECUTOR_PREFIX,
+                pcMetrics.getCommonTags()).bindTo(pcMetrics.getMeterRegistry());
     }
 
     private void validateConfiguration() {
@@ -626,13 +628,21 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         maybeCloseConsumer();
 
         producerManager.ifPresent(x -> x.close(timeout));
-        PCMetrics.close();
+        deregisterMeters();
+        pcMetrics.close();
         log.debug("Close complete.");
         this.state = CLOSED;
 
         if (this.getFailureCause() != null) {
             log.error("PC closed due to error: {}", getFailureCause(), null);
         }
+    }
+
+    /**
+     * De-registers and removes user function executor meters from meter registry on shutdown
+     */
+    private void deregisterMeters() {
+        pcMetrics.removeMetersByPrefixAndCommonTags(USER_FUNCTION_EXECUTOR_PREFIX);
     }
 
     /**

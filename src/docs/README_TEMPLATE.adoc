@@ -963,10 +963,11 @@ Following example illustrates setup of Parallel Consumer with Meter Registry and
 ----
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-metrics/src/main/java/io/confluent/parallelconsumer/examples/metrics/CoreApp.java[tag=example]
 ----
-<1> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
-<2> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
-<3> - Meter Registry is set through ParallelConsumerOptions.builder(), if not specified - will default to CompositeMeterRegistry - which is No-op.
-<4> - Optional - "instance" tag with value of "pc1" is set through same builder - it will be added to all Parallel Consumer meters
+<1> - Meter Registry is set through ParallelConsumerOptions.builder(), if not specified - will default to CompositeMeterRegistry - which is No-op.
+<2> - Optional - common tags can be specified through same builder - they will be added to all Parallel Consumer meters
+<3> - Optional - instance tag value can be specified - it has to be unique to ensure meter uniqueness in cases when multiple parallel consumer instances are recording metrics to the same meter registry. If instance tag is not specified - unique UUID value will be generated and used. Tag is created with tag key 'pcinstance'.
+<4> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
+<5> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
 
 NOTE:: any additional binders / metrics need to be cleaned up appropriately - for example the Kafka Consumer Metrics registered above - need to be closed using `kafkaClientMetrics.close()` after calling shutting down Parallel Consumer as Parallel Consumer will close Kafka Consumer on shutdown.
 
