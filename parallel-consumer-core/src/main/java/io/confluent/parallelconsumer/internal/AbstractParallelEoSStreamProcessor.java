@@ -1247,7 +1247,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         final boolean containsStaleWork = wm.checkIfWorkIsStale(workContainerBatch);
 
         if (containsStaleWork) {
-            handleStaleWork(workContainerBatch);
+            log.debug("there are stale work containers to be filtered out");
         }
 
         final List<WorkContainer<K, V>> activeWorkContainers = containsStaleWork ?
@@ -1282,26 +1282,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             throw e; // trow again to make the future failed
         } finally {
             cleanUpContext(context);
-        }
-    }
-
-    /**
-     * Given the batch of work containers, publish stale work to feedback loop to be reduced from in progress work.
-     *
-     * @param workContainerBatch
-     */
-    protected void handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
-        final List<WorkContainer<K, V>> staleWorkContainers = workContainerBatch
-                .stream()
-                .filter(wm::checkIfWorkIsStale)
-                .collect(Collectors.toList());
-        final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
-        try {
-            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-            log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
-            staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
-        } finally {
-            cleanUpContext(internalContext);
         }
     }
 
