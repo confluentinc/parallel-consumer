@@ -778,8 +778,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // make sure all work that's been completed are arranged ready for commit
         Duration timeToBlockFor = shouldTryCommitNow ? Duration.ZERO : getTimeToBlockFor();
 
-        // drain retry queue to the tail of mailbox queue to be processed
-        drainRetryQueueToMailBox();
+        // poll retry queue to the tail of mailbox queue to be processed
+        pollRetryQueueToMailBox();
 
         processWorkCompleteMailBox(timeToBlockFor);
 
@@ -1460,15 +1460,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    // drain retry queue records to mailbox queue to be processed
+    // poll retry queue records to mailbox queue to be processed
     // the retry queue modifications are all happening in the same thread, no need to worry about race condition
-    private void drainRetryQueueToMailBox() {
-        wm.getSm()
-                .getRetryQueue()
-                .stream()
-                .map(ControllerEventMessage::of)
-                .forEach(workMailBox::add);
-        wm.getSm().getRetryQueue().clear();
+    private void pollRetryQueueToMailBox() {
+        workMailBox.add(ControllerEventMessage.of(wm.getSm().getRetryQueue().pollFirst()));
     }
 
     private void addToRetryQueue(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
