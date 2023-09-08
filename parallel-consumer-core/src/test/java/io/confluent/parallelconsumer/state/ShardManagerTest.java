@@ -24,7 +24,7 @@ class ShardManagerTest {
     void retryQueueOrdering() {
         PCModuleTestEnv module = mu.getModule();
         ShardManager<String, String> sm = new ShardManager<>(module, module.workManager());
-        NavigableSet<WorkContainer<?, ?>> retryQueue = sm.getRetryQueue();
+        NavigableSet<WorkContainer<String, String>> retryQueue = sm.getRetryQueue();
 
 
         WorkContainer<String, String> w0 = mu.createWorkFor(0);

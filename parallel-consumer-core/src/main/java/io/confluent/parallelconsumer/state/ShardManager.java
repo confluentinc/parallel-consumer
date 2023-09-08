@@ -89,8 +89,8 @@ public class ShardManager<K, V> {
     /**
      * Read optimised view of {@link WorkContainer}s that need retrying.
      */
-    @Getter(AccessLevel.PACKAGE) // visible for testing
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
+    @Getter // visible for testing
+    private final NavigableSet<WorkContainer<K, V>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -219,7 +219,7 @@ public class ShardManager<K, V> {
     /**
      * Idempotent - work may have not been removed, either way it's put back
      */
-    public void onFailure(WorkContainer<?, ?> wc) {
+    public void onFailure(WorkContainer<K, V> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
     }
