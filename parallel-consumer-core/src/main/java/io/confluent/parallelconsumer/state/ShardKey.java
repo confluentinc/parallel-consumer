@@ -79,18 +79,17 @@ public class ShardKey {
 
         @Override
         public boolean equals(Object o) {
-
             if (o == this) return true;
             if (!(o instanceof KeyWithEquals)) return false;
             KeyWithEquals other = (KeyWithEquals) o;
             if (other.key == null && this.key == null) return true;
             if (other.key == null || this.key == null) return false;
             return Objects.deepEquals(this.key, other.key);
-
         }
 
         @Override
         public int hashCode() {
+
             final int PRIME = 59;
             int result = 1;
             result = (result * PRIME);
@@ -100,9 +99,12 @@ public class ShardKey {
             }
             if (isArray(key)) {
                 result = result + arrayHashCode(key);
+            } else {
+                result = result + key.hashCode();
             }
             return result;
         }
+
 
         private int arrayHashCode(Object t) {
             if (t instanceof Object[]) {
