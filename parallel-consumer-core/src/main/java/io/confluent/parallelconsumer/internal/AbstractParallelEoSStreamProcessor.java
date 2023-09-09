@@ -1463,7 +1463,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     // poll retry queue records to mailbox queue to be processed
     // the retry queue modifications are all happening in the same thread, no need to worry about race condition
     private void pollRetryQueueToMailBox() {
-        workMailBox.add(ControllerEventMessage.of(wm.getSm().getRetryQueue().pollFirst()));
+        WorkContainer<K, V> wc = wm.getSm().getRetryQueue().pollFirst();
+        if (wc != null) {
+            workMailBox.add(ControllerEventMessage.of(wc));
+        }
     }
 
     private void addToRetryQueue(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
