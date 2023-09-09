@@ -22,7 +22,10 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -51,6 +54,8 @@ public class ShardManager<K, V> {
     private final ParallelConsumerOptions<?, ?> options;
 
     private final WorkManager<K, V> wm;
+
+    private final int RETRY_INIT_CAPACITY = 1000;
 
     /**
      * Map of Object keys to Shard
@@ -90,7 +95,7 @@ public class ShardManager<K, V> {
      * Read optimised view of {@link WorkContainer}s that need retrying.
      */
     @Getter // visible for testing
-    private final NavigableSet<WorkContainer<K, V>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
+    private final BlockingQueue<WorkContainer<K, V>> retryQueue = new PriorityBlockingQueue<>(RETRY_INIT_CAPACITY, retryQueueWorkContainerComparator);
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -224,7 +229,7 @@ public class ShardManager<K, V> {
      */
     public void onFailure(WorkContainer<K, V> wc) {
         log.debug("Work FAILED");
-        this.retryQueue.add(wc);
+//        this.retryQueue.add(wc);
     }
 
     /**

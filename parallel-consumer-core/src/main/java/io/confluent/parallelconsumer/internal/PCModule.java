@@ -116,4 +116,13 @@ public class PCModule<K, V> {
         }
         return pcMetrics;
     }
+
+    private RetryHandler retryHandler;
+
+    public RetryHandler retryHandler() {
+        if (retryHandler == null) {
+            retryHandler = new RetryHandler(this);
+        }
+        return retryHandler;
+    }
 }

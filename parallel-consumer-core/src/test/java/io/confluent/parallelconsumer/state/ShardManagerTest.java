@@ -8,6 +8,7 @@ import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import org.junit.jupiter.api.Test;
 
 import java.util.NavigableSet;
+import java.util.Queue;
 
 import static com.google.common.truth.Truth.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
@@ -24,7 +25,7 @@ class ShardManagerTest {
     void retryQueueOrdering() {
         PCModuleTestEnv module = mu.getModule();
         ShardManager<String, String> sm = new ShardManager<>(module, module.workManager());
-        NavigableSet<WorkContainer<String, String>> retryQueue = sm.getRetryQueue();
+        Queue<WorkContainer<String, String>> retryQueue = sm.getRetryQueue();
 
 
         WorkContainer<String, String> w0 = mu.createWorkFor(0);

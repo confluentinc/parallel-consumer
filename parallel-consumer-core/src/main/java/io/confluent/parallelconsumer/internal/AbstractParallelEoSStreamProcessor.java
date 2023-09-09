@@ -139,7 +139,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
+    public static class ControllerEventMessage<K, V> {
 
         WorkContainer<K, V> workContainer;
 
@@ -230,6 +230,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see State
      */
     @Setter
+    @Getter
     private State state = State.UNUSED;
 
     /**
@@ -725,6 +726,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             executorService = Executors.newSingleThreadExecutor();
         }
 
+        ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
+        retryHandlerThreadpool.submit(module.retryHandler());
 
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
@@ -777,9 +780,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // make sure all work that's been completed are arranged ready for commit
         Duration timeToBlockFor = shouldTryCommitNow ? Duration.ZERO : getTimeToBlockFor();
-
-        // poll retry queue to the tail of mailbox queue to be processed
-        pollRetryQueueToMailBox();
 
         processWorkCompleteMailBox(timeToBlockFor);
 
@@ -1460,14 +1460,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    // poll retry queue records to mailbox queue to be processed
-    // the retry queue modifications are all happening in the same thread, no need to worry about race condition
-    private void pollRetryQueueToMailBox() {
-        WorkContainer<K, V> wc = wm.getSm().getRetryQueue().pollFirst();
-        if (wc != null) {
-            workMailBox.add(ControllerEventMessage.of(wc));
-        }
-    }
 
     private void addToRetryQueue(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
         wm.getSm().getRetryQueue().add(wc);
