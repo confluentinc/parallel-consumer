@@ -262,6 +262,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Duration drainTimeout;
 
     private PCMetrics pcMetrics;
+    ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -726,9 +727,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             executorService = Executors.newSingleThreadExecutor();
         }
 
-        ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
-        retryHandlerThreadpool.submit(module.retryHandler());
-
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
             addInstanceMDC();
@@ -760,6 +758,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
+
+        retryHandlerThreadpool.submit(module.retryHandler());
     }
 
     /**

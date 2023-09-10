@@ -117,11 +117,11 @@ public class PCModule<K, V> {
         return pcMetrics;
     }
 
-    private RetryHandler retryHandler;
+    private RetryHandler<K, V> retryHandler;
 
-    public RetryHandler retryHandler() {
+    public RetryHandler<K, V> retryHandler() {
         if (retryHandler == null) {
-            retryHandler = new RetryHandler(this);
+            retryHandler = new RetryHandler<>(this);
         }
         return retryHandler;
     }
