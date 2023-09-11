@@ -69,7 +69,8 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    @Getter(AccessLevel.PRIVATE)
+//    @Getter(AccessLevel.PRIVATE)
+    @Getter
     private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
@@ -125,7 +126,7 @@ public class ShardManager<K, V> {
         return Optional.ofNullable(processingShards.get(key));
     }
 
-    ShardKey computeShardKey(WorkContainer<?, ?> wc) {
+    public ShardKey computeShardKey(WorkContainer<?, ?> wc) {
         return ShardKey.of(wc, options.getOrdering());
     }
 
@@ -193,6 +194,7 @@ public class ShardManager<K, V> {
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
+        shard.addWorkContainerToAvailableContainers(wc);
     }
 
     void removeShardIfEmpty(ShardKey key) {

@@ -1291,7 +1291,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
             for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure(e);
-                addToRetryQueue(context, wc);
+                addToMailbox(context, wc); // always add on error
             }
             throw e; // trow again to make the future failed
         } finally {
