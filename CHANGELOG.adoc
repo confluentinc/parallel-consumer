@@ -13,6 +13,12 @@ NOTE:: Dependency version bumps are not listed here.
 ifndef::github_name[]
 toc::[]
 endif::[]
+== 0.5.2.8
+
+=== Fixes
+
+* fix: Fix equality and hash code for ShardKey with array key (#638), resolves (#579)
+
 == 0.5.2.7
 
 === Fixes
