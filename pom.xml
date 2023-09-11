@@ -1,0 +1,977 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright (C) 2020-2023 Confluent, Inc.
+
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.confluent.parallelconsumer</groupId>
+    <artifactId>parallel-consumer-parent</artifactId>
+    <name>Confluent Parallel Consumer</name>
+    <version>0.5.2.8-SNAPSHOT</version>
+    <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
+    </description>
+    <url>http://confluent.io</url>
+    <inceptionYear>2020</inceptionYear>
+
+    <organization>
+        <name>Confluent, Inc.</name>
+        <url>http://confluent.io</url>
+    </organization>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
+
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>parallel-consumer-core</module>
+        <module>parallel-consumer-vertx</module>
+        <module>parallel-consumer-reactor</module>
+        <module>parallel-consumer-examples</module>
+    </modules>
+
+    <developers>
+        <developer>
+            <id>antony@confluent.io</id>
+            <name>Antony Stubbs</name>
+            <email>antony@confluent.io</email>
+            <url>http://confluent.io</url>
+            <organization>Confluent</organization>
+            <organizationUrl>http://confluent.io</organizationUrl>
+            <timezone>Europe/London</timezone>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com:confluentinc/parallel-consumer.git</connection>
+        <developerConnection>scm:git:git@github.com:confluentinc/parallel-consumer.git</developerConnection>
+        <url>https://github.com/confluentinc/parallel-consumer.git</url>
+        <tag>0.5.2.6</tag>
+    </scm>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
+
+    <properties>
+        <source.version>17</source.version>
+        <release.target>8</release.target>
+
+        <!-- when running mvn locally from cmd line, use default jvm for jvm8 - by default uses the runtime JVM -->
+        <jvm.location>${java.home}</jvm.location>
+        <jvm8.location>-insert jvm8 location via environment variable-</jvm8.location>
+        <jvm9.location>-insert jvm9 location via environment variable-</jvm9.location>
+        <!-- default to format when on developer machines, check when in CI -->
+        <license.mode>format</license.mode>
+        <delombok.output>${project.basedir}/target/delombok</delombok.output>
+
+        <!-- standard props -->
+        <maven.version>3.6.3</maven.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <skipTests>false</skipTests>
+        <skipITs>${skipTests}</skipITs>
+        <skipUTs>${skipTests}</skipUTs>
+
+        <!-- version numbers -->
+        <!-- plugins -->
+        <mycila.version>4.2</mycila.version>
+        <lombok.version>1.18.28</lombok.version>
+        <auto-service.version>1.1.1</auto-service.version>
+        <surefire.version>3.1.2</surefire.version>
+
+        <!-- core -->
+        <slf4j.version>2.0.7</slf4j.version>
+        <kafka.version>3.5.0</kafka.version>
+        <version.unij>0.1.3</version.unij>
+
+        <!-- tests -->
+        <parallel-tests>true</parallel-tests>
+
+        <!-- tests deps-->
+        <junit.version>5.10.0-RC1</junit.version>
+        <junit.platform.version>1.10.0</junit.platform.version>
+        <testcontainers.version>1.18.3</testcontainers.version>
+        <truth.version>1.1.5</truth.version>
+        <flogger.version>0.7.4</flogger.version>
+        <mockito.version>5.4.0</mockito.version>
+        <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
+        <jabel.version>1.0.0</jabel.version>
+        <micrometer-core.version>1.10.2</micrometer-core.version>
+    </properties>
+
+    <profiles>
+        <profile>
+            <!-- override source and target when working from IDE -->
+            <id>intellij-idea-only</id>
+            <activation>
+                <property>
+                    <name>idea.maven.embedder.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <!-- override source and target when working from IDE -->
+                            <source>${source.version}</source>
+                            <target>${source.version}</target>
+                            <release>${source.version}</release>
+                            <!-- disable Jabel -->
+                            <annotationProcessors>
+                                <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
+                                </annotationProcessor>
+                            </annotationProcessors>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <!-- For releasing, use jvm8 for testing -->
+            <!-- currently broken -->
+            <id>jvm8-release</id>
+            <properties>
+                <jvm.location>${jvm8.location}</jvm.location>
+            </properties>
+        </profile>
+        <profile>
+            <!-- For releasing, use jvm9 for testing -->
+            <id>jvm9-release</id>
+            <properties>
+                <jvm.location>${jvm9.location}</jvm.location>
+            </properties>
+        </profile>
+        <profile>
+            <id>license-format</id>
+            <activation>
+                <os>
+                    <!-- this doesnt' work? remove -->
+                    <!-- improve to instead be !jenkins && !travis  / !CI -->
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <license.mode>format</license.mode>
+            </properties>
+        </profile>
+        <profile>
+            <id>github</id>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>github-asciidoc-template-maven-plugin</id>
+                    <url>https://maven.pkg.github.com/whelk-io/asciidoc-template-maven-plugin</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+        <profile>
+            <!-- Profile to always run in Continuous Integration (Jenkins, Github Workflows etc) environments -->
+            <id>ci</id>
+            <properties>
+                <license.mode>check</license.mode>
+                <parallel-tests>false</parallel-tests>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>enforce-versions</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <phase>validate</phase>
+                                <configuration>
+                                    <rules>
+                                        <!-- only enforce requireReleaseDeps when running in CI, not locally -->
+                                        <requireReleaseDeps>
+                                            <onlyWhenRelease>false</onlyWhenRelease>
+                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                            <excludes>
+                                                <exclude>io.confluent.parallelconsumer:</exclude>
+                                            </excludes>
+                                        </requireReleaseDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>maven-central</id>
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <distributionManagement>
+                <snapshotRepository>
+                    <id>ossrh</id>
+                    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+                </snapshotRepository>
+            </distributionManagement>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.plugins</groupId>
+                        <artifactId>nexus-staging-maven-plugin</artifactId>
+                        <version>1.6.13</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <serverId>ossrh</serverId>
+                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+    <dependencies>
+        <!-- Build dependency -->
+        <dependency>
+            <groupId>com.github.bsideup.jabel</groupId>
+            <artifactId>jabel-javac-plugin</artifactId>
+            <version>${jabel.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Main -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>pl.tlinkowski.unij</groupId>
+            <artifactId>pl.tlinkowski.unij.api</artifactId>
+            <version>${version.unij}</version>
+        </dependency>
+        <dependency>
+            <groupId>pl.tlinkowski.unij</groupId>
+            <artifactId>pl.tlinkowski.unij.bundle.jdk8</artifactId>
+            <version>${version.unij}</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.4.8</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>${junit.platform.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Junit Pioneer pulls in an older version - force the matched version -->
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-commons</artifactId>
+            <version>${junit.platform.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.24.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>auto-service-annotations</artifactId>
+            <version>${auto-service.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.truth</groupId>
+            <artifactId>truth</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.truth.extensions</groupId>
+            <artifactId>truth-java8-extension</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-slf4j-backend</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>one.util</groupId>
+            <artifactId>streamex</artifactId>
+            <version>0.8.1</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-core</artifactId>
+                <version>${micrometer-core.version}</version>
+            </dependency>
+            <!-- External -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>kafka</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>4.2.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.12.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.truth</groupId>
+                <artifactId>truth</artifactId>
+                <version>${truth.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.truth.extensions</groupId>
+                <artifactId>truth-java8-extension</artifactId>
+                <version>${truth.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.stubbs.truth</groupId>
+                <artifactId>truth-generator-api</artifactId>
+                <version>${truth-generator-maven-plugin.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>32.1.1-jre</version>
+            </dependency>
+            <dependency>
+                <groupId>me.tongfei</groupId>
+                <artifactId>progressbar</artifactId>
+                <version>0.9.5</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.flogger</groupId>
+                <artifactId>flogger</artifactId>
+                <version>${flogger.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.flogger</groupId>
+                <artifactId>flogger-slf4j-backend</artifactId>
+                <version>${flogger.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <scope>test</scope>
+                <version>${junit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <scope>test</scope>
+                <version>${junit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <scope>test</scope>
+                <version>${junit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit-pioneer</groupId>
+                <artifactId>junit-pioneer</artifactId>
+                <scope>test</scope>
+                <version>1.9.1</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.tomakehurst</groupId>
+                <artifactId>wiremock-jre8</artifactId>
+                <version>2.35.0</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+                <filtering>true</filtering>
+            </testResource>
+        </testResources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-help-plugin</artifactId>
+                <version>3.4.0</version>
+                <executions>
+                    <execution>
+                        <id>show-profiles</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>active-profiles</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.sonatype.ossindex.maven</groupId>
+                <artifactId>ossindex-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <scope>runtime</scope>
+                    <fail>false</fail>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>audit-dependencies</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>audit</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.soebes.maven.plugins</groupId>
+                <artifactId>echo-maven-plugin</artifactId>
+                <version>0.5.0</version>
+                <!-- very useful for debugging maven runtime state -->
+                <!--                <configuration>-->
+                <!--                    <echos>-->
+                <!--                        <echo>vars: ${JAVA_HOME} ${java.home} ${jvm.location}</echo>-->
+                <!--                    </echos>-->
+                <!--                </configuration>-->
+            </plugin>
+            <plugin>
+                <groupId>io.whelk.asciidoc</groupId>
+                <artifactId>asciidoc-template-maven-plugin</artifactId>
+                <version>1.0.21</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>process</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>build</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <templateDirectory>src/docs/</templateDirectory>
+                    <templateFile>README_TEMPLATE.adoc</templateFile>
+                    <outputDirectory>./</outputDirectory>
+                    <outputFile>README.adoc</outputFile>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.0.1</version>
+                <configuration>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <pushChanges>false</pushChanges>
+                    <tagNameFormat>@{project.version}</tagNameFormat>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${mycila.version}</version>
+                <inherited>false</inherited>
+                <!-- To apply the license run: -->
+                <!-- ↪ mvn com.mycila:license-maven-plugin:format-->
+                <!-- To skip: -Dlicense.skip -->
+                <configuration>
+                    <aggregate>true</aggregate>
+                    <licenseSets>
+                        <licenseSet>
+                            <inlineHeader>Copyright (C) ${license.git.copyrightYears} ${project.organization.name}
+                            </inlineHeader>
+                            <excludes>
+                                <exclude>**/release-pom.xml</exclude>
+                                <exclude>**/target/**/*</exclude>
+                                <exclude>**/README*</exclude>
+                                <!-- don't think this is needed, as it's excluded by default. But running really slow on OSx so thought should check -->
+                                <!-- https://github.com/mathieucarbou/license-maven-plugin/issues/298-->
+                                <!-- Ideally the fix would be this issue: https://github.com/mathieucarbou/license-maven-plugin/issues/126  Ignore items from .gitignore #126-->
+                                <exclude>.ci/**/*</exclude>
+                                <exclude>.git/**/*</exclude>
+                                <!-- Very odd artifact on Jenkins -->
+                                <!--00:01:15.201  [INFO] Checking licenses...-->
+                                <!--00:01:17.095  [WARNING] Unknown file extension: ********-->
+                                <!--00:01:17.096  [WARNING] Missing header in: ********-->
+                                <exclude>********</exclude>
+                            </excludes>
+                        </licenseSet>
+                    </licenseSets>
+                    <mapping>
+                        <java>JAVAPKG_STYLE</java>
+                    </mapping>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.mycila</groupId>
+                        <artifactId>license-maven-plugin-git</artifactId>
+                        <version>${mycila.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>${license.mode}</goal>
+                        </goals>
+                        <phase>process-sources</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.auto.service</groupId>
+                            <artifactId>auto-service</artifactId>
+                            <version>${auto-service.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <!-- jabel setup-->
+                        <path>
+                            <groupId>com.github.bsideup.jabel</groupId>
+                            <artifactId>jabel-javac-plugin</artifactId>
+                            <version>${jabel.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <!-- enable language preview features -->
+                    <source>${source.version}</source>
+                    <target>${release.target}</target>
+                    <release>${release.target}</release>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor
+                        </annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${surefire.version}</version>
+                <configuration>
+                    <trimStackTrace>false</trimStackTrace>
+                    <excludes>
+                        <!-- <exclude>**/*integration*/**/*.java</exclude> too aggressive? -->
+                        <exclude>**/integrationTest*/**/*.java</exclude>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                    <jvm>${jvm.location}/bin/java</jvm>
+                    <skipTests>${skipUTs}</skipTests>
+                </configuration>
+            </plugin>
+            <plugin>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${surefire.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includes>
+                        <!-- using filename matching -->
+                        <!-- Integration tests need to be in a package named `integrationTest` -->
+                        <include>**/integrationTest*/**/*.java</include>
+                    </includes>
+                    <jvm>${jvm.location}/bin/java</jvm>
+                    <skipTests>${skipTests}</skipTests>
+                    <skipITs>${skipITs}</skipITs>
+                    <parallel>methods</parallel>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.10</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <id>enforce-versions</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <phase>validate</phase>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[${source.version},)</version>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>3.6.3</version>
+                                </requireMavenVersion>
+                                <requireMavenVersion>
+                                    <version>3.6.3</version>
+                                </requireMavenVersion>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <exclude>log4j:*:*:*:runtime</exclude>
+                                        <exclude>log4j:*:*:*:compile</exclude>
+                                        <exclude>log4j:*:*:*:test</exclude>
+                                        <exclude>org.apache.logging.log4j:log4j-core:*:*:runtime</exclude>
+                                        <exclude>org.apache.logging.log4j:log4j-core:*:*:compile</exclude>
+                                        <!-- Javafaker is abandoned and has CVEs and bugs -->
+                                        <exclude>com.github.javafaker</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                                <reactorModuleConvergence />
+                                <banDuplicatePomDependencyVersions />
+                                <requireSameVersions />
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- https://stackoverflow.com/a/1733745/105741-->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.4.0</version>
+                <executions>
+                    <!-- integration test sources -->
+                    <execution>
+                        <id>add-integration-test-source</id>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>src/test-integration/java</source>
+                                <source>${project.build.directory}/generated-sources</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>add-integration-test-resource</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>add-test-resource</goal>
+                        </goals>
+                        <configuration>
+                            <resources>
+                                <resource>
+                                    <directory>src/test-integration/resources</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-site-plugin</artifactId>
+                <version>4.0.0-M9</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-project-info-reports-plugin</artifactId>
+                <version>3.4.5</version>
+            </plugin>
+            <plugin>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok-maven-plugin</artifactId>
+                <version>1.18.20.0</version>
+                <configuration>
+                    <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                    <outputDirectory>${delombok.output}</outputDirectory>
+                    <addOutputDirectory>false</addOutputDirectory>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>delombok</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <sourcepath>${delombok.output}</sourcepath>
+                    <sourcepath>${delombok.output}</sourcepath>
+                    <!--
+                    Force javadoc to ignore things like "unknown tag: implNote"
+                    and "no @param for <C>"
+                    -->
+                    <additionalOptions>-Xdoclint:none</additionalOptions>
+                    <javadocExecutable>${java.home}/bin/javadoc</javadocExecutable>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <source>${source.version}</source>
+                            <release>${source.version}</release>
+                            <!-- Source goals - change to true? -->
+                            <failOnWarnings>false</failOnWarnings>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>tree</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- for use in idea -->
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>2.16.0</version>
+            </plugin>
+        </plugins>
+
+        <!-- Management -->
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>4.0.0-M9</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-project-info-reports-plugin</artifactId>
+                    <version>3.4.5</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>3.3.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>3.1.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>3.1.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.3.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>3.6.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <repositories>
+        <repository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+        <repository>
+            <id>astubbs-truth-generator</id>
+            <url>https://packagecloud.io/astubbs/truth-generator/maven2</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>astubbs-truth-generator</id>
+            <url>https://packagecloud.io/astubbs/truth-generator/maven2</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+</project>

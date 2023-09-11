@@ -1,0 +1,121 @@
+package io.confluent.parallelconsumer;
+
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
+import io.confluent.parallelconsumer.ParallelStreamProcessor.ConsumeProduceResult;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.assertj.core.util.Lists;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.stream.Stream;
+
+import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.internal.verification.VerificationModeFactory.times;
+
+// TODO this class shouldn't have access to the non streaming async consumer - refactor out another super class layer
+@Slf4j
+class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
+
+    JStreamParallelEoSStreamProcessor<String, String> streaming;
+
+    @BeforeEach
+    public void setupData() {
+        super.primeFirstRecord();
+    }
+
+    @Override
+    protected ParallelEoSStreamProcessor<String, String> initAsyncConsumer(ParallelConsumerOptions<String, String> options) {
+        streaming = new JStreamParallelEoSStreamProcessor<>(options);
+
+        return streaming;
+    }
+
+    @Test
+    void testStream() {
+        var latch = new CountDownLatch(1);
+        Stream<ConsumeProduceResult<String, String, String, String>> streamedResults = streaming.pollProduceAndStream((record) -> {
+            ProducerRecord<String, String> mock = mock(ProducerRecord.class);
+            log.info("Consumed and produced record ({}), and returning a derivative result to produce to output topic: {}", record, mock);
+            myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+            latch.countDown();
+            return Lists.list(mock);
+        });
+
+        awaitLatch(latch);
+
+        awaitForSomeLoopCycles(2);
+
+        verify(myRecordProcessingAction, times(1)).apply(any());
+
+        assertThat(streamedResults).hasSize(1);
+    }
+
+    @Test
+    void testConsumeAndProduce() {
+        var latch = new CountDownLatch(1);
+        var stream = streaming.pollProduceAndStream((record) -> {
+            String apply = myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+            ProducerRecord<String, String> result = new ProducerRecord<>(OUTPUT_TOPIC, "akey", apply);
+            log.info("Consumed a record ({}), and returning a derivative result record to be produced: {}", record, result);
+            List<ProducerRecord<String, String>> result1 = Lists.list(result);
+            latch.countDown();
+            return result1;
+        });
+
+        awaitLatch(latch);
+
+        resumeControlLoop();
+
+        awaitForSomeLoopCycles(1);
+
+        verify(myRecordProcessingAction, times(1)).apply(any());
+
+        var myResultStream = stream.peek(x -> {
+            if (x != null) {
+                ConsumerRecord<String, String> left = x.getIn().getSingleConsumerRecord();
+                log.info("{}:{}:{}:{}", left.key(), left.value(), x.getOut(), x.getMeta());
+            } else {
+                log.info("null");
+            }
+        });
+
+        assertThat(myResultStream).hasSize(1);
+    }
+
+    @Test
+    void testFlatMapProduce() {
+        var latch = new CountDownLatch(1);
+        var myResultStream = streaming.pollProduceAndStream((record) -> {
+            String apply1 = myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+            String apply2 = myRecordProcessingAction.apply(record.getSingleConsumerRecord());
+
+            var list = Lists.list(
+                    new ProducerRecord<>(OUTPUT_TOPIC, "key", apply1),
+                    new ProducerRecord<>(OUTPUT_TOPIC, "key", apply2));
+
+            latch.countDown();
+            return list;
+        });
+
+        awaitLatch(latch);
+
+        awaitForSomeLoopCycles(1);
+
+        verify(myRecordProcessingAction, times(2)).apply(any());
+
+
+        assertThat(myResultStream).hasSize(2);
+    }
+
+}
