@@ -60,8 +60,7 @@ public class ProcessingShard<K, V> {
 
 
     public boolean workIsWaitingToBeProcessed() {
-        return entries.values().parallelStream()
-                .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
+        return availableWorkContainerCnt.get() > 0L;
     }
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
@@ -77,8 +76,8 @@ public class ProcessingShard<K, V> {
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove work from shard's queue
         entries.remove(wc.offset());
-        availableWorkContainerCnt.decrementAndGet();
     }
+
 
     public boolean isEmpty() {
         return entries.isEmpty();
@@ -115,8 +114,9 @@ public class ProcessingShard<K, V> {
                 });
     }
 
-    public void incrAvailableWorkContainerCnt() {
+    public ProcessingShard<K, V> incrAvailableWorkContainerCnt() {
         availableWorkContainerCnt.incrementAndGet();
+        return this;
     }
 
 
@@ -163,6 +163,8 @@ public class ProcessingShard<K, V> {
         }
 
         logSlowWork(slowWork);
+
+        availableWorkContainerCnt.getAndAdd(-1 * workTaken.size());
 
         return workTaken;
     }
