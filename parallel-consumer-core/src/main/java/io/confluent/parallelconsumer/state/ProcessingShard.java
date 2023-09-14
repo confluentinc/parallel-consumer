@@ -102,9 +102,6 @@ public class ProcessingShard<K, V> {
         return entries.remove(offset);
     }
 
-    public WorkContainer<K, V> removeFromAvailableContainers(long offset) {
-        return entries.remove(offset);
-    }
 
 
     // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:

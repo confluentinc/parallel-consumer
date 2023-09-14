@@ -230,7 +230,7 @@ public class ShardManager<K, V> {
      */
     public void onFailure(WorkContainer<K, V> wc) {
         log.debug("Work FAILED");
-        retryQueue.add(wc);
+        this.retryQueue.add(wc);
     }
 
     /**
