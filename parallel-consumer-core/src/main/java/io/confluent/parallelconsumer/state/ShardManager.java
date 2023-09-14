@@ -194,7 +194,6 @@ public class ShardManager<K, V> {
         var shard = processingShards.computeIfAbsent(shardKey,
                 ignore -> new ProcessingShard<>(shardKey, options, wm.getPm()));
         shard.addWorkContainer(wc);
-        shard.addWorkContainerToAvailableContainers(wc);
     }
 
     void removeShardIfEmpty(ShardKey key) {
@@ -231,6 +230,7 @@ public class ShardManager<K, V> {
      */
     public void onFailure(WorkContainer<K, V> wc) {
         log.debug("Work FAILED");
+        retryQueue.add(wc);
     }
 
     /**

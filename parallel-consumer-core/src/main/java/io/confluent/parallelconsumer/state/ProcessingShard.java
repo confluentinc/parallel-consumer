@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -45,8 +46,6 @@ public class ProcessingShard<K, V> {
     @Getter
     private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
 
-    @Getter
-    private final NavigableMap<Long, WorkContainer<K, V>> availableWorkContainers = new ConcurrentSkipListMap<>();
 
     @Getter(PRIVATE)
     private final ShardKey key;
@@ -56,6 +55,9 @@ public class ProcessingShard<K, V> {
     private final PartitionStateManager<K, V> pm;
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
+
+    private AtomicLong availableWorkContainerCnt = new AtomicLong(0);
+
 
     public boolean workIsWaitingToBeProcessed() {
         return entries.values().parallelStream()
@@ -68,21 +70,14 @@ public class ProcessingShard<K, V> {
             log.debug("Entry for {} already exists in shard queue, dropping record", wc);
         } else {
             entries.put(key, wc);
-        }
-    }
-
-    public void addWorkContainerToAvailableContainers(WorkContainer<K, V> wc) {
-        long key = wc.offset();
-        if (availableWorkContainers.containsKey(key)) {
-            log.debug("Entry for {} already exists in shard queue, dropping record", wc);
-        } else {
-            availableWorkContainers.put(key, wc);
+            availableWorkContainerCnt.incrementAndGet();
         }
     }
 
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove work from shard's queue
         entries.remove(wc.offset());
+        availableWorkContainerCnt.decrementAndGet();
     }
 
     public boolean isEmpty() {
@@ -90,10 +85,7 @@ public class ProcessingShard<K, V> {
     }
 
     public long getCountOfWorkAwaitingSelection() {
-        return entries.values().stream()
-                // todo missing pm.isBlocked(topicPartition) ?
-                .filter(WorkContainer::isAvailableToTakeAsWork)
-                .count();
+        return availableWorkContainerCnt.get();
     }
 
     public long getCountOfWorkTracked() {
@@ -110,6 +102,10 @@ public class ProcessingShard<K, V> {
         return entries.remove(offset);
     }
 
+    public WorkContainer<K, V> removeFromAvailableContainers(long offset) {
+        return entries.remove(offset);
+    }
+
 
     // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:
     // 1. block the new work containers to be picked and processed
@@ -122,6 +118,10 @@ public class ProcessingShard<K, V> {
                 });
     }
 
+    public void incrAvailableWorkContainerCnt() {
+        availableWorkContainerCnt.incrementAndGet();
+    }
+
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
@@ -129,12 +129,19 @@ public class ProcessingShard<K, V> {
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
-        var iterator = availableWorkContainers.entrySet().iterator();
+        var iterator = entries.entrySet().iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
             var workContainer = iterator.next().getValue();
 
             if (pm.couldBeTakenAsWork(workContainer)) {
-                workTaken.add(workContainer);
+                if (workContainer.isAvailableToTakeAsWork()) {
+                    log.trace("Taking {} as work", workContainer);
+                    workContainer.onQueueingForExecution();
+                    workTaken.add(workContainer);
+                } else {
+                    log.trace("Skipping {} as work, not available to take as work", workContainer);
+                    addToSlowWorkMaybe(slowWork, workContainer);
+                }
 
                 if (isOrderRestricted()) {
                     // can't take any more work from this shard, due to ordering restrictions
@@ -162,54 +169,6 @@ public class ProcessingShard<K, V> {
 
         return workTaken;
     }
-
-//    ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
-//        log.trace("Looking for work on shardQueueEntry: {}", getKey());
-//
-//        var slowWork = new HashSet<WorkContainer<?, ?>>();
-//        var workTaken = new ArrayList<WorkContainer<K, V>>();
-//
-//        var iterator = entries.entrySet().iterator();
-//        while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
-//            var workContainer = iterator.next().getValue();
-//
-//            if (pm.couldBeTakenAsWork(workContainer)) {
-//                if (workContainer.isAvailableToTakeAsWork()) {
-//                    log.trace("Taking {} as work", workContainer);
-//                    workContainer.onQueueingForExecution();
-//                    availableWorkContainers.remove(workContainer.offset());
-//                    workTaken.add(workContainer);
-//                } else {
-//                    log.trace("Skipping {} as work, not available to take as work", workContainer);
-//                    addToSlowWorkMaybe(slowWork, workContainer);
-//                }
-//
-//                if (isOrderRestricted()) {
-//                    // can't take any more work from this shard, due to ordering restrictions
-//                    // processing blocked on this shard, continue to next shard
-//                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), getKey());
-//                    break;
-//                }
-//            } else {
-//                // break, assuming all work in this shard, is for the same ShardKey, which is always on the same
-//                //  partition (regardless of ordering mode - KEY, PARTITION or UNORDERED (which is parallel PARTITIONs)),
-//                //  so no point continuing shard scanning. This only isn't true if a non standard partitioner produced the
-//                //  recrods of the same key to different partitions. In which case, there's no way PC can make sure all
-//                //  records of that belong to the shard are able to even be processed by the same PC instance, so it doesn't
-//                //  matter.
-//                log.trace("Partition for shard {} is blocked for work taking, stopping shard scan", this);
-//                break;
-//            }
-//        }
-//
-//        if (workTaken.size() == workToGetDelta) {
-//            log.trace("Work taken ({}) exceeds max ({})", workTaken.size(), workToGetDelta);
-//        }
-//
-//        logSlowWork(slowWork);
-//
-//        return workTaken;
-//    }
 
     private void logSlowWork(Set<WorkContainer<?, ?>> slowWork) {
         // log

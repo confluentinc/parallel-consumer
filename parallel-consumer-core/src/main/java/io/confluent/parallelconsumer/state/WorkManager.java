@@ -190,6 +190,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         wc.endFlight();
         pm.onFailure(wc);
         sm.onFailure(wc);
+        ProcessingShard<K, V> shard = sm.getShard(ShardKey.of(wc, module.options().getOrdering())).get();
+
+        shard.removeFromAvailableContainers(wc.offset());
         numberRecordsOutForProcessing--;
     }
 

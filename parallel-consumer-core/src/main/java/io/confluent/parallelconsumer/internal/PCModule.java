@@ -24,6 +24,7 @@ import java.time.Clock;
  */
 public class PCModule<K, V> {
 
+    @Setter
     protected ParallelConsumerOptions<K, V> optionsInstance;
 
     @Setter
@@ -117,6 +118,7 @@ public class PCModule<K, V> {
         return pcMetrics;
     }
 
+    @Setter
     private RetryHandler<K, V> retryHandler;
 
     public RetryHandler<K, V> retryHandler() {
