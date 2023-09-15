@@ -616,7 +616,10 @@ public class PartitionState<K, V> {
      * @return true if this record be taken from its partition as work.
      */
     public boolean couldBeTakenAsWork(WorkContainer<K, V> workContainer) {
-        if (isAllowedMoreRecords()) {
+        if (checkIfWorkIsStale(workContainer)) {
+            log.debug("Work is in queue with stale epoch or no longer assigned. Skipping. Shard it came from will/was removed during partition revocation. WC: {}", workContainer);
+            return false;
+        } else if (isAllowedMoreRecords()) {
             log.debug("Partition is allowed more records. Taking work. WC: {}", workContainer);
             return true;
         } else if (isBlockingProgress(workContainer)) {

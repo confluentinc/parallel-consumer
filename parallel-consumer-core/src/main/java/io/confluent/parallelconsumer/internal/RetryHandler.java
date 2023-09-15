@@ -13,32 +13,25 @@ import java.util.concurrent.BlockingQueue;
 @Slf4j
 public class RetryHandler<K, V> implements Runnable {
     private final BlockingQueue<WorkContainer<K, V>> retryQueue;
-    private final State state;
 
     private final PCModule<K, V> pc;
-
-    private final static long DEFAULT_WAITING_MILLIS = 5L;
 
     public RetryHandler(PCModule<K, V> pc) {
         this.pc = pc;
         retryQueue = pc.workManager().getSm().getRetryQueue();
-        state = pc.pc().getState();
     }
 
     @Override
     public void run() {
-        while (!state.equals(State.CLOSED)) {
-            long waitingMillis = getRetryWaitingMillis();
-            if (waitingMillis <= 0) {
-                pollRetryQueueToAvailableWorkerMap();
-            }
+        if (isTimeForRetry()) {
+            pollRetryQueueToAvailableWorkerMap();
         }
     }
 
-    private long getRetryWaitingMillis() {
+    private boolean isTimeForRetry() {
         WorkContainer<K, V> wc = retryQueue.peek();
 
-        return wc != null ? wc.getRetryDueAt().toEpochMilli() - pc.clock().millis() : DEFAULT_WAITING_MILLIS;
+        return wc != null && wc.getRetryDueAt().toEpochMilli() - pc.clock().millis() <= 0;
     }
 
 

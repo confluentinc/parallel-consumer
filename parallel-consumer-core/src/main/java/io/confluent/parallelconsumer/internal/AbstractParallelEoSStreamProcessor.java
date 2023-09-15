@@ -139,7 +139,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    public static class ControllerEventMessage<K, V> {
+    private static class ControllerEventMessage<K, V> {
 
         WorkContainer<K, V> workContainer;
 
@@ -230,7 +230,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see State
      */
     @Setter
-    @Getter
     private State state = State.UNUSED;
 
     /**
@@ -262,7 +261,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Duration drainTimeout;
 
     private PCMetrics pcMetrics;
-    ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
 
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions) {
         this(newOptions, new PCModule<>(newOptions));
@@ -759,6 +757,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
 
+        // init retry handler
+        ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
         retryHandlerThreadpool.submit(module.retryHandler());
     }
 

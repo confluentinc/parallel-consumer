@@ -24,7 +24,6 @@ import java.time.Clock;
  */
 public class PCModule<K, V> {
 
-    @Setter
     protected ParallelConsumerOptions<K, V> optionsInstance;
 
     @Setter
