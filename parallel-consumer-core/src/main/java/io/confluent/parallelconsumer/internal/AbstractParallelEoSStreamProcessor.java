@@ -757,7 +757,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
 
-        // init retry handler
+        // init retry handler to calculate the available worker numbers and update the retryQueue
         ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
         retryHandlerThreadpool.submit(module.retryHandler());
     }

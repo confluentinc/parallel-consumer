@@ -28,6 +28,7 @@ public class RetryHandler<K, V> implements Runnable {
         }
     }
 
+    // if the worker is ready to be
     private boolean isTimeForRetry() {
         WorkContainer<K, V> wc = retryQueue.peek();
 
@@ -35,9 +36,10 @@ public class RetryHandler<K, V> implements Runnable {
     }
 
 
-    // poll retry queue records to mailbox queue to be processed
-    // the retry queue modifications are all happening in the same thread, no need to worry about race condition
+    // poll retry queue records updates the available count
     private void pollRetryQueueToAvailableWorkerMap() {
+        // could be race condition with getTimeToBlockFor() when it tries to get the earliest worker
+        // but since the block time also related to commit interval, so this impact should be trivial
         WorkContainer<K, V> wc = retryQueue.poll();
         if (wc != null) {
             ShardKey shardKey = pc.workManager().getSm().computeShardKey(wc);

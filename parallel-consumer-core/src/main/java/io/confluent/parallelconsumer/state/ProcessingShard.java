@@ -97,10 +97,11 @@ public class ProcessingShard<K, V> {
     }
 
     public WorkContainer<K, V> remove(long offset) {
-        if (availableWorkContainerCnt.get() > 0) {
-            availableWorkContainerCnt.decrementAndGet();
+        // from onPartitionsRemoved callback, need to deduce the available worker count for the revoked partition
+        WorkContainer<K, V> toRemovedWorker = entries.get(offset);
+        if (toRemovedWorker != null && toRemovedWorker.isAvailableToTakeAsWork()) {
+            dcrAvailableWorkContainerCntByDelta(1);
         }
-
         return entries.remove(offset);
     }
 
@@ -167,10 +168,7 @@ public class ProcessingShard<K, V> {
 
         logSlowWork(slowWork);
 
-        availableWorkContainerCnt.getAndAdd(-1 * workTaken.size());
-        if (availableWorkContainerCnt.get() < 0L) {
-            availableWorkContainerCnt.set(0L);
-        }
+        dcrAvailableWorkContainerCntByDelta(workTaken.size());
 
         return workTaken;
     }
@@ -217,5 +215,13 @@ public class ProcessingShard<K, V> {
     // check if the work container is stale
     private boolean isWorkContainerStale(WorkContainer<K, V> workContainer) {
         return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
+    }
+
+    private void dcrAvailableWorkContainerCntByDelta(int delta) {
+        availableWorkContainerCnt.getAndAdd(-1 * delta);
+        // in case of possible race condition
+        if (availableWorkContainerCnt.get() < 0L) {
+            availableWorkContainerCnt.set(0L);
+        }
     }
 }
