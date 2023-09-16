@@ -1459,10 +1459,4 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-
-    private void addToRetryQueue(PollContextInternal<K, V> pollContext, WorkContainer<K, V> wc) {
-        wm.getSm().getRetryQueue().add(wc);
-        // need to release the lock on producerManager
-        wc.onPostAddToMailBox(pollContext, producerManager);
-    }
 }

@@ -97,6 +97,10 @@ public class ProcessingShard<K, V> {
     }
 
     public WorkContainer<K, V> remove(long offset) {
+        if (availableWorkContainerCnt.get() > 0) {
+            availableWorkContainerCnt.decrementAndGet();
+        }
+
         return entries.remove(offset);
     }
 
@@ -164,6 +168,9 @@ public class ProcessingShard<K, V> {
         logSlowWork(slowWork);
 
         availableWorkContainerCnt.getAndAdd(-1 * workTaken.size());
+        if (availableWorkContainerCnt.get() < 0L) {
+            availableWorkContainerCnt.set(0L);
+        }
 
         return workTaken;
     }
