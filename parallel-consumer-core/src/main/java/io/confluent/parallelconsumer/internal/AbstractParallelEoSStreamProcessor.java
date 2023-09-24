@@ -206,6 +206,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Instant lastCommitTime;
 
+    private final RetryHandler<K, V> retryHandler;
+
+
     @Override
     public boolean isClosedOrFailed() {
         boolean closed = state == State.CLOSED;
@@ -230,6 +233,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see State
      */
     @Setter
+    @Getter
     private State state = State.UNUSED;
 
     /**
@@ -310,6 +314,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
         //Initialize metrics for this class once all the objects are created
         initMetrics();
+
+        this.retryHandler = module.retryHandler();
     }
 
     private void initMetrics() {
@@ -636,6 +642,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (this.getFailureCause() != null) {
             log.error("PC closed due to error: {}", getFailureCause(), null);
         }
+
+        this.retryHandler.close();
     }
 
     /**

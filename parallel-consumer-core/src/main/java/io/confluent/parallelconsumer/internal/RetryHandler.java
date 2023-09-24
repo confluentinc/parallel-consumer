@@ -16,17 +16,27 @@ public class RetryHandler<K, V> implements Runnable {
 
     private final PCModule<K, V> pc;
 
+    private boolean isStopped = false;
+
     public RetryHandler(PCModule<K, V> pc) {
         this.pc = pc;
         retryQueue = pc.workManager().getSm().getRetryQueue();
+        isStopped = false;
     }
 
     @Override
     public void run() {
-        if (isTimeForRetry()) {
-            pollRetryQueueToAvailableWorkerMap();
+        while (!isStopped) {
+            if (isTimeForRetry()) {
+                pollRetryQueueToAvailableWorkerMap();
+            }
         }
     }
+
+    public void close() {
+        isStopped = true;
+    }
+
 
     // if the worker is ready to be
     private boolean isTimeForRetry() {

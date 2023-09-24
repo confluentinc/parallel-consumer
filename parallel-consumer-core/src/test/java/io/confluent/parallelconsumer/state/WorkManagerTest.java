@@ -38,6 +38,7 @@ import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.truth.Truth.assertWithMessage;
@@ -129,6 +130,10 @@ public class WorkManagerTest {
         ConsumerRecord<String, String> stringStringConsumerRecord = new ConsumerRecord<>(INPUT_TOPIC, partition, offset, key, value);
         offset++;
         return stringStringConsumerRecord;
+    }
+
+    private void initRetryHandler() {
+        CompletableFuture.runAsync(module.retryHandler());
     }
 
     @ParameterizedTest
@@ -735,6 +740,44 @@ public class WorkManagerTest {
                         .map(WorkContainer::getTopicPartition)
                         .collect(Collectors.toList()))
                 .containsNoDuplicates();
+
+    }
+
+    /**
+     * Tests failed work delay
+     */
+    @Test
+    void testAvailableWorkerCnt() {
+        ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
+        setupWorkManager(build);
+        initRetryHandler();
+        // sanity
+        assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
+
+        registerSomeWork();
+
+        int total = 3;
+        int maxWorkToGet = 2;
+
+        var works = wm.getWorkIfAvailable(maxWorkToGet);
+
+        assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(total - works.size());
+
+        // fail the work
+        var wc = works.get(0);
+        fail(wc);
+
+
+        // advance clock to make delay pass
+        advanceClockByDelay();
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        // work should now be ready to take
+        works = wm.getWorkIfAvailable(maxWorkToGet);
+        assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(total - works.size());
 
     }
 
