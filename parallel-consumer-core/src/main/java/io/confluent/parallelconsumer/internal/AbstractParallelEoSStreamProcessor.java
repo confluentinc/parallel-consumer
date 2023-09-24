@@ -233,7 +233,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see State
      */
     @Setter
-    @Getter
     private State state = State.UNUSED;
 
     /**

@@ -744,7 +744,7 @@ public class WorkManagerTest {
     }
 
     /**
-     * Tests failed work delay
+     * Tests available worker cnt
      */
     @Test
     void testAvailableWorkerCnt() {
