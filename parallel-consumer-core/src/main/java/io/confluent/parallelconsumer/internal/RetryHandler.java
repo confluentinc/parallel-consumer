@@ -16,7 +16,9 @@ public class RetryHandler<K, V> implements Runnable {
 
     private final PCModule<K, V> pc;
 
-    private boolean isStopped = false;
+    private boolean isStopped;
+
+    private long dueMillis = Long.MAX_VALUE;
 
     public RetryHandler(PCModule<K, V> pc) {
         this.pc = pc;
@@ -27,6 +29,7 @@ public class RetryHandler<K, V> implements Runnable {
     @Override
     public void run() {
         while (!isStopped) {
+            updateDueMillis();
             if (isTimeForRetry()) {
                 pollRetryQueueToAvailableWorkerMap();
             }
@@ -40,9 +43,17 @@ public class RetryHandler<K, V> implements Runnable {
 
     // if the worker is ready to be
     private boolean isTimeForRetry() {
-        WorkContainer<K, V> wc = retryQueue.peek();
+        return dueMillis - pc.clock().millis() <= 0;
+    }
 
-        return wc != null && wc.getRetryDueAt().toEpochMilli() - pc.clock().millis() <= 0;
+    private void updateDueMillis() {
+        // only check retryQueue if there is no candidates to retry
+        if (dueMillis == Long.MAX_VALUE) {
+            WorkContainer<K, V> wc = retryQueue.peek();
+            if (wc != null) {
+                dueMillis = wc.getRetryDueAt().toEpochMilli();
+            }
+        }
     }
 
 
@@ -55,5 +66,6 @@ public class RetryHandler<K, V> implements Runnable {
             ShardKey shardKey = pc.workManager().getSm().computeShardKey(wc);
             pc.workManager().getSm().getProcessingShards().computeIfPresent(shardKey, (k ,v) -> v.incrAvailableWorkContainerCnt());
         }
+        dueMillis = Long.MAX_VALUE;
     }
 }
