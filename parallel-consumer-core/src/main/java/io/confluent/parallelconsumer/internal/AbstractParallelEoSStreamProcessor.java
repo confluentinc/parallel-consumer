@@ -633,6 +633,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         maybeCloseConsumer();
 
         producerManager.ifPresent(x -> x.close(timeout));
+
+        this.retryHandler.close();
+
         deregisterMeters();
         pcMetrics.close();
         log.debug("Close complete.");
@@ -641,8 +644,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (this.getFailureCause() != null) {
             log.error("PC closed due to error: {}", getFailureCause(), null);
         }
-
-        this.retryHandler.close();
     }
 
     /**

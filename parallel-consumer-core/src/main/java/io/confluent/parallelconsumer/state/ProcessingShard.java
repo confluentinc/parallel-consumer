@@ -217,8 +217,8 @@ public class ProcessingShard<K, V> {
         return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
     }
 
-    private void dcrAvailableWorkContainerCntByDelta(int delta) {
-        availableWorkContainerCnt.getAndAdd(-1 * delta);
+    private void dcrAvailableWorkContainerCntByDelta(int ByNum) {
+        availableWorkContainerCnt.getAndAdd(-1 * ByNum);
         // in case of possible race condition
         if (availableWorkContainerCnt.get() < 0L) {
             availableWorkContainerCnt.set(0L);

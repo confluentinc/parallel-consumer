@@ -15,14 +15,17 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RetryHandler<K, V> implements Runnable {
     private final BlockingQueue<WorkContainer<K, V>> retryQueue;
 
-    private AtomicLong retryItemCnt;
+    private final AtomicLong retryItemCnt;
 
     private final PCModule<K, V> pc;
 
     private boolean isStopped;
 
     // timestamp to be checked how long to check the heap and increase the availableWorkContainerCnt
-    private long dueMillis = Long.MAX_VALUE;
+    private long nextRetryTimestampMs;
+
+    // if there are retry worker waiting to be removed when retry time is due
+    private boolean inWaitingTobePolled = false;
 
     public RetryHandler(PCModule<K, V> pc) {
         this.pc = pc;
@@ -34,10 +37,10 @@ public class RetryHandler<K, V> implements Runnable {
     @Override
     public void run() {
         while (!isStopped) {
-            updateDueMillis();
+            updateNextRetryTimestampMs();
             // if there is already failed task to be retried, then wait for the timing to reduce the IO
             if (isTimeForRetry()) {
-                pollRetryQueueToAvailableWorkerMap();
+                pollFromRetryQueue();
             }
         }
     }
@@ -46,25 +49,24 @@ public class RetryHandler<K, V> implements Runnable {
         isStopped = true;
     }
 
-
-    // if the worker is ready to be
     private boolean isTimeForRetry() {
-        return dueMillis - pc.clock().millis() <= 0;
+        return inWaitingTobePolled && nextRetryTimestampMs - pc.clock().millis() <= 0;
     }
 
-    private void updateDueMillis() {
-        // only check retryQueue if there is no candidates to retry
-        if (dueMillis == Long.MAX_VALUE && retryItemCnt.get() > 0) {
+    private void updateNextRetryTimestampMs() {
+        // only check retryQueue if there is no candidates to retry and there are items in the retryQueue
+        if (!inWaitingTobePolled && retryItemCnt.get() > 0) {
             WorkContainer<K, V> wc = retryQueue.peek();
             if (wc != null) {
-                dueMillis = wc.getRetryDueAt().toEpochMilli();
+                nextRetryTimestampMs = wc.getRetryDueAt().toEpochMilli();
+                inWaitingTobePolled = true;
             }
         }
     }
 
 
     // poll retry queue records updates the available count
-    private void pollRetryQueueToAvailableWorkerMap() {
+    private void pollFromRetryQueue() {
         // could be race condition with getTimeToBlockFor() when it tries to get the earliest worker
         // but since the block time also related to commit interval, so this impact should be trivial
         WorkContainer<K, V> wc = retryQueue.poll();
@@ -74,7 +76,7 @@ public class RetryHandler<K, V> implements Runnable {
             retryItemCnt.decrementAndGet();
         }
 
-        // reset the timestamp
-        dueMillis = Long.MAX_VALUE;
+        // reset the flag
+        inWaitingTobePolled = false;
     }
 }
