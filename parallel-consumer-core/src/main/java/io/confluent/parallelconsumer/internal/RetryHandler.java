@@ -18,6 +18,7 @@ public class RetryHandler<K, V> implements Runnable {
 
     private boolean isStopped;
 
+    // timestamp to be checked how long to check the heap and increase the availableWorkContainerCnt
     private long dueMillis = Long.MAX_VALUE;
 
     public RetryHandler(PCModule<K, V> pc) {
@@ -30,6 +31,7 @@ public class RetryHandler<K, V> implements Runnable {
     public void run() {
         while (!isStopped) {
             updateDueMillis();
+            // if there is already failed task to be retried, then wait for the timing to reduce the IO
             if (isTimeForRetry()) {
                 pollRetryQueueToAvailableWorkerMap();
             }
@@ -66,6 +68,8 @@ public class RetryHandler<K, V> implements Runnable {
             ShardKey shardKey = pc.workManager().getSm().computeShardKey(wc);
             pc.workManager().getSm().getProcessingShards().computeIfPresent(shardKey, (k ,v) -> v.incrAvailableWorkContainerCnt());
         }
+
+        // reset the timestamp
         dueMillis = Long.MAX_VALUE;
     }
 }
