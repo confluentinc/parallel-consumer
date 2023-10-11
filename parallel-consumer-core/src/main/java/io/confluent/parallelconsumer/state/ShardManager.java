@@ -26,6 +26,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -96,6 +97,9 @@ public class ShardManager<K, V> {
      */
     @Getter // visible for testing
     private final BlockingQueue<WorkContainer<K, V>> retryQueue = new PriorityBlockingQueue<>(RETRY_INIT_CAPACITY, retryQueueWorkContainerComparator);
+
+    @Getter
+    private final AtomicLong retryItemCnt = new AtomicLong(0);
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -176,6 +180,7 @@ public class ShardManager<K, V> {
 
             // remove if in retry queue
             this.retryQueue.remove(removedWC);
+            retryItemCnt.decrementAndGet();
 
             // remove the shard if empty
             removeShardIfEmpty(shardKey);
@@ -210,6 +215,7 @@ public class ShardManager<K, V> {
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove from the retry queue if it's contained
         this.retryQueue.remove(wc);
+        retryItemCnt.decrementAndGet();
 
         // remove from processing queues
         var key = computeShardKey(wc);
@@ -230,6 +236,7 @@ public class ShardManager<K, V> {
     public void onFailure(WorkContainer<K, V> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
+        retryItemCnt.incrementAndGet();
     }
 
     /**

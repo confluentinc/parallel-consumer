@@ -9,10 +9,13 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class RetryHandler<K, V> implements Runnable {
     private final BlockingQueue<WorkContainer<K, V>> retryQueue;
+
+    private AtomicLong retryItemCnt;
 
     private final PCModule<K, V> pc;
 
@@ -24,6 +27,7 @@ public class RetryHandler<K, V> implements Runnable {
     public RetryHandler(PCModule<K, V> pc) {
         this.pc = pc;
         retryQueue = pc.workManager().getSm().getRetryQueue();
+        retryItemCnt = pc.workManager().getSm().getRetryItemCnt();
         isStopped = false;
     }
 
@@ -50,7 +54,7 @@ public class RetryHandler<K, V> implements Runnable {
 
     private void updateDueMillis() {
         // only check retryQueue if there is no candidates to retry
-        if (dueMillis == Long.MAX_VALUE) {
+        if (dueMillis == Long.MAX_VALUE && retryItemCnt.get() > 0) {
             WorkContainer<K, V> wc = retryQueue.peek();
             if (wc != null) {
                 dueMillis = wc.getRetryDueAt().toEpochMilli();
