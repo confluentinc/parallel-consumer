@@ -179,8 +179,9 @@ public class ShardManager<K, V> {
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
 
             // remove if in retry queue
-            this.retryQueue.remove(removedWC);
-            retryItemCnt.decrementAndGet();
+            if (this.retryQueue.remove(removedWC)) {
+                retryItemCnt.decrementAndGet();
+            }
 
             // remove the shard if empty
             removeShardIfEmpty(shardKey);
@@ -214,8 +215,9 @@ public class ShardManager<K, V> {
 
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove from the retry queue if it's contained
-        this.retryQueue.remove(wc);
-        retryItemCnt.decrementAndGet();
+        if (this.retryQueue.remove(wc)) {
+            retryItemCnt.decrementAndGet();
+        }
 
         // remove from processing queues
         var key = computeShardKey(wc);

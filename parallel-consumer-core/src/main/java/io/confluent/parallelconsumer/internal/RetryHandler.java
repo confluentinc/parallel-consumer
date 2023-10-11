@@ -71,6 +71,7 @@ public class RetryHandler<K, V> implements Runnable {
         if (wc != null) {
             ShardKey shardKey = pc.workManager().getSm().computeShardKey(wc);
             pc.workManager().getSm().getProcessingShards().computeIfPresent(shardKey, (k ,v) -> v.incrAvailableWorkContainerCnt());
+            retryItemCnt.decrementAndGet();
         }
 
         // reset the timestamp
