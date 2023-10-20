@@ -206,8 +206,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Instant lastCommitTime;
 
-    private final RetryHandler<K, V> retryHandler;
-
 
     @Override
     public boolean isClosedOrFailed() {
@@ -313,8 +311,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
         //Initialize metrics for this class once all the objects are created
         initMetrics();
-
-        this.retryHandler = module.retryHandler();
     }
 
     private void initMetrics() {
@@ -634,7 +630,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         producerManager.ifPresent(x -> x.close(timeout));
 
-        this.retryHandler.close();
+        module.retryHandler().close();
 
         deregisterMeters();
         pcMetrics.close();
