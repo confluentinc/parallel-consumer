@@ -307,8 +307,8 @@ public class ParallelConsumerOptions<K, V> {
      * maximum to prevent overloading them or to a degree, using up quotas.
      * <p>
      * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a
-     * {@link #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15}
-     * records being processed at once.
+     * {@link #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most
+     * {@link #getMaxConcurrency()} * {@link #getBatchSize()} = {@code 6} inflight records at once.
      * <p>
      * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
      * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
