@@ -93,7 +93,7 @@
         <!-- version numbers -->
         <!-- plugins -->
         <mycila.version>4.2</mycila.version>
-        <lombok.version>1.18.28</lombok.version>
+        <lombok.version>1.18.30</lombok.version>
         <auto-service.version>1.1.1</auto-service.version>
         <surefire.version>3.1.2</surefire.version>
 
