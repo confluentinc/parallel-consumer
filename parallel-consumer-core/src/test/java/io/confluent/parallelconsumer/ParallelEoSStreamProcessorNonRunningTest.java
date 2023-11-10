@@ -6,6 +6,8 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.parallelconsumer.internal.TestParallelEoSStreamProcessor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.clients.consumer.MockConsumer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -24,16 +26,21 @@ class ParallelEoSStreamProcessorNonRunningTest {
      */
     @Test
     void getTargetLoad() {
-        final int expectedTargetLoad = 40;
+        final int batchSize = 10;
+        final int concurrency = 2;
+        final MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.LATEST);
         final ParallelConsumerOptions<String, String> testOptions = ParallelConsumerOptions.<String, String>builder()
-                .batchSize(10)
-                .maxConcurrency(2)
+                .batchSize(batchSize)
+                .maxConcurrency(concurrency)
+                .consumer(consumer)
                 .build();
-        TestParallelEoSStreamProcessor<String, String> testInstance = new TestParallelEoSStreamProcessor<>(testOptions);
+        try (final TestParallelEoSStreamProcessor<String, String> testInstance = new TestParallelEoSStreamProcessor<>(testOptions)) {
+            final int defaultLoad = 2;
+            final int expectedTargetLoad = batchSize * concurrency * defaultLoad;
 
-        final int actualTargetLoad = testInstance.getTargetLoad();
+            final int actualTargetLoad = testInstance.getTargetLoad();
 
-        Assertions.assertEquals(expectedTargetLoad, actualTargetLoad);
+            Assertions.assertEquals(expectedTargetLoad, actualTargetLoad);
+        }
     }
-
 }
