@@ -12,20 +12,20 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests that the protected and internal methods of
+ * Tests to verify the protected and internal methods of
  * {@link io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor} work as expected.
  * <p>
  *
  * @author Jonathon Koyle
  */
 @Slf4j
-class ParallelEoSStreamProcessorNonRunningTest {
+class AbstractParallelEoSStreamProcessorConfigurationTest {
 
     /**
-     * Test that the mock consumer works as expected
+     * Test that the {@link io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor#getQueueTargetLoaded}
      */
     @Test
-    void getTargetLoad() {
+    void queueTargetLoad() {
         final int batchSize = 10;
         final int concurrency = 2;
         final MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.LATEST);
