@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2023 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -177,5 +177,29 @@ class PartitionStateCommittedOffsetTest {
         assertThat(state).getAllIncompleteOffsets().containsExactlyElementsIn(expectedTruncatedIncompletes);
     }
 
+    @Test
+    void workCompletedDuringAsyncCommitShouldKeepStateAsDirty(){
+        final long completedOffset = 1L;
+        final long incompleteOffset = 2L;
+
+        final HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(incompleteOffset), new TreeSet<>(List.of(completedOffset,incompleteOffset)));
+        PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
+        state.onSuccess(completedOffset);
+
+        // fetch committable/completed offset
+        OffsetAndMetadata offsetAndMetadata = state.getCommitDataIfDirty().get();
+
+        assertThat(offsetAndMetadata).getOffset().isEqualTo(completedOffset+1);
+
+        // mark incomplete work as complete
+        state.onSuccess(incompleteOffset);
+        assertThat(state).isDirty();
+
+        //mark fetched offset as committed
+        state.onOffsetCommitSuccess(offsetAndMetadata);
+
+        // partition should stay dirty, since the newly completed work could be committed now.
+        assertThat(state).isDirty();
+    }
 
 }
