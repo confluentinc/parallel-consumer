@@ -4,10 +4,6 @@
  */
 package io.confluent.parallelconsumer.integrationTests;
 
-/*-
- * Copyright (C) 2020-2022 Confluent, Inc.
- */
-
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.integrationTests.utils.KafkaClientUtils;
