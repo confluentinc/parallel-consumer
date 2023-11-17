@@ -11,13 +11,19 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static io.confluent.parallelconsumer.ManagedTruth.assertThat;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
@@ -49,13 +55,27 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
     void setup() {
         setupTopic();
         consumer = getKcu().createNewConsumer(KafkaClientUtils.GroupOption.NEW_GROUP);
+    }
 
-        pc = new ParallelEoSStreamProcessor<>(ParallelConsumerOptions.<String, String>builder()
-                .consumer(consumer)
-                .ordering(PARTITION) // just so we dont need to use keys
-                .build());
+    @AfterEach
+    void cleanup() {
+        pc.close();
+    }
 
-        pc.subscribe(UniSets.of(topic));
+    private ParallelEoSStreamProcessor<String, String> setupPC() {
+        return setupPC(null);
+    }
+
+    private ParallelEoSStreamProcessor<String, String> setupPC(Function<ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String>, ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String>> optionsCustomizer) {
+        ParallelConsumerOptions.ParallelConsumerOptionsBuilder<String, String> optionsBuilder =
+                ParallelConsumerOptions.<String, String>builder()
+                        .consumer(consumer)
+                        .ordering(PARTITION);
+        if (optionsCustomizer != null) {
+            optionsBuilder = optionsCustomizer.apply(optionsBuilder);
+        }
+
+        return new ParallelEoSStreamProcessor<>(optionsBuilder.build());
     }
 
     /**
@@ -67,6 +87,8 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
     void commitUponRevoke() {
         var numberOfRecordsToProduce = 20L;
         var count = new AtomicLong();
+        pc = setupPC();
+        pc.subscribe(UniSets.of(topic));
 
         //
         getKcu().produceMessages(topic, numberOfRecordsToProduce);
@@ -93,6 +115,74 @@ class RebalanceTest extends BrokerIntegrationTest<String, String> {
 
         // make sure only there are no duplicates
         assertThat(newConsumersPollResult).hasCountEqualTo(0);
+        log.debug("Test finished");
+    }
+
+    static Stream<Arguments> rebalanceTestCommitModes() {
+        return Stream.of(
+                Arguments.of("Consumer Async", ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, null),
+                Arguments.of("Consumer Sync", ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC, null),
+                Arguments.of("Consumer Async + Producer Non-transactional", ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL),
+                Arguments.of("Consumer Sync + Producer Non-transactional", ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS, KafkaClientUtils.ProducerMode.NOT_TRANSACTIONAL),
+                Arguments.of("Transactional Producer", ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER, KafkaClientUtils.ProducerMode.TRANSACTIONAL)
+        );
+    }
+
+    @SneakyThrows
+    @MethodSource("rebalanceTestCommitModes")
+    @ParameterizedTest(name = "[{index}] - {0}")
+    /**
+     * Tests that re-balance completes on partition revocation in supported commit modes and consumer / producer combinations.
+     * Issue was raised when producer was set, but not used - https://github.com/confluentinc/parallel-consumer/issues/637
+     * bug in transactional producer commit synchronisation with re-balance triggered commit was not caught by existing tests.
+     */
+    void rebalanceCompletesForCommitModeVariations(String testName, ParallelConsumerOptions.CommitMode commitMode, KafkaClientUtils.ProducerMode producerMode) {
+        var numberOfRecordsToProduce = 20L;
+        var count = new AtomicLong();
+        pc = setupPC(builder -> {
+            builder = builder.commitMode(commitMode);
+            if (producerMode != null) {
+                builder = builder.producer(getKcu().createNewProducer(producerMode));
+            }
+            return builder;
+        });
+        pc.subscribe(UniSets.of(topic));
+        //
+        getKcu().produceMessages(topic, numberOfRecordsToProduce);
+
+        // consume all the messages
+        pc.poll(recordContexts -> {
+            count.getAndIncrement();
+            log.debug("PC1 - Processed record, count now {} - offset: {}", count, recordContexts.offset());
+        });
+        await().untilAtomic(count, is(equalTo(numberOfRecordsToProduce)));
+        log.debug("All records consumed");
+        Consumer<String, String> newConsumer = getKcu().createNewConsumer(REUSE_GROUP);
+
+        ParallelEoSStreamProcessor<String, String> pc2 = setupPC(builder -> builder.consumer(newConsumer));
+        pc2.subscribe(UniSets.of(topic));
+
+        // cause rebalance
+        pc2.poll(recordContexts -> {
+            count.getAndIncrement();
+            log.debug("PC2 - Processed record, count now {} - offset: {}", count, recordContexts.offset());
+        });
+
+        await().untilAsserted(() -> assertThat(pc2).getNumberOfAssignedPartitions().isEqualTo(1));
+        getKcu().produceMessages(topic, numberOfRecordsToProduce);
+
+        await().untilAtomic(count, is(equalTo(numberOfRecordsToProduce * 2)));
+        pc.closeDrainFirst();
+        await().untilAsserted(() -> assertThat(pc2).getNumberOfAssignedPartitions().isEqualTo(2));
+
+        getKcu().produceMessages(topic, numberOfRecordsToProduce);
+
+        await().untilAtomic(count, is(equalTo(numberOfRecordsToProduce * 3)));
+        pc2.closeDrainFirst();
+        await().untilAsserted(() -> {
+            assertThat(pc2).isClosedOrFailed();
+            org.assertj.core.api.Assertions.assertThat(count).hasValue(numberOfRecordsToProduce * 3);
+        });
         log.debug("Test finished");
     }
 
