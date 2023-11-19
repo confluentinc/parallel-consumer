@@ -17,8 +17,10 @@ endif::[]
 
 === Improvements
 * improvement: add RetryHandler for accelerating available container count calculation （#644）
+* fix: Fix target loading computation for inflight records
 
 === Fixes
+
 * fix: Fix equality and hash code for ShardKey with array key (#638), resolves (#579)
 
 == 0.5.2.7
