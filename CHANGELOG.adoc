@@ -15,11 +15,10 @@ toc::[]
 endif::[]
 == 0.5.2.8
 
-* fix: Fix target loading computation for inflight records
-
 === Fixes
-
 * fix: Fix equality and hash code for ShardKey with array key (#638), resolves (#579)
+* fix: Fix target loading computation for inflight records (#662)
+* fix: Fix synchronisation logic for transactional producer commit affecting non-transactional usage (#665), resolves (#637)
 
 == 0.5.2.7
 
