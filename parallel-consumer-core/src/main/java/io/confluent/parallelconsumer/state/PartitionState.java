@@ -401,9 +401,8 @@ public class PartitionState<K, V> {
             // and retain the dirty state on commit completion.
             stateChangedSinceCommitStart = false;
             return of(createOffsetAndMetadata());
-        } else {
-            return empty();
         }
+        return empty();
     }
 
     // visible for testing

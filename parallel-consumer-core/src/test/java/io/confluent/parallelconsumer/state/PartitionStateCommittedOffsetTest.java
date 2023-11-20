@@ -16,10 +16,7 @@ import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 import pl.tlinkowski.unij.api.UniSets;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
@@ -182,7 +179,8 @@ class PartitionStateCommittedOffsetTest {
         final long completedOffset = 1L;
         final long incompleteOffset = 2L;
 
-        final HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(incompleteOffset), new TreeSet<>(List.of(completedOffset,incompleteOffset)));
+        final HighestOffsetAndIncompletes offsetData = new HighestOffsetAndIncompletes(Optional.of(incompleteOffset),
+                new TreeSet<>(Arrays.asList(completedOffset, incompleteOffset)));
         PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
         state.onSuccess(completedOffset);
 
