@@ -172,6 +172,17 @@ public class PartitionState<K, V> {
     private DistributionSummary ratioMetadataSpaceUsedDistributionSummary;
     private final PCMetrics pcMetrics;
 
+    /**
+     * Additional flag to prevent overwriting dirty state that was updated during commit execution window - so that any
+     * subsequent offsets completed while commit is being performed could mark state as dirty and retain the dirty state
+     * on commit completion. In tight race condition - it may be set just before offset is completed and included in
+     * commit data collection - so it is a little bit pessimistic - that may cause an additional unnecessary commit on
+     * next commit cycle - but it is highly unlikely as throughput has to be high for this to occur - but with high
+     * throughput there will be other offsets ready to commit anyway.
+     */
+    private boolean stateChangedSinceCommitStart = false;
+
+
     public PartitionState(long newEpoch,
                           PCModule<K, V> pcModule,
                           TopicPartition topicPartition,
@@ -209,10 +220,13 @@ public class PartitionState<K, V> {
     }
 
     private void setClean() {
-        setDirty(false);
+        if (!stateChangedSinceCommitStart) {
+            setDirty(false);
+        }
     }
 
     private void setDirty() {
+        stateChangedSinceCommitStart = true;
         setDirty(true);
     }
 
@@ -382,9 +396,13 @@ public class PartitionState<K, V> {
     }
 
     public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
-        return isDirty() ?
-                of(createOffsetAndMetadata()) :
-                empty();
+        if (isDirty()) {
+            // setting the flag so that any subsequent offset completed while commit is being performed could mark state as dirty
+            // and retain the dirty state on commit completion.
+            stateChangedSinceCommitStart = false;
+            return of(createOffsetAndMetadata());
+        }
+        return empty();
     }
 
     // visible for testing
