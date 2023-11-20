@@ -409,21 +409,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         isRebalanceInProgress.set(true);
-        while (this.producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false))
+        while (isTransactionCommittingInProgress())
             Thread.sleep(100); //wait for the transaction to finish committing
 
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
 
         try {
             // commit any offsets from revoked partitions BEFORE truncation
-            this.producerManager.ifPresent(pm -> {
-                try {
-                    pm.preAcquireOffsetsToCommit();
-                } catch (Exception exc) {
-                    throw new InternalRuntimeException(exc);
-                }
-            });
-
             commitOffsetsThatAreReady();
 
             // truncate the revoked partitions
@@ -617,7 +609,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         processWorkCompleteMailBox(Duration.ZERO);
 
         //
-        if( Thread.currentThread().isInterrupted()) {
+        if (Thread.currentThread().isInterrupted()) {
             log.warn("control thread interrupted - may lead to issues with transactional commit lock acquisition");
         }
         commitOffsetsThatAreReady();
@@ -1425,6 +1417,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
 
 
+
+    private boolean isTransactionCommittingInProgress() {
+        return options.isUsingTransactionCommitMode() &&
+                producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false);
+    }
 
     @Override
     public void pauseIfRunning() {
