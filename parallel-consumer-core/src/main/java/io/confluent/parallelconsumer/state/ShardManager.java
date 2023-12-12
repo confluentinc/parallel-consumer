@@ -78,13 +78,13 @@ public class ShardManager<K, V> {
      */
     @Getter(AccessLevel.PACKAGE) // visible for testing
     private final Comparator<WorkContainer<?, ?>> retryQueueWorkContainerComparator = Comparator
-            .comparing((WorkContainer<?, ?> workContainer) -> workContainer.getRetryDueAt())
-            .thenComparing(workContainer -> {
+            //.comparing((WorkContainer<?, ?> workContainer) -> workContainer.getRetryDueAt())
+    		.comparing((WorkContainer<?, ?> workContainer) -> workContainer.offset())        
+    		.thenComparing(workContainer -> {
                 // TopicPartition does not implement comparable
                 TopicPartition tp = workContainer.getTopicPartition();
                 return tp.topic() + tp.partition();
-            })
-            .thenComparing(WorkContainer::offset);
+            });
 
     /**
      * Read optimised view of {@link WorkContainer}s that need retrying.
