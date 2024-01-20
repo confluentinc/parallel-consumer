@@ -45,6 +45,14 @@ public class RetryHandler<K, V> implements Runnable {
         }
     }
 
+    public void execute() {
+        updateNextRetryTimestampMs();
+        // if there is already failed task to be retried, then wait for the timing to reduce the IO
+        if (isTimeForRetry()) {
+            pollFromRetryQueue();
+        }
+    }
+
     public void close() {
         isStopped = true;
     }

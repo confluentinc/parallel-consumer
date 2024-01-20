@@ -17,7 +17,6 @@ endif::[]
 
 === Improvements
 * improvement: add RetryHandler for accelerating available container count calculation （#644）
-* fix: Fix target loading computation for inflight records
 
 === Fixes
 
