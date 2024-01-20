@@ -68,7 +68,7 @@ public class RetryHandler<K, V> implements Runnable {
     // poll retry queue records updates the available count
     private void pollFromRetryQueue() {
         // could be race condition with getTimeToBlockFor() when it tries to get the earliest worker
-        // but since the block time also related to commit interval, so this impact should be trivial
+        // but since the block time only related to commit interval, so this impact should be trivial
         WorkContainer<K, V> wc = retryQueue.poll();
         if (wc != null) {
             ShardKey shardKey = pc.workManager().getSm().computeShardKey(wc);
