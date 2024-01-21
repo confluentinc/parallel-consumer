@@ -57,6 +57,7 @@ public class ProcessingShard<K, V> {
 
     private AtomicLong availableWorkContainerCnt = new AtomicLong(0);
 
+    private AtomicLong expiredRetryContainerCnt = new AtomicLong(0);
 
     public boolean workIsWaitingToBeProcessed() {
         return availableWorkContainerCnt.get() > 0L;
@@ -75,6 +76,16 @@ public class ProcessingShard<K, V> {
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove work from shard's queue
         entries.remove(wc.offset());
+
+        // decrease for retry only
+        if (wc.getLastFailedAt().isPresent()) {
+            expiredRetryContainerCnt.decrementAndGet();
+        }
+    }
+
+    public void onFailure() {
+        // increase available cnt first to let retry expired calculated later
+        incrAvailableWorkContainerCnt();
     }
 
 
@@ -84,6 +95,10 @@ public class ProcessingShard<K, V> {
 
     public long getCountOfWorkAwaitingSelection() {
         return availableWorkContainerCnt.get();
+    }
+
+    public long getExpiredRetryContainerCnt() {
+        return expiredRetryContainerCnt.get();
     }
 
     public long getCountOfWorkTracked() {
@@ -137,6 +152,11 @@ public class ProcessingShard<K, V> {
             if (pm.couldBeTakenAsWork(workContainer)) {
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
+
+                    // only increase the AvailableWorkContainerCnt when this is retry due since already added in the new container creation
+                    if (workContainer.isDelayExistsExpired()) {
+                        expiredRetryContainerCnt.incrementAndGet();
+                    }
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
                 } else {

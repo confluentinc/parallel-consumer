@@ -70,7 +70,7 @@ public class ShardManager<K, V> {
      * @see WorkManager#getWorkIfAvailable()
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
-    @Getter
+    @Getter(AccessLevel.PRIVATE)
     private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
@@ -95,8 +95,8 @@ public class ShardManager<K, V> {
     /**
      * Read optimised view of {@link WorkContainer}s that need retrying.
      */
-    @Getter // visible for testing
-    private final BlockingQueue<WorkContainer<K, V>> retryQueue = new PriorityBlockingQueue<>(RETRY_INIT_CAPACITY, retryQueueWorkContainerComparator);
+    @Getter(AccessLevel.PACKAGE) // visible for testing
+    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
 
     @Getter
     private final AtomicLong retryItemCnt = new AtomicLong(0);
@@ -129,7 +129,7 @@ public class ShardManager<K, V> {
         return Optional.ofNullable(processingShards.get(key));
     }
 
-    public ShardKey computeShardKey(WorkContainer<?, ?> wc) {
+    ShardKey computeShardKey(WorkContainer<?, ?> wc) {
         return ShardKey.of(wc, options.getOrdering());
     }
 
@@ -141,9 +141,13 @@ public class ShardManager<K, V> {
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+        // all available container count - (still pending for running retry containers count)
+        // => all_available_count - (retryCnt - all_expire_cnt) => all_available_count + all_expire_cnt - retryCnt
+
         return processingShards.values().stream()
-                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
-                .sum();
+                .mapToLong(processingShard ->
+                        processingShard.getCountOfWorkAwaitingSelection() + processingShard.getExpiredRetryContainerCnt())
+                .sum() - retryItemCnt.get();
     }
 
     public boolean workIsWaitingToBeProcessed() {
@@ -237,8 +241,16 @@ public class ShardManager<K, V> {
      */
     public void onFailure(WorkContainer<K, V> wc) {
         log.debug("Work FAILED");
-        this.retryQueue.add(wc);
-        retryItemCnt.incrementAndGet();
+        if (this.retryQueue.add(wc)) {
+            retryItemCnt.incrementAndGet();
+        }
+        var key = computeShardKey(wc);
+        var shardOptional = getShard(key);
+
+        if (shardOptional.isPresent()) {
+            shardOptional.get().onFailure();
+        }
+
     }
 
     /**

@@ -622,8 +622,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         producerManager.ifPresent(x -> x.close(timeout));
 
-        module.retryHandler().close();
-
         deregisterMeters();
         pcMetrics.close();
         log.debug("Close complete.");
@@ -746,17 +744,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     doClose(shutdownTimeout); // attempt to close
                     throw failureReason;
                 }
+
             }
             log.info("Control loop ending clean (state:{})...", state);
             return true;
         };
         Future<Boolean> controlTaskFutureResult = executorService.submit(controlTask);
         this.controlThreadFuture = Optional.of(controlTaskFutureResult);
-
-        // init retry handler to update the available worker numbers when work container is ready for retry
-//        ExecutorService retryHandlerThreadpool = Executors.newSingleThreadExecutor();
-//        retryHandlerThreadpool.submit(module.retryHandler());
-        module.retryHandler().execute();
     }
 
     /**

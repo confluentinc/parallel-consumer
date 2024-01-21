@@ -110,6 +110,18 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
     }
 
     /**
+     *
+     * @return whether this is retry and should be executed
+     */
+    public boolean isDelayExistsExpired() {
+        if (lastFailedAt.isEmpty()) {
+            return false;
+        }
+        Duration delay = getDelayUntilRetryDue();
+        return delay.isNegative() || delay.isZero();
+    }
+
+    /**
      * @return time until it should be retried
      */
     public Duration getDelayUntilRetryDue() {

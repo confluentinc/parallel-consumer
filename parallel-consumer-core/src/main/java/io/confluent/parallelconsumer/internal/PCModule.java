@@ -117,13 +117,4 @@ public class PCModule<K, V> {
         return pcMetrics;
     }
 
-    @Setter
-    private RetryHandler<K, V> retryHandler;
-
-    public RetryHandler<K, V> retryHandler() {
-        if (retryHandler == null) {
-            retryHandler = new RetryHandler<>(this);
-        }
-        return retryHandler;
-    }
 }

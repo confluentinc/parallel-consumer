@@ -132,9 +132,6 @@ public class WorkManagerTest {
         return stringStringConsumerRecord;
     }
 
-    private void initRetryHandler() {
-        CompletableFuture.runAsync(module.retryHandler());
-    }
 
     @ParameterizedTest
     @EnumSource
@@ -750,7 +747,6 @@ public class WorkManagerTest {
     void testAvailableWorkerCnt() {
         ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
         setupWorkManager(build);
-        initRetryHandler();
         // sanity
         assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
 
