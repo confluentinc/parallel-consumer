@@ -56,8 +56,6 @@ public class ShardManager<K, V> {
 
     private final WorkManager<K, V> wm;
 
-    private final int RETRY_INIT_CAPACITY = 1000;
-
     /**
      * Map of Object keys to Shard
      * <p>
@@ -239,7 +237,7 @@ public class ShardManager<K, V> {
     /**
      * Idempotent - work may have not been removed, either way it's put back
      */
-    public void onFailure(WorkContainer<K, V> wc) {
+    public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
         if (this.retryQueue.add(wc)) {
             retryItemCnt.incrementAndGet();

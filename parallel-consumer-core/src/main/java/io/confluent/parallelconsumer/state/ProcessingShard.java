@@ -153,7 +153,7 @@ public class ProcessingShard<K, V> {
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
 
-                    // only increase the AvailableWorkContainerCnt when this is retry due since already added in the new container creation
+                    // only increase the ExpiredRetryContainerCnt when this is retry due since already added in the new container creation
                     if (workContainer.isDelayExistsExpired()) {
                         expiredRetryContainerCnt.incrementAndGet();
                     }

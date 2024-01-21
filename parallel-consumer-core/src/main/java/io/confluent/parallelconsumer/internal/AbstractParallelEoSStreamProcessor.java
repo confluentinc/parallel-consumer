@@ -206,7 +206,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private Instant lastCommitTime;
 
-
     @Override
     public boolean isClosedOrFailed() {
         boolean closed = state == State.CLOSED;
@@ -621,7 +620,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         maybeCloseConsumer();
 
         producerManager.ifPresent(x -> x.close(timeout));
-
         deregisterMeters();
         pcMetrics.close();
         log.debug("Close complete.");
@@ -719,6 +717,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             executorService = Executors.newSingleThreadExecutor();
         }
 
+
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
             addInstanceMDC();
@@ -744,7 +743,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     doClose(shutdownTimeout); // attempt to close
                     throw failureReason;
                 }
-
             }
             log.info("Control loop ending clean (state:{})...", state);
             return true;
@@ -771,7 +769,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // make sure all work that's been completed are arranged ready for commit
         Duration timeToBlockFor = shouldTryCommitNow ? Duration.ZERO : getTimeToBlockFor();
-
         processWorkCompleteMailBox(timeToBlockFor);
 
         //
