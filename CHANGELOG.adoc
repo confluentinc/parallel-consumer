@@ -16,7 +16,7 @@ endif::[]
 == 0.5.2.8
 
 === Improvements
-* improvement: add multiple caches for accelerating available container count calculation （#644）
+* improvement: add multiple caches for accelerating available container count calculation （#667）
 
 === Fixes
 

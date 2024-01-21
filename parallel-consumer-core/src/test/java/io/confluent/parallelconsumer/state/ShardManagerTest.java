@@ -8,7 +8,6 @@ import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import org.junit.jupiter.api.Test;
 
 import java.util.NavigableSet;
-import java.util.Queue;
 
 import static com.google.common.truth.Truth.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
