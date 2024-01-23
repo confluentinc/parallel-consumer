@@ -92,10 +92,10 @@
 
         <!-- version numbers -->
         <!-- plugins -->
-        <mycila.version>4.2</mycila.version>
+        <mycila.version>4.3</mycila.version>
         <lombok.version>1.18.28</lombok.version>
         <auto-service.version>1.1.1</auto-service.version>
-        <surefire.version>3.1.2</surefire.version>
+        <surefire.version>3.2.2</surefire.version>
 
         <!-- core -->
         <slf4j.version>2.0.7</slf4j.version>
@@ -107,14 +107,15 @@
 
         <!-- tests deps-->
         <junit.version>5.10.0-RC1</junit.version>
-        <junit.platform.version>1.10.0</junit.platform.version>
+        <junit.platform.version>1.10.1</junit.platform.version>
         <testcontainers.version>1.18.3</testcontainers.version>
         <truth.version>1.1.5</truth.version>
         <flogger.version>0.7.4</flogger.version>
         <mockito.version>5.4.0</mockito.version>
         <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>1.0.0</jabel.version>
-        <micrometer-core.version>1.10.2</micrometer-core.version>
+        <logback.version>1.4.14</logback.version>
+        <micrometer-core.version>1.12.2</micrometer-core.version>
     </properties>
 
     <profiles>
@@ -303,7 +304,6 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.4.8</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -496,6 +496,18 @@
                 <groupId>com.github.tomakehurst</groupId>
                 <artifactId>wiremock-jre8</artifactId>
                 <version>2.35.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
