@@ -1,8 +1,8 @@
+package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
-package io.confluent.parallelconsumer.integrationTests;
 
 import io.confluent.csid.utils.ThreadUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
