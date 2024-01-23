@@ -89,9 +89,12 @@ public class PCModule<K, V> {
         return parallelEoSStreamProcessor;
     }
 
-    final DynamicLoadFactor dynamicLoadFactor = new DynamicLoadFactor();
+    private DynamicLoadFactor dynamicLoadFactor;
 
     protected DynamicLoadFactor dynamicExtraLoadFactor() {
+        if (dynamicLoadFactor == null) {
+            dynamicLoadFactor = initDynamicLoadFactor();
+        }
         return dynamicLoadFactor;
     }
 
@@ -115,5 +118,14 @@ public class PCModule<K, V> {
             pcMetrics = new PCMetrics(options().getMeterRegistry(), optionsInstance.getMetricsTags(), optionsInstance.getPcInstanceTag());
         }
         return pcMetrics;
+    }
+
+    private DynamicLoadFactor initDynamicLoadFactor() {
+        if (options().getMessageBufferSize() > 0) {
+            int staticLoadFactor = (options().getMessageBufferSize() / options().getTargetAmountOfRecordsInFlight()) + (options().getMessageBufferSize() % options().getTargetAmountOfRecordsInFlight() == 0 ? 0 : 1);
+            return new DynamicLoadFactor(staticLoadFactor, staticLoadFactor);
+        } else {
+            return new DynamicLoadFactor(options().initialLoadFactor, options().maximumLoadFactor);
+        }
     }
 }

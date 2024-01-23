@@ -14,8 +14,8 @@ import java.time.Instant;
  * Controls a loading factor. Is used to ensure enough messages in multiples of our target concurrency are queued ready
  * for processing.
  * <p>
- * Ensures that increases in loading factor aren't performed a) too soon after the last increase ({@link
- * #isNotCoolingDown()})  and b) too soon after starting the system ({@link #isWarmUpPeriodOver()}).
+ * Ensures that increases in loading factor aren't performed a) too soon after the last increase
+ * ({@link #isNotCoolingDown()})  and b) too soon after starting the system ({@link #isWarmUpPeriodOver()}).
  */
 // todo make so can be fractional like 50% - this is because some systems need a fractional factor, like 1.1 or 1.2 rather than 2
 @Slf4j
@@ -33,7 +33,8 @@ public class DynamicLoadFactor {
      * <p>
      * Starts off as 2, so there's a good guarantee that we start off with enough data queued up.
      */
-    private static final int DEFAULT_INITIAL_LOADING_FACTOR = 2;
+    public static final int DEFAULT_INITIAL_LOADING_FACTOR = 2;
+    public static final int DEFAULT_MAX_LOADING_FACTOR = 100;
 
     private final long startTimeMs = System.currentTimeMillis();
 
@@ -62,12 +63,17 @@ public class DynamicLoadFactor {
      * finishes, theres at least one more entry for it in the queue.
      */
     @Getter
-    private final int maxFactor = 100;
+    private int maxFactor;
 
     @Getter
-    private int currentFactor = DEFAULT_INITIAL_LOADING_FACTOR;
+    private int currentFactor;
     private long lastSteppedFactor = currentFactor;
     private Instant lastStepTime = Instant.MIN;
+
+    public DynamicLoadFactor(int initial, int maximum) {
+        this.currentFactor = initial;
+        this.maxFactor = maximum;
+    }
 
     /**
      * Try to increase the loading factor

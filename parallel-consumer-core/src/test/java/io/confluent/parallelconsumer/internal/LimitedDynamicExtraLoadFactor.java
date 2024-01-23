@@ -5,13 +5,7 @@ package io.confluent.parallelconsumer.internal;
  */
 
 public class LimitedDynamicExtraLoadFactor extends DynamicLoadFactor {
-    @Override
-    public int getMaxFactor() {
-        return 2;
-    }
-
-    @Override
-    public int getCurrentFactor() {
-        return 2;
+    public LimitedDynamicExtraLoadFactor() {
+        super(2, 2);
     }
 }
