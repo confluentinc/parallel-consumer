@@ -13,12 +13,12 @@
     <version>0.5.2.8-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
-    <url>http://confluent.io</url>
+    <url>https://confluent.io</url>
     <inceptionYear>2020</inceptionYear>
 
     <organization>
         <name>Confluent, Inc.</name>
-        <url>http://confluent.io</url>
+        <url>https://confluent.io</url>
     </organization>
 
     <licenses>
@@ -44,9 +44,9 @@
             <id>antony@confluent.io</id>
             <name>Antony Stubbs</name>
             <email>antony@confluent.io</email>
-            <url>http://confluent.io</url>
+            <url>https://confluent.io</url>
             <organization>Confluent</organization>
-            <organizationUrl>http://confluent.io</organizationUrl>
+            <organizationUrl>https://confluent.io</organizationUrl>
             <timezone>Europe/London</timezone>
         </developer>
     </developers>
