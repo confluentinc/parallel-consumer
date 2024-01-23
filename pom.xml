@@ -114,7 +114,8 @@
         <mockito.version>5.4.0</mockito.version>
         <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>1.0.0</jabel.version>
-        <micrometer-core.version>1.10.2</micrometer-core.version>
+        <logback.version>1.4.14</logback.version>
+        <micrometer-core.version>1.12.2</micrometer-core.version>
     </properties>
 
     <profiles>
@@ -303,7 +304,6 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.4.8</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -496,6 +496,18 @@
                 <groupId>com.github.tomakehurst</groupId>
                 <artifactId>wiremock-jre8</artifactId>
                 <version>2.35.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
