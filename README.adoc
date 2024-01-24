@@ -309,7 +309,6 @@ As an illustrative example of relative performance, given:
 ** numberOfThreads = 16
 
 .Comparative performance of order modes and key spaces
-
 [cols="1,1,1,3",options="header"]
 |===
 |Ordering
@@ -730,9 +729,14 @@ Note that in PARTITION ordered mode it may be necessary to tune Consumer fetch b
 
 As default buffer size is calculated as `maxConcurrency * batchSize * loadFactor` - it can be quite small in PARTITION order by default (as concurrency is typically low) and processing threads can be starved if incoming message rate is higher than processing rate as small buffer gets filled with messages from only subset of subscribed partitions before back-pressure kicks in.
 
-It may be not enough to just increase the buffer size - so tuning of underlying Kafka Consumer `max.partition.fetch.bytes` is recommended - with rough target to return X number of messages so that ParallelConsumer buffer is 2 * partitionCount * X. That way back pressure will only kick in after Consumer done at least 2 polls from each subscribed partition.
+It may be not enough to just increase the buffer size - so tuning of underlying Kafka Consumer `max.partition.fetch.bytes` is recommended - there are two approaches that could be used to tune it - depending on data distribution.
+
+One - have a large enough buffer to smooth out spikes in specific partitions - this approach may still lead to thread starvation in cases when processing is relatively slow and some partitions have no data for periods of time or data is consistently unevenly partitioned - as buffer will get filled and will take some time to resume polling, but is acceptable when data flow is more or less consistent.
+Rough target to return X number of messages so that ParallelConsumer buffer is 2 * partitionCount * X. That way back pressure will only kick in after Consumer done at least 2 polls from each subscribed partition.
 
 For example - with 5 subscribed partitions and 1KB message size - can use 500KB `max.partition.fetch.bytes` to get a cap of maximum 500 records per partition fetch - so using guide above set `messageBufferSize` to 5000 ( 2*5*500 ) as a starting point - and tune from there depending on processing speed - but keeping similar (or higher) ratio of `messageBufferSize` to maximum number of records fetched per partition.
+
+Two - have a small buffer and small `max.partition.fetch.bytes` - for scenarios when processing is slow and there is no goal to maximize message polling throughput - setting those values low - will allow to drain buffer faster in cases where data flow is inconsistent and some partitions may have no data for periods of time. As a rough starting point buffer can be set to same 2 * fetch per partition * number of partitions - but partition fetch size set to a low value - for example for messages that take 1 second to process - 5-10 messages per fetch per partition would give reasonable buffer drain time and not poll excessively.
 
 Note:: Kafka Consumer option `max.poll.records` does not change number of records actually fetched by Kafka Consumer - so it is not really useful for this tuning.
 
@@ -1032,17 +1036,14 @@ For a code example, see the <<streams-usage-code>> section.
 
 .Example usage with Kafka Streams
 image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fbf/image.png[Kafka Streams Usage,align="center"]
-
 [[mertics]]
 == Metrics
 
-Metrics collection subsystem is implemented using Micrometer.
-This allows for flexible configuration of target metrics backend to be used.
-See below on example of how to configure MeterRegistry for Parallel Consumer to use for metrics collection.
+Metrics collection subsystem is implemented using Micrometer. This allows for flexible configuration of target metrics backend to be used. See below on example of how to configure MeterRegistry for Parallel Consumer to use for metrics collection.
 
 === Meters
-
 Following meters are defined by Parallel Consumer - grouped by Subsystem
+
 
 ==== Partition Manager
 
@@ -1158,8 +1159,7 @@ Total number of records failed to be processed
 
 Counter `pc.slow.records{subsystem=workmanager, topic="topicName", partition="partitionNumber"}`
 
-Total number of records that spent more than the configured time threshold in the waiting queue.
-This setting defaults to 10 seconds
+Total number of records that spent more than the configured time threshold in the waiting queue. This setting defaults to 10 seconds
 
 ==== Broker Poller
 
@@ -1202,7 +1202,6 @@ Distribution Summary `pc.payload.ratio.used{subsystem=offsetencoder}`
 Ratio between offset metadata payload size and offsets encoded
 
 === Example Metrics setup steps
-
 Meter registry that metrics should be bound has to be set using Parallel Consumer Options along with any common tags that identify the PC instance.
 In addition, if desired - Kafka Consumer, Producer can be bound to the registry as well as general JVM metric, logging system and other common binders.
 
@@ -1232,16 +1231,14 @@ Following example illustrates setup of Parallel Consumer with Meter Registry and
         return eosStreamProcessor;
     }
 ----
-
 <1> - Meter Registry is set through ParallelConsumerOptions.builder(), if not specified - will default to CompositeMeterRegistry - which is No-op.
 <2> - Optional - common tags can be specified through same builder - they will be added to all Parallel Consumer meters
-<3> - Optional - instance tag value can be specified - it has to be unique to ensure meter uniqueness in cases when multiple parallel consumer instances are recording metrics to the same meter registry.
-If instance tag is not specified - unique UUID value will be generated and used.
-Tag is created with tag key 'pcinstance'.
+<3> - Optional - instance tag value can be specified - it has to be unique to ensure meter uniqueness in cases when multiple parallel consumer instances are recording metrics to the same meter registry. If instance tag is not specified - unique UUID value will be generated and used. Tag is created with tag key 'pcinstance'.
 <4> - Optional - Kafka Consumer Micrometer metrics object created for Kafka Consumer that is later used for Parallel Consumer.
 <5> - Optional - Kafka Consumer Micrometer metrics are bound to Meter Registry.
 
 NOTE:: any additional binders / metrics need to be cleaned up appropriately - for example the Kafka Consumer Metrics registered above - need to be closed using `kafkaClientMetrics.close()` after calling shutting down Parallel Consumer as Parallel Consumer will close Kafka Consumer on shutdown.
+
 
 [[roadmap]]
 == Roadmap
@@ -1466,6 +1463,7 @@ The offset map is compressed in parallel using two different compression techniq
 The sizes of the compressed maps are then compared, and the smallest chosen for serialization.
 If both serialised formats are significantly large, they are then both compressed using `zstd` compression, and if that results in a smaller serialization then the compressed form is used instead.
 
+
 ==== Storage Notes
 
 * Runtime data model creates list of incomplete offsets
@@ -1544,6 +1542,10 @@ endif::[]
 * fix: Fix synchronisation logic for transactional producer commit affecting non-transactional usage (#665), resolves (#637)
 * fix: Fix for race condition in partition state clean/dirty tracking (#666), resolves (#664)
 
+=== Improvements
+
+* feature: Make PC message buffer size configurable - two new configuration options for controlling buffer size added (#682)
+
 == 0.5.2.7
 
 === Fixes
@@ -1559,7 +1561,6 @@ endif::[]
 * Refactored metrics implementation to not use singleton - improves meter separation, allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
 
 == 0.5.2.6
-
 === Improvements
 
 * feature: Micrometer metrics (#594)
@@ -1629,11 +1630,13 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
+
 === Fixes
 
 * fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
 * fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
+
 
 == v0.5.2.2
 
