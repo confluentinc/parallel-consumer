@@ -624,6 +624,25 @@ This option is most like normal operation, except if the consumer is assigned mo
 .Partition ordered concurrent processing of messages
 image::https://lucid.app/publicSegments/view/30ad8632-e8fe-4e05-8afd-a2b6b3bab309/image.png[align="center"]
 
+Note that in PARTITION ordered mode it may be necessary to tune Consumer fetch bytes per partition and ParallelConsumer message buffer size in `ParallelConsumerOptions` (either through specifying relatively high `initialLoadFactor` and `maximumLoadFactor` or explicitly setting `messageBufferSize`).
+
+As default buffer size is calculated as `maxConcurrency * batchSize * loadFactor` - it can be quite small in PARTITION order by default (as concurrency is typically low) and processing threads can be starved if incoming message rate is higher than processing rate as small buffer gets filled with messages from only subset of subscribed partitions before back-pressure kicks in.
+
+It may be not enough to just increase the buffer size - so tuning of underlying Kafka Consumer `max.partition.fetch.bytes` is recommended - there are two approaches that could be used to tune it - depending on data distribution.
+
+One - have a large enough buffer to smooth out spikes in specific partitions - this approach may still lead to thread starvation in cases when processing is relatively slow and some partitions have no data for periods of time or data is consistently unevenly partitioned - as buffer will get filled and will take some time to resume polling, but is acceptable when data flow is more or less consistent.
+Rough target to return X number of messages so that ParallelConsumer buffer is 2 * partitionCount * X. That way back pressure will only kick in after Consumer done at least 2 polls from each subscribed partition.
+
+For example - with 5 subscribed partitions and 1KB message size - can use 500KB `max.partition.fetch.bytes` to get a cap of maximum 500 records per partition fetch - so using guide above set `messageBufferSize` to 5000 ( 2*5*500 ) as a starting point - and tune from there depending on processing speed - but keeping similar (or higher) ratio of `messageBufferSize` to maximum number of records fetched per partition.
+
+Two - have a small buffer and small `max.partition.fetch.bytes` - for scenarios when processing is slow and there is no goal to maximize message polling throughput - setting those values low - will allow to drain buffer faster in cases where data flow is inconsistent and some partitions may have no data for periods of time. As a rough starting point buffer can be set to same 2 * fetch per partition * number of partitions - but partition fetch size set to a low value - for example for messages that take 1 second to process - 5-10 messages per fetch per partition would give reasonable buffer drain time and not poll excessively.
+
+Note:: Kafka Consumer option `max.poll.records` does not change number of records actually fetched by Kafka Consumer - so it is not really useful for this tuning.
+
+
+
+Refer to `PartitionOrderProcessingTest` integration tests for example scenario.
+
 === Ordered by Key
 
 Most similar to ordered by partition, this mode ensures process ordering by *key* (per partition).

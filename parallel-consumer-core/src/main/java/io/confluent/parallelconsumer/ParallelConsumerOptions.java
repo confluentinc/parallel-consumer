@@ -1,15 +1,15 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.DynamicLoadFactor;
 import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -21,13 +21,11 @@ import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Function;
 
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_TRANSACTIONAL_PRODUCER;
 import static java.time.Duration.ofMillis;
-import static java.util.Collections.emptyList;
 
 /**
  * The options for the {@link AbstractParallelEoSStreamProcessor} system.
@@ -507,4 +505,34 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     public final Duration drainTimeout = Duration.ofSeconds(30);
+
+    /**
+     * Message buffer size - overrides use of dynamic load factor to set specific fixed size of message buffer. Useful
+     * when using low concurrency modes - like partition based ordering to get a better mix of messages in the buffer.
+     * As the buffer is shared across multiple partitions - with small buffer it is easy to starve processing threads as
+     * single Consumer poll would will the buffer from single (or low number) of partitions. Setting this value would
+     * effectively set low and high bound of dynamic load factor to a fixed value so that
+     * {@link #getTargetAmountOfRecordsInFlight * loadingFactor} is equal to this size.
+     */
+    public final int messageBufferSize;
+
+    /**
+     * Initial load factor - overrides default starting load factor
+     * {@link io.confluent.parallelconsumer.internal.DynamicLoadFactor#DEFAULT_INITIAL_LOADING_FACTOR}
+     * <p>
+     * Ignored if {@link #messageBufferSize} is specified as dynamic load factor system is set to static load factor to
+     * match requested buffer size.
+     */
+    @Builder.Default
+    public final int initialLoadFactor = DynamicLoadFactor.DEFAULT_INITIAL_LOADING_FACTOR;
+
+    /**
+     * Initial load factor - overrides default maximum load factor
+     * {@link io.confluent.parallelconsumer.internal.DynamicLoadFactor#DEFAULT_MAX_LOADING_FACTOR}
+     * <p>
+     * Ignored if {@link #messageBufferSize} is specified as dynamic load factor system is set to static load factor to
+     * match requested buffer size.
+     */
+    @Builder.Default
+    public final int maximumLoadFactor = DynamicLoadFactor.DEFAULT_MAX_LOADING_FACTOR;
 }
