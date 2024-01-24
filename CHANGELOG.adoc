@@ -25,6 +25,10 @@ endif::[]
 * fix: Fix synchronisation logic for transactional producer commit affecting non-transactional usage (#665), resolves (#637)
 * fix: Fix for race condition in partition state clean/dirty tracking (#666), resolves (#664)
 
+=== Improvements
+
+* feature: Make PC message buffer size configurable - two new configuration options for controlling buffer size added (#682)
+
 == 0.5.2.7
 
 === Fixes
