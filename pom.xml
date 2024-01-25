@@ -95,7 +95,7 @@
         <mycila.version>4.3</mycila.version>
         <lombok.version>1.18.28</lombok.version>
         <auto-service.version>1.1.1</auto-service.version>
-        <surefire.version>3.2.2</surefire.version>
+        <surefire.version>3.2.5</surefire.version>
 
         <!-- core -->
         <slf4j.version>2.0.7</slf4j.version>
@@ -427,7 +427,7 @@
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
-                <version>3.12.0</version>
+                <version>3.14.0</version>
             </dependency>
             <dependency>
                 <groupId>com.google.truth</groupId>
@@ -649,7 +649,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.12.1</version>
                 <configuration>
                     <annotationProcessorPaths>
                         <path>
@@ -720,7 +720,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.10</version>
+                <version>0.8.11</version>
                 <executions>
                     <execution>
                         <goals>
