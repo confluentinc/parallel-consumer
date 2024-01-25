@@ -1,9 +1,9 @@
 package io.confluent.parallelconsumer.integrationTests;
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.EnumCartesianProductTestSets;
+import io.confluent.csid.utils.ArgumentSetsBuilder;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.ProgressTracker;
 import io.confluent.csid.utils.TrimListRepresentation;
@@ -31,7 +31,8 @@ import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junitpioneer.jupiter.CartesianProductTest;
+import org.junitpioneer.jupiter.cartesian.ArgumentSets;
+import org.junitpioneer.jupiter.cartesian.CartesianTest;
 
 import java.util.*;
 import java.util.concurrent.Future;
@@ -68,7 +69,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
     int HIGH_MAX_POLL_RECORDS_CONFIG = 10_000;
 
     // is sensitive to changes in metadata size
-    @CartesianProductTest(factory = "enumSets")
+    @CartesianTest
+    @CartesianTest.MethodFactory("enumSets")
     void testDefaultMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 5000;
         if (order.equals(PARTITION))
@@ -81,10 +83,9 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         runTest(DEFAULT_MAX_POLL_RECORDS_CONFIG, PERIODIC_CONSUMER_SYNC, UNORDERED);
     }
 
-    static CartesianProductTest.Sets enumSets() {
-        return new EnumCartesianProductTestSets()
-                .add(CommitMode.class)
-                .add(ProcessingOrder.class);
+    static ArgumentSets enumSets() {
+        return ArgumentSetsBuilder.builder().add(CommitMode.class)
+                .add(ProcessingOrder.class).build();
     }
 
     @RepeatedTest(5)
@@ -94,7 +95,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
 
     // is sensitive to changes in metadata size
 //    @ResourceLock(value = OffsetMapCodecManager.METADATA_DATA_SIZE_RESOURCE_LOCK, mode = READ)
-    @CartesianProductTest(factory = "enumSets")
+    @CartesianTest
+    @CartesianTest.MethodFactory("enumSets")
     public void testLowMaxPoll(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 5000;
         if (order.equals(PARTITION))
@@ -102,7 +104,8 @@ class TransactionAndCommitModeTest extends BrokerIntegrationTest<String, String>
         runTest(LOW_MAX_POLL_RECORDS_CONFIG, commitMode, order, numMessages);
     }
 
-    @CartesianProductTest(factory = "enumSets")
+    @CartesianTest
+    @CartesianTest.MethodFactory("enumSets")
     public void testHighMaxPollEnum(CommitMode commitMode, ProcessingOrder order) {
         int numMessages = 10000;
         if (order.equals(PARTITION))
