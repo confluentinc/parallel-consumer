@@ -140,7 +140,7 @@ public class ShardManager<K, V> {
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         // all available container count - (still pending for running retry containers count)
-        // => all_available_count - (retryCnt - all_expire_cnt) => all_available_count + all_expire_cnt - retryCnt
+        // => all_available_count - (retryCnt - all_expired_retry_cnt) => all_available_count + all_expired_retry_cnt - retryCnt
 
         return processingShards.values().stream()
                 .mapToLong(processingShard ->

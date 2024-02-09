@@ -85,7 +85,7 @@ public class ProcessingShard<K, V> {
 
     public void onFailure() {
         // increase available cnt first to let retry expired calculated later
-        incrAvailableWorkContainerCnt();
+        availableWorkContainerCnt.incrementAndGet();
     }
 
 
@@ -132,12 +132,6 @@ public class ProcessingShard<K, V> {
                     return isWorkContainerStale(workContainer);
                 });
     }
-
-    public ProcessingShard<K, V> incrAvailableWorkContainerCnt() {
-        availableWorkContainerCnt.incrementAndGet();
-        return this;
-    }
-
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
