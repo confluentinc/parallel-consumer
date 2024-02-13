@@ -1533,10 +1533,14 @@ NOTE:: Dependency version bumps are not listed here.
 ifndef::github_name[]
 toc::[]
 endif::[]
-== 0.5.2.8
+
+== 0.5.2.9
 
 === Improvements
 * improvement: add multiple caches for accelerating available container count calculation （#667）
+
+
+== 0.5.2.8
 
 === Fixes
 

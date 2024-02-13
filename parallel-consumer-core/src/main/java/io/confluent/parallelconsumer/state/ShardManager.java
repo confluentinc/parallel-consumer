@@ -140,12 +140,11 @@ public class ShardManager<K, V> {
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         // all available container count - (still pending for running retry containers count)
-        // => all_available_count - (retryCnt - all_expired_retry_cnt) => all_available_count + all_expired_retry_cnt - retryCnt
+        // => all_available_count - (retryCnt - all_expired_retry_cnt)
 
         return processingShards.values().stream()
-                .mapToLong(processingShard ->
-                        processingShard.getCountOfWorkAwaitingSelection() + processingShard.getExpiredRetryContainerCnt())
-                .sum() - retryItemCnt.get();
+                .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
+                .sum() - retryItemCnt.get() + getExpiredItemCntFromRetryQueue();
     }
 
     public boolean workIsWaitingToBeProcessed() {
@@ -321,5 +320,21 @@ public class ShardManager<K, V> {
                         .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
         numberOfShardsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
                 this, shardManager -> shardManager.processingShards.keySet().size());
+    }
+
+    // get expired items count from retryQueue
+    private long getExpiredItemCntFromRetryQueue() {
+        long count = 0;
+        for (WorkContainer<?, ?> workContainer : retryQueue) {
+            if (workContainer.getDelayUntilRetryDue().isNegative() || workContainer.getDelayUntilRetryDue().isZero()) {
+                count ++;
+            } else {
+                break;
+            }
+        }
+        return count;
+//        return retryQueue.parallelStream()
+//                .filter(workContainer -> workContainer.getDelayUntilRetryDue().isNegative() || workContainer.getDelayUntilRetryDue().isZero())
+//                .count();
     }
 }
