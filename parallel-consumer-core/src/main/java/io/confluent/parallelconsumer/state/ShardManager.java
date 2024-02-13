@@ -96,9 +96,6 @@ public class ShardManager<K, V> {
     @Getter(AccessLevel.PACKAGE) // visible for testing
     private final NavigableSet<WorkContainer<?, ?>> retryQueue = new TreeSet<>(retryQueueWorkContainerComparator);
 
-    @Getter
-    private final AtomicLong retryItemCnt = new AtomicLong(0);
-
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
      * shard.
@@ -144,13 +141,11 @@ public class ShardManager<K, V> {
 
         return processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
-                .sum() - retryItemCnt.get() + getExpiredItemCntFromRetryQueue();
+                .sum() - retryQueue.size() + getNumberOfFailedWorkReadyToBeRetried();
     }
 
     public boolean workIsWaitingToBeProcessed() {
-        Collection<ProcessingShard<K, V>> allShards = processingShards.values();
-        return allShards.parallelStream()
-                .anyMatch(ProcessingShard::workIsWaitingToBeProcessed);
+        return getNumberOfWorkQueuedInShardsAwaitingSelection() > 0L;
     }
 
     /**
@@ -180,9 +175,7 @@ public class ShardManager<K, V> {
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
 
             // remove if in retry queue
-            if (this.retryQueue.remove(removedWC)) {
-                retryItemCnt.decrementAndGet();
-            }
+            this.retryQueue.remove(removedWC);
 
             // remove the shard if empty
             removeShardIfEmpty(shardKey);
@@ -216,9 +209,7 @@ public class ShardManager<K, V> {
 
     public void onSuccess(WorkContainer<?, ?> wc) {
         // remove from the retry queue if it's contained
-        if (this.retryQueue.remove(wc)) {
-            retryItemCnt.decrementAndGet();
-        }
+        this.retryQueue.remove(wc);
 
         // remove from processing queues
         var key = computeShardKey(wc);
@@ -238,9 +229,8 @@ public class ShardManager<K, V> {
      */
     public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
-        if (this.retryQueue.add(wc)) {
-            retryItemCnt.incrementAndGet();
-        }
+        this.retryQueue.add(wc);
+
         var key = computeShardKey(wc);
         var shardOptional = getShard(key);
 
@@ -323,11 +313,13 @@ public class ShardManager<K, V> {
     }
 
     // get expired items count from retryQueue
-    private long getExpiredItemCntFromRetryQueue() {
+    private long getNumberOfFailedWorkReadyToBeRetried() {
         long count = 0;
         for (WorkContainer<?, ?> workContainer : retryQueue) {
-            if (workContainer.getDelayUntilRetryDue().isNegative() || workContainer.getDelayUntilRetryDue().isZero()) {
-                count ++;
+            if (workContainer.isDelayPassed()) {
+                if (workContainer.isNotInFlight() ) {
+                    count++;
+                }
             } else {
                 // early stop since retryQueue is sorted by retryDueAt
                 break;

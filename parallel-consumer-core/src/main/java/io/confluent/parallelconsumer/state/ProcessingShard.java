@@ -58,10 +58,6 @@ public class ProcessingShard<K, V> {
     private AtomicLong availableWorkContainerCnt = new AtomicLong(0);
 
 
-    public boolean workIsWaitingToBeProcessed() {
-        return availableWorkContainerCnt.get() > 0L;
-    }
-
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
         if (entries.containsKey(key)) {
@@ -120,7 +116,11 @@ public class ProcessingShard<K, V> {
         return this.entries.entrySet()
                 .removeIf(entry -> {
                     WorkContainer<K, V> workContainer = entry.getValue();
-                    return isWorkContainerStale(workContainer);
+                    boolean isStale = isWorkContainerStale(workContainer);
+                    if (isStale) {
+                        dcrAvailableWorkContainerCntByDelta(1);
+                    }
+                    return isStale;
                 });
     }
 
@@ -130,6 +130,8 @@ public class ProcessingShard<K, V> {
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
+        int retryContainerCnt = 0;
+
         var iterator = entries.entrySet().iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
             var workContainer = iterator.next().getValue();
@@ -137,6 +139,11 @@ public class ProcessingShard<K, V> {
             if (pm.couldBeTakenAsWork(workContainer)) {
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
+
+                    // track if this is retry container
+                    if (workContainer.isDelayExistsExpired()) {
+                        retryContainerCnt++;
+                    }
 
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
@@ -169,7 +176,7 @@ public class ProcessingShard<K, V> {
 
         logSlowWork(slowWork);
 
-        dcrAvailableWorkContainerCntByDelta(workTaken.size());
+        dcrAvailableWorkContainerCntByDelta(workTaken.size() - retryContainerCnt);
 
         return workTaken;
     }
