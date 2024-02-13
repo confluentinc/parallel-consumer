@@ -329,12 +329,10 @@ public class ShardManager<K, V> {
             if (workContainer.getDelayUntilRetryDue().isNegative() || workContainer.getDelayUntilRetryDue().isZero()) {
                 count ++;
             } else {
+                // early stop since retryQueue is sorted by retryDueAt
                 break;
             }
         }
         return count;
-//        return retryQueue.parallelStream()
-//                .filter(workContainer -> workContainer.getDelayUntilRetryDue().isNegative() || workContainer.getDelayUntilRetryDue().isZero())
-//                .count();
     }
 }
