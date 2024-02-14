@@ -316,10 +316,11 @@ public class ShardManager<K, V> {
     private long getNumberOfFailedWorkReadyToBeRetried() {
         long count = 0;
         for (WorkContainer<?, ?> workContainer : retryQueue) {
+            // when poller check, considering it is ready to be retried. there are two scenarios:
+            // 1. the container is yet to be selected, therefore it is not inflight and should be counted in
+            // 2. the container has been selected and it is inflight but we already slashed them from availableWorkContainerCnt, so should be counted in
             if (workContainer.isDelayPassed()) {
-                if (workContainer.isNotInFlight() ) {
-                    count++;
-                }
+                count++;
             } else {
                 // early stop since retryQueue is sorted by retryDueAt
                 break;

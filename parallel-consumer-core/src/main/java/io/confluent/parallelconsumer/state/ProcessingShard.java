@@ -57,7 +57,6 @@ public class ProcessingShard<K, V> {
 
     private AtomicLong availableWorkContainerCnt = new AtomicLong(0);
 
-
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
         if (entries.containsKey(key)) {
@@ -86,7 +85,6 @@ public class ProcessingShard<K, V> {
     public long getCountOfWorkAwaitingSelection() {
         return availableWorkContainerCnt.get();
     }
-
 
     public long getCountOfWorkTracked() {
         return entries.size();
@@ -130,8 +128,6 @@ public class ProcessingShard<K, V> {
         var slowWork = new HashSet<WorkContainer<?, ?>>();
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
-        int retryContainerCnt = 0;
-
         var iterator = entries.entrySet().iterator();
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
             var workContainer = iterator.next().getValue();
@@ -139,11 +135,6 @@ public class ProcessingShard<K, V> {
             if (pm.couldBeTakenAsWork(workContainer)) {
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
-
-                    // track if this is retry container
-                    if (workContainer.isDelayExistsExpired()) {
-                        retryContainerCnt++;
-                    }
 
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
@@ -176,7 +167,7 @@ public class ProcessingShard<K, V> {
 
         logSlowWork(slowWork);
 
-        dcrAvailableWorkContainerCntByDelta(workTaken.size() - retryContainerCnt);
+        dcrAvailableWorkContainerCntByDelta(workTaken.size());
 
         return workTaken;
     }
