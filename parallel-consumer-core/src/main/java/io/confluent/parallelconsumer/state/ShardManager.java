@@ -286,14 +286,13 @@ public class ShardManager<K, V> {
         return workFromAllShards;
     }
 
+    // remove stale containers from both processingShards and retryQueue
     public boolean removeStaleContainers() {
-        boolean removed = processingShards.values().stream()
+        return processingShards.values().stream()
                 .map(ProcessingShard::removeStaleWorkContainersFromShard)
-                .anyMatch(res -> res.equals(true));
-        if (removed) {
-            log.debug("there are stale work containers removed");
-        }
-        return removed;
+                .flatMap(Collection::stream)
+                .map(retryQueue::remove)
+                .findAny().isPresent();
     }
 
     private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {

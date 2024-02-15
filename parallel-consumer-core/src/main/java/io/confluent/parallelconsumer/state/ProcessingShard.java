@@ -55,7 +55,7 @@ public class ProcessingShard<K, V> {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
-    private AtomicLong availableWorkContainerCnt = new AtomicLong(0);
+    private final AtomicLong availableWorkContainerCnt = new AtomicLong(0);
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
@@ -110,16 +110,20 @@ public class ProcessingShard<K, V> {
     // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:
     // 1. block the new work containers to be picked and processed
     // 2. will cause the consumer to paused consuming new messages indefinitely
-    public boolean removeStaleWorkContainersFromShard() {
-        return this.entries.entrySet()
+    public List<WorkContainer<K, V>> removeStaleWorkContainersFromShard() {
+        List<WorkContainer<K, V>> staleContainers = new ArrayList<>();
+        this.entries.entrySet()
                 .removeIf(entry -> {
                     WorkContainer<K, V> workContainer = entry.getValue();
                     boolean isStale = isWorkContainerStale(workContainer);
                     if (isStale) {
+                        // decrease the AvailableWorkContainerCnt and collect stale containers
                         dcrAvailableWorkContainerCntByDelta(1);
+                        staleContainers.add(workContainer);
                     }
                     return isStale;
                 });
+        return staleContainers;
     }
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
