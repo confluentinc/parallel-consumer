@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -44,6 +45,7 @@ public class ProcessingShard<K, V> {
     @Getter
     private final NavigableMap<Long, WorkContainer<K, V>> entries = new ConcurrentSkipListMap<>();
 
+
     @Getter(PRIVATE)
     private final ShardKey key;
 
@@ -53,10 +55,7 @@ public class ProcessingShard<K, V> {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
-    public boolean workIsWaitingToBeProcessed() {
-        return entries.values().parallelStream()
-                .anyMatch(kvWorkContainer -> kvWorkContainer.isAvailableToTakeAsWork());
-    }
+    private final AtomicLong availableWorkContainerCnt = new AtomicLong(0);
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
@@ -64,6 +63,7 @@ public class ProcessingShard<K, V> {
             log.debug("Entry for {} already exists in shard queue, dropping record", wc);
         } else {
             entries.put(key, wc);
+            availableWorkContainerCnt.incrementAndGet();
         }
     }
 
@@ -72,15 +72,18 @@ public class ProcessingShard<K, V> {
         entries.remove(wc.offset());
     }
 
+    public void onFailure() {
+        // increase available cnt first to let retry expired calculated later
+        availableWorkContainerCnt.incrementAndGet();
+    }
+
+
     public boolean isEmpty() {
         return entries.isEmpty();
     }
 
     public long getCountOfWorkAwaitingSelection() {
-        return entries.values().stream()
-                // todo missing pm.isBlocked(topicPartition) ?
-                .filter(WorkContainer::isAvailableToTakeAsWork)
-                .count();
+        return availableWorkContainerCnt.get();
     }
 
     public long getCountOfWorkTracked() {
@@ -94,21 +97,34 @@ public class ProcessingShard<K, V> {
     }
 
     public WorkContainer<K, V> remove(long offset) {
+        // from onPartitionsRemoved callback, need to deduce the available worker count for the revoked partition
+        WorkContainer<K, V> toRemovedWorker = entries.get(offset);
+        if (toRemovedWorker != null && toRemovedWorker.isAvailableToTakeAsWork()) {
+            dcrAvailableWorkContainerCntByDelta(1);
+        }
         return entries.remove(offset);
     }
+
 
 
     // remove staled WorkContainer otherwise when the partition is reassigned, the staled messages will:
     // 1. block the new work containers to be picked and processed
     // 2. will cause the consumer to paused consuming new messages indefinitely
-    public boolean removeStaleWorkContainersFromShard() {
-        return this.entries.entrySet()
+    public List<WorkContainer<K, V>> removeStaleWorkContainersFromShard() {
+        List<WorkContainer<K, V>> staleContainers = new ArrayList<>();
+        this.entries.entrySet()
                 .removeIf(entry -> {
                     WorkContainer<K, V> workContainer = entry.getValue();
-                    return isWorkContainerStale(workContainer);
+                    boolean isStale = isWorkContainerStale(workContainer);
+                    if (isStale) {
+                        // decrease the AvailableWorkContainerCnt and collect stale containers
+                        dcrAvailableWorkContainerCntByDelta(1);
+                        staleContainers.add(workContainer);
+                    }
+                    return isStale;
                 });
+        return staleContainers;
     }
-
 
     ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
@@ -123,6 +139,7 @@ public class ProcessingShard<K, V> {
             if (pm.couldBeTakenAsWork(workContainer)) {
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
+
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
                 } else {
@@ -153,6 +170,8 @@ public class ProcessingShard<K, V> {
         }
 
         logSlowWork(slowWork);
+
+        dcrAvailableWorkContainerCntByDelta(workTaken.size());
 
         return workTaken;
     }
@@ -199,5 +218,13 @@ public class ProcessingShard<K, V> {
     // check if the work container is stale
     private boolean isWorkContainerStale(WorkContainer<K, V> workContainer) {
         return pm.getPartitionState(workContainer).checkIfWorkIsStale(workContainer);
+    }
+
+    private void dcrAvailableWorkContainerCntByDelta(int ByNum) {
+        availableWorkContainerCnt.getAndAdd(-1 * ByNum);
+        // in case of possible race condition
+        if (availableWorkContainerCnt.get() < 0L) {
+            availableWorkContainerCnt.set(0L);
+        }
     }
 }

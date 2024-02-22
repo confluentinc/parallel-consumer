@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import com.google.common.truth.Truth;
@@ -130,6 +130,7 @@ public class WorkManagerTest {
         offset++;
         return stringStringConsumerRecord;
     }
+
 
     @ParameterizedTest
     @EnumSource
@@ -735,6 +736,43 @@ public class WorkManagerTest {
                         .map(WorkContainer::getTopicPartition)
                         .collect(Collectors.toList()))
                 .containsNoDuplicates();
+
+    }
+
+    /**
+     * Tests available worker cnt
+     */
+    @Test
+    void testAvailableWorkerCnt() {
+        ParallelConsumerOptions<?, ?> build = ParallelConsumerOptions.builder().ordering(PARTITION).build();
+        setupWorkManager(build);
+        // sanity
+        assertThat(wm.getOptions().getOrdering()).isEqualTo(PARTITION);
+
+        registerSomeWork();
+
+        int total = 3;
+        int maxWorkToGet = 2;
+
+        var works = wm.getWorkIfAvailable(maxWorkToGet);
+
+        assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(total - works.size());
+
+        // fail the work
+        var wc = works.get(0);
+        fail(wc);
+
+
+        // advance clock to make delay pass
+        advanceClockByDelay();
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        // work should now be ready to take
+        works = wm.getWorkIfAvailable(maxWorkToGet);
+        assertThat(wm.getNumberOfWorkQueuedInShardsAwaitingSelection()).isEqualTo(total - works.size());
 
     }
 

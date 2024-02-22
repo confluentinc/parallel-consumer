@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.SupplierUtils;
@@ -1407,20 +1407,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         notifySomethingToDo();
     }
 
-    private boolean isCommandedToCommit() {
-        synchronized (commitCommand) {
-            return this.commitCommand.get();
-        }
-    }
 
-    private void clearCommitCommand() {
-        synchronized (commitCommand) {
-            if (commitCommand.get()) {
-                log.debug("Command to commit asap received, clearing");
-                this.commitCommand.set(false);
-            }
-        }
-    }
+
 
     private boolean isTransactionCommittingInProgress() {
         return options.isUsingTransactionCommitMode() &&
@@ -1447,4 +1435,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.debug("Skipping transition of parallel consumer to state running. Current state is {}.", this.state);
         }
     }
+
+    private boolean isCommandedToCommit() {
+        synchronized (commitCommand) {
+            return this.commitCommand.get();
+        }
+    }
+
+    private void clearCommitCommand() {
+        synchronized (commitCommand) {
+            if (commitCommand.get()) {
+                log.debug("Command to commit asap received, clearing");
+                this.commitCommand.set(false);
+            }
+        }
+    }
+
 }
