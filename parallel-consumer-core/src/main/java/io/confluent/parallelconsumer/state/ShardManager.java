@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
@@ -22,7 +22,11 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -132,15 +136,16 @@ public class ShardManager<K, V> {
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
+        // all available container count - (still pending for running retry containers count)
+        // => all_available_count - (retryCnt - all_expired_retry_cnt)
+
         return processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
-                .sum();
+                .sum() - retryQueue.size() + getNumberOfFailedWorkReadyToBeRetried();
     }
 
     public boolean workIsWaitingToBeProcessed() {
-        Collection<ProcessingShard<K, V>> allShards = processingShards.values();
-        return allShards.parallelStream()
-                .anyMatch(ProcessingShard::workIsWaitingToBeProcessed);
+        return getNumberOfWorkQueuedInShardsAwaitingSelection() > 0L;
     }
 
     /**
@@ -225,6 +230,14 @@ public class ShardManager<K, V> {
     public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
         this.retryQueue.add(wc);
+
+        var key = computeShardKey(wc);
+        var shardOptional = getShard(key);
+
+        if (shardOptional.isPresent()) {
+            shardOptional.get().onFailure();
+        }
+
     }
 
     /**
@@ -273,14 +286,13 @@ public class ShardManager<K, V> {
         return workFromAllShards;
     }
 
+    // remove stale containers from both processingShards and retryQueue
     public boolean removeStaleContainers() {
-        boolean removed = processingShards.values().stream()
+        return processingShards.values().stream()
                 .map(ProcessingShard::removeStaleWorkContainersFromShard)
-                .anyMatch(res -> res.equals(true));
-        if (removed) {
-            log.debug("there are stale work containers removed");
-        }
-        return removed;
+                .flatMap(Collection::stream)
+                .map(retryQueue::remove)
+                .findAny().isPresent();
     }
 
     private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {
@@ -297,5 +309,22 @@ public class ShardManager<K, V> {
                         .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
         numberOfShardsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
                 this, shardManager -> shardManager.processingShards.keySet().size());
+    }
+
+    // get expired items count from retryQueue
+    private long getNumberOfFailedWorkReadyToBeRetried() {
+        long count = 0;
+        for (WorkContainer<?, ?> workContainer : retryQueue) {
+            // when poller check, considering it is ready to be retried. there are two scenarios:
+            // 1. the container is yet to be selected, therefore it is not inflight and should be counted in
+            // 2. the container has been selected and it is inflight but we already slashed them from availableWorkContainerCnt, so should be counted in
+            if (workContainer.isDelayPassed()) {
+                count++;
+            } else {
+                // early stop since retryQueue is sorted by retryDueAt
+                break;
+            }
+        }
+        return count;
     }
 }
