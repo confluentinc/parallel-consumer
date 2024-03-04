@@ -71,5 +71,10 @@ public class RecordContext<K, V> {
     public Optional<Instant> getSucceededAt() {
         return workContainer.getSucceededAt();
     }
+
+    /**
+     * @return if the record has failed, returns the last failure reason
+     */
+    public Optional<Throwable> getLastFailureReason() { return workContainer.getLastFailureReason(); }
 }
 
