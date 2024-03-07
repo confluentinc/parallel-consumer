@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.state.ConsumerRecordId;
@@ -71,5 +71,10 @@ public class RecordContext<K, V> {
     public Optional<Instant> getSucceededAt() {
         return workContainer.getSucceededAt();
     }
+
+    /**
+     * @return if the record has failed, returns the last failure reason
+     */
+    public Optional<Throwable> getLastFailureReason() { return workContainer.getLastFailureReason(); }
 }
 
