@@ -143,7 +143,7 @@ public class CoreApp {
 
         pc.poll(context -> {
             var consumerRecord = context.getSingleRecord().getConsumerRecord();
-            Long retryCount = retriesCount.computeIfAbsent(consumerRecord, ignore -> 0L);
+            Long retryCount = retriesCount.compute(consumerRecord, (key, oldValue) -> oldValue == null ? 0L : oldValue + 1);
             if (retryCount < maxRetries) {
                 processRecord(consumerRecord);
                 // no exception, so completed - remove from map
