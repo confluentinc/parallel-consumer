@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.core;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
