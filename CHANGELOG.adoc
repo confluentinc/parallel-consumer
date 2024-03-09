@@ -20,6 +20,9 @@ endif::[]
 * improvement: add multiple caches for accelerating available container count calculation （#667）
 * improvement: RecordContext now exposes lastFailureReason (#725)
 
+=== Fixes
+* fix: remove lingeringOnCommitWouldBeBeneficial and unused imports
+
 == 0.5.2.8
 
 === Fixes
