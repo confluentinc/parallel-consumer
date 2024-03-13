@@ -9,4 +9,4 @@ github:
     enable: true
     repo_name: confluentinc/parallel-consumer
 semaphore:
-    enable: false
+    enable: true
