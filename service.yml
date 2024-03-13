@@ -8,5 +8,7 @@ lang_version: 17
 github:
     enable: true
     repo_name: confluentinc/parallel-consumer
+git:
+    enable: true
 semaphore:
     enable: true
