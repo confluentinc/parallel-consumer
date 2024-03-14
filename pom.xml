@@ -623,7 +623,7 @@
                                 <!-- exclude semaphore build time files -->
                                 <exclude>bin/</exclude>
                                 <exclude>.m2/</exclude>
-                                <exclude>mk-include</exclude>
+                                <exclude>mk-include/</exclude>
                                 <!-- Very odd artifact on Jenkins -->
                                 <!--00:01:15.201  [INFO] Checking licenses...-->
                                 <!--00:01:17.095  [WARNING] Unknown file extension: ********-->
