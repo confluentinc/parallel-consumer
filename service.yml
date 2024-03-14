@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2021-2022 Confluent, Inc.
+# Copyright (C) 2024 Confluent, Inc.
 #
 
 name: parallel-consumer
@@ -12,3 +12,8 @@ git:
     enable: true
 semaphore:
     enable: true
+    pipeline_enable: false
+make:
+  enable: true
+  update_makefile: false
+  enable_updates: true
