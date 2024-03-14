@@ -1,3 +1,5 @@
+/mk-include
+/.mk-include-timestamp
 .DS_Store
 
 # Compiled class file
