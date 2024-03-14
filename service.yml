@@ -17,3 +17,5 @@ make:
   enable: true
   update_makefile: false
   enable_updates: true
+sonarqube:
+  enable: false
