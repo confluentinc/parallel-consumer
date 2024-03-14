@@ -37,26 +37,33 @@ global_job_config:
         - make epilogue-ci
 
 blocks:
-  - name: "Build, Test, Release"
-    run:
-      # don't run the build or unit tests on non-functional changes...
-      when: "change_in('/', {exclude: ['/.deployed-versions/', '.github/']})"
+  - name: Build
+    dependencies: []
     task:
-      # You can customize your CI job here
-      #      env_vars:
-      #        # custom env_vars
-      #      prologue:
-      #        commands:
-      #          # custom vault secrets
-      #          # custom prologue commands
       jobs:
-        - name: "Build, Test, Release"
+        - name: Build without Tests
           commands:
-            - make build
-            - make test
-            - make release-ci
+            - ./mvnw --batch-mode -Pci -U -DskipTests clean install
+            - cache store
+  - name: Test
+    dependencies: [Build]
+    task:
+      prologue:
+        commands:
+          - checkout
+          - cache restore
+      jobs:
+        - name: Tests
+          commands:
+            - ./mvnw --batch-mode -Pci dependency:analyze verify
+
       epilogue:
         always:
           commands:
-            - make epilogue-ci
-            - make testbreak-after
+            - test-results publish **/target/**-reports/*.xml
+after_pipeline:
+  task:
+    jobs:
+      - name: Publish Results
+        commands:
+          - test-results gen-pipeline-report
