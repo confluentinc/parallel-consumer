@@ -618,6 +618,8 @@
                                 <!-- Ideally the fix would be this issue: https://github.com/mathieucarbou/license-maven-plugin/issues/126  Ignore items from .gitignore #126-->
                                 <exclude>.ci/**/*</exclude>
                                 <exclude>.git/**/*</exclude>
+                                <!-- exclude semaphore yml files -->
+                                <exclude>.semaphore/*.yml</exclude>
                                 <!-- Very odd artifact on Jenkins -->
                                 <!--00:01:15.201  [INFO] Checking licenses...-->
                                 <!--00:01:17.095  [WARNING] Unknown file extension: ********-->
