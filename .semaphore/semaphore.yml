@@ -47,8 +47,7 @@ blocks:
       jobs:
         - name: Build and Test
           commands:
-            - ./mvnw --batch-mode -q -Pci -U -DskipTests clean install
-            - ./mvnw --batch-mode -Pci -Dlicense.skip dependency:analyze verify
+            - ./mvnw --batch-mode -q -Pci -U clean dependency:analyze install
       epilogue:
         always:
           commands:
