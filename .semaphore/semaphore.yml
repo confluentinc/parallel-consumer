@@ -29,6 +29,7 @@ global_job_config:
     commands:
       - sem-version java 17
       - checkout
+      - git fetch --unshallow
       - make show-args
       - . vault-setup
       - . vault-sem-get-secret ci-reporting
