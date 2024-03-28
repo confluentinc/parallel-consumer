@@ -45,22 +45,10 @@ blocks:
     dependencies: []
     task:
       jobs:
-        - name: Build without Tests
+        - name: Build and Test
           commands:
-            - ./mvnw --batch-mode -Pci -U -DskipTests clean install
-            - cache store
-  - name: Test
-    dependencies: [Build]
-    task:
-      prologue:
-        commands:
-          - checkout
-          - cache restore
-      jobs:
-        - name: Tests
-          commands:
-            - ./mvnw --batch-mode -Pci dependency:analyze verify
-
+            - ./mvnw --batch-mode -q -Pci -U -DskipTests clean install
+            - ./mvnw --batch-mode -Pci -Dlicense.skip dependency:analyze verify
       epilogue:
         always:
           commands:
