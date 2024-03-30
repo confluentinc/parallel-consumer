@@ -535,4 +535,12 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     public final int maximumLoadFactor = DynamicLoadFactor.DEFAULT_MAX_LOADING_FACTOR;
+
+    /**
+     * Make the "auto commit is disabled check" soft - when set, the processor will not throw an exception if Kafka's
+     * auto commit feature is enabled in the consumer. Use with caution, the library coordinates offset so
+     * <code>enable.auto.commit</code> must always be disabled in your consumer.
+     */
+    @Builder.Default
+    public final boolean softAutoCommitDisabledCheck = false;
 }

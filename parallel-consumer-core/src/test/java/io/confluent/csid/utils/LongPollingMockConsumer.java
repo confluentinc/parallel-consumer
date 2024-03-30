@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
@@ -168,8 +168,8 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         Field subscriptionsField = MockConsumer.class.getDeclaredField("subscriptions"); //NoSuchFieldException
         subscriptionsField.setAccessible(true);
         SubscriptionState subscriptionState = (SubscriptionState) subscriptionsField.get(this); //IllegalAccessException
-        ConsumerRebalanceListener consumerRebalanceListener = subscriptionState.rebalanceListener();
-        return consumerRebalanceListener;
+        Optional<ConsumerRebalanceListener> consumerRebalanceListener = subscriptionState.rebalanceListener();
+        return consumerRebalanceListener.orElse(null);
     }
 
     public void subscribeWithRebalanceAndAssignment(final List<String> topics, int partitions) {
