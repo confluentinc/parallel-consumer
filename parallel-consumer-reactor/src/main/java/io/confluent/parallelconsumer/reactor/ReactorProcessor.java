@@ -1,9 +1,10 @@
 package io.confluent.parallelconsumer.reactor;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.PCRetriableException;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.PollContext;
 import io.confluent.parallelconsumer.PollContextInternal;
@@ -102,26 +103,10 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
                     // it will run in the controller thread, unless user themselves uses either publishOn or successful
                     // subscribeOn
                     .publishOn(getScheduler())
-                    .doOnNext(signal -> {
-                        log.trace("doOnNext {}", signal);
-                    })
-                    .doOnComplete(() -> {
-                        log.debug("Reactor success (doOnComplete)");
-                        pollContext.streamWorkContainers().forEach(wc -> {
-                            wc.onUserFunctionSuccess();
-                            addToMailbox(pollContext, wc);
-                        });
-                    })
-                    .doOnError(throwable -> {
-                        log.error("Reactor fail signal", throwable);
-                        pollContext.streamWorkContainers().forEach(wc -> {
-                            wc.onUserFunctionFailure(throwable);
-                            addToMailbox(pollContext, wc);
-                        });
-                    })
+                    .doOnNext(signal -> log.trace("doOnNext {}", signal))
                     // cause users Publisher to run a thread pool, if it hasn't already - this is a crucial magical part
                     .subscribeOn(getScheduler())
-                    .subscribe();
+                    .subscribe(ignore -> onComplete(pollContext), throwable -> onError(pollContext, throwable));
 
             log.trace("asyncPoll - user function finished ok.");
             return UniLists.of(flux);
@@ -130,6 +115,26 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
         //
         Consumer<Object> voidCallBack = (ignore) -> log.trace("Void callback applied.");
         supervisorLoop(wrappedUserFunc, voidCallBack);
+    }
+
+    private void onComplete(PollContextInternal<K, V> pollContext) {
+        log.debug("Reactor success");
+        pollContext.streamWorkContainers().forEach(wc -> {
+            wc.onUserFunctionSuccess();
+            addToMailbox(pollContext, wc);
+        });
+    }
+
+    private void onError(PollContextInternal<K, V> pollContext, Throwable throwable) {
+        if (throwable instanceof PCRetriableException) {
+            log.debug("Reactor fail signal", throwable);
+        } else {
+            log.error("Reactor fail signal", throwable);
+        }
+        pollContext.streamWorkContainers().forEach(wc -> {
+            wc.onUserFunctionFailure(throwable);
+            addToMailbox(pollContext, wc);
+        });
     }
 
     private Scheduler getScheduler() {

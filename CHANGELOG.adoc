@@ -16,7 +16,12 @@ endif::[]
 
 == 0.5.2.9
 
+=== Fixes
+
+* fix: Support for PCRetriableException in ReactorProcessor (#733)
+
 === Improvements
+
 * improvement: add multiple caches for accelerating available container count calculation （#667）
 * improvement: RecordContext now exposes lastFailureReason (#725)
 
@@ -51,6 +56,7 @@ endif::[]
 * Refactored metrics implementation to not use singleton - improves meter separation, allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
 
 == 0.5.2.6
+
 === Improvements
 
 * feature: Micrometer metrics (#594)
@@ -120,13 +126,11 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
-
 === Fixes
 
 * fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
 * fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
-
 
 == v0.5.2.2
 
