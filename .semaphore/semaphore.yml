@@ -30,15 +30,6 @@ global_job_config:
       - sem-version java 17
       - checkout
       - git fetch --unshallow
-      - make show-args
-      - . vault-setup
-      - . vault-sem-get-secret ci-reporting
-      - . vault-sem-get-secret v1/ci/kv/service-foundations/cc-mk-include
-      - make init-ci
-  epilogue:
-    always:
-      commands:
-        - make epilogue-ci
 
 blocks:
   - name: Build
