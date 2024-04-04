@@ -1146,19 +1146,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
         boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;
-        boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean isCommandedToCommit = isCommandedToCommit();
 
-        boolean shouldDoANormalCommit = commitFrequencyOK && !lingerBeneficial;
-
-        boolean shouldCommitNow = shouldDoANormalCommit || isCommandedToCommit;
+        boolean shouldCommitNow = commitFrequencyOK || isCommandedToCommit;
 
         if (log.isDebugEnabled()) {
             log.debug("Should commit this cycle? " +
                     "shouldCommitNow? " + shouldCommitNow + " : " +
-                    "shouldDoANormalCommit? " + shouldDoANormalCommit + ", " +
                     "commitFrequencyOK? " + commitFrequencyOK + ", " +
-                    "lingerBeneficial? " + lingerBeneficial + ", " +
                     "isCommandedToCommit? " + isCommandedToCommit
             );
         }
@@ -1170,28 +1165,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return workerThreadPool.get().getQueue().size();
     }
 
-    /**
-     * Under some conditions, waiting longer before committing can be faster
-     *
-     * @return true if waiting to commit would help performance
-     */
-    private boolean lingeringOnCommitWouldBeBeneficial() {
-        if (log.isTraceEnabled()) {
-            // work is waiting to be done
-            boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
-            // no work is currently being done
-            boolean workInFlight = wm.hasWorkInFlight();
-            // work mailbox is empty
-            boolean workWaitingInMailbox = !workMailBox.isEmpty();
-            boolean workWaitingToProcess = wm.hasIncompleteOffsets();
-            log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
-                    workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
-            boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
-        }
-
-        // todo disable - commit frequency takes care of lingering? is this outdated?
-        return false;
-    }
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
