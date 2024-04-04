@@ -1,3 +1,4 @@
+//DUMMY CHANGE to test public CI build - DO NOT MERGE!
 //
 // STOP!!! Make sure you're editing the TEMPLATE version of the README, in /src/docs/README_TEMPLATE.adoc
 //
