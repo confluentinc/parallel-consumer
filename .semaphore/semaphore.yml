@@ -38,7 +38,7 @@ blocks:
       jobs:
         - name: Build and Test
           commands:
-            - ./mvnw --batch-mode -q -Pci -U clean install
+            - ./mvnw --batch-mode -Pci -U clean install
       epilogue:
         always:
           commands:
