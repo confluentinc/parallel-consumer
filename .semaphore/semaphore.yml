@@ -22,9 +22,6 @@ queue:
     processing: parallel
 
 global_job_config:
-  env_vars:
-    - name: MAVEN_OPTS
-      value: "-Dmaven.repo.local=.m2"
   prologue:
     commands:
       - cache clear
