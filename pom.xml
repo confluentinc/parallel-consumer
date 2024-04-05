@@ -971,6 +971,10 @@
             <url>https://packages.confluent.io/maven/</url>
         </repository>
         <repository>
+            <id>central</id>
+            <url>https://repo1.maven.org/maven2/</url>
+        </repository>
+        <repository>
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
         </repository>
@@ -983,6 +987,10 @@
         </repository>
     </repositories>
     <pluginRepositories>
+        <pluginRepository>
+            <id>central</id>
+            <url>https://repo1.maven.org/maven2/</url>
+        </pluginRepository>
         <pluginRepository>
             <id>astubbs-truth-generator</id>
             <url>https://packagecloud.io/astubbs/truth-generator/maven2</url>
