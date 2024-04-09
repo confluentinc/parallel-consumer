@@ -22,11 +22,9 @@ queue:
     processing: parallel
 
 global_job_config:
-  env_vars:
-    - name: MAVEN_OPTS
-      value: "-Dmaven.repo.local=.m2"
   prologue:
     commands:
+      - cache clear
       - sem-version java 17
       - checkout
       - git fetch --unshallow
@@ -38,7 +36,7 @@ blocks:
       jobs:
         - name: Build and Test
           commands:
-            - ./mvnw --batch-mode -q -Pci -U clean install
+            - ./mvnw --batch-mode -X -Pci -U clean install
       epilogue:
         always:
           commands:
