@@ -175,7 +175,10 @@ public class ShardManager<K, V> {
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
 
             // remove if in retry queue
-            this.retryQueue.remove(removedWC);
+            // check null to avoid race condition
+            if (Objects.nonNull(removedWC)) {
+                this.retryQueue.remove(removedWC);
+            }
 
             // remove the shard if empty
             removeShardIfEmpty(shardKey);
