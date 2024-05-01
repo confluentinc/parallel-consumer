@@ -1539,7 +1539,9 @@ endif::[]
 === Fixes
 
 * fix: Support for PCRetriableException in ReactorProcessor (#733)
+* fix: Remove lingeringOnCommitWouldBeBeneficial and unused imports (#732)
 * fix: NullPointerException on partitions revoked (#757)
+
 
 === Improvements
 
