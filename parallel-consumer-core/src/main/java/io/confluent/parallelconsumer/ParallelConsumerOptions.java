@@ -535,4 +535,15 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     public final int maximumLoadFactor = DynamicLoadFactor.DEFAULT_MAX_LOADING_FACTOR;
+
+    /**
+     * The purpose of the flag is to be a last resort / temporary work-around for changes introduced in newer Kafka
+     * Clients that break reflective access and for using wrapped, custom or extended KafkaConsumer classes that fail
+     * reflection checks - setting the flag to true will ignore reflection access exceptions during this check.
+     * <p>
+     * Note: that library will still try to access auto commit field on the consumer object and if it is accessible and
+     * not disabled - the Parallel Consumer will shut down.
+     */
+    @Builder.Default
+    public final boolean ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck = false;
 }
