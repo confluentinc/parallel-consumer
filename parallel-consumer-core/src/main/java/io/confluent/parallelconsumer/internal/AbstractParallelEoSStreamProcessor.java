@@ -19,7 +19,10 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.internals.AsyncKafkaConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
+import org.apache.kafka.clients.consumer.internals.ConsumerDelegate;
+import org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
 
@@ -470,27 +473,50 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             if (consumer instanceof KafkaConsumer) {
                 // Could use Commons Lang FieldUtils#readField - but, avoid needing commons lang
-                Field coordinatorField = KafkaConsumer.class.getDeclaredField("coordinator");
-                coordinatorField.setAccessible(true);
-                ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
+                Field delegateField = KafkaConsumer.class.getDeclaredField("delegate");
+                delegateField.setAccessible(true);
+                ConsumerDelegate<?, ?> delegate = (ConsumerDelegate<?, ?>) delegateField.get(consumer);
 
-                if (coordinator == null)
-                    throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
+                Boolean isAutoCommitEnabled;
+                if (delegate instanceof LegacyKafkaConsumer) {
+                    Field coordinatorField = LegacyKafkaConsumer.class.getDeclaredField("coordinator");
+                    coordinatorField.setAccessible(true);
+                    ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(delegate); //IllegalAccessException
 
-                Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
-                autoCommitEnabledField.setAccessible(true);
-                Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
+                    if (coordinator == null)
+                        throw new IllegalAccessException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
 
-                if (TRUE.equals(isAutoCommitEnabled))
-                    throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+                    Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
+                    autoCommitEnabledField.setAccessible(true);
+                    isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
+                } else if (delegate instanceof AsyncKafkaConsumer) {
+                    Field autoCommitEnabledField = AsyncKafkaConsumer.class.getDeclaredField("autoCommitEnabled");
+                    autoCommitEnabledField.setAccessible(true);
+                    isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(delegate);
+                } else {
+                    log.error("Consumer delegate is neither a LegacyKafkaConsumer nor a AsyncKafkaConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
+                    isAutoCommitEnabled = false;
+                }
+
+                if (TRUE.equals(isAutoCommitEnabled)) {
+                    if (options.isSoftAutoCommitDisabledCheck()) {
+                        log.warn("Consumer auto commit must be disabled, as commits are handled by the library.");
+                    } else {
+                        throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+                    }
+                }
             } else if (consumer instanceof MockConsumer) {
                 log.debug("Detected MockConsumer class which doesn't do auto commits");
             } else {
                 // Probably Mockito
                 log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
             }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
+        } catch (NoSuchFieldException | IllegalAccessException | NullPointerException e) {
+            if (options.isSoftAutoCommitDisabledCheck()) {
+                log.error("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
+            } else {
+                throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
+            }
         }
     }
 
@@ -1379,8 +1405,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
         notifySomethingToDo();
     }
-
-
 
 
     private boolean isTransactionCommittingInProgress() {
