@@ -537,10 +537,13 @@ public class ParallelConsumerOptions<K, V> {
     public final int maximumLoadFactor = DynamicLoadFactor.DEFAULT_MAX_LOADING_FACTOR;
 
     /**
-     * Make the "auto commit is disabled check" soft - when set, the processor will not throw an exception if Kafka's
-     * auto commit feature is enabled in the consumer. Use with caution, the library coordinates offset so
-     * <code>enable.auto.commit</code> must always be disabled in your consumer.
+     * The purpose of the flag is to be a last resort / temporary work-around for changes introduced in newer Kafka
+     * Clients that break reflective access and for using wrapped, custom or extended KafkaConsumer classes that fail
+     * reflection checks - setting the flag to true will ignore reflection access exceptions during this check.
+     * <p>
+     * Note: that library will still try to access auto commit field on the consumer object and if it is accessible and
+     * not disabled - the Parallel Consumer will shut down.
      */
     @Builder.Default
-    public final boolean softAutoCommitDisabledCheck = false;
+    public final boolean ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck = false;
 }

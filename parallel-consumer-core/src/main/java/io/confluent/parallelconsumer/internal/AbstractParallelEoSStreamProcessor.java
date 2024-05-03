@@ -494,17 +494,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     autoCommitEnabledField.setAccessible(true);
                     isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(delegate);
                 } else {
-                    log.error("Consumer delegate is neither a LegacyKafkaConsumer nor a AsyncKafkaConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
-                    isAutoCommitEnabled = false;
-                }
-
-                if (TRUE.equals(isAutoCommitEnabled)) {
-                    if (options.isSoftAutoCommitDisabledCheck()) {
-                        log.warn("Consumer auto commit must be disabled, as commits are handled by the library.");
+                    if (options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
+                        log.warn("Consumer delegate is neither a LegacyKafkaConsumer nor a AsyncKafkaConsumer - cannot check auto commit is disabled for consumer type: {}. Ignoring due to the option flag ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck=true", consumer.getClass().getName());
+                        isAutoCommitEnabled = false;
                     } else {
-                        throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+                        throw new ParallelConsumerException("Consumer delegate is neither a LegacyKafkaConsumer nor a AsyncKafkaConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
                     }
                 }
+
+                if (TRUE.equals(isAutoCommitEnabled))
+                    throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
             } else if (consumer instanceof MockConsumer) {
                 log.debug("Detected MockConsumer class which doesn't do auto commits");
             } else {
@@ -512,8 +511,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
             }
         } catch (NoSuchFieldException | IllegalAccessException | NullPointerException e) {
-            if (options.isSoftAutoCommitDisabledCheck()) {
-                log.error("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
+            if (options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
+                log.warn("Cannot check auto commit is disabled for consumer type: {},  Ignoring due to the option flag ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck=true", consumer.getClass().getName(), e);
             } else {
                 throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
             }
