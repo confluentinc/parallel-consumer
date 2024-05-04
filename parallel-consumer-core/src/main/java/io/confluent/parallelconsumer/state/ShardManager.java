@@ -15,6 +15,7 @@ import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.micrometer.core.instrument.Gauge;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -69,7 +70,8 @@ public class ShardManager<K, V> {
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
     @Getter(AccessLevel.PRIVATE)
-    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    @Setter(AccessLevel.PACKAGE)
+    private Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
      * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -

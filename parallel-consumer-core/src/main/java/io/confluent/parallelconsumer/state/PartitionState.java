@@ -100,6 +100,7 @@ public class PartitionState<K, V> {
      *         storage
      */
     @NonNull
+    @Setter(PACKAGE)
     private ConcurrentSkipListMap<Long, Optional<ConsumerRecord<K, V>>> incompleteOffsets;
 
     /**
