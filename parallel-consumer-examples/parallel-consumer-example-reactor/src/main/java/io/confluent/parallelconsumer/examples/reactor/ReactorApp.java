@@ -50,8 +50,6 @@ public class ReactorApp {
 
         postSetup();
 
-        int port = getPort();
-
         // tag::example[]
         parallelConsumer.react(context -> {
             var consumerRecord = context.getSingleRecord().getConsumerRecord();
