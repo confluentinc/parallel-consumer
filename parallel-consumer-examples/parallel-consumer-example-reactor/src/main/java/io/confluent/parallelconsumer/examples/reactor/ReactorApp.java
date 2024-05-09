@@ -60,10 +60,6 @@ public class ReactorApp {
         // end::example[]
     }
 
-    protected int getPort() {
-        return 8080;
-    }
-
     void close() {
         this.parallelConsumer.closeDrainFirst();
     }
