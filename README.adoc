@@ -1539,6 +1539,7 @@ endif::[]
 === Fixes
 
 * fix: Support for PCRetriableException in ReactorProcessor (#733)
+* fix: NullPointerException on partitions revoked (#757)
 * fix: remove lingeringOnCommitWouldBeBeneficial and unused imports (#732)
 * fix: Fix failing auto-commit check for kafka-clients >= v3.7.0 (#721)
 
