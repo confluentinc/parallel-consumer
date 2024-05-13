@@ -19,10 +19,7 @@ import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.MockConsumer;
-import org.apache.kafka.clients.consumer.internals.AsyncKafkaConsumer;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
-import org.apache.kafka.clients.consumer.internals.ConsumerDelegate;
-import org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.MDC;
 
@@ -47,7 +44,7 @@ import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static io.confluent.parallelconsumer.metrics.PCMetricsDef.USER_FUNCTION_EXECUTOR_PREFIX;
-import static java.lang.Boolean.TRUE;
+import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -276,7 +273,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ParallelConsumerOptions
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
-        Objects.requireNonNull(newOptions, "Options must be supplied");
+        requireNonNull(newOptions, "Options must be supplied");
         this.module = module;
         options = newOptions;
         this.shutdownTimeout = options.getShutdownTimeout();
@@ -470,53 +467,89 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Consider requesting ability to inspect configuration at runtime.
      */
     private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        final Optional<Boolean> isAutoCommitEnabled;
         try {
-            if (consumer instanceof KafkaConsumer) {
-                // Could use Commons Lang FieldUtils#readField - but, avoid needing commons lang
-                Field delegateField = KafkaConsumer.class.getDeclaredField("delegate");
-                delegateField.setAccessible(true);
-                ConsumerDelegate<?, ?> delegate = (ConsumerDelegate<?, ?>) delegateField.get(consumer);
-
-                Boolean isAutoCommitEnabled;
-                if (delegate instanceof LegacyKafkaConsumer) {
-                    Field coordinatorField = LegacyKafkaConsumer.class.getDeclaredField("coordinator");
-                    coordinatorField.setAccessible(true);
-                    ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(delegate); //IllegalAccessException
-
-                    if (coordinator == null)
-                        throw new IllegalAccessException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
-
-                    Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
-                    autoCommitEnabledField.setAccessible(true);
-                    isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
-                } else if (delegate instanceof AsyncKafkaConsumer) {
-                    Field autoCommitEnabledField = AsyncKafkaConsumer.class.getDeclaredField("autoCommitEnabled");
-                    autoCommitEnabledField.setAccessible(true);
-                    isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(delegate);
-                } else {
-                    if (options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
-                        log.warn("Consumer delegate is neither a LegacyKafkaConsumer nor a AsyncKafkaConsumer - cannot check auto commit is disabled for consumer type: {}. Ignoring due to the option flag ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck=true", consumer.getClass().getName());
-                        isAutoCommitEnabled = false;
-                    } else {
-                        throw new ParallelConsumerException("Consumer delegate is neither a LegacyKafkaConsumer nor a AsyncKafkaConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
-                    }
-                }
-
-                if (TRUE.equals(isAutoCommitEnabled))
-                    throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
-            } else if (consumer instanceof MockConsumer) {
-                log.debug("Detected MockConsumer class which doesn't do auto commits");
-            } else {
-                // Probably Mockito
-                log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
+            isAutoCommitEnabled = getAutoCommitEnabled(consumer);
+        } catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException | NullPointerException e) {
+            if (!options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
+                throw new ParallelConsumerException("Failed to check whether auto commit is enabled for consumer "
+                        + "type " + consumer.getClass() + ". This exception can be ignored by enabling the "
+                        + "ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck option.");
             }
-        } catch (NoSuchFieldException | IllegalAccessException | NullPointerException e) {
+
+            log.warn("Failed to check whether auto commit is enabled for consumer type {}. "
+                    + "Ignoring because ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck is enabled.", consumer.getClass(), e);
+            return;
+        }
+
+        if (isAutoCommitEnabled.isPresent() && isAutoCommitEnabled.get()) {
+            throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+        }
+
+        if (!isAutoCommitEnabled.isPresent()) {
             if (options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
-                log.warn("Cannot check auto commit is disabled for consumer type: {},  Ignoring due to the option flag ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck=true", consumer.getClass().getName(), e);
+                log.warn("Unable to check whether auto commit is enabled for consumer type {}. "
+                        + "Ignoring because ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck is enabled.", consumer.getClass());
             } else {
-                throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
+                throw new ParallelConsumerException("Unable to check whether auto commit is enabled for consumer "
+                        + "type " + consumer.getClass() + ". This exception can be ignored by enabling the "
+                        + "ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck option.");
             }
         }
+    }
+
+    private static Optional<Boolean> getAutoCommitEnabled(final org.apache.kafka.clients.consumer.Consumer<?, ?> consumer) throws ClassNotFoundException, IllegalAccessException, NoSuchFieldException {
+        if (consumer instanceof MockConsumer<?, ?>) {
+            log.debug("Detected MockConsumer class which doesn't do auto commits");
+            return Optional.of(false);
+        } else if (!(consumer instanceof KafkaConsumer<?,?>)) {
+            log.warn("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: {}", consumer.getClass());
+            return Optional.of(false); // Probably Mockito
+        }
+
+        final KafkaConsumer<?, ?> kafkaConsumer = (KafkaConsumer<?, ?>) consumer;
+
+        Field delegateField;
+        try {
+            delegateField = KafkaConsumer.class.getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+        } catch (NoSuchFieldException ignored) {
+            delegateField = null;
+        }
+
+        if (delegateField != null) { // kafka-clients >= 3.7.0
+            final org.apache.kafka.clients.consumer.Consumer<?, ?> delegate =
+                    (org.apache.kafka.clients.consumer.Consumer<?, ?>) delegateField.get(kafkaConsumer);
+            requireNonNull(delegate, "Consumer delegate must not be null");
+
+            if ("org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer".equals(delegate.getClass().getName())) {
+                final boolean autoCommitEnabled = getAutoCommitEnabledFromCoordinator(delegate.getClass(), delegate);
+                return Optional.of(autoCommitEnabled);
+            } else if ("org.apache.kafka.clients.consumer.internals.AsyncKafkaConsumer".equals(delegate.getClass().getName())) {
+                final Field autoCommitEnabledField = delegate.getClass().getDeclaredField("autoCommitEnabled"); //NoSuchFieldException
+                autoCommitEnabledField.setAccessible(true);
+                final boolean autoCommitEnabled = (boolean) autoCommitEnabledField.get(delegate); //IllegalAccessException
+                return Optional.of(autoCommitEnabled);
+            } else {
+                log.warn("Encountered unknown consumer delegate {}", consumer.getClass());
+                return Optional.empty();
+            }
+        } else { // kafka-clients < 3.7.0
+            final boolean autoCommitEnabled = getAutoCommitEnabledFromCoordinator(kafkaConsumer.getClass(), kafkaConsumer);
+            return Optional.of(autoCommitEnabled);
+        }
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static <T extends org.apache.kafka.clients.consumer.Consumer, U extends org.apache.kafka.clients.consumer.Consumer<?, ?>> boolean getAutoCommitEnabledFromCoordinator(final Class<T> consumerClass, final U consumer) throws IllegalAccessException, NoSuchFieldException {
+        final Field coordinatorField = consumerClass.getDeclaredField("coordinator"); //NoSuchFieldException
+        coordinatorField.setAccessible(true);
+        final ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
+        requireNonNull(coordinator, "Consumer coordinator must not be null. Ensure that group.id is configured for this consumer.");
+
+        final Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled"); //NoSuchFieldException
+        autoCommitEnabledField.setAccessible(true);
+        return (boolean) autoCommitEnabledField.get(coordinator); //IllegalAccessException
     }
 
     /**

@@ -168,8 +168,22 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         Field subscriptionsField = MockConsumer.class.getDeclaredField("subscriptions"); //NoSuchFieldException
         subscriptionsField.setAccessible(true);
         SubscriptionState subscriptionState = (SubscriptionState) subscriptionsField.get(this); //IllegalAccessException
-        Optional<ConsumerRebalanceListener> consumerRebalanceListener = subscriptionState.rebalanceListener();
-        return consumerRebalanceListener.orElse(null);
+        if (subscriptionState == null || subscriptionState.rebalanceListener() == null) {
+            return null;
+        }
+
+        Field rebalanceListenerField = SubscriptionState.class.getDeclaredField("rebalanceListener"); //NoSuchFieldException
+        rebalanceListenerField.setAccessible(true);
+
+        Class<?> rebalanceListenerClass = rebalanceListenerField.getType();
+        if (ConsumerRebalanceListener.class.isAssignableFrom(rebalanceListenerClass)) { // kafka-clients < 3.7.0
+            return (ConsumerRebalanceListener) rebalanceListenerField.get(subscriptionState); //IllegalAccessException
+        } else if (Optional.class.isAssignableFrom(rebalanceListenerClass)) { // kafka-clients >= 3.7.0
+            @SuppressWarnings("unchecked") Optional<ConsumerRebalanceListener> rebalanceListener = (Optional<ConsumerRebalanceListener>) rebalanceListenerField.get(subscriptionState); //IllegalAccessException
+            return rebalanceListener.orElse(null);
+        } else {
+            throw new IllegalStateException("SubscriptionState#rebalanceListener() is neither a ConsumerRebalanceListener nor an Optional.");
+        }
     }
 
     public void subscribeWithRebalanceAndAssignment(final List<String> topics, int partitions) {
