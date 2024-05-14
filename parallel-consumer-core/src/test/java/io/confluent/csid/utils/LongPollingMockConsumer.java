@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
@@ -188,16 +188,6 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
     }
 
     @SneakyThrows
-    @Override
-    public synchronized void rebalance(final Collection<TopicPartition> newAssignment) {
-        super.rebalance(newAssignment);
-        ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
-        if (rebalanceListeners != null) {
-            rebalanceListeners.onPartitionsAssigned(newAssignment);
-        }
-    }
-
-    @SneakyThrows
     public void revoke(final Collection<TopicPartition> newAssignment) {
         ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
         if (rebalanceListeners != null) {
@@ -205,6 +195,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         }
     }
 
+    @Override
     @SneakyThrows
     public synchronized void assign(final Collection<TopicPartition> newAssignment) {
         ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
