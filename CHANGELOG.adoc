@@ -21,6 +21,7 @@ endif::[]
 * fix: Support for PCRetriableException in ReactorProcessor (#733)
 * fix: NullPointerException on partitions revoked (#757)
 * fix: remove lingeringOnCommitWouldBeBeneficial and unused imports (#732)
+* fix: Fix failing auto-commit check for kafka-clients >= v3.7.0 (#721)
 * fix: Fix redundant rebalance callback in LongPollingMockConsumer for Kafka >= 3.6 (#765)
 
 === Improvements
@@ -31,6 +32,7 @@ endif::[]
 === Dependencies
 
 * build(deps): Bump Kafka to 3.6.2
+* build(deps): Bump Kafka to 3.7.0
 
 == 0.5.2.8
 
