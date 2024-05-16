@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.examples.reactor;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -50,8 +50,6 @@ public class ReactorApp {
 
         postSetup();
 
-        int port = getPort();
-
         // tag::example[]
         parallelConsumer.react(context -> {
             var consumerRecord = context.getSingleRecord().getConsumerRecord();
@@ -60,10 +58,6 @@ public class ReactorApp {
             return Mono.just("something todo"); // <1>
         });
         // end::example[]
-    }
-
-    protected int getPort() {
-        return 8080;
     }
 
     void close() {
