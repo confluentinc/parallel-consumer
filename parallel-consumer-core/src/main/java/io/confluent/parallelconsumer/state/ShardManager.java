@@ -15,6 +15,7 @@ import io.confluent.parallelconsumer.metrics.PCMetricsDef;
 import io.micrometer.core.instrument.Gauge;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -22,11 +23,7 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -69,7 +66,8 @@ public class ShardManager<K, V> {
      */
     // performance: could disable/remove if using partition order - but probably not worth the added complexity in the code to handle an extra special case
     @Getter(AccessLevel.PRIVATE)
-    private final Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
+    @Setter(AccessLevel.PACKAGE)
+    private Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
     /**
      * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
@@ -175,7 +173,10 @@ public class ShardManager<K, V> {
             WorkContainer<K, V> removedWC = shard.remove(consumerRecord.offset());
 
             // remove if in retry queue
-            this.retryQueue.remove(removedWC);
+            // check null to avoid race condition
+            if (Objects.nonNull(removedWC)) {
+                this.retryQueue.remove(removedWC);
+            }
 
             // remove the shard if empty
             removeShardIfEmpty(shardKey);

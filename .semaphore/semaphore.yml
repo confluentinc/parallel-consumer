@@ -27,18 +27,10 @@ global_job_config:
       value: "-Dmaven.repo.local=.m2"
   prologue:
     commands:
+      - cache clear
       - sem-version java 17
       - checkout
       - git fetch --unshallow
-      - make show-args
-      - . vault-setup
-      - . vault-sem-get-secret ci-reporting
-      - . vault-sem-get-secret v1/ci/kv/service-foundations/cc-mk-include
-      - make init-ci
-  epilogue:
-    always:
-      commands:
-        - make epilogue-ci
 
 blocks:
   - name: Build
@@ -47,7 +39,8 @@ blocks:
       jobs:
         - name: Build and Test
           commands:
-            - ./mvnw --batch-mode -q -Pci -U clean install
+            - ./mvnw --batch-mode -q -Pci -U clean install -DskipTests
+            - ./mvnw --batch-mode -Pci verify
       epilogue:
         always:
           commands:

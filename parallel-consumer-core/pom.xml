@@ -125,7 +125,7 @@
                 <artifactId>truth-generator-maven-plugin</artifactId>
                 <version>${truth-generator-maven-plugin.version}</version>
                 <configuration>
-                    <cleanTargetDir>true</cleanTargetDir>
+                    <cleanTargetDir>false</cleanTargetDir>
                     <useHas>false</useHas>
                     <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
                     <releaseTarget>8</releaseTarget>

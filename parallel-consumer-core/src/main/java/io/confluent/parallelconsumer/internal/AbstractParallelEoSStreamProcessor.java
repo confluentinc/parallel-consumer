@@ -44,7 +44,7 @@ import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.State.*;
 import static io.confluent.parallelconsumer.metrics.PCMetricsDef.USER_FUNCTION_EXECUTOR_PREFIX;
-import static java.lang.Boolean.TRUE;
+import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static lombok.AccessLevel.PRIVATE;
@@ -273,7 +273,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ParallelConsumerOptions
      */
     protected AbstractParallelEoSStreamProcessor(ParallelConsumerOptions<K, V> newOptions, PCModule<K, V> module) {
-        Objects.requireNonNull(newOptions, "Options must be supplied");
+        requireNonNull(newOptions, "Options must be supplied");
         this.module = module;
         options = newOptions;
         this.shutdownTimeout = options.getShutdownTimeout();
@@ -467,31 +467,89 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Consider requesting ability to inspect configuration at runtime.
      */
     private void checkAutoCommitIsDisabled(org.apache.kafka.clients.consumer.Consumer<K, V> consumer) {
+        final Optional<Boolean> isAutoCommitEnabled;
         try {
-            if (consumer instanceof KafkaConsumer) {
-                // Could use Commons Lang FieldUtils#readField - but, avoid needing commons lang
-                Field coordinatorField = KafkaConsumer.class.getDeclaredField("coordinator");
-                coordinatorField.setAccessible(true);
-                ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
-
-                if (coordinator == null)
-                    throw new IllegalStateException("Coordinator for Consumer is null - missing GroupId? Reflection broken?");
-
-                Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled");
-                autoCommitEnabledField.setAccessible(true);
-                Boolean isAutoCommitEnabled = (Boolean) autoCommitEnabledField.get(coordinator);
-
-                if (TRUE.equals(isAutoCommitEnabled))
-                    throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
-            } else if (consumer instanceof MockConsumer) {
-                log.debug("Detected MockConsumer class which doesn't do auto commits");
-            } else {
-                // Probably Mockito
-                log.error("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName());
+            isAutoCommitEnabled = getAutoCommitEnabled(consumer);
+        } catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException | NullPointerException e) {
+            if (!options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
+                throw new ParallelConsumerException("Failed to check whether auto commit is enabled for consumer "
+                        + "type " + consumer.getClass() + ". This exception can be ignored by enabling the "
+                        + "ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck option.");
             }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new IllegalStateException("Cannot check auto commit is disabled for consumer type: " + consumer.getClass().getName(), e);
+
+            log.warn("Failed to check whether auto commit is enabled for consumer type {}. "
+                    + "Ignoring because ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck is enabled.", consumer.getClass(), e);
+            return;
         }
+
+        if (isAutoCommitEnabled.isPresent() && isAutoCommitEnabled.get()) {
+            throw new ParallelConsumerException("Consumer auto commit must be disabled, as commits are handled by the library.");
+        }
+
+        if (!isAutoCommitEnabled.isPresent()) {
+            if (options.isIgnoreReflectiveAccessExceptionsForAutoCommitDisabledCheck()) {
+                log.warn("Unable to check whether auto commit is enabled for consumer type {}. "
+                        + "Ignoring because ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck is enabled.", consumer.getClass());
+            } else {
+                throw new ParallelConsumerException("Unable to check whether auto commit is enabled for consumer "
+                        + "type " + consumer.getClass() + ". This exception can be ignored by enabling the "
+                        + "ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck option.");
+            }
+        }
+    }
+
+    private static Optional<Boolean> getAutoCommitEnabled(final org.apache.kafka.clients.consumer.Consumer<?, ?> consumer) throws ClassNotFoundException, IllegalAccessException, NoSuchFieldException {
+        if (consumer instanceof MockConsumer<?, ?>) {
+            log.debug("Detected MockConsumer class which doesn't do auto commits");
+            return Optional.of(false);
+        } else if (!(consumer instanceof KafkaConsumer<?,?>)) {
+            log.warn("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: {}", consumer.getClass());
+            return Optional.of(false); // Probably Mockito
+        }
+
+        final KafkaConsumer<?, ?> kafkaConsumer = (KafkaConsumer<?, ?>) consumer;
+
+        Field delegateField;
+        try {
+            delegateField = KafkaConsumer.class.getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+        } catch (NoSuchFieldException ignored) {
+            delegateField = null;
+        }
+
+        if (delegateField != null) { // kafka-clients >= 3.7.0
+            final org.apache.kafka.clients.consumer.Consumer<?, ?> delegate =
+                    (org.apache.kafka.clients.consumer.Consumer<?, ?>) delegateField.get(kafkaConsumer);
+            requireNonNull(delegate, "Consumer delegate must not be null");
+
+            if ("org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer".equals(delegate.getClass().getName())) {
+                final boolean autoCommitEnabled = getAutoCommitEnabledFromCoordinator(delegate.getClass(), delegate);
+                return Optional.of(autoCommitEnabled);
+            } else if ("org.apache.kafka.clients.consumer.internals.AsyncKafkaConsumer".equals(delegate.getClass().getName())) {
+                final Field autoCommitEnabledField = delegate.getClass().getDeclaredField("autoCommitEnabled"); //NoSuchFieldException
+                autoCommitEnabledField.setAccessible(true);
+                final boolean autoCommitEnabled = (boolean) autoCommitEnabledField.get(delegate); //IllegalAccessException
+                return Optional.of(autoCommitEnabled);
+            } else {
+                log.warn("Encountered unknown consumer delegate {}", consumer.getClass());
+                return Optional.empty();
+            }
+        } else { // kafka-clients < 3.7.0
+            final boolean autoCommitEnabled = getAutoCommitEnabledFromCoordinator(kafkaConsumer.getClass(), kafkaConsumer);
+            return Optional.of(autoCommitEnabled);
+        }
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static <T extends org.apache.kafka.clients.consumer.Consumer, U extends org.apache.kafka.clients.consumer.Consumer<?, ?>> boolean getAutoCommitEnabledFromCoordinator(final Class<T> consumerClass, final U consumer) throws IllegalAccessException, NoSuchFieldException {
+        final Field coordinatorField = consumerClass.getDeclaredField("coordinator"); //NoSuchFieldException
+        coordinatorField.setAccessible(true);
+        final ConsumerCoordinator coordinator = (ConsumerCoordinator) coordinatorField.get(consumer); //IllegalAccessException
+        requireNonNull(coordinator, "Consumer coordinator must not be null. Ensure that group.id is configured for this consumer.");
+
+        final Field autoCommitEnabledField = coordinator.getClass().getDeclaredField("autoCommitEnabled"); //NoSuchFieldException
+        autoCommitEnabledField.setAccessible(true);
+        return (boolean) autoCommitEnabledField.get(coordinator); //IllegalAccessException
     }
 
     /**
@@ -1146,19 +1204,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
 
         boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(getTimeBetweenCommits()) > 0;
-        boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean isCommandedToCommit = isCommandedToCommit();
 
-        boolean shouldDoANormalCommit = commitFrequencyOK && !lingerBeneficial;
-
-        boolean shouldCommitNow = shouldDoANormalCommit || isCommandedToCommit;
+        boolean shouldCommitNow = commitFrequencyOK || isCommandedToCommit;
 
         if (log.isDebugEnabled()) {
             log.debug("Should commit this cycle? " +
                     "shouldCommitNow? " + shouldCommitNow + " : " +
-                    "shouldDoANormalCommit? " + shouldDoANormalCommit + ", " +
                     "commitFrequencyOK? " + commitFrequencyOK + ", " +
-                    "lingerBeneficial? " + lingerBeneficial + ", " +
                     "isCommandedToCommit? " + isCommandedToCommit
             );
         }
@@ -1170,28 +1223,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return workerThreadPool.get().getQueue().size();
     }
 
-    /**
-     * Under some conditions, waiting longer before committing can be faster
-     *
-     * @return true if waiting to commit would help performance
-     */
-    private boolean lingeringOnCommitWouldBeBeneficial() {
-        if (log.isTraceEnabled()) {
-            // work is waiting to be done
-            boolean workIsWaitingToBeCompletedSuccessfully = wm.workIsWaitingToBeProcessed();
-            // no work is currently being done
-            boolean workInFlight = wm.hasWorkInFlight();
-            // work mailbox is empty
-            boolean workWaitingInMailbox = !workMailBox.isEmpty();
-            boolean workWaitingToProcess = wm.hasIncompleteOffsets();
-            log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToProcess {};",
-                    workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToProcess);
-            boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToProcess;
-        }
-
-        // todo disable - commit frequency takes care of lingering? is this outdated?
-        return false;
-    }
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
@@ -1406,8 +1437,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
         notifySomethingToDo();
     }
-
-
 
 
     private boolean isTransactionCommittingInProgress() {

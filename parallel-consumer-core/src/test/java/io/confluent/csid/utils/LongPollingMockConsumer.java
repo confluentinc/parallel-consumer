@@ -1,7 +1,7 @@
 package io.confluent.csid.utils;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
@@ -168,8 +168,22 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         Field subscriptionsField = MockConsumer.class.getDeclaredField("subscriptions"); //NoSuchFieldException
         subscriptionsField.setAccessible(true);
         SubscriptionState subscriptionState = (SubscriptionState) subscriptionsField.get(this); //IllegalAccessException
-        ConsumerRebalanceListener consumerRebalanceListener = subscriptionState.rebalanceListener();
-        return consumerRebalanceListener;
+        if (subscriptionState == null || subscriptionState.rebalanceListener() == null) {
+            return null;
+        }
+
+        Field rebalanceListenerField = SubscriptionState.class.getDeclaredField("rebalanceListener"); //NoSuchFieldException
+        rebalanceListenerField.setAccessible(true);
+
+        Class<?> rebalanceListenerClass = rebalanceListenerField.getType();
+        if (ConsumerRebalanceListener.class.isAssignableFrom(rebalanceListenerClass)) { // kafka-clients < 3.7.0
+            return (ConsumerRebalanceListener) rebalanceListenerField.get(subscriptionState); //IllegalAccessException
+        } else if (Optional.class.isAssignableFrom(rebalanceListenerClass)) { // kafka-clients >= 3.7.0
+            @SuppressWarnings("unchecked") Optional<ConsumerRebalanceListener> rebalanceListener = (Optional<ConsumerRebalanceListener>) rebalanceListenerField.get(subscriptionState); //IllegalAccessException
+            return rebalanceListener.orElse(null);
+        } else {
+            throw new IllegalStateException("SubscriptionState#rebalanceListener() is neither a ConsumerRebalanceListener nor an Optional.");
+        }
     }
 
     public void subscribeWithRebalanceAndAssignment(final List<String> topics, int partitions) {
@@ -188,16 +202,6 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
     }
 
     @SneakyThrows
-    @Override
-    public synchronized void rebalance(final Collection<TopicPartition> newAssignment) {
-        super.rebalance(newAssignment);
-        ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
-        if (rebalanceListeners != null) {
-            rebalanceListeners.onPartitionsAssigned(newAssignment);
-        }
-    }
-
-    @SneakyThrows
     public void revoke(final Collection<TopicPartition> newAssignment) {
         ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
         if (rebalanceListeners != null) {
@@ -205,6 +209,7 @@ public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
         }
     }
 
+    @Override
     @SneakyThrows
     public synchronized void assign(final Collection<TopicPartition> newAssignment) {
         ConsumerRebalanceListener rebalanceListeners = getRebalanceListener();
