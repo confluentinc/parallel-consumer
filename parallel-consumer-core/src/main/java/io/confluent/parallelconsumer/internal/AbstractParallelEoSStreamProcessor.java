@@ -1278,15 +1278,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
          */
         final boolean containsStaleWork = wm.checkIfWorkIsStale(workContainerBatch);
 
-        if (containsStaleWork) {
-            handleStaleWork(workContainerBatch);
-        }
-
         final List<WorkContainer<K, V>> activeWorkContainers = containsStaleWork ?
-                workContainerBatch
-                        .stream()
-                        .filter(wc -> !wm.checkIfWorkIsStale(wc))
-                        .collect(Collectors.toList())
+                handleStaleWork(workContainerBatch)
                 : workContainerBatch;
 
         final PollContextInternal<K, V> context = new PollContextInternal<>(activeWorkContainers);
@@ -1322,11 +1315,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workContainerBatch
      */
-    protected void handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
-        final List<WorkContainer<K, V>> staleWorkContainers = workContainerBatch
-                .stream()
-                .filter(wm::checkIfWorkIsStale)
-                .collect(Collectors.toList());
+    protected List<WorkContainer<K, V>> handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
+        Map<Boolean, List<WorkContainer<K, V>>> splitContainersMap = workContainerBatch.stream()
+                .collect(Collectors.groupingBy(wm::checkIfWorkIsStale));
+        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.get(Boolean.TRUE);
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
         try {
             // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
@@ -1335,6 +1327,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } finally {
             cleanUpContext(internalContext);
         }
+        // return the normal workContainers
+        return splitContainersMap.get(Boolean.FALSE);
     }
 
     protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> runUserFunctionInternal(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
