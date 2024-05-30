@@ -1321,9 +1321,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.getOrDefault(Boolean.TRUE, new ArrayList<>());
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
         try {
-            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-            log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
-            staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
+            if (!staleWorkContainers.isEmpty()) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
+                staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
+            }
         } finally {
             cleanUpContext(internalContext);
         }
