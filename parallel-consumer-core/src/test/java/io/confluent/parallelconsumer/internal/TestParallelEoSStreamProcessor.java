@@ -5,6 +5,11 @@ package io.confluent.parallelconsumer.internal;
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.state.WorkContainer;
+import io.confluent.parallelconsumer.state.WorkManager;
+
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * Provides a set of methods for testing internal and configuration based interfaces of
@@ -16,4 +21,17 @@ public class TestParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStr
     }
 
     public int getTargetLoad() { return getQueueTargetLoaded(); }
+
+    public List<WorkContainer<K, V>> handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
+        return super.handleStaleWork(workContainerBatch);
+    }
+
+    public void setWm(WorkManager wm) {
+        super.wm = wm;
+    }
+
+    public BlockingQueue getMailBox() {
+        return super.getWorkMailBox();
+    }
+
 }
