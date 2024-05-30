@@ -122,7 +122,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     // todo make package level
     @Getter(AccessLevel.PUBLIC)
-    protected final WorkManager<K, V> wm;
+    protected WorkManager<K, V> wm;
 
     /**
      * Collection of work waiting to be
@@ -1318,7 +1318,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     protected List<WorkContainer<K, V>> handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
         Map<Boolean, List<WorkContainer<K, V>>> splitContainersMap = workContainerBatch.stream()
                 .collect(Collectors.groupingBy(wm::checkIfWorkIsStale));
-        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.get(Boolean.TRUE);
+        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.getOrDefault(Boolean.TRUE, new ArrayList<>());
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
         try {
             // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
@@ -1328,7 +1328,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             cleanUpContext(internalContext);
         }
         // return the normal workContainers
-        return splitContainersMap.get(Boolean.FALSE);
+        return splitContainersMap.getOrDefault(Boolean.FALSE, new ArrayList<>());
     }
 
     protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> runUserFunctionInternal(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
