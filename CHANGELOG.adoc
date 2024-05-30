@@ -26,6 +26,7 @@ endif::[]
 
 === Improvements
 
+* improvement: stale containers exclusion and handling improvement (#779)
 * improvement: add multiple caches for accelerating available container count calculation （#667）
 * improvement: RecordContext now exposes lastFailureReason (#725)
 
