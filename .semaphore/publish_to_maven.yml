@@ -1,0 +1,35 @@
+#
+# Copyright (C) 2021-2023 Confluent, Inc.
+#
+
+version : v1.0
+name : Publish to Maven Central
+agent :
+  machine :
+    type : s1-prod-ubuntu20-04-amd64-1
+
+global_job_config :
+  env_vars :
+    - name : MAVEN_OPTS
+      value : "-Dmaven.repo.local=.m2"
+  prologue :
+    commands :
+      - sem-version java 17
+      - checkout
+      - git fetch --unshallow
+      - . vault-setup
+
+blocks :
+  - name : Deploy to Maven Central
+    task :
+      jobs :
+        - name : Publish Artifacts
+          commands :
+            - ./mvnw --batch-mode clean deploy -Pmaven-central -Pjenkins -Pci -Dgpg.passphrase=$GPG_PASSPHRASE -DskipTests
+
+after_pipeline :
+  task :
+    jobs :
+      - name : Publish Results
+        commands :
+          - test-results gen-pipeline-report
