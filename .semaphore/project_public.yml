@@ -14,11 +14,11 @@ spec:
     url: git@github.com:confluentinc/parallel-consumer.git
     run_on:
     - forked_pull_requests
-    pipeline_file: .semaphore/semaphore_public.yml
+    pipeline_file: .semaphore/semaphore.yml
     integration_type: github_app
     status:
       pipeline_files:
-      - path: .semaphore/semaphore_public.yml
+      - path: .semaphore/semaphore.yml
         level: pipeline
     forked_pull_requests:
       allowed_contributors:

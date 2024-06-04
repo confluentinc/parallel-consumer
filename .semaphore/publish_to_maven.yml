@@ -15,17 +15,23 @@ global_job_config :
   prologue :
     commands :
       - sem-version java 17
-      - checkout
-      - git fetch --unshallow
-      - . vault-setup
-      - . vault-sem-get-secret gpg/confluent-packaging-private-8B1DA6120C2BF624
-      - chmod +x .semaphore/initgpg.sh
+
 blocks :
   - name : Deploy to Maven Central
     task :
       jobs :
         - name : Publish Artifacts
           commands :
+            - |
+              if [[ "${SEMAPHORE_ORGANIZATION_URL}" == *".semaphoreci.com" ]]; then
+                echo "Not meant to run on public semaphore!"
+                exit 1
+              fi
+            - checkout
+            - git fetch --unshallow
+            - . vault-setup
+            - . vault-sem-get-secret gpg/confluent-packaging-private-8B1DA6120C2BF624
+            - chmod +x .semaphore/initgpg.sh
             - . .semaphore/initgpg.sh
             - ./mvnw --batch-mode clean deploy -Pmaven-central -Pci -Dgpg.passphrase=$PASSPHRASE -DskipTests
 
