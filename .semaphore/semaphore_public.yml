@@ -51,9 +51,3 @@ after_pipeline:
       - name: Publish Results
         commands:
           - test-results gen-pipeline-report
-
-promotions :
-  - name : Publish to Maven Central
-    pipeline_file : publish_to_maven.yml
-    auto_promote :
-      when : "result = 'passed' and tag =~ '.*'"

@@ -1,0 +1,41 @@
+#
+# Copyright (C) 2021-2023 Confluent, Inc.
+#
+
+version: v1.0
+name: tasks/release
+agent:
+  machine:
+    type: s1-prod-ubuntu20-04-amd64-1
+fail_fast:
+  cancel:
+    when: "true"
+global_job_config:
+  env_vars:
+    - name: MAVEN_OPTS
+      value: "-Dmaven.repo.local=.m2"
+  prologue:
+    commands:
+      - sem-version java 17
+      - . vault-setup
+      - . vault-sem-get-secret ci-reporting
+
+blocks:
+  - name: Release
+    task:
+      prologue:
+        commands:
+          - cache clear
+          - checkout
+          - git fetch --unshallow
+      jobs:
+        - name: Run Maven Release Plugin
+          commands:
+            - ./mvnw release:clean release:prepare release:perform -B -DreleaseVersion=$PROJECT_VERSION -DdevelopmentVersion=$NEXT_PROJECT_VERSION -Darguments="-DskipTests=true"
+
+after_pipeline:
+  task:
+    jobs:
+      - name: Publish Results
+        commands:
+          - test-results gen-pipeline-report
