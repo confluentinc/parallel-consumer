@@ -18,7 +18,7 @@ sonarqube:
 tasks:
   - name: release
     scheduled: False
-    branch: "main"
+    branch: "master"
     pipeline_file: .semaphore/release.yml
     parameters:
       - name: PROJECT_VERSION
