@@ -4,7 +4,6 @@
 #
 
 set -o errexit -o nounset -o pipefail
-echo "${PRIVATE_KEY}"
 echo -e "${PRIVATE_KEY}" | gpg --import --batch --no-tty
 cat <<GPG_AGENT_CFG > ~/.gnupg/gpg-agent.conf
 use-agent
