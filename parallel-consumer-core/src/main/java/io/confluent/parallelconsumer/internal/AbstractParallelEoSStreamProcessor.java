@@ -184,10 +184,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
     /**
-     * used for mark for interruption exclusion
+     * Indicates state of waiting while in-flight messages complete processing on shutdown.
+     * Used to prevent control thread interrupt due to wakeup logic on rebalances
      */
-    private final AtomicBoolean awaitingSubmittedTaskComplete = new AtomicBoolean();
-
+    private final AtomicBoolean awaitingInflightProcessingCompletionOnShutdown = new AtomicBoolean();
 
     private final OffsetCommitter committer;
 
@@ -645,7 +645,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.debug("Awaiting worker pool termination...");
-        awaitingSubmittedTaskComplete.getAndSet(true);
+        awaitingInflightProcessingCompletionOnShutdown.getAndSet(true);
         boolean awaitingInflightCompletion = true;
         while (awaitingInflightCompletion) {
             log.debug("Still awaiting completion of inflight work");
@@ -664,7 +664,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 awaitingInflightCompletion = true;
             }
         }
-        awaitingSubmittedTaskComplete.getAndSet(false);
+        awaitingInflightProcessingCompletionOnShutdown.getAndSet(false);
 
         if (workerThreadPool.get().getActiveCount() > 0) {
             log.warn("Clean execution pool termination failed - some threads still active despite await and interrupt - is user function swallowing interrupted exception? Threads still not done count: {}", workerThreadPool.get().getActiveCount());
@@ -1410,8 +1410,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     public void notifySomethingToDo() {
         boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false);
-        // not interrupt when workerThreadPool draining submitted tasks
-        if (noTransactionInProgress && !awaitingSubmittedTaskComplete.get()) {
+        // do not interrupt while workerThreadPool is draining submitted / inflight tasks
+        if (noTransactionInProgress && !awaitingInflightProcessingCompletionOnShutdown.get()) {
             log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
             interruptControlThread();
         } else {
