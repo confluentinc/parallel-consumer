@@ -17,20 +17,20 @@ global_job_config:
   prologue:
     commands:
       - sem-version java 17
-      - . vault-setup
-      - . vault-sem-get-secret ci-reporting
 
 blocks:
   - name: Release
     task:
-      prologue:
-        commands:
-          - cache clear
-          - checkout
-          - git fetch --unshallow
       jobs:
         - name: Run Maven Release Plugin
           commands:
+            - |
+              if [[ "${SEMAPHORE_ORGANIZATION_URL}" == *".semaphoreci.com" ]]; then
+                echo "Not meant to run on public semaphore!"
+                exit 1
+              fi
+            - checkout
+            - git fetch --unshallow
             - ./mvnw release:clean release:prepare release:perform -B -DreleaseVersion=$PROJECT_VERSION -DdevelopmentVersion=$NEXT_PROJECT_VERSION -Darguments="-DskipTests=true"
 
 after_pipeline:

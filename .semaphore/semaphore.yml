@@ -27,7 +27,6 @@ global_job_config:
       value: "-Dmaven.repo.local=.m2"
   prologue:
     commands:
-      - cache clear
       - sem-version java 17
       - checkout
       - git fetch --unshallow
