@@ -122,7 +122,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     // todo make package level
     @Getter(AccessLevel.PUBLIC)
-    protected final WorkManager<K, V> wm;
+    protected WorkManager<K, V> wm;
 
     /**
      * Collection of work waiting to be
@@ -1287,15 +1287,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
          */
         final boolean containsStaleWork = wm.checkIfWorkIsStale(workContainerBatch);
 
-        if (containsStaleWork) {
-            handleStaleWork(workContainerBatch);
-        }
-
         final List<WorkContainer<K, V>> activeWorkContainers = containsStaleWork ?
-                workContainerBatch
-                        .stream()
-                        .filter(wc -> !wm.checkIfWorkIsStale(wc))
-                        .collect(Collectors.toList())
+                handleStaleWork(workContainerBatch)
                 : workContainerBatch;
 
         final PollContextInternal<K, V> context = new PollContextInternal<>(activeWorkContainers);
@@ -1331,19 +1324,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workContainerBatch
      */
-    protected void handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
-        final List<WorkContainer<K, V>> staleWorkContainers = workContainerBatch
-                .stream()
-                .filter(wm::checkIfWorkIsStale)
-                .collect(Collectors.toList());
+    protected List<WorkContainer<K, V>> handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
+        Map<Boolean, List<WorkContainer<K, V>>> splitContainersMap = workContainerBatch.stream()
+                .collect(Collectors.groupingBy(wm::checkIfWorkIsStale));
+        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.getOrDefault(Boolean.TRUE, new ArrayList<>());
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
         try {
-            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-            log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
-            staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
+            if (!staleWorkContainers.isEmpty()) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
+                staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
+            }
         } finally {
             cleanUpContext(internalContext);
         }
+        // return the normal workContainers
+        return splitContainersMap.getOrDefault(Boolean.FALSE, new ArrayList<>());
     }
 
     protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> runUserFunctionInternal(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
