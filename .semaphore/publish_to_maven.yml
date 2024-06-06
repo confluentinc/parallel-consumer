@@ -1,0 +1,43 @@
+#
+# Copyright (C) 2021-2023 Confluent, Inc.
+#
+
+version : v1.0
+name : Publish to Maven Central
+agent :
+  machine :
+    type : s1-prod-ubuntu20-04-amd64-1
+
+global_job_config :
+  env_vars :
+    - name : MAVEN_OPTS
+      value : "-Dmaven.repo.local=.m2"
+  prologue :
+    commands :
+      - sem-version java 17
+
+blocks :
+  - name : Deploy to Maven Central
+    task :
+      jobs :
+        - name : Publish Artifacts
+          commands :
+            - |
+              if [[ "${SEMAPHORE_ORGANIZATION_URL}" == *".semaphoreci.com" ]]; then
+                echo "Not meant to run on public semaphore!"
+                exit 1
+              fi
+            - checkout
+            - git fetch --unshallow
+            - . vault-setup
+            - . vault-sem-get-secret gpg/confluent-packaging-private-8B1DA6120C2BF624
+            - chmod +x .semaphore/initgpg.sh
+            - . .semaphore/initgpg.sh
+            - ./mvnw --batch-mode clean deploy -Pmaven-central -Pci -Dgpg.passphrase=$PASSPHRASE -DskipTests
+
+after_pipeline :
+  task :
+    jobs :
+      - name : Publish Results
+        commands :
+          - test-results gen-pipeline-report
