@@ -1282,14 +1282,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Pool received: {}", workContainerBatch);
 
         /*
-         *  Handle stale work from the batch, before creating the internal context for running user function.
+         *  Handle and filter stale work from the batch, before creating the internal context for running user function.
          *  The context created is used by the "wrapped" user function to inject transactional producer synchronization.
          */
-        final boolean containsStaleWork = wm.checkIfWorkIsStale(workContainerBatch);
-
-        final List<WorkContainer<K, V>> activeWorkContainers = containsStaleWork ?
-                handleStaleWork(workContainerBatch)
-                : workContainerBatch;
+        final List<WorkContainer<K, V>> activeWorkContainers = handleStaleWork(workContainerBatch);
 
         final PollContextInternal<K, V> context = new PollContextInternal<>(activeWorkContainers);
 
