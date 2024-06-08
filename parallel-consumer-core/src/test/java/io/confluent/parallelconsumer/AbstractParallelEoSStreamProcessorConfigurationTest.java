@@ -24,6 +24,9 @@ import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Tests to verify the protected and internal methods of
@@ -88,11 +91,15 @@ class AbstractParallelEoSStreamProcessorConfigurationTest {
 
         try (final TestParallelEoSStreamProcessor<String, String> testInstance = new TestParallelEoSStreamProcessor<>(testOptions)) {
             testInstance.setWm(wm);
+            Function<PollContextInternal<String, String>, List<String>> dummyFunction = (contextInternal) -> new ArrayList<>();
+            Consumer<String> callback = (res) -> {
+            };
 
-            List<WorkContainer<String, String>> normalWorkers = testInstance.handleStaleWork(workContainers);
+            testInstance.runUserFunc(dummyFunction, callback, workContainers);
 
-            Assertions.assertEquals(normalWorkers.size(), 1);
-            Assertions.assertEquals(testInstance.getMailBox().size(), 1);
+
+            Assertions.assertEquals(testInstance.getMailBoxSuccessCnt(), 1);
+            Assertions.assertEquals(testInstance.getMailBoxFailedCnt(), 1);
         }
     }
 
@@ -105,11 +112,15 @@ class AbstractParallelEoSStreamProcessorConfigurationTest {
 
         try (final TestParallelEoSStreamProcessor<String, String> testInstance = new TestParallelEoSStreamProcessor<>(testOptions)) {
             testInstance.setWm(wm);
+            Function<PollContextInternal<String, String>, List<String>> dummyFunction = (contextInternal) -> new ArrayList<>();
+            Consumer<String> callback = (res) -> {
+            };
 
-            List<WorkContainer<String, String>> normalWorkers = testInstance.handleStaleWork(workContainers);
+            testInstance.runUserFunc(dummyFunction, callback, workContainers);
 
-            Assertions.assertEquals(normalWorkers.size(), 2);
-            Assertions.assertEquals(testInstance.getMailBox().size(), 0);
+
+            Assertions.assertEquals(testInstance.getMailBoxSuccessCnt(), 2);
+            Assertions.assertEquals(testInstance.getMailBoxFailedCnt(), 0);
         }
     }
 }
