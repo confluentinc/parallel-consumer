@@ -139,7 +139,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
+    static class ControllerEventMessage<K, V> {
 
         WorkContainer<K, V> workContainer;
 
@@ -1285,7 +1285,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
          *  Handle and filter stale work from the batch, before creating the internal context for running user function.
          *  The context created is used by the "wrapped" user function to inject transactional producer synchronization.
          */
-        final List<WorkContainer<K, V>> activeWorkContainers = handleStaleWork(workContainerBatch);
+        Map<Boolean, List<WorkContainer<K, V>>> splitContainersMap = workContainerBatch.stream()
+                .collect(Collectors.groupingBy(wm::checkIfWorkIsStale));
+        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.getOrDefault(Boolean.TRUE, new ArrayList<>());
+        final List<WorkContainer<K, V>> activeWorkContainers = splitContainersMap.getOrDefault(Boolean.FALSE, new ArrayList<>());
+
+        handleStaleWork(staleWorkContainers);
 
         final PollContextInternal<K, V> context = new PollContextInternal<>(activeWorkContainers);
 
@@ -1320,10 +1325,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workContainerBatch
      */
-    protected List<WorkContainer<K, V>> handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
-        Map<Boolean, List<WorkContainer<K, V>>> splitContainersMap = workContainerBatch.stream()
-                .collect(Collectors.groupingBy(wm::checkIfWorkIsStale));
-        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.getOrDefault(Boolean.TRUE, new ArrayList<>());
+    protected void handleStaleWork(final List<WorkContainer<K, V>> staleWorkContainers) {
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
         try {
             if (!staleWorkContainers.isEmpty()) {
@@ -1334,8 +1336,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } finally {
             cleanUpContext(internalContext);
         }
-        // return the normal workContainers
-        return splitContainersMap.getOrDefault(Boolean.FALSE, new ArrayList<>());
     }
 
     protected <R> ArrayList<Tuple<ConsumerRecord<K, V>, R>> runUserFunctionInternal(final Function<PollContextInternal<K, V>, List<R>> usersFunction,
