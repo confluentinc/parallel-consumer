@@ -44,13 +44,13 @@ class ReactorPCTest extends ReactorUnitTestBase {
         primeFirstRecord();
 
         ConcurrentLinkedQueue<Object> msgs = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<String> threads = new ConcurrentLinkedQueue<>();
 
         reactorPC.react((rec) -> {
             log.info("Reactor user poll function: {}", rec);
             msgs.add(rec);
-            Mono<String> result = Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()));
-//            Flux<String> stringFlux = fromPath("/tmp/out.html");
-            return result;
+            threads.add(Thread.currentThread().getName());
+            return Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()));
         });
 
         await()
@@ -63,6 +63,10 @@ class ReactorPCTest extends ReactorUnitTestBase {
                     assertThat(consumerSpy)
                             .hasCommittedToPartition(topicPartition)
                             .atLeastOffset(4);
+
+                    assertWithMessage("The user-defined function should be executed by the scheduler")
+                            .that(threads.stream().allMatch(thread -> thread.startsWith("boundedElastic")))
+                            .isTrue();
                 });
     }
 
