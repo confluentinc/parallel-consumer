@@ -1,14 +1,10 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.JavaUtils;
-import io.confluent.csid.utils.LatchTestUtils;
-import io.confluent.csid.utils.ProgressBarUtils;
-import io.confluent.csid.utils.Range;
-import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.csid.utils.*;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
@@ -163,9 +159,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         consumerSpy.addRecord(ktu.makeRecord("0", "v2"));
         consumerSpy.addRecord(ktu.makeRecord("1", "v3"));
         consumerSpy.addRecord(ktu.makeRecord("0", "v4"));
-
+        AtomicBoolean gotK0 = new AtomicBoolean(false);
+        AtomicBoolean gotK1 = new AtomicBoolean(false);
         parallelConsumer.poll((record) -> {
-            if(record.getSingleConsumerRecord().value().equals("v1")) {
+            if (record.getSingleConsumerRecord().value().equals("v1")) {
+                gotK0.set(true);
                 try {
                     latch.await();
                     ThreadUtils.sleepQuietly(100);
@@ -173,17 +171,22 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                     interrupted.set(true);
                     Thread.interrupted(); //reset interrupted flag.
                 }
+            } else if (record.getSingleConsumerRecord().key().equals("1")) {
+                gotK1.set(true);
             }
         });
-
         // let it process
+        while (!gotK0.get() && !gotK1.get()) {
+            awaitForSomeLoopCycles(1);
+        }
+        // a bit more time to help with flakiness on slower CI
         awaitForSomeLoopCycles(2);
 
         latch.countDown();
         parallelConsumer.close();
 
         //
-        assertCommits(of(1,2), "primed record and first key=0 record completed only, followup key 0 records skipped");
+        assertCommits(of(1, 2), "primed record and first key=0 record completed only, followup key 0 records skipped");
         assertCommits().encodedIncomplete(2); //first blocked/skipped key 0 record (value v2).
         assertThat(interrupted).isFalse();
     }
