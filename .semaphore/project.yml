@@ -42,3 +42,15 @@ spec:
   - pull_request
   - forked_pull_request
   - tag
+  tasks:
+  - name: release
+    scheduled: False
+    branch: "master"
+    pipeline_file: .semaphore/release.yml
+    parameters:
+    - name: PROJECT_VERSION
+      required: True
+      default_value: "X.Y.Z"
+    - name: NEXT_PROJECT_VERSION
+      required: True
+      default_value: "X.Y.Z-SNAPSHOT"
