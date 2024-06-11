@@ -16,7 +16,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.reactivestreams.Publisher;
 import pl.tlinkowski.unij.api.UniLists;
 import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
@@ -95,16 +95,9 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
             pollContext.streamWorkContainers()
                     .forEach(x -> x.setWorkType(REACTOR_TYPE));
 
-            Publisher<?> publisher = carefullyRun(reactorFunction, pollContext.getPollContext());
-
-            Disposable flux = Flux.from(publisher)
-                    // using #subscribeOn so this should be redundant, but testing has shown otherwise
-                    // note this will not cause user's function to run in pool - without successful use of subscribeOn,
-                    // it will run in the controller thread, unless user themselves uses either publishOn or successful
-                    // subscribeOn
-                    .publishOn(getScheduler())
+            Disposable flux = Mono.fromCallable(() -> carefullyRun(reactorFunction, pollContext.getPollContext()))
+                    .flatMapMany(it -> it)
                     .doOnNext(signal -> log.trace("doOnNext {}", signal))
-                    // cause users Publisher to run a thread pool, if it hasn't already - this is a crucial magical part
                     .subscribeOn(getScheduler())
                     .subscribe(ignore -> onComplete(pollContext), throwable -> onError(pollContext, throwable));
 
