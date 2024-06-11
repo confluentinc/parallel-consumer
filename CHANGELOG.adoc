@@ -18,6 +18,7 @@ endif::[]
 
 === Fixes
 
+* fix: ReactorProcessor executes a user-provided function in a pc-pool thread rather than in the provided scheduler (#793)
 * fix: fix issue for cannot close and exit properly when re-balancing storm (#787)
 * fix: Support for PCRetriableException in ReactorProcessor (#733)
 * fix: NullPointerException on partitions revoked (#757)
