@@ -591,7 +591,6 @@
                 <version>3.0.1</version>
                 <configuration>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
-                    <pushChanges>false</pushChanges>
                     <tagNameFormat>@{project.version}</tagNameFormat>
                 </configuration>
             </plugin>
