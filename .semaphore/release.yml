@@ -31,7 +31,7 @@ blocks:
               fi
             - checkout
             - git fetch --unshallow
-            - ./mvnw release:clean release:prepare release:perform -B -DreleaseVersion=$PROJECT_VERSION -DdevelopmentVersion=$NEXT_PROJECT_VERSION -Darguments="-DskipTests=true"
+            - ./mvnw release:clean release:prepare release:perform -B -Pci -DreleaseVersion=$PROJECT_VERSION -DdevelopmentVersion=$NEXT_PROJECT_VERSION -Darguments="-DskipTests=true"
 
 after_pipeline:
   task:
