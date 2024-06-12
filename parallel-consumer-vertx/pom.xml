@@ -8,7 +8,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.3.1-SNAPSHOT</version>
+        <version>0.5.2.9-SNAPSHOT</version>
     </parent>
 
     <artifactId>parallel-consumer-vertx</artifactId>
