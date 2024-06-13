@@ -34,7 +34,7 @@ blocks :
             - export SONATYPE_OSSRH_USER=$(vault kv get --field=user v1/ci/kv/sonatype/confluent)
             - export SONATYPE_OSSRH_PASSWORD=$(vault kv get --field=password v1/ci/kv/sonatype/confluent)
             - export SETTINGS_XML_PATH="$HOME/.m2/settings.xml"
-            - python update_maven_settings.py # Update maven settings with Sonatype credentials
+            - python .semaphore/update_maven_settings.py # Update maven settings with Sonatype credentials
             - ./mvnw --batch-mode clean deploy -Pmaven-central -Pci -Dgpg.passphrase=$PASSPHRASE -DskipTests
 
 after_pipeline :
