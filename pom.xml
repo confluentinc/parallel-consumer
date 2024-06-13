@@ -618,7 +618,7 @@
                                 <exclude>.ci/**/*</exclude>
                                 <exclude>.git/**/*</exclude>
                                 <!-- exclude semaphore yml files -->
-                                <exclude>.semaphore/*.yml</exclude>
+                                <exclude>.semaphore/*</exclude>
                                 <!-- exclude semaphore build time files -->
                                 <exclude>bin/</exclude>
                                 <exclude>.m2/</exclude>
