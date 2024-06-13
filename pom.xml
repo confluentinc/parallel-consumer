@@ -10,7 +10,7 @@
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-parent</artifactId>
     <name>Confluent Parallel Consumer</name>
-    <version>0.5.3.1-SNAPSHOT</version>
+    <version>0.5.2.9-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
     <url>https://confluent.io</url>
@@ -618,7 +618,7 @@
                                 <exclude>.ci/**/*</exclude>
                                 <exclude>.git/**/*</exclude>
                                 <!-- exclude semaphore yml files -->
-                                <exclude>.semaphore/*.yml</exclude>
+                                <exclude>.semaphore/*</exclude>
                                 <!-- exclude semaphore build time files -->
                                 <exclude>bin/</exclude>
                                 <exclude>.m2/</exclude>
