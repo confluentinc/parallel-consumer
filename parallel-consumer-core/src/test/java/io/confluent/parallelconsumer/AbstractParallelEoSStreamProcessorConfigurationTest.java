@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -122,5 +123,27 @@ class AbstractParallelEoSStreamProcessorConfigurationTest {
             Assertions.assertEquals(testInstance.getMailBoxSuccessCnt(), 2);
             Assertions.assertEquals(testInstance.getMailBoxFailedCnt(), 0);
         }
+    }
+
+    @Test
+    void testPartitions() {
+        List<String> emptyList = new ArrayList<>();
+        List<String> list1 = Arrays.asList("1", "2", "3", "4");
+        List<String> list2 = Arrays.asList("1", "2", "3", "4", "5", "6", "7");
+
+        final TestParallelEoSStreamProcessor<String, String> testInstance = new TestParallelEoSStreamProcessor<>(testOptions);
+        List<List<String>> emptyres = testInstance.partitionList(emptyList, 2);
+        List<List<String>> res1 = testInstance.partitionList(list1, 2);
+        List<List<String>> res2 = testInstance.partitionList(list2, 3);
+        Assertions.assertEquals(emptyres.size(), 1);
+        Assertions.assertTrue(emptyres.get(0).isEmpty());
+        Assertions.assertEquals(res1.size(), 2);
+        Assertions.assertEquals(res1.get(0), Arrays.asList("1", "2"));
+        Assertions.assertEquals(res1.get(1), Arrays.asList("3", "4"));
+        Assertions.assertEquals(res2.size(), 3);
+        Assertions.assertEquals(res2.get(0), Arrays.asList("1", "2", "3"));
+        Assertions.assertEquals(res2.get(1), Arrays.asList("4", "5", "6"));
+        Assertions.assertEquals(res2.get(2), Arrays.asList("7"));
+
     }
 }

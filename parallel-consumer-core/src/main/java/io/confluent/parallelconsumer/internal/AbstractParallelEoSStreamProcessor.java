@@ -3,7 +3,6 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2024 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.SupplierUtils;
 import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
@@ -33,11 +32,13 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static io.confluent.csid.utils.BackportUtils.isEmpty;
 import static io.confluent.csid.utils.BackportUtils.toSeconds;
@@ -997,26 +998,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return partition(workToProcess, maxBatchSize);
     }
 
-    private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
-        List<List<T>> listOfBatches = new ArrayList<>();
-        List<T> batchInConstruction = new ArrayList<>();
-
-        //
-        for (T item : sourceCollection) {
-            batchInConstruction.add(item);
-
-            //
-            if (batchInConstruction.size() == maxBatchSize) {
-                listOfBatches.add(batchInConstruction);
-                batchInConstruction = new ArrayList<>();
-            }
-        }
-
-        // add partial tail
-        if (!batchInConstruction.isEmpty()) {
-            listOfBatches.add(batchInConstruction);
-        }
-
+    static <T> List<List<T>> partition(List<T> sourceCollection, int maxBatchSize) {
+        int size = sourceCollection.size();
+        int fullChunks = (size - 1) / maxBatchSize;
+        List<List<T>> listOfBatches = IntStream.range(0, fullChunks + 1).mapToObj(
+                n -> sourceCollection.subList(n * maxBatchSize, n == fullChunks ? size : (n + 1) * maxBatchSize)).collect(Collectors.toList());
         if (log.isDebugEnabled()) {
             log.debug("sourceCollection.size() {}, batches: {}, batch sizes {}",
                     sourceCollection.size(),
@@ -1314,7 +1300,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wc.onUserFunctionFailure(e);
                 addToMailbox(context, wc); // always add on error
             }
-            throw e; // trow again to make the future failed
+            throw e; // throw again to make the future failed
         } finally {
             cleanUpContext(context);
         }
@@ -1323,7 +1309,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Given the batch of work containers, publish stale work to feedback loop to be reduced from in progress work.
      *
-     * @param workContainerBatch
+     * @param staleWorkContainers
      */
     protected void handleStaleWork(final List<WorkContainer<K, V>> staleWorkContainers) {
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
