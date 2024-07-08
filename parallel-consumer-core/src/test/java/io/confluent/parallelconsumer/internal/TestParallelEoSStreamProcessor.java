@@ -10,9 +10,7 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -55,5 +53,9 @@ public class TestParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStr
                     return (wc != null && !wc.isUserFunctionSucceeded());
                 })
                 .count();
+    }
+
+    public List<List<V>> partitionList(List<V> sourceCollection, int maxBatchSize) {
+        return partition(sourceCollection, maxBatchSize);
     }
 }

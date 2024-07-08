@@ -14,10 +14,15 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.3.1
+
+=== Fixes
+* fix: simplify partition and fix typo (#812)
+
+
 == 0.5.3.0
 
 === Fixes
-
 * fix: ReactorProcessor - run used-defined function in provided scheduler rather than in pc-pool thread (#798 / #794), fixes (#793)
 * fix: fix issue for cannot close and exit properly when re-balancing storm (#787)
 * fix: Support for PCRetriableException in ReactorProcessor (#733)
