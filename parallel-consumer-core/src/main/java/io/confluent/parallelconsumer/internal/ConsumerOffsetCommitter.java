@@ -90,7 +90,20 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         switch (commitMode) {
             case PERIODIC_CONSUMER_SYNC -> {
                 log.debug("Committing offsets Sync");
-                consumerMgr.commitSync(offsetsToSend);
+                while(true) {
+                    try {
+                        consumerMgr.commitSync(offsetsToSend);
+                        //break when offset commit is okay, never throw exception to the main threads
+                        break;
+                    } catch(Throwable t) {
+                        log.error("Failed to commit offset. Retrying in 10 seconds", t);
+                        try {
+                            Thread.sleep(10000L);
+                        } catch(InterruptedException ite) {
+                            log.info("Giving up offset commit due to interruption");
+                        }
+                    }
+                }
             }
             case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //
