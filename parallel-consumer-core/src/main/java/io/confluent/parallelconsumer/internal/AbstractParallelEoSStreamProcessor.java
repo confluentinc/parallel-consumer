@@ -629,6 +629,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
+        // fixes github issue #809 - ensure doClose() state transition to CLOSED
+        // by catching unhandled exceptions in subsystems during close
+        try {
+            innerDoClose(timeout);
+        } catch (Exception e) {
+            log.error("exception during close", e);
+            throw e;
+        } finally {
+            deregisterMeters();
+            pcMetrics.close();
+            log.debug("Close complete.");
+            this.state = CLOSED;
+            if (this.getFailureCause() != null) {
+                log.error("PC closed due to error: {}", getFailureCause(), null);
+            }
+        }
+    }
+
+    private void innerDoClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
         // Drain and pause polling - keeps consumer alive for later commit, but paused
@@ -678,23 +697,26 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (Thread.currentThread().isInterrupted()) {
             log.warn("control thread interrupted - may lead to issues with transactional commit lock acquisition");
         }
-        commitOffsetsThatAreReady();
-
+        try {
+            commitOffsetsThatAreReady();
+        } catch (Exception e) {
+            log.warn("failed to commit during close sequence", e);
+        }
         // only close consumer once producer has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
-        brokerPollSubsystem.closeAndWait();
+        try {
+            brokerPollSubsystem.closeAndWait();
+        } catch (Exception e) {
+            log.warn("failed to close brokerPollSubsystem during close sequence", e);
+        }
 
-        maybeCloseConsumer();
+        try {
+            maybeCloseConsumer();
+        } catch (Exception e) {
+            log.warn("failed to maybeCloseConsumer during close sequence", e);
+        }
 
         producerManager.ifPresent(x -> x.close(timeout));
-        deregisterMeters();
-        pcMetrics.close();
-        log.debug("Close complete.");
-        this.state = CLOSED;
-
-        if (this.getFailureCause() != null) {
-            log.error("PC closed due to error: {}", getFailureCause(), null);
-        }
     }
 
     /**
