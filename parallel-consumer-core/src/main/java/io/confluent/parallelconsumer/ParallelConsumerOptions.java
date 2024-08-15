@@ -391,6 +391,19 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);
 
     /**
+     * Controls how long for Kafka consumer.poll() to be retried upon SaslAuthenticationException.
+     *
+     * Occasionally, consumer.poll() throws SaslAuthenticationException due to temporary external system failures.
+     *
+     * In this case, consumers are stopped immediately. It is actually retryable.
+     * This timeout is zero by default, meaning no retry will be performed.
+     * When set to a duration that is larger than 0, the consumer.poll() will ignore SaslAuthenticationException and continue retrying
+     * until this timeout is elaposed.
+     */
+    @Builder.Default
+    private final Duration saslAuthenticationRetryTimeout = Duration.ofSeconds(0);
+
+    /**
      * The maximum number of messages to attempt to pass into the user functions.
      * <p>
      * Batch sizes may sometimes be less than this size, but will never be more.

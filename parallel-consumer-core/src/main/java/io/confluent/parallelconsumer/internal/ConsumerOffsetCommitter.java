@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -90,20 +90,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
         switch (commitMode) {
             case PERIODIC_CONSUMER_SYNC -> {
                 log.debug("Committing offsets Sync");
-                while(true) {
-                    try {
-                        consumerMgr.commitSync(offsetsToSend);
-                        //break when offset commit is okay, never throw exception to the main threads
-                        break;
-                    } catch(Throwable t) {
-                        log.error("Failed to commit offset. Retrying in 10 seconds", t);
-                        try {
-                            Thread.sleep(10000L);
-                        } catch(InterruptedException ite) {
-                            log.info("Giving up offset commit due to interruption");
-                        }
-                    }
-                }
+                consumerMgr.commitSync(offsetsToSend);
             }
             case PERIODIC_CONSUMER_ASYNCHRONOUS -> {
                 //

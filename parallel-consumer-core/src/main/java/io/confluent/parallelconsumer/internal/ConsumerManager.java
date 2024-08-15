@@ -1,17 +1,21 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.SaslAuthenticationException;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.errors.WakeupException;
 import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,6 +28,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ConsumerManager<K, V> {
 
     private final Consumer<K, V> consumer;
+
+    private final Duration offsetCommitTimeout;
+
+    private final Duration saslAuthenticationRetryTimeout;
 
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
@@ -55,7 +63,31 @@ public class ConsumerManager<K, V> {
             pollingBroker.set(true);
             updateCache();
             log.debug("Poll starting with timeout: {}", timeoutToUse);
-            records = consumer.poll(timeoutToUse);
+            Instant pollStarted = Instant.now();
+            long tryCount = 0;
+            while(true) {
+                tryCount++;
+                try {
+                    records = consumer.poll(timeoutToUse);
+                    break;
+                } catch(SaslAuthenticationException authenticationException) {
+                    Instant now = Instant.now();
+                    Duration elapsed = Duration.between(pollStarted, now);
+                    boolean shouldRetry = elapsed.toMillis() < saslAuthenticationRetryTimeout.toMillis();
+                    if(shouldRetry) {
+                        log.warn("Poll error: SaslAuthenticationException. Retrying ({})", tryCount);
+                        try {
+                            Thread.sleep(5000L); // TODO: Magic value here
+                        } catch(InterruptedException ex) {
+                            throw new RuntimeException("Poll interrupted", ex);
+                        }
+                    } else {
+                        // no more retries allowed
+                        log.error("Poll error: SaslAuthenticationException. {} tries attempted, since {}", tryCount, pollStarted, authenticationException);
+                        throw authenticationException;
+                    }
+                }
+            }
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
             updateCache();
         } catch (WakeupException w) {
@@ -94,18 +126,53 @@ public class ConsumerManager<K, V> {
         noWakeups++;
         while (inProgress) {
             try {
+                long tryCount = 0;
                 while(true) {
+                    tryCount++;
+                    Instant startedTime = Instant.now();
                     try {
                         consumer.commitSync(offsetsToSend);
                         // break when offset commit is okay. Do not throw exception to main threads
                         break;
-                    } catch(Throwable t) {
-                        log.error("Failed to commit offset. Retrying in 10 seconds", t);
-                        try {
-                            Thread.sleep(10000L);
-                        } catch(InterruptedException ite) {
-                            log.info("Giving up offset commit due to interruption");
-                            break;
+                    } catch(CommitFailedException commitFailedException) {
+                        // it is impossible to commit now because the group have rebalanced
+                        // Log an error and let the poller do the rebalance job and seek commit later
+                        log.warn("Failed to commit offset due to group rebalancing. Will ignore the error for now.", commitFailedException);
+                        break;
+                    } catch(TimeoutException timeoutException) {
+                        // offset commit times out after 1 minute.
+                        // We should honor the user configured timeout offsetCommitTimeout here.
+                        Instant now = Instant.now();
+                        Duration elapsed = Duration.between(startedTime, now);
+                        boolean shouldRetry = elapsed.toMillis() <= offsetCommitTimeout.toMillis();
+                        if(shouldRetry) {
+                            log.warn("Encountered timeout while committing offset. Retrying ({})", tryCount);
+                            // The timeout is already after 1 minute. There is no need to sleep in between retries
+                        } else {
+                            // bubble up other exceptions for main events to handle
+                            log.error("Offset commit took too long due to TimeoutException (tried {} times)", tryCount);
+                            throw timeoutException;
+                        }
+                    } catch(SaslAuthenticationException authenticationException) {
+                        // We should honor the user configured SaslAuthenticationException timeout here.
+                        // to allow the program to sustain temporary LDAP failures
+                        Instant now = Instant.now();
+                        Duration elapsed = Duration.between(startedTime, now);
+                        boolean shouldRetry = elapsed.toMillis() <= saslAuthenticationRetryTimeout.toMillis();
+                        if(shouldRetry) {
+                            log.warn("Encountered SaslAuthenticationException while committing offset. Retrying ({})", tryCount);
+                            // Since authentication exception may happen immediately, it is good to sleep a few seconds before trying again
+                            try {
+                                Thread.sleep(10000L); // magic value
+                            } catch(InterruptedException ex) {
+                                // don't swallow the interrupted exception
+                                log.warn("Offset Commit was interrupted", ex);
+                                throw new RuntimeException("Offset Commit was interrupted");
+                            }
+                        } else {
+                            log.error("Offset commit failed due to SaslAuthenticationException (tried {} times)", tryCount);
+                            // bubble up other exceptions for main events to handle
+                            throw authenticationException;
                         }
                     }
                 }
