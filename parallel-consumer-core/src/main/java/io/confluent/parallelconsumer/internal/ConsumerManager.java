@@ -83,7 +83,7 @@ public class ConsumerManager<K, V> {
                         if (shouldRetry) {
                             log.warn("Poll error: SaslAuthenticationException. Retrying ({})", tryCount);
                             try {
-                                Thread.sleep(5000L); // TODO: Magic value here
+                                retryBackOff(5000L); // no need to check return value here as next loop will check
                             } catch (InterruptedException ex) {
                                 throw new RuntimeException("Poll interrupted", ex);
                             }
@@ -173,7 +173,7 @@ public class ConsumerManager<K, V> {
                             log.warn("Encountered SaslAuthenticationException while committing offset. Retrying ({})", tryCount);
                             // Since authentication exception may happen immediately, it is good to sleep a few seconds before trying again
                             try {
-                                Thread.sleep(10000L); // magic value
+                                retryBackOff(5000L); // no need to check return value
                             } catch(InterruptedException ex) {
                                 // don't swallow the interrupted exception
                                 log.warn("Offset Commit was interrupted", ex);
@@ -196,6 +196,21 @@ public class ConsumerManager<K, V> {
         }
     }
 
+    // Return true if backoff is finished successfully
+    // Return false if it ended before the timeout
+    // Throws InterruptedException if interrupted
+    private boolean retryBackOff(long backOffTimeMs) throws InterruptedException {
+        int interval = 100; // sleep in 100ms interval
+        long started = System.currentTimeMillis();
+        long deadLine = started + backOffTimeMs;
+        while(System.currentTimeMillis() < deadLine) {
+            Thread.sleep(interval);
+            if(shutdownRequested.get()) {
+                return false;
+            }
+        }
+        return true;
+    }
     public void commitAsync(Map<TopicPartition, OffsetAndMetadata> offsets, OffsetCommitCallback callback) {
         // we dont' want to be woken up during a commit, only polls
         boolean inProgress = true;
@@ -215,10 +230,13 @@ public class ConsumerManager<K, V> {
         return metaCache;
     }
 
-    public void preClose() {
-        log.info("Pre-closing Consumer Manager");
-        this.shutdownRequested.set(true);
+    public void signalStop() {
+        if(!this.shutdownRequested.get()) {
+            log.info("Signaling Consumer Manager to stop");
+            this.shutdownRequested.set(true);
+        }
     }
+
     public void close(final Duration defaultTimeout) {
         long deadline = System.currentTimeMillis() + defaultTimeout.toMillis();
         log.debug("Consumer Manager Closing...");
