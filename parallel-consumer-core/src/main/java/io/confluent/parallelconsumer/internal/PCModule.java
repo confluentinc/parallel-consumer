@@ -109,6 +109,12 @@ public class PCModule<K, V> {
         return brokerPollSystem;
     }
 
+    // Signal that the thread should be stopped now.
+    // All retry (e.g. offsetCommitTimeout, saslAuthenticationRetryTimeout will expire within next loop (roughly 5 seconds)
+    protected void preClose() {
+        consumerManager.preClose();
+    }
+
     public Clock clock() {
         return TimeUtils.getClock();
     }

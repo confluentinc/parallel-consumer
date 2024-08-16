@@ -16,9 +16,11 @@ import pl.tlinkowski.unij.api.UniMaps;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Delegate for {@link KafkaConsumer}
@@ -35,7 +37,9 @@ public class ConsumerManager<K, V> {
 
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
+    private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
 
+    private final AtomicLong pendingRequests = new AtomicLong(0L);
     /**
      * Since Kakfa 2.7, multi-threaded access to consumer group metadata was blocked, so before and after polling, save
      * a copy of the metadata.
@@ -53,7 +57,7 @@ public class ConsumerManager<K, V> {
 
     ConsumerRecords<K, V> poll(Duration requestedLongPollTimeout) {
         Duration timeoutToUse = requestedLongPollTimeout;
-        ConsumerRecords<K, V> records;
+        ConsumerRecords<K, V> records = new ConsumerRecords<>(new HashMap<>());
         try {
             if (commitRequested) {
                 log.debug("Commit requested, so will not long poll as need to perform the commit");
@@ -65,28 +69,33 @@ public class ConsumerManager<K, V> {
             log.debug("Poll starting with timeout: {}", timeoutToUse);
             Instant pollStarted = Instant.now();
             long tryCount = 0;
-            while(true) {
-                tryCount++;
-                try {
-                    records = consumer.poll(timeoutToUse);
-                    break;
-                } catch(SaslAuthenticationException authenticationException) {
-                    Instant now = Instant.now();
-                    Duration elapsed = Duration.between(pollStarted, now);
-                    boolean shouldRetry = elapsed.toMillis() < saslAuthenticationRetryTimeout.toMillis();
-                    if(shouldRetry) {
-                        log.warn("Poll error: SaslAuthenticationException. Retrying ({})", tryCount);
-                        try {
-                            Thread.sleep(5000L); // TODO: Magic value here
-                        } catch(InterruptedException ex) {
-                            throw new RuntimeException("Poll interrupted", ex);
+            try {
+                pendingRequests.addAndGet(1L);
+                while (!shutdownRequested.get()) {
+                    tryCount++;
+                    try {
+                        records = consumer.poll(timeoutToUse);
+                        break;
+                    } catch (SaslAuthenticationException authenticationException) {
+                        Instant now = Instant.now();
+                        Duration elapsed = Duration.between(pollStarted, now);
+                        boolean shouldRetry = elapsed.toMillis() < saslAuthenticationRetryTimeout.toMillis();
+                        if (shouldRetry) {
+                            log.warn("Poll error: SaslAuthenticationException. Retrying ({})", tryCount);
+                            try {
+                                Thread.sleep(5000L); // TODO: Magic value here
+                            } catch (InterruptedException ex) {
+                                throw new RuntimeException("Poll interrupted", ex);
+                            }
+                        } else {
+                            // no more retries allowed
+                            log.error("Poll error: SaslAuthenticationException. {} tries attempted, since {}", tryCount, pollStarted, authenticationException);
+                            throw authenticationException;
                         }
-                    } else {
-                        // no more retries allowed
-                        log.error("Poll error: SaslAuthenticationException. {} tries attempted, since {}", tryCount, pollStarted, authenticationException);
-                        throw authenticationException;
                     }
                 }
+            } finally {
+                pendingRequests.addAndGet(-1L);
             }
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
             updateCache();
@@ -126,8 +135,9 @@ public class ConsumerManager<K, V> {
         noWakeups++;
         while (inProgress) {
             try {
+                pendingRequests.addAndGet(1L);
                 long tryCount = 0;
-                while(true) {
+                while(!shutdownRequested.get()) {
                     tryCount++;
                     Instant startedTime = Instant.now();
                     try {
@@ -180,6 +190,8 @@ public class ConsumerManager<K, V> {
             } catch (WakeupException w) {
                 log.debug("Got woken up, retry. errors: " + erroneousWakups + " none: " + noWakeups + " correct:" + correctPollWakeups, w);
                 erroneousWakups++;
+            } finally {
+                pendingRequests.addAndGet(-1L);
             }
         }
     }
@@ -203,8 +215,25 @@ public class ConsumerManager<K, V> {
         return metaCache;
     }
 
+    public void preClose() {
+        log.info("Pre-closing Consumer Manager");
+        this.shutdownRequested.set(true);
+    }
     public void close(final Duration defaultTimeout) {
+        long deadline = System.currentTimeMillis() + defaultTimeout.toMillis();
+        log.debug("Consumer Manager Closing...");
+        this.shutdownRequested.set(true);
+        log.debug("ConsumerManager close waiting for max of {} for pending requests to complete", defaultTimeout);
+        while(pendingRequests.get() > 0L && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(100);
+            } catch(InterruptedException ex) {
+                throw new RuntimeException("Wait interrupted");
+            }
+        }
+        log.debug("ConsumerManager close wait completed.");
         consumer.close(defaultTimeout);
+        log.debug("ConsumerManager closed");
     }
 
     public Set<TopicPartition> assignment() {

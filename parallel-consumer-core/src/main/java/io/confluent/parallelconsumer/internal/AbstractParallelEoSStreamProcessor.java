@@ -581,7 +581,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.info("Already closed, checking end state..");
         } else {
             log.info("Signaling to close...");
-
+            // Pre-Close is to signal all retry events to skip on next retry.
+            module.preClose();
             switch (drainMode) {
                 case DRAIN -> {
                     log.info("Will wait for all in flight to complete before");
