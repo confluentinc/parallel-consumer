@@ -27,14 +27,15 @@ import static com.google.common.truth.Truth.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Tests that PC works fine with the plain vanilla {@link MockConsumer}, as opposed to the
- * {@link LongPollingMockConsumer}.
- * <p>
- * These tests demonstrate why using {@link MockConsumer} is difficult, and why {@link LongPollingMockConsumer} should
- * be used instead.
+ * Test that PC can survive for a temporary SaslAuthenticationException.
  *
- * @author Antony Stubbs
- * @see LongPollingMockConsumer#revokeAssignment
+ * In this test, MockConsumer starts to throw SaslAuthenticationException from the beginning until 20 seconds later.
+ *
+ * After that MockConsumer will back to normal.
+ *
+ * The saslAuthenticationRetryTimeout is set to 25 seconds. It is expected to resume normal after 20 seconds and will
+ * be able to consume all produced messages.
+ * @author Shilin Wu
  */
 @Slf4j
 @Timeout(60000L)
@@ -73,7 +74,7 @@ class MockConsumerTestWithSaslAuthenticationException {
         //
         var options = ParallelConsumerOptions.<String, String>builder()
                 .consumer(mockConsumer)
-                .saslAuthenticationRetryTimeout(Duration.ofSeconds(25L))
+                .saslAuthenticationRetryTimeout(Duration.ofSeconds(25L)) // set retry to 25 seconds.
                 .build();
         var parallelConsumer = new ParallelEoSStreamProcessor<String, String>(options);
         parallelConsumer.subscribe(of(topic));

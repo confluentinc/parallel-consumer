@@ -35,6 +35,8 @@ public class ConsumerManager<K, V> {
 
     private final Duration saslAuthenticationRetryTimeout;
 
+    private final Duration saslAuthenticationRetryBackOff;
+
     private final AtomicBoolean pollingBroker = new AtomicBoolean(false);
 
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
@@ -83,7 +85,7 @@ public class ConsumerManager<K, V> {
                         if (shouldRetry) {
                             log.warn("Poll error: SaslAuthenticationException. Retrying ({})", tryCount);
                             try {
-                                retryBackOff(5000L); // no need to check return value here as next loop will check
+                                retryBackOff(this.saslAuthenticationRetryBackOff.toMillis()); // no need to check return value here as next loop will check
                             } catch (InterruptedException ex) {
                                 throw new RuntimeException("Poll interrupted", ex);
                             }
@@ -130,7 +132,7 @@ public class ConsumerManager<K, V> {
     }
 
     public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        // we dont' want to be woken up during a commit, only polls
+        // we don't want to be woken up during a commit, only polls
         boolean inProgress = true;
         noWakeups++;
         while (inProgress) {
@@ -173,7 +175,7 @@ public class ConsumerManager<K, V> {
                             log.warn("Encountered SaslAuthenticationException while committing offset. Retrying ({})", tryCount);
                             // Since authentication exception may happen immediately, it is good to sleep a few seconds before trying again
                             try {
-                                retryBackOff(5000L); // no need to check return value
+                                retryBackOff(saslAuthenticationRetryBackOff.toMillis()); // no need to check return value
                             } catch(InterruptedException ex) {
                                 // don't swallow the interrupted exception
                                 log.warn("Offset Commit was interrupted", ex);

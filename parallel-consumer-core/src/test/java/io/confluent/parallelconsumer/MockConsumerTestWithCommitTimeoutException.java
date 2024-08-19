@@ -28,14 +28,12 @@ import static com.google.common.truth.Truth.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Tests that PC works fine with the plain vanilla {@link MockConsumer}, as opposed to the
- * {@link LongPollingMockConsumer}.
- * <p>
- * These tests demonstrate why using {@link MockConsumer} is difficult, and why {@link LongPollingMockConsumer} should
- * be used instead.
+ * Tests that PC works fine with a consumer where the commitSync fails with TimeoutException after 5 seconds.
  *
- * @author Antony Stubbs
- * @see LongPollingMockConsumer#revokeAssignment
+ * After the first 20 seconds, commitSync will resume normal behavior: Succeed immediately
+ *
+ * In this test, we want to make sure the PC still resumes normal operation after several TimeoutException on commitSync timeout.
+ * @author Shilin Wu
  */
 @Slf4j
 @Timeout(60000L)
@@ -44,7 +42,7 @@ class MockConsumerTestWithCommitTimeoutException {
     private final String topic = MockConsumerTestWithCommitTimeoutException.class.getSimpleName();
 
     /**
-     * Test that the mock consumer works as expected
+     * Test that the PC can resume operation after several failures
      */
     @Test
     void mockConsumer() {
@@ -52,11 +50,13 @@ class MockConsumerTestWithCommitTimeoutException {
         var mockConsumer = new MockConsumer<String, String>(OffsetResetStrategy.EARLIEST) {
             @Override
             public synchronized ConsumerRecords<String, String> poll(Duration timeout) {
+                // polls are normal
                 return super.poll(timeout);
             }
 
             @Override
             public synchronized void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
+                // fail with timeout after 5 seconds for the first 20 seconds
                 if(System.currentTimeMillis() < failUntil.get()) {
                     try {
                         Thread.sleep(5000L);
@@ -75,9 +75,9 @@ class MockConsumerTestWithCommitTimeoutException {
         //
         var options = ParallelConsumerOptions.<String, String>builder()
                 .consumer(mockConsumer)
-                .offsetCommitTimeout(Duration.ofSeconds(25L))
-                .commitInterval(Duration.ofSeconds(1L))
-                .commitMode(ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC)
+                .offsetCommitTimeout(Duration.ofSeconds(25L)) // commit timeout set to 25 seconds
+                .commitInterval(Duration.ofSeconds(1L)) // commit interval set to 1 second
+                .commitMode(ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC) // use sync commit
                 .build();
         var parallelConsumer = new ParallelEoSStreamProcessor<String, String>(options);
         parallelConsumer.subscribe(of(topic));

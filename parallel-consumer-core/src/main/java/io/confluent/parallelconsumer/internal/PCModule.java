@@ -69,7 +69,8 @@ public class PCModule<K, V> {
         if (consumerManager == null) {
             consumerManager = new ConsumerManager<>(optionsInstance.getConsumer(),
                     optionsInstance.getOffsetCommitTimeout(),
-                    optionsInstance.getSaslAuthenticationRetryTimeout());
+                    optionsInstance.getSaslAuthenticationRetryTimeout(),
+                    optionsInstance.getSaslAuthenticationExceptionRetryBackoff());
         }
         return consumerManager;
     }

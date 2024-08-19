@@ -26,14 +26,13 @@ import static com.google.common.truth.Truth.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 /**
- * Tests that PC works fine with the plain vanilla {@link MockConsumer}, as opposed to the
- * {@link LongPollingMockConsumer}.
- * <p>
- * These tests demonstrate why using {@link MockConsumer} is difficult, and why {@link LongPollingMockConsumer} should
- * be used instead.
+ * Tests that PC can be closed ahead of time. Make sure PC can shut down cleanly.
  *
- * @author Antony Stubbs
- * @see LongPollingMockConsumer#revokeAssignment
+ * In this test, the MockConsumer will start throwing SaslAuthenticationException from 2 seconds onwards, until infinity.
+ *
+ * The offsetCommitTimeout as well as the saslAuthenticationRetryTimeout had been set to infinity as well.
+ *
+ * After 5 seconds PC will be requested to close. The expected behavior is that the PC can be shutdown cleanly.
  */
 @Slf4j
 @Timeout(60000L)
@@ -46,8 +45,8 @@ class MockConsumerTestWithEarlyClose {
      */
     @Test
     void mockConsumer() {
-        final AtomicLong startFail = new AtomicLong(System.currentTimeMillis() + 5000L);
-        final AtomicLong failUntil = new AtomicLong(System.currentTimeMillis() + 200000000L);
+        final AtomicLong startFail = new AtomicLong(System.currentTimeMillis() + 2000L); // start failing after 2 seconds
+        final AtomicLong failUntil = new AtomicLong(System.currentTimeMillis() + 200000000L); // never recover
         var mockConsumer = new MockConsumer<String, String>(OffsetResetStrategy.EARLIEST) {
             @Override
             public synchronized ConsumerRecords<String, String> poll(Duration timeout) {
@@ -108,7 +107,7 @@ class MockConsumerTestWithEarlyClose {
         }
 
         log.info("Trying to close...");
-        parallelConsumer.close();
+        parallelConsumer.close(); // request close after 5 seconds
         log.info("Close successful!");
     }
 

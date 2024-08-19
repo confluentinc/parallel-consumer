@@ -327,6 +327,9 @@ public class ParallelConsumerOptions<K, V> {
 
     public static final Duration DEFAULT_STATIC_RETRY_DELAY = Duration.ofSeconds(1);
 
+    // Default backoff for SaslAuthenticationException retry durion ConsumerManager.commitSync and ConsumerManager.poll.
+    public static final Duration SASL_AUTHENTICATION_EXCEPTION_RETRY_BACKOFF = Duration.ofSeconds(5);
+
     /**
      * Error handling strategy to use when invalid offsets metadata is encountered. This could happen accidentally or
      * deliberately if the user attempts to reuse an existing consumer group id.
@@ -402,6 +405,14 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     private final Duration saslAuthenticationRetryTimeout = Duration.ofSeconds(0);
+
+    /**
+     * Controls when SaslAuthenticationException is encountered, how long to backoff before next try.
+     * The backoff still watches the shutdownRequest every 100ms and will exit as soon as (within 100ms)
+     * the shutdown request had been received.
+     */
+    @Builder.Default
+    private final Duration saslAuthenticationExceptionRetryBackoff = SASL_AUTHENTICATION_EXCEPTION_RETRY_BACKOFF;
 
     /**
      * The maximum number of messages to attempt to pass into the user functions.
