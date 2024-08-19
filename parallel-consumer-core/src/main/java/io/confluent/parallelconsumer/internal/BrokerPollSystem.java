@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -222,6 +222,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * Will begin the shutdown process, eventually closing itself once drained
      */
     public void drain() {
+        consumerManager.signalStop();
         // idempotent
         if (runState != State.DRAINING) {
             log.debug("Signaling poll system to drain, waking up consumer...");
@@ -266,6 +267,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     public void closeAndWait() throws TimeoutException, ExecutionException {
+        consumerManager.signalStop();
         log.debug("Requesting broker polling system to close...");
         transitionToClosing();
         if (pollControlThreadFuture.isPresent()) {
@@ -291,6 +293,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private void transitionToClosing() {
+        consumerManager.signalStop();
         log.debug("Poller transitioning to closing, waking up consumer");
         runState = State.CLOSING;
         consumerManager.wakeup();
