@@ -267,7 +267,6 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     public void closeAndWait() throws TimeoutException, ExecutionException {
-        consumerManager.signalStop();
         log.debug("Requesting broker polling system to close...");
         transitionToClosing();
         if (pollControlThreadFuture.isPresent()) {

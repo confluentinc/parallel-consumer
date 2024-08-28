@@ -59,7 +59,7 @@ public class ConsumerManager<K, V> {
 
     ConsumerRecords<K, V> poll(Duration requestedLongPollTimeout) {
         Duration timeoutToUse = requestedLongPollTimeout;
-        ConsumerRecords<K, V> records = new ConsumerRecords<>(new HashMap<>());
+        ConsumerRecords<K, V> records = null;
         try {
             if (commitRequested) {
                 log.debug("Commit requested, so will not long poll as need to perform the commit");
@@ -109,7 +109,7 @@ public class ConsumerManager<K, V> {
         } finally {
             pollingBroker.set(false);
         }
-        return records;
+        return records != null ? records : new ConsumerRecords<>(UniMaps.of());
     }
 
     protected void updateCache() {
