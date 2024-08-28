@@ -145,7 +145,8 @@ public class ConsumerManager<K, V> {
             try {
                 pendingRequests.addAndGet(1L);
                 long tryCount = 0;
-                while(!shutdownRequested.get()) {
+                //allow to try to commit at least once during close / shutdown regardless of the flag.
+                while (tryCount == 0 || !shutdownRequested.get()) {
                     tryCount++;
                     Instant startedTime = Instant.now();
                     try {
