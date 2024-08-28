@@ -71,12 +71,14 @@ public class ConsumerManager<K, V> {
             log.debug("Poll starting with timeout: {}", timeoutToUse);
             Instant pollStarted = Instant.now();
             long tryCount = 0;
+            boolean polledSuccessfully = false;
             try {
                 pendingRequests.addAndGet(1L);
                 while (!shutdownRequested.get()) {
                     tryCount++;
                     try {
                         records = consumer.poll(timeoutToUse);
+                        polledSuccessfully = true;
                         break;
                     } catch (SaslAuthenticationException authenticationException) {
                         Instant now = Instant.now();
@@ -97,9 +99,13 @@ public class ConsumerManager<K, V> {
                     }
                 }
             } finally {
+                if (polledSuccessfully) {
+                    log.debug("Poll completed normally (after timeout of {} on try {}) and returned {}...", timeoutToUse, tryCount, records.count());
+                } else {
+                    log.debug("Poll did not completed (after timeout of {} and tries {}), shutdownRequested {}", timeoutToUse, tryCount, shutdownRequested.get());
+                }
                 pendingRequests.addAndGet(-1L);
             }
-            log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
             updateCache();
         } catch (WakeupException w) {
             correctPollWakeups++;
