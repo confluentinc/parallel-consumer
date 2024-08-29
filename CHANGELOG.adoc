@@ -18,7 +18,9 @@ endif::[]
 
 === Fixes
 
-* fix: ConcurrentModificationException Happened while high load and draining (#821)
+* fix: ConcurrentModificationException Happened while high load and draining (#822) fixes (#821)
+* fix: safely completing doClose() (#818) partially fixes (#809)
+* Improved offset commit retry. Add support for SaslAuthenticationException retry timeout (#819), partially fixes (#809) in Commit_Sync mode
 
 == 0.5.3.0
 
