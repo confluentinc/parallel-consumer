@@ -69,9 +69,10 @@ class ParallelEoSSStreamProcessorRebalancedTest extends ParallelEoSStreamProcess
     public void messageLossWithTimingPartitionRevoke() {
         // 1. insert one record
         // 2. before getWorkIfAvailable, the partition revoked
-        // 3. the incompleteOffsets is cleared since it is overridden by RemovedPartitionState
-        // 4. commit the offset, with empty incompleteOffsets
-        // 5. container is marked as stale and be filtered
+        // 3. the timing of revoking should be happening right after check isDirty
+        // 4. the incompleteOffsets is cleared since it is overridden by RemovedPartitionState
+        // 5. commit the offset, with empty incompleteOffsets
+        // 6. container is marked as stale and be filtered
         CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
         final CountDownLatch countDownLatch = new CountDownLatch(1);
         final PCModuleTestEnv pcModuleTestEnv = new PCModuleTestEnv(getBaseOptions(commitMode), countDownLatch);
