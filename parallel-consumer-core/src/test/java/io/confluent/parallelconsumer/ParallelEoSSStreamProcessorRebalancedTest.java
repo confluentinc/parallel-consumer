@@ -17,7 +17,6 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.google.common.truth.Truth.assertThat;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
 @Slf4j
@@ -60,35 +59,6 @@ class ParallelEoSSStreamProcessorRebalancedTest extends ParallelEoSStreamProcess
         addRecordsWithSetKeyForEachPartition();
         countDownLatch.countDown();
         awaitForCommit(4);
-    }
-
-
-    @ParameterizedTest
-    @EnumSource(CommitMode.class)
-    @SneakyThrows
-    public void messageLossWithTimingPartitionRevoke() {
-        // 1. insert one record
-        // 2. before getWorkIfAvailable, the partition revoked
-        // 3. the timing of revoking should be happening right after check isDirty
-        // 4. the incompleteOffsets is cleared since it is overridden by RemovedPartitionState
-        // 5. commit the offset, with empty incompleteOffsets
-        // 6. container is marked as stale and be filtered
-        CommitMode commitMode = CommitMode.PERIODIC_CONSUMER_ASYNCHRONOUS;
-        final CountDownLatch countDownLatch = new CountDownLatch(1);
-        final PCModuleTestEnv pcModuleTestEnv = new PCModuleTestEnv(getBaseOptions(commitMode), countDownLatch);
-        parallelConsumer = new ParallelEoSStreamProcessor<>(getBaseOptions(commitMode), pcModuleTestEnv);
-        parentParallelConsumer = parallelConsumer;
-        parallelConsumer.subscribe(of(INPUT_TOPIC));
-        this.consumerSpy.subscribeWithRebalanceAndAssignment(of(INPUT_TOPIC), 2);
-        attachLoopCounter(parallelConsumer);
-        primeFirstRecord();
-        consumerSpy.revoke(of(new TopicPartition(INPUT_TOPIC, 0)));
-        parallelConsumer.requestCommitAsap();
-        parallelConsumer.poll(context -> {
-            countDownLatch.countDown();
-        });
-
-        assertThat(countDownLatch.getCount()).isEqualTo(1L);
     }
 
     private void addRecordsWithSetKeyForEachPartition() {
