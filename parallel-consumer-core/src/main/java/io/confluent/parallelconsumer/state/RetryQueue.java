@@ -13,6 +13,7 @@ import org.apache.kafka.common.utils.CloseableIterator;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * Custom Sorted Set implementation for the retry queue. Difference from standard Sorted Set is that it allows
@@ -161,7 +162,7 @@ public class RetryQueue {
         }
         lock.writeLock().lock();
         try {
-            List<WorkContainerKey> keysToRemove = toRemove.stream().map(WorkContainerKey::of).toList();
+            List<WorkContainerKey> keysToRemove = toRemove.stream().map(WorkContainerKey::of).collect(Collectors.toList());
             boolean modified = false;
             for (WorkContainerKey wcKey : keysToRemove) {
                 WorkContainerSortKey existing = unique.remove(wcKey);
@@ -196,8 +197,9 @@ public class RetryQueue {
 
     /**
      * Returns a pair of values - current retry queue size and number of work containers that are ready to be retried
-     * Method is combined to provide consistent view of the queue - both values calculated while locked with same read lock
-     * preventing racing updates between two reads.
+     * Method is combined to provide consistent view of the queue - both values calculated while locked with same read
+     * lock preventing racing updates between two reads.
+     *
      * @return pair of values - current retry queue size and number of work containers that are ready to be retried
      */
     public ParallelConsumer.Tuple<Integer, Long> getQueueSizeAndNumberReadyToBeRetried() {
