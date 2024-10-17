@@ -1,3 +1,7 @@
+
+/*-
+ * Copyright (C) 2020-2024 Confluent, Inc.
+ */
 package io.confluent.parallelconsumer.integrationTests.utils;
 
 /*-
@@ -278,6 +282,45 @@ public class KafkaClientUtils implements AutoCloseable {
 
             var mu = new ModelUtils(new PCModuleTestEnv());
             List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend, prefix);
+
+            for (var record : recs) {
+                Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
+                    if (exception != null) {
+                        log.error("Error sending, ", exception);
+                    }
+                });
+                sends.add(send);
+                expectedKeys.add(record.key());
+            }
+            log.debug("Finished sending test data");
+        }
+        // make sure we finish sending before next stage
+        log.debug("Waiting for broker acks");
+        for (Future<RecordMetadata> send : sends) {
+            RecordMetadata recordMetadata = send.get();
+            boolean b = recordMetadata.hasOffset();
+            assertThat(b).isTrue();
+        }
+        assertThat(sends).hasSize(Math.toIntExact(numberToSend));
+        return expectedKeys;
+    }
+
+    public List<String> produceMessagesWithThrowHeader(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
+        log.debug("Producing {} messages to {}", numberToSend, topicName);
+        final List<String> expectedKeys = new ArrayList<>();
+        List<Future<RecordMetadata>> sends = new ArrayList<>();
+        try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
+
+            var mu = new ModelUtils(new PCModuleTestEnv());
+            List<ProducerRecord<String, String>> recs = new ArrayList<>();
+            for (int i = 0; i < numberToSend; i++) {
+                ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "k-" + i, "value-" + i);
+                if (i % 2 == 0) {
+                    record.headers().add("throw", "true".getBytes());
+                }
+                recs.add(record);
+            }
+
 
             for (var record : recs) {
                 Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {

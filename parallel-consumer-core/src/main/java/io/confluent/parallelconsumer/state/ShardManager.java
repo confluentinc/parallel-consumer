@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
+import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -21,10 +22,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
@@ -70,30 +69,12 @@ public class ShardManager<K, V> {
     @Setter(AccessLevel.PACKAGE)
     private Map<ShardKey, ProcessingShard<K, V>> processingShards = new ConcurrentHashMap<>();
 
-    /**
-     * TreeSet is a Set, so must ensure that we are consistent with equalTo in our comparator - so include the full id -
-     * {@link TopicPartition} and offset after comparing the retry due time.
-     * <p>
-     * I.e. two instances of WC are not equal, just because their retry due time its.
-     * <p>
-     * Also - our primary comparison - {@link WorkContainer#getRetryDueAt()} must return a consistant value, regardless
-     * of WHEN it's queried - so must not use shortcuts like {@link Instant#now()}
-     */
-    @Getter(AccessLevel.PACKAGE) // visible for testing
-    private final Comparator<WorkContainer<?, ?>> retryQueueWorkContainerComparator = Comparator
-            .comparing((WorkContainer<?, ?> workContainer) -> workContainer.getRetryDueAt())
-            .thenComparing(workContainer -> {
-                // TopicPartition does not implement comparable
-                TopicPartition tp = workContainer.getTopicPartition();
-                return tp.topic() + tp.partition();
-            })
-            .thenComparing(WorkContainer::offset);
 
     /**
-     * Read optimised view of {@link WorkContainer}s that need retrying.
+     * View of {@link WorkContainer}s that need retrying sorted by retryDue.
      */
     @Getter(AccessLevel.PACKAGE) // visible for testing
-    private final NavigableSet<WorkContainer<?, ?>> retryQueue = new ConcurrentSkipListSet<>(retryQueueWorkContainerComparator);
+    private final RetryQueue retryQueue = new RetryQueue();
 
     /**
      * Iteration resume point, to ensure fairness (prevent shard starvation) when we can't process messages from every
@@ -131,16 +112,24 @@ public class ShardManager<K, V> {
         return ShardKey.of(wc, options.getOrdering());
     }
 
-    /**
-     * @return Work ready in the processing shards, awaiting selection as work to do
-     */
+        /**
+         * @return Work ready in the processing shards, awaiting selection as work to do
+         */
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         // all available container count - (still pending for running retry containers count)
         // => all_available_count - (retryCnt - all_expired_retry_cnt)
+        // order matters as there is a race between getting those numbers and state updates - we should err on the higher
+        // number - so read retry queue size before shards size (as normally retry queue is updated before shard counters are on work taken).
+        // it can still be negative due to race between marking containers inflight, updating counters in shards and updates to retryQueue
+        // this value should not be used in isolation though - but as part of overall buffer size calculation - which takes into account
+        // this number and number of work containers queued in work thread pool.
+        // it is safe though to set it to 0 for negative value of shards size - retry queue size portion.
 
-        return processingShards.values().stream()
+        ParallelConsumer.Tuple<Integer,Long> retryQueueSizeAndNumberReadyToBeRetried =retryQueue.getQueueSizeAndNumberReadyToBeRetried();
+        long diffBetweenShardsAndRetrySize= -retryQueueSizeAndNumberReadyToBeRetried.getLeft() +processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
-                .sum() - retryQueue.size() + getNumberOfFailedWorkReadyToBeRetried();
+                .sum();
+        return retryQueueSizeAndNumberReadyToBeRetried.getRight() + (diffBetweenShardsAndRetrySize < 0 ? 0 : diffBetweenShardsAndRetrySize);
     }
 
     public boolean workIsWaitingToBeProcessed() {
@@ -231,13 +220,13 @@ public class ShardManager<K, V> {
      */
     public void onFailure(WorkContainer<?, ?> wc) {
         log.debug("Work FAILED");
-        this.retryQueue.add(wc);
 
         var key = computeShardKey(wc);
         var shardOptional = getShard(key);
 
         if (shardOptional.isPresent()) {
             shardOptional.get().onFailure();
+            this.retryQueue.add(wc);
         }
 
     }
@@ -246,13 +235,17 @@ public class ShardManager<K, V> {
      * @return none if there are no messages to retry
      */
     public Optional<Duration> getLowestRetryTime() {
-        // find the first in the queue that isn't in flight
-        // could potentially remove from queue when in flight but that's messy and performance gain would be trivial
-        for (WorkContainer<?, ?> workContainer : this.retryQueue) {
-            if (workContainer.isNotInFlight())
-                return of(workContainer.getDelayUntilRetryDue());
+        // find the first in the queue
+        try (RetryQueue.RetryQueueIterator retryQueueIterator = this.retryQueue.iterator()) {
+            while (retryQueueIterator.hasNext()) {
+                WorkContainer<?, ?> workContainer = retryQueueIterator.next();
+                // Would only be in edge case of race between picking container for work (when its marked in-flight) and
+                // updating retryQueue - so still double-checking here to only consider not inflight ones.
+                if (workContainer.isNotInFlight())
+                    return of(workContainer.getDelayUntilRetryDue());
+            }
+            return empty();
         }
-        return empty();
     }
 
     public List<WorkContainer<K, V>> getWorkIfAvailable(final int requestedMaxWorkToRetrieve) {
@@ -270,7 +263,7 @@ public class ShardManager<K, V> {
 
             //
             int remainingToGet = requestedMaxWorkToRetrieve - workFromAllShards.size();
-            var work = shard.getWorkIfAvailable(remainingToGet);
+            var work = shard.getWorkIfAvailable(remainingToGet, retryQueue);
             workFromAllShards.addAll(work);
 
             // next
@@ -311,22 +304,5 @@ public class ShardManager<K, V> {
                         .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
         numberOfShardsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
                 this, shardManager -> shardManager.processingShards.keySet().size());
-    }
-
-    // get expired items count from retryQueue
-    private long getNumberOfFailedWorkReadyToBeRetried() {
-        long count = 0;
-        for (WorkContainer<?, ?> workContainer : retryQueue) {
-            // when poller check, considering it is ready to be retried. there are two scenarios:
-            // 1. the container is yet to be selected, therefore it is not inflight and should be counted in
-            // 2. the container has been selected and it is inflight but we already slashed them from availableWorkContainerCnt, so should be counted in
-            if (workContainer.isDelayPassed()) {
-                count++;
-            } else {
-                // early stop since retryQueue is sorted by retryDueAt
-                break;
-            }
-        }
-        return count;
     }
 }
