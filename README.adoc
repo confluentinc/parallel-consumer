@@ -1533,12 +1533,17 @@ NOTE:: Dependency version bumps are not listed here.
 ifndef::github_name[]
 toc::[]
 endif::[]
+== 0.5.3.2
+
+=== Fixes
+
+* fix: message loss on closing or partitions revoked (#827) fixes (#826)
+* fix: unbounded retry queue growth preventing polling from being throttled and leading to OOM (#834) fixes (#832, #817)
 
 == 0.5.3.1
 
 === Fixes
 
-* fix: message loss on closing or partitions revoked (#826)
 * fix: ConcurrentModificationException Happened while high load and draining (#822) fixes (#821)
 * fix: safely completing doClose() (#818) partially fixes (#809)
 * Improved offset commit retry. Add support for SaslAuthenticationException retry timeout (#819), partially fixes (#809) in Commit_Sync mode
