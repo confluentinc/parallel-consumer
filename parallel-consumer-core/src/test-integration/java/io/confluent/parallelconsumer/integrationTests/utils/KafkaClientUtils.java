@@ -271,17 +271,68 @@ public class KafkaClientUtils implements AutoCloseable {
     }
 
     public List<String> produceMessages(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
-        return produceMessages(topicName, numberToSend, "");
+        return produceMessages(topicName, numberToSend, "", numberToSend);
+    }
+
+    public List<String> produceMessages(String topicName, long numberToSend, long numberOfUniqueKeys) throws InterruptedException, ExecutionException {
+        return produceMessages(topicName, numberToSend, "", numberOfUniqueKeys);
     }
 
     public List<String> produceMessages(String topicName, long numberToSend, String prefix) throws InterruptedException, ExecutionException {
+        return produceMessages(topicName, numberToSend, prefix, numberToSend);
+    }
+
+    public List<String> produceMessages(String topicName, long numberToSend, String prefix, long numberOfUniqueKeys) throws InterruptedException, ExecutionException {
         log.info("Producing {} messages to {}", numberToSend, topicName);
         final List<String> expectedKeys = new ArrayList<>();
         List<Future<RecordMetadata>> sends = new ArrayList<>();
         try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
 
             var mu = new ModelUtils(new PCModuleTestEnv());
-            List<ProducerRecord<String, String>> recs = mu.createProducerRecords(topicName, numberToSend, prefix);
+            List<ProducerRecord<String, String>> recs = new ArrayList<>();
+            while (recs.size() < numberToSend) { //generate records in blocks of numberOfUniqueKeys
+                recs.addAll(mu.createProducerRecords(topicName, numberOfUniqueKeys, prefix));
+            }
+            recs = recs.subList(0, (int) numberToSend); //trim back to requested number to send
+
+            for (var record : recs) {
+                Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
+                    if (exception != null) {
+                        log.error("Error sending, ", exception);
+                    }
+                });
+                sends.add(send);
+                expectedKeys.add(record.key());
+            }
+            log.debug("Finished sending test data");
+        }
+        // make sure we finish sending before next stage
+        log.debug("Waiting for broker acks");
+        for (Future<RecordMetadata> send : sends) {
+            RecordMetadata recordMetadata = send.get();
+            boolean b = recordMetadata.hasOffset();
+            assertThat(b).isTrue();
+        }
+        assertThat(sends).hasSize(Math.toIntExact(numberToSend));
+        return expectedKeys;
+    }
+
+    public List<String> produceMessagesWithThrowHeader(String topicName, long numberToSend) throws InterruptedException, ExecutionException {
+        log.debug("Producing {} messages to {}", numberToSend, topicName);
+        final List<String> expectedKeys = new ArrayList<>();
+        List<Future<RecordMetadata>> sends = new ArrayList<>();
+        try (Producer<String, String> kafkaProducer = createNewProducer(false)) {
+
+            var mu = new ModelUtils(new PCModuleTestEnv());
+            List<ProducerRecord<String, String>> recs = new ArrayList<>();
+            for (int i = 0; i < numberToSend; i++) {
+                ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "k-" + i, "value-" + i);
+                if (i % 2 == 0) {
+                    record.headers().add("throw", "true".getBytes());
+                }
+                recs.add(record);
+            }
+
 
             for (var record : recs) {
                 Future<RecordMetadata> send = kafkaProducer.send(record, (meta, exception) -> {
