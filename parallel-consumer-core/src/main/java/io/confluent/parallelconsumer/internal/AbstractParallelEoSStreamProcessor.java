@@ -184,8 +184,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
 
     /**
-     * Indicates state of waiting while in-flight messages complete processing on shutdown.
-     * Used to prevent control thread interrupt due to wakeup logic on rebalances
+     * Indicates state of waiting while in-flight messages complete processing on shutdown. Used to prevent control
+     * thread interrupt due to wakeup logic on rebalances
      */
     private final AtomicBoolean awaitingInflightProcessingCompletionOnShutdown = new AtomicBoolean();
 
@@ -508,7 +508,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (consumer instanceof MockConsumer<?, ?>) {
             log.debug("Detected MockConsumer class which doesn't do auto commits");
             return Optional.of(false);
-        } else if (!(consumer instanceof KafkaConsumer<?,?>)) {
+        } else if (!(consumer instanceof KafkaConsumer<?, ?>)) {
             log.warn("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: {}", consumer.getClass());
             return Optional.of(false); // Probably Mockito
         }
@@ -604,6 +604,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.info("Close complete.");
+    }
+
+    /**
+     * Returns cached view of paused partition size. Useful for testing and monitoring by wrapping application / user
+     * code.
+     *
+     * @return number of paused partitions
+     */
+    public int getPausedPartitionSize() {
+        return brokerPollSubsystem.getPausedPartitionSize();
     }
 
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
@@ -909,9 +919,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void maybeWakeupPoller() {
         if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
-                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
-                        options.getTargetAmountOfRecordsInFlight());
+                if (log.isDebugEnabled()) {
+                    long inShards = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+                    long outForProcessing = wm.getNumberRecordsOutForProcessing();
+                    log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (in buffers: {} vs target: {}), in shards: {}, outForProcessing: {}",
+                            inShards + outForProcessing,
+                            options.getTargetAmountOfRecordsInFlight(), inShards, outForProcessing);
+                }
                 brokerPollSubsystem.wakeupIfPaused();
             }
         }

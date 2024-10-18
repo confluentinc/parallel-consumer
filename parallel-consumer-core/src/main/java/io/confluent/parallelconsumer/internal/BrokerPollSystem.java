@@ -399,4 +399,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
             log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
         }
     }
+
+    /**
+     * Returns cached view of paused partition size. Useful for testing and monitoring by wrapping application / user
+     * code.
+     *
+     * @return number of paused partitions
+     */
+    public int getPausedPartitionSize() {
+        return consumerManager.getPausedPartitionSize();
+    }
 }
