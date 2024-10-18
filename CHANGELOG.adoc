@@ -17,8 +17,12 @@ endif::[]
 
 === Fixes
 
+* fix: include inflight message count in polling backpressure logic (#836)
 * fix: message loss on closing or partitions revoked (#827) fixes (#826)
 * fix: unbounded retry queue growth preventing polling from being throttled and leading to OOM (#834) fixes (#832, #817)
+
+=== Note
+#836 introduces a change in how buffer size is calculated as now inflight messages are counted as part of buffer size - so behaviour of existing applications may change and pausing of consumer happen sooner.
 
 == 0.5.3.1
 
