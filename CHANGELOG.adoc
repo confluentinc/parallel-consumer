@@ -17,6 +17,7 @@ endif::[]
 
 === Fixes
 
+* fix: close parallel consumer on transactional mode when InvalidPidMappingException (#830)
 * fix: include inflight message count in polling backpressure logic (#836)
 * fix: message loss on closing or partitions revoked (#827) fixes (#826)
 * fix: unbounded retry queue growth preventing polling from being throttled and leading to OOM (#834) fixes (#832, #817)
