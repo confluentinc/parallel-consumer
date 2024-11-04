@@ -7,12 +7,16 @@ package io.confluent.parallelconsumer;
 import io.confluent.csid.utils.*;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
+import io.confluent.parallelconsumer.internal.ProducerManager;
+import io.confluent.parallelconsumer.internal.State;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.errors.InvalidPidMappingException;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serdes;
+import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -22,7 +26,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 
+import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,6 +92,47 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertCommits(of(), "All erroring, so nothing committed except initial");
     }
 
+    @Test
+    @SneakyThrows
+    public void closePCWhenInvalidPidMappingException() {
+        setupParallelConsumerInstance(PERIODIC_CONSUMER_ASYNCHRONOUS);
+
+        MockitoAnnotations.openMocks(this);
+        final ParallelEoSStreamProcessor<String, String> pcSpy = spy(parallelConsumer);
+        final InvalidPidMappingException invalidPidMappingException = new InvalidPidMappingException("InvalidPidMappingException exception");
+
+        // use mocked producer manager
+        ProducerManager<String, String> producerManager = mock(ProducerManager.class);
+        Field producerManagerField = AbstractParallelEoSStreamProcessor.class.getDeclaredField("producerManager");
+        producerManagerField.setAccessible(true);
+        producerManagerField.set(pcSpy, Optional.of(producerManager));
+
+        when(producerManager.beginProducing(any())).thenReturn(mock(ProducerManager.ProducingLock.class));
+        when(producerManager.produceMessages(any())).thenThrow(invalidPidMappingException);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        // count down latch if close is invoked
+        Mockito.doAnswer(invocation -> {
+            Object result = invocation.callRealMethod();
+            latch.countDown();
+            return result;
+        }).when(pcSpy).close(any());
+
+        pcSpy.pollAndProduceMany((record) -> of(new ProducerRecord<>("outputTopic", record.key(), record.value())));
+
+        latch.await();
+
+        //check failure cause
+        Assertions.assertThat(pcSpy.getFailureCause().equals(invalidPidMappingException)).isTrue();
+
+        //check state is CLOSED
+        Field state = AbstractParallelEoSStreamProcessor.class.getDeclaredField("state");
+        state.setAccessible(true);
+        Assertions.assertThat(State.CLOSED.equals(state.get(pcSpy))).isTrue();
+
+    }
+
+
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
@@ -114,6 +161,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         assertCommits(of(), "All erroring, so nothing committed except initial");
         assertThat(interrupted).isTrue();
     }
+
 
     @ParameterizedTest()
     @EnumSource(CommitMode.class)

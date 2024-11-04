@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.TimeUtils;
@@ -13,6 +13,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.errors.InvalidPidMappingException;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.ArrayList;
@@ -132,6 +133,9 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
                 }
                 return null; // return from timer function
             });
+        } catch (InvalidPidMappingException invalidPidMappingException) {
+            log.error("Closing parallel Consumer due to InvalidPidMappingException", invalidPidMappingException);
+            this.closeOnException(invalidPidMappingException);
         } catch (Exception e) {
             throw new InternalRuntimeException("Error while waiting for produce results", e);
         }

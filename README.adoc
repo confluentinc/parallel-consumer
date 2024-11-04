@@ -1533,6 +1533,13 @@ NOTE:: Dependency version bumps are not listed here.
 ifndef::github_name[]
 toc::[]
 endif::[]
+
+== 0.5.3.3
+
+=== Fixes
+
+* fix: close parallel consumer on transactional mode when InvalidPidMappingException (#830)
+
 == 0.5.3.2
 
 === Fixes

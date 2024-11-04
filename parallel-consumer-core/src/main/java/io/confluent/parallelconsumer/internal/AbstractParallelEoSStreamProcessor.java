@@ -568,6 +568,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         closeDontDrainFirst();
     }
 
+    /**
+     * Close the system without draining and set failure reason
+     * @param exception
+     *
+     * @see State#DRAINING
+     */
+    public void closeOnException(Exception exception){
+        this.failureReason = exception;
+        closeDontDrainFirst();
+    }
+
     @Override
     public void close(Duration timeout, DrainingMode drainMode) {
         shutdownTimeout = timeout;
