@@ -1,15 +1,43 @@
 = Releasing
 
-- Update the changelog and commit
-- Run the maven release:prepare goal:
+Releases are automated through a Semaphore Task and are always built from latest commit of the master branch.
 
-`release:prepare -DautoVersionSubmodules=true -DpushChanges=false -Darguments=-DskipTests -Pci`
 
-- Push the master branch with release and tag
-- Trigger master builder to build the tag (this is needed to trigger the deployment flow)
-- Wait for Jenkins to finish running the build (~15 minutes)
+- Verify that Changelog.md and Readme.md are up-to-date with all the changes in the release. If not update them through normal PR process.
+- Go to Tasks in Parallel Consumer project on Semaphore CI - https://semaphore.ci.confluent.io/projects/parallel-consumer/schedulers
+- Click on Run Now for the Release task
+- Enter Release Version (e.g. 0.5.3.3)
+- Enter Next Development Version (e.g. 0.5.3.4-SNAPSHOT)
+- Click Run the Task
+- The task will create a Tag branch and corresponding Semaphore Job will start automatically
+- Once the build job for the Tag is complete - go to the Semaphore CI page for that job and click Publish to Maven Central in the Promotions box.
+- Wait for the promotion to complete - note that it may show as failed on Semaphore - but actually succeed - verify logs on Semaphore
 - Wait for Sonatype to publish from it's staging area (~15 minutes) https://repo1.maven.org/maven2/io/confluent/parallelconsumer/parallel-consumer-parent/[repo1 link]
 - Verify the release is available on Maven Central https://repo1.maven.org/maven2/io/confluent/parallelconsumer/parallel-consumer-parent/[repo1 link]
 - Create the release on GH from the tag
 - Paste in the details from the changelog, save, share as discussion
-- Announce on slack (community #clients and internal channels), mailing list, twitter
+- Announce on slack (community #parallel-consumer and internal channels), mailing list, twitter
+
+
+== Troubleshooting
+
+There seems to be a bug somewhere in Maven plugins or just timeout getting caught when deploying to sonatype - after actual deployment is done - logs like this:
+```
+[INFO]  * Upload of locally staged artifacts finished.04:49
+[INFO]  * Closing staging repository with ID "ioconfluent".04:49
+Waiting for operation to complete...04:49
+..................................06:30
+[INFO] Remote staged 1 repositories, finished with success.06:30
+[INFO] Remote staging repositories are being released...06:30
+Waiting for operation to complete...06:30
+.......Oct 21, 2024 1:04:39 PM com.sun.jersey.api.client.ClientResponse getEntity07:22
+SEVERE: A message body reader for Java class com.sonatype.nexus.staging.api.dto.StagingProfileRepositoryDTO, and Java type class com.sonatype.nexus.staging.api.dto.StagingProfileRepositoryDTO, and MIME media type text/html was not found07:22
+Oct 21, 2024 1:04:39 PM com.sun.jersey.api.client.ClientResponse getEntity
+```
+Shows up as promotion failed - but as you can see the actual deployment was successful.
+
+In case of actual upload failure / build failure of the tagged branch - the tag might need to be reverted - which is locked by devprod and github task has to be ran to revert the Tag.
+
+`delete-github-tag` in https://semaphore.ci.confluent.io/projects/github-tasks/schedulers.
+
+This will delete the tag (actually it will rename the tag to TAG-DELETED - i.e. 0.5.3.3-deleted) so that whatever build issue there is can be remedied (with revert / new PRs to Master branch) and when ready to do a release again - you can follow this process again.
