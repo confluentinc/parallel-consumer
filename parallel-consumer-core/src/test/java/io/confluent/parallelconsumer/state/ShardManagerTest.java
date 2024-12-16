@@ -4,22 +4,32 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
+import io.confluent.csid.utils.ThreadUtils;
+import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.PCModuleTestEnv;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.threeten.extra.MutableClock;
 import pl.tlinkowski.unij.api.UniLists;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.NavigableSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import static com.google.common.truth.Truth.assertThat;
-import static pl.tlinkowski.unij.api.UniLists.of;
+import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 /**
  * @author Antony Stubbs
@@ -67,18 +77,20 @@ class ShardManagerTest {
 
     @Test
     void retryQueueOrdering() {
-        PCModuleTestEnv module = mu.getModule();
-        ShardManager<String, String> sm = new ShardManager<>(module, module.workManager());
-        NavigableSet<WorkContainer<?, ?>> retryQueue = sm.getRetryQueue();
+        String topic = "topic";
+        int partition = 0;
 
+        PCModule<String, String> mockPcModule = mock(PCModule.class);
+        MutableClock clock = MutableClock.of(Instant.now(), Clock.systemDefaultZone().getZone());
+        when(mockPcModule.clock()).thenReturn(clock);
+        when(mockPcModule.options()).thenReturn(ParallelConsumerOptions.<String, String>builder().build());
+        RetryQueue retryQueue = new RetryQueue();
 
-        WorkContainer<String, String> w0 = mu.createWorkFor(0);
-        WorkContainer<String, String> w1 = mu.createWorkFor(1);
-        WorkContainer<String, String> w2 = mu.createWorkFor(2);
-        WorkContainer<String, String> w3 = mu.createWorkFor(3);
+        WorkContainer<String, String> w0 = new WorkContainer<>(0, new ConsumerRecord<>(topic, partition, 0, "k", "v"), mockPcModule);
 
-        final int ZERO = 0;
-        assertThat(sm.getRetryQueueWorkContainerComparator().compare(w0, w0)).isEqualTo(ZERO);
+        WorkContainer<String, String> w1 = new WorkContainer<>(0, new ConsumerRecord<>(topic, partition, 1, "k", "v"), mockPcModule);
+        WorkContainer<String, String> w2 = new WorkContainer<>(0, new ConsumerRecord<>(topic, partition, 2, "k", "v"), mockPcModule);
+        WorkContainer<String, String> w3 = new WorkContainer<>(0, new ConsumerRecord<>(topic, partition, 3, "k", "v"), mockPcModule);
 
 
         retryQueue.add(w0);
@@ -86,22 +98,113 @@ class ShardManagerTest {
         retryQueue.add(w2);
         retryQueue.add(w3);
 
-        assertThat(retryQueue).hasSize(4);
+        assertThat(retryQueue.size()).isEqualTo(4);
 
         assertThat(w0).isNotEqualTo(w1);
         assertThat(w1).isNotEqualTo(w2);
 
         boolean removed = retryQueue.remove(w1);
         assertThat(removed).isTrue();
-        assertThat(retryQueue).hasSize(3);
+        assertThat(retryQueue.size()).isEqualTo(3);
 
-        assertThat(retryQueue).containsNoDuplicates();
+        Assertions.assertThat(checkForNoDupes(retryQueue)).as("RetryQueue should not contain duplicates").isTrue();
 
         assertThat(retryQueue.contains(w0)).isTrue();
         assertThat(retryQueue.contains(w1)).isFalse();
 
-        assertThat(retryQueue).contains(w0);
-        assertThat(retryQueue).containsNoneIn(of(w1));
-        assertThat(retryQueue).contains(w2);
+        assertThat(retryQueue.contains(w0)).isTrue();
+        assertThat(retryQueue.contains(w1)).isFalse();
+        assertThat(retryQueue.contains(w2)).isTrue();
+    }
+
+    @Test
+    void testRetryQueueOrdering() {
+        RetryQueue retryQueue = new RetryQueue();
+        PCModule<String, String> mockPcModule = mock(PCModule.class);
+        MutableClock clock = MutableClock.of(Instant.now(), Clock.systemDefaultZone().getZone());
+        when(mockPcModule.clock()).thenReturn(clock);
+        when(mockPcModule.options()).thenReturn(ParallelConsumerOptions.<String, String>builder().build());
+
+        String topic = "topic";
+        int partition = 0;
+
+        WorkContainer<String, String> wc1 = new WorkContainer<>(0, new ConsumerRecord<>(topic, partition, 0, "k", "v"), mockPcModule);
+        wc1.onUserFunctionFailure(new Throwable("cause"));
+        retryQueue.add(wc1);
+        clock.add(10, ChronoUnit.SECONDS);
+        WorkContainer<String, String> wc1_2 = new WorkContainer<>(0, new ConsumerRecord<>(topic, partition, 0, "k", "v"), mockPcModule);
+        wc1_2.onUserFunctionFailure(new Throwable("cause"));
+        retryQueue.add(wc1_2);
+        Assertions.assertThat(retryQueue.size()).isEqualTo(1);
+    }
+
+    @Test
+    void testRetryQueueOrderingMultipleTries() {
+        String topic = "topic";
+        int partition = 0;
+        int retryTestNum = 0;
+        while (retryTestNum < 5) {
+
+            PCModule<String, String> mockPcModule = mock(PCModule.class);
+            MutableClock clock = MutableClock.of(Instant.now(), Clock.systemDefaultZone().getZone());
+            when(mockPcModule.clock()).thenReturn(clock);
+            when(mockPcModule.options()).thenReturn(ParallelConsumerOptions.<String, String>builder().build());
+
+            RetryQueue retryQueue = new RetryQueue();
+
+
+            WorkContainer<String, String> w0 = new WorkContainer<>(
+                    1, new ConsumerRecord<>(topic, partition, 0, "key0", "value0"), mockPcModule);
+            ((MutableClock) mockPcModule.clock()).setInstant(Instant.now());
+            w0.onUserFunctionFailure(new RuntimeException("test1"));
+            retryQueue.add(w0);
+
+            WorkContainer<String, String> w1 = new WorkContainer<>(
+                    1, new ConsumerRecord<>(topic, partition, 1, "key1", "value0"), mockPcModule);
+            ThreadUtils.sleepQuietly(10);
+            ((MutableClock) mockPcModule.clock()).setInstant(Instant.now());
+            w1.onUserFunctionFailure(new RuntimeException("test2"));
+            retryQueue.add(w1);
+
+            WorkContainer<String, String> w2 = new WorkContainer<>(
+                    1, new ConsumerRecord<>(topic, partition, 2, "key2", "value0"), mockPcModule);
+            ThreadUtils.sleepQuietly(10);
+            ((MutableClock) mockPcModule.clock()).setInstant(Instant.now());
+            w2.onUserFunctionFailure(new RuntimeException("test3"));
+            retryQueue.add(w2);
+
+            ThreadUtils.sleepQuietly(10);
+            ((MutableClock) mockPcModule.clock()).setInstant(Instant.now());
+            w0.onUserFunctionFailure(new RuntimeException("a"));
+            int tries = 0;
+            while (retryQueue.size() < 4 && tries < 100) {
+                ((MutableClock) mockPcModule.clock()).setInstant(Instant.now());
+                w0.onUserFunctionFailure(new RuntimeException("a"));
+                retryQueue.add(w0);
+                tries++;
+            }
+            // Sometimes 4 elements are observed in retryQueue
+            Assertions.assertThat(retryQueue.size()).as("Expecting to have 3 elements").isEqualTo(3);
+
+            retryQueue.remove(w0);
+            retryQueue.remove(w1);
+            retryQueue.remove(w2);
+            Assertions.assertThat(retryQueue.size()).isEqualTo(0);
+            retryTestNum++;
+        }
+    }
+
+    private boolean checkForNoDupes(RetryQueue retryQueue) {
+        Set<String> checkSet = new HashSet<>();
+        try (RetryQueue.RetryQueueIterator retryQueueIterator = retryQueue.iterator()) {
+            while (retryQueueIterator.hasNext()) {
+                WorkContainer<?, ?> workContainer = retryQueueIterator.next();
+                //Checking by topic + partition + offset for uniqueness
+                if (!checkSet.add(workContainer.getTopicPartition().topic() + "_" + workContainer.getTopicPartition().partition() + "_" + workContainer.getCr().offset())) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

@@ -122,7 +122,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     // todo make package level
     @Getter(AccessLevel.PUBLIC)
-    protected final WorkManager<K, V> wm;
+    protected WorkManager<K, V> wm;
 
     /**
      * Collection of work waiting to be
@@ -139,7 +139,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Value
     @RequiredArgsConstructor(access = PRIVATE)
-    private static class ControllerEventMessage<K, V> {
+    static class ControllerEventMessage<K, V> {
 
         WorkContainer<K, V> workContainer;
 
@@ -182,6 +182,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #processWorkCompleteMailBox
      */
     private final AtomicBoolean currentlyPollingWorkCompleteMailBox = new AtomicBoolean();
+
+    /**
+     * Indicates state of waiting while in-flight messages complete processing on shutdown. Used to prevent control
+     * thread interrupt due to wakeup logic on rebalances
+     */
+    private final AtomicBoolean awaitingInflightProcessingCompletionOnShutdown = new AtomicBoolean();
 
     private final OffsetCommitter committer;
 
@@ -502,7 +508,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (consumer instanceof MockConsumer<?, ?>) {
             log.debug("Detected MockConsumer class which doesn't do auto commits");
             return Optional.of(false);
-        } else if (!(consumer instanceof KafkaConsumer<?,?>)) {
+        } else if (!(consumer instanceof KafkaConsumer<?, ?>)) {
             log.warn("Consumer is neither a KafkaConsumer nor a MockConsumer - cannot check auto commit is disabled for consumer type: {}", consumer.getClass());
             return Optional.of(false); // Probably Mockito
         }
@@ -522,7 +528,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     (org.apache.kafka.clients.consumer.Consumer<?, ?>) delegateField.get(kafkaConsumer);
             requireNonNull(delegate, "Consumer delegate must not be null");
 
-            if ("org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer".equals(delegate.getClass().getName())) {
+            if ("org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer".equals(delegate.getClass().getName())
+                    // kafka-clients >= 3.9.0
+                    || "org.apache.kafka.clients.consumer.internals.ClassicKafkaConsumer".equals(delegate.getClass().getName())) {
                 final boolean autoCommitEnabled = getAutoCommitEnabledFromCoordinator(delegate.getClass(), delegate);
                 return Optional.of(autoCommitEnabled);
             } else if ("org.apache.kafka.clients.consumer.internals.AsyncKafkaConsumer".equals(delegate.getClass().getName())) {
@@ -559,6 +567,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     @Override
     public void close() {
+        closeDontDrainFirst();
+    }
+
+    /**
+     * Close the system without draining and set failure reason
+     * @param exception
+     *
+     * @see State#DRAINING
+     */
+    public void closeOnException(Exception exception){
+        this.failureReason = exception;
         closeDontDrainFirst();
     }
 
@@ -600,6 +619,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.info("Close complete.");
     }
 
+    /**
+     * Returns cached view of paused partition size. Useful for testing and monitoring by wrapping application / user
+     * code.
+     *
+     * @return number of paused partitions
+     */
+    public int getPausedPartitionSize() {
+        return brokerPollSubsystem.getPausedPartitionSize();
+    }
+
     private void waitForClose(Duration timeout) throws TimeoutException, ExecutionException {
         log.info("Waiting on closed state...");
         while (!state.equals(CLOSED)) {
@@ -623,6 +652,25 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
+        // fixes github issue #809 - ensure doClose() state transition to CLOSED
+        // by catching unhandled exceptions in subsystems during close
+        try {
+            innerDoClose(timeout);
+        } catch (Exception e) {
+            log.error("exception during close", e);
+            throw e;
+        } finally {
+            deregisterMeters();
+            pcMetrics.close();
+            log.debug("Close complete.");
+            this.state = CLOSED;
+            if (this.getFailureCause() != null) {
+                log.error("PC closed due to error: {}", getFailureCause(), null);
+            }
+        }
+    }
+
+    private void innerDoClose(Duration timeout) throws TimeoutException, ExecutionException, InterruptedException {
         log.debug("Starting close process (state: {})...", state);
 
         // Drain and pause polling - keeps consumer alive for later commit, but paused
@@ -639,6 +687,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
 
         log.debug("Awaiting worker pool termination...");
+        awaitingInflightProcessingCompletionOnShutdown.getAndSet(true);
         boolean awaitingInflightCompletion = true;
         while (awaitingInflightCompletion) {
             log.debug("Still awaiting completion of inflight work");
@@ -657,6 +706,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 awaitingInflightCompletion = true;
             }
         }
+        awaitingInflightProcessingCompletionOnShutdown.getAndSet(false);
+
         if (workerThreadPool.get().getActiveCount() > 0) {
             log.warn("Clean execution pool termination failed - some threads still active despite await and interrupt - is user function swallowing interrupted exception? Threads still not done count: {}", workerThreadPool.get().getActiveCount());
         }
@@ -669,23 +720,26 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (Thread.currentThread().isInterrupted()) {
             log.warn("control thread interrupted - may lead to issues with transactional commit lock acquisition");
         }
-        commitOffsetsThatAreReady();
-
+        try {
+            commitOffsetsThatAreReady();
+        } catch (Exception e) {
+            log.warn("failed to commit during close sequence", e);
+        }
         // only close consumer once producer has committed it's offsets (tx'l)
         log.debug("Closing and waiting for broker poll system...");
-        brokerPollSubsystem.closeAndWait();
+        try {
+            brokerPollSubsystem.closeAndWait();
+        } catch (Exception e) {
+            log.warn("failed to close brokerPollSubsystem during close sequence", e);
+        }
 
-        maybeCloseConsumer();
+        try {
+            maybeCloseConsumer();
+        } catch (Exception e) {
+            log.warn("failed to maybeCloseConsumer during close sequence", e);
+        }
 
         producerManager.ifPresent(x -> x.close(timeout));
-        deregisterMeters();
-        pcMetrics.close();
-        log.debug("Close complete.");
-        this.state = CLOSED;
-
-        if (this.getFailureCause() != null) {
-            log.error("PC closed due to error: {}", getFailureCause(), null);
-        }
     }
 
     /**
@@ -878,9 +932,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void maybeWakeupPoller() {
         if (state == RUNNING) {
             if (!wm.isSufficientlyLoaded() && brokerPollSubsystem.isPausedForThrottling()) {
-                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
-                        wm.getNumberOfWorkQueuedInShardsAwaitingSelection(),
-                        options.getTargetAmountOfRecordsInFlight());
+                if (log.isDebugEnabled()) {
+                    long inShards = wm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+                    long outForProcessing = wm.getNumberRecordsOutForProcessing();
+                    log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (in buffers: {} vs target: {}), in shards: {}, outForProcessing: {}",
+                            inShards + outForProcessing,
+                            options.getTargetAmountOfRecordsInFlight(), inShards, outForProcessing);
+                }
                 brokerPollSubsystem.wakeupIfPaused();
             }
         }
@@ -1273,21 +1331,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.trace("Pool received: {}", workContainerBatch);
 
         /*
-         *  Handle stale work from the batch, before creating the internal context for running user function.
+         *  Handle and filter stale work from the batch, before creating the internal context for running user function.
          *  The context created is used by the "wrapped" user function to inject transactional producer synchronization.
          */
-        final boolean containsStaleWork = wm.checkIfWorkIsStale(workContainerBatch);
+        Map<Boolean, List<WorkContainer<K, V>>> splitContainersMap = workContainerBatch.stream()
+                .collect(Collectors.groupingBy(wm::checkIfWorkIsStale));
+        final List<WorkContainer<K, V>> staleWorkContainers = splitContainersMap.getOrDefault(Boolean.TRUE, new ArrayList<>());
+        final List<WorkContainer<K, V>> activeWorkContainers = splitContainersMap.getOrDefault(Boolean.FALSE, new ArrayList<>());
 
-        if (containsStaleWork) {
-            handleStaleWork(workContainerBatch);
-        }
-
-        final List<WorkContainer<K, V>> activeWorkContainers = containsStaleWork ?
-                workContainerBatch
-                        .stream()
-                        .filter(wc -> !wm.checkIfWorkIsStale(wc))
-                        .collect(Collectors.toList())
-                : workContainerBatch;
+        handleStaleWork(staleWorkContainers);
 
         final PollContextInternal<K, V> context = new PollContextInternal<>(activeWorkContainers);
 
@@ -1322,16 +1374,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workContainerBatch
      */
-    protected void handleStaleWork(final List<WorkContainer<K, V>> workContainerBatch) {
-        final List<WorkContainer<K, V>> staleWorkContainers = workContainerBatch
-                .stream()
-                .filter(wm::checkIfWorkIsStale)
-                .collect(Collectors.toList());
+    protected void handleStaleWork(final List<WorkContainer<K, V>> staleWorkContainers) {
         final PollContextInternal<K, V> internalContext = new PollContextInternal<>(staleWorkContainers);
         try {
-            // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
-            log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
-            staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
+            if (!staleWorkContainers.isEmpty()) {
+                // when epoch's change, we can't remove them from the executor pool queue, so we just have to skip them when we find them
+                log.debug("Pool found work from old generation of assigned work, skipping message as epoch doesn't match current {}", staleWorkContainers);
+                staleWorkContainers.forEach(wc -> addToMailbox(internalContext, wc));
+            }
         } finally {
             cleanUpContext(internalContext);
         }
@@ -1401,7 +1451,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     public void notifySomethingToDo() {
         boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionCommittingInProgress).orElse(false);
-        if (noTransactionInProgress) {
+        // do not interrupt while workerThreadPool is draining submitted / inflight tasks
+        if (noTransactionInProgress && !awaitingInflightProcessingCompletionOnShutdown.get()) {
             log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
             interruptControlThread();
         } else {
