@@ -8,7 +8,10 @@ import io.confluent.parallelconsumer.PollContextInternal;
 import io.confluent.parallelconsumer.RecordContext;
 import io.confluent.parallelconsumer.internal.PCModule;
 import io.confluent.parallelconsumer.internal.ProducerManager;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
@@ -16,7 +19,9 @@ import org.apache.kafka.common.TopicPartition;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.Temporal;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
 
@@ -29,7 +34,6 @@ import static java.util.Optional.of;
  * @author Antony Stubbs
  */
 @Slf4j
-@EqualsAndHashCode
 public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     static final String DEFAULT_TYPE = "DEFAULT";
@@ -82,6 +86,15 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     private Optional<Long> timeTakenAsWorkMs = Optional.empty();
 
+    private Optional<Instant> retryDueAt = Optional.empty();
+
+    private Comparator<WorkContainer<?, ?>> comparator = Comparator
+            .comparing((WorkContainer<?, ?> workContainer) -> {
+                // TopicPartition does not implement comparable
+                TopicPartition tp = workContainer.getTopicPartition();
+                return tp.topic() + tp.partition();
+            })
+            .thenComparing(WorkContainer::offset);
 
     public WorkContainer(long epoch, ConsumerRecord<K, V> cr, @NonNull PCModule<K, V> module, @NonNull String workType) {
         this.epoch = epoch;
@@ -122,14 +135,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
      * @return The point in time at which the record should ideally be retried.
      */
     public Instant getRetryDueAt() {
-        if (lastFailedAt.isPresent()) {
-            // previously failed, so add the delay to the last failed time
-            Duration retryDelay = getRetryDelayConfig();
-            return lastFailedAt.get().plus(retryDelay);
-        } else {
-            // never failed, so no try again delay
-            return Instant.MIN; // use a constant for stable comparison
-        }
+        return retryDueAt.orElse(Instant.MIN); // use a constant for stable comparison
     }
 
     /**
@@ -147,10 +153,32 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
 
     @Override
     public int compareTo(WorkContainer o) {
-        long myOffset = this.cr.offset();
-        long theirOffset = o.cr.offset();
-        int compare = Long.compare(myOffset, theirOffset);
-        return compare;
+        return comparator.compare(this, o);
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        WorkContainer<?, ?> that = (WorkContainer<?, ?>) o;
+        String thisTopic = getTopicPartition().topic();
+        String thatTopic = that.getTopicPartition().topic();
+        if (!thisTopic.equals(thatTopic)) {
+            return false;
+        }
+        int thisPartition = getTopicPartition().partition();
+        int thatPartition = that.getTopicPartition().partition();
+        if (thisPartition != thatPartition) {
+            return false;
+        }
+        long thisOffset = getCr().offset();
+        long thatOffset = that.getCr().offset();
+        return thisOffset == thatOffset;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(getTopicPartition().topic(), getTopicPartition().partition(), cr.offset());
     }
 
     public boolean isNotInFlight() {
@@ -188,6 +216,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer<K, V>> {
         numberOfFailedAttempts++;
         lastFailedAt = of(Instant.now(module.clock()));
         lastFailureReason = Optional.ofNullable(cause);
+        Duration retryDelay = getRetryDelayConfig();
+        retryDueAt = of(lastFailedAt.get().plus(retryDelay));
     }
 
     public boolean isUserFunctionComplete() {

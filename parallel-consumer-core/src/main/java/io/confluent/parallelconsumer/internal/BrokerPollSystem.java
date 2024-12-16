@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -222,6 +222,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * Will begin the shutdown process, eventually closing itself once drained
      */
     public void drain() {
+        consumerManager.signalStop();
         // idempotent
         if (runState != State.DRAINING) {
             log.debug("Signaling poll system to drain, waking up consumer...");
@@ -291,6 +292,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     }
 
     private void transitionToClosing() {
+        consumerManager.signalStop();
         log.debug("Poller transitioning to closing, waking up consumer");
         runState = State.CLOSING;
         consumerManager.wakeup();
@@ -396,5 +398,15 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         } else {
             log.info("Skipping transition of broker poll system to state running. Current state is {}.", this.runState);
         }
+    }
+
+    /**
+     * Returns cached view of paused partition size. Useful for testing and monitoring by wrapping application / user
+     * code.
+     *
+     * @return number of paused partitions
+     */
+    public int getPausedPartitionSize() {
+        return consumerManager.getPausedPartitionSize();
     }
 }
