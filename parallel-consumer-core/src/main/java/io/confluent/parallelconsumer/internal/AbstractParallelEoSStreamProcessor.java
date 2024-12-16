@@ -528,7 +528,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     (org.apache.kafka.clients.consumer.Consumer<?, ?>) delegateField.get(kafkaConsumer);
             requireNonNull(delegate, "Consumer delegate must not be null");
 
-            if ("org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer".equals(delegate.getClass().getName())) {
+            if ("org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer".equals(delegate.getClass().getName())
+                    // kafka-clients >= 3.9.0
+                    || "org.apache.kafka.clients.consumer.internals.ClassicKafkaConsumer".equals(delegate.getClass().getName())) {
                 final boolean autoCommitEnabled = getAutoCommitEnabledFromCoordinator(delegate.getClass(), delegate);
                 return Optional.of(autoCommitEnabled);
             } else if ("org.apache.kafka.clients.consumer.internals.AsyncKafkaConsumer".equals(delegate.getClass().getName())) {
