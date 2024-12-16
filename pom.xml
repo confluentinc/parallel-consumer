@@ -10,7 +10,7 @@
     <groupId>io.confluent.parallelconsumer</groupId>
     <artifactId>parallel-consumer-parent</artifactId>
     <name>Confluent Parallel Consumer</name>
-    <version>0.5.2.9-SNAPSHOT</version>
+    <version>0.5.3.3-SNAPSHOT</version>
     <description>Parallel Apache Kafka client wrapper with client side queueing, a simpler consumer/producer API with key concurrency and extendable non-blocking IO processing.
     </description>
     <url>https://confluent.io</url>
@@ -591,7 +591,6 @@
                 <version>3.0.1</version>
                 <configuration>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
-                    <pushChanges>false</pushChanges>
                     <tagNameFormat>@{project.version}</tagNameFormat>
                 </configuration>
             </plugin>
@@ -619,7 +618,7 @@
                                 <exclude>.ci/**/*</exclude>
                                 <exclude>.git/**/*</exclude>
                                 <!-- exclude semaphore yml files -->
-                                <exclude>.semaphore/*.yml</exclude>
+                                <exclude>.semaphore/*</exclude>
                                 <!-- exclude semaphore build time files -->
                                 <exclude>bin/</exclude>
                                 <exclude>.m2/</exclude>
@@ -835,7 +834,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-site-plugin</artifactId>
-                <version>4.0.0-M13</version>
+                <version>4.0.0-M15</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -929,7 +928,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-site-plugin</artifactId>
-                    <version>4.0.0-M13</version>
+                    <version>4.0.0-M15</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

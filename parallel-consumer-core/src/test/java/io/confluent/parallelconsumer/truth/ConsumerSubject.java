@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.truth;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2024 Confluent, Inc.
  */
 
 import com.google.common.truth.FailureMetadata;

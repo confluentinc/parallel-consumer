@@ -240,7 +240,7 @@ public class PartitionState<K, V> {
             return false;
         } else {
             // if within the range of tracked offsets, must have been previously completed, as it's not in the incomplete set
-            return recOffset <= offsetHighestSeen;
+            return recOffset <= offsetHighestSucceeded;
         }
     }
 
@@ -459,7 +459,8 @@ public class PartitionState<K, V> {
          *
          * See #200 for the complete correct solution.
          */
-        long currentOffsetHighestSeen = offsetHighestSeen;
+        // use offsetHighestSucceeded instead of offsetHighestSeen to fix issue #826
+        long currentOffsetHighestSeen = offsetHighestSucceeded;
         Long firstIncompleteOffset = incompleteOffsets.keySet().ceiling(KAFKA_OFFSET_ABSENCE);
         boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
 

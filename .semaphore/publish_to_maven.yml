@@ -1,0 +1,45 @@
+#
+# Copyright (C) 2021-2023 Confluent, Inc.
+#
+
+version : v1.0
+name : Publish to Maven Central
+agent :
+  machine :
+    type : s1-prod-ubuntu20-04-amd64-1
+
+global_job_config :
+  prologue :
+    commands :
+      - sem-version java 17
+
+blocks :
+  - name : Deploy to Maven Central
+    task :
+      jobs :
+        - name : Publish Artifacts
+          commands :
+            - |
+              if [[ "${SEMAPHORE_ORGANIZATION_URL}" == *".semaphoreci.com" ]]; then
+                echo "Not meant to run on public semaphore!"
+                exit 1
+              fi
+            - checkout
+            - git fetch --unshallow
+            - . vault-setup
+            - . vault-sem-get-secret v1/ci/kv/semaphore2/gpg/confluent-packaging-private-8B1DA6120C2BF624
+            - chmod +x .semaphore/initgpg.sh
+            - . .semaphore/initgpg.sh
+            - export SONATYPE_SERVER_ID=ossrh
+            - export SONATYPE_OSSRH_USER=$(vault kv get --field=user_token_username v1/ci/kv/sonatype/confluent)
+            - export SONATYPE_OSSRH_PASSWORD=$(vault kv get --field=user_token_password v1/ci/kv/sonatype/confluent)
+            - export SETTINGS_XML_PATH="$HOME/.m2/settings.xml"
+            - python .semaphore/update_maven_settings.py # Update maven settings with Sonatype credentials
+            - ./mvnw --batch-mode clean deploy -Pmaven-central -Pci -Dgpg.passphrase=$PASSPHRASE -DskipTests
+
+after_pipeline :
+  task :
+    jobs :
+      - name : Publish Results
+        commands :
+          - test-results gen-pipeline-report

@@ -126,7 +126,7 @@ public class ProcessingShard<K, V> {
         return staleContainers;
     }
 
-    ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta) {
+    ArrayList<WorkContainer<K, V>> getWorkIfAvailable(int workToGetDelta, RetryQueue retryQueue) {
         log.trace("Looking for work on shardQueueEntry: {}", getKey());
 
         var slowWork = new HashSet<WorkContainer<?, ?>>();
@@ -171,6 +171,9 @@ public class ProcessingShard<K, V> {
 
         logSlowWork(slowWork);
 
+        // Remove from retry queue as picked for submission to work pool - filter to only remove work containers that have
+        // previously failed - as retry queue won't have any that didn't previously fail.
+        retryQueue.removeAll(workTaken.stream().filter(WorkContainer::hasPreviouslyFailed).collect(Collectors.toList()));
         dcrAvailableWorkContainerCntByDelta(workTaken.size());
 
         return workTaken;
