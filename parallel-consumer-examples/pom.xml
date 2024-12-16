@@ -10,7 +10,7 @@
     <parent>
         <artifactId>parallel-consumer-parent</artifactId>
         <groupId>io.confluent.parallelconsumer</groupId>
-        <version>0.5.3.3-SNAPSHOT</version>
+        <version>0.5.3.2</version>
     </parent>
 
     <artifactId>parallel-consumer-examples</artifactId>
