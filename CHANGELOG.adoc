@@ -14,11 +14,54 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
-== 0.5.2.9
+== 0.5.3.3
+
+=== Fixes
+
+* fix: close parallel consumer on transactional mode when InvalidPidMappingException (#830)
+* fix: support kafka-clients 3.9.0 (#841)
+
+== 0.5.3.2
+
+=== Fixes
+
+* fix: include inflight message count in polling backpressure logic (#836)
+* fix: message loss on closing or partitions revoked (#827) fixes (#826)
+* fix: unbounded retry queue growth preventing polling from being throttled and leading to OOM (#834) fixes (#832, #817)
+
+=== Note
+#836 introduces a change in how buffer size is calculated as now inflight messages are counted as part of buffer size - so behaviour of existing applications may change and pausing of consumer happen sooner.
+
+== 0.5.3.1
+
+=== Fixes
+
+* fix: ConcurrentModificationException Happened while high load and draining (#822) fixes (#821)
+* fix: safely completing doClose() (#818) partially fixes (#809)
+* Improved offset commit retry. Add support for SaslAuthenticationException retry timeout (#819), partially fixes (#809) in Commit_Sync mode
+
+== 0.5.3.0
+
+=== Fixes
+
+* fix: ReactorProcessor - run used-defined function in provided scheduler rather than in pc-pool thread (#798 / #794), fixes (#793)
+* fix: fix issue for cannot close and exit properly when re-balancing storm (#787)
+* fix: Support for PCRetriableException in ReactorProcessor (#733)
+* fix: NullPointerException on partitions revoked (#757)
+* fix: remove lingeringOnCommitWouldBeBeneficial and unused imports (#732)
+* fix: Fix failing auto-commit check for kafka-clients >= v3.7.0 (#721)
+* fix: Fix redundant rebalance callback in LongPollingMockConsumer for Kafka >= 3.6 (#765)
 
 === Improvements
+
+* improvement: stale containers exclusion and handling improvement (#779)
 * improvement: add multiple caches for accelerating available container count calculation （#667）
 * improvement: RecordContext now exposes lastFailureReason (#725)
+
+=== Dependencies
+
+* build(deps): Bump Kafka to 3.6.2
+* build(deps): Bump Kafka to 3.7.0
 
 == 0.5.2.8
 
@@ -48,6 +91,7 @@ endif::[]
 * Refactored metrics implementation to not use singleton - improves meter separation, allows correct metrics subsystem operation when multiple parallel consumer instances are running in same java process (#630), fixes (#617) improves on (#627)
 
 == 0.5.2.6
+
 === Improvements
 
 * feature: Micrometer metrics (#594)
@@ -117,13 +161,11 @@ endif::[]
 ** build(deps-dev): bump Confluent Platform Kafka Broker to 7.2.2 (#421)
 ** build(deps): Upgrade to AK 3.3.0 (#309)
 
-
 === Fixes
 
 * fixes #419: NoSuchElementException during race condition in PartitionState (#422)
 * Fixes #412: ClassCastException with retryDelayProvider (#417)
 * fixes ShardManager retryQueue ordering and set issues due to poor Comparator implementation (#423)
-
 
 == v0.5.2.2
 

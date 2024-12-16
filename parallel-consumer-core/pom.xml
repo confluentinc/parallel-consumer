@@ -8,7 +8,7 @@
     <parent>
         <groupId>io.confluent.parallelconsumer</groupId>
         <artifactId>parallel-consumer-parent</artifactId>
-        <version>0.5.2.9-SNAPSHOT</version>
+        <version>0.5.3.3-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -125,7 +125,7 @@
                 <artifactId>truth-generator-maven-plugin</artifactId>
                 <version>${truth-generator-maven-plugin.version}</version>
                 <configuration>
-                    <cleanTargetDir>true</cleanTargetDir>
+                    <cleanTargetDir>false</cleanTargetDir>
                     <useHas>false</useHas>
                     <useGetterForLegacyClasses>true</useGetterForLegacyClasses>
                     <releaseTarget>8</releaseTarget>

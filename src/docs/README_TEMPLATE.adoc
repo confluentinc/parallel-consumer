@@ -169,8 +169,8 @@ Why not run more consumers __within__ your application instance?::
 However, you are still restricted by all the per consumer restrictions as described above.
 
 Why not use the Vert.x library yourself in your processing loop?::
-* Vert.x us used in this library to provide a non-blocking IO system in the message processing step.
-Using Vert.x without using this library with *ordered* processing requires dealing with the quite complicated, and not straight forward, aspect of handling offset commits with Vert.x asynchronous processing system.
+* Vert.x is used in this library to provide a non-blocking IO system in the message processing step.
+Using Vert.x without using this library with *ordered* processing requires dealing with the quite complicated, and not straight forward, aspect of handling offset commits with the Vert.x asynchronous processing system.
 +
 *Unordered* processing with Vert.x is somewhat easier, however offset management is still quite complicated, and the Parallel Consumer also provides optimizations for message-level acknowledgment in this case.
 This library handles offset commits for both ordered and unordered processing cases.
@@ -182,7 +182,7 @@ Below are some real world use cases which illustrate concrete situations where t
 * Slow consumer systems in transactional systems (online vs offline or reporting systems)
 ** Notification system:
 +
-*** Notification processing system which sends push notifications to a user to acknowledge a two-factor authentication request on their mobile and authorising a login to a website, requires optimal end-to-end latency for a good user experience.
+*** Notification processing system which sends push notifications for a user to acknowledge two-factor authentication requests on their mobile for authorising a website login, requires optimal end-to-end latency for a good user experience.
 *** A specific message in this queue uncharacteristically takes a long time to process because the third party system is sometimes unpredictably slow to respond and so holds up the processing for *ALL* other notifications for other users that are in the same partition behind this message.
 *** Using key order concurrent processing will allow notifications to proceed while this message either slowly succeeds or times out and retires.
 ** Slow GPS tracking system (slow HTTP service interfaces that can scale horizontally)
@@ -198,7 +198,7 @@ Below are some real world use cases which illustrate concrete situations where t
 +
 `1 second / 50ms × 100,000 keys = 2,000,000 messages per second`
 +
-While the HTTP system probably cannot handle 2,000,000 messages per second, more importantly, your system is no longer the bottleneck.
+While the HTTP system probably cannot handle 2,000,000 messages per second, your system is no longer the bottleneck.
 
 ** Slow CPU bound model processing for fraud prediction
 *** Consider a system where message data is passed through a fraud prediction model which takes CPU cycles, instead of an external system being slow.
