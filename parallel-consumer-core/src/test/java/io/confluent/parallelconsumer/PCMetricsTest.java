@@ -69,11 +69,15 @@ class PCMetricsTest extends ParallelEoSStreamProcessorTestBase {
                             throw new RuntimeException("Failed a record to verify failed meter");
                         }
                     }
-                    if (counter.get() >= numberToBlockAt.get()) {
-                        latch.await();
-                    } else {
-                        Thread.sleep(5);
+
+                    //towards end of records in Partition 1 - throw RTE to get failed record to verify meter
+                    if (recordContext.partition() == 0 && counter.get() > (quantityP0 - 300)) {
+                        if (!failedRecordDone.getAndSet(true)) {
+                            throw new RuntimeException("Failed a record to verify failed meter");
+                        }
                     }
+
+                    Thread.sleep(5);
                     counter.incrementAndGet();
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
