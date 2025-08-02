@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2024 Confluent, Inc.
+ * Copyright (C) 2020-2025 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.LoopingResumingIterator;
@@ -125,8 +125,8 @@ public class ShardManager<K, V> {
         // this number and number of work containers queued in work thread pool.
         // it is safe though to set it to 0 for negative value of shards size - retry queue size portion.
 
-        ParallelConsumer.Tuple<Integer,Long> retryQueueSizeAndNumberReadyToBeRetried =retryQueue.getQueueSizeAndNumberReadyToBeRetried();
-        long diffBetweenShardsAndRetrySize= -retryQueueSizeAndNumberReadyToBeRetried.getLeft() +processingShards.values().stream()
+        ParallelConsumer.Tuple<Integer,Long> retryQueueSizeAndNumberReadyToBeRetried = retryQueue.getQueueSizeAndNumberReadyToBeRetried();
+        long diffBetweenShardsAndRetrySize= -retryQueueSizeAndNumberReadyToBeRetried.getLeft() + processingShards.values().stream()
                 .mapToLong(ProcessingShard::getCountOfWorkAwaitingSelection)
                 .sum();
         return retryQueueSizeAndNumberReadyToBeRetried.getRight() + (diffBetweenShardsAndRetrySize < 0 ? 0 : diffBetweenShardsAndRetrySize);
@@ -282,12 +282,12 @@ public class ShardManager<K, V> {
     }
 
     // remove stale containers from both processingShards and retryQueue
-    public boolean removeStaleContainers() {
+    public long removeStaleContainers() {
         return processingShards.values().stream()
                 .map(ProcessingShard::removeStaleWorkContainersFromShard)
                 .flatMap(Collection::stream)
                 .map(retryQueue::remove)
-                .findAny().isPresent();
+                .count();
     }
 
     private void updateResumePoint(Optional<Map.Entry<ShardKey, ProcessingShard<K, V>>> lastShard) {

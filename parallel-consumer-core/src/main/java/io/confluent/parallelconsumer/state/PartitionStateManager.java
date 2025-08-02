@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2023 Confluent, Inc.
+ * Copyright (C) 2020-2025 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
@@ -128,7 +128,8 @@ public class PartitionStateManager<K, V> implements ConsumerRebalanceListener {
             // remove stale work containers after partition epoch changed
             // because we will judge if container is stale or not by comparing between
             // epoch from WorkContainer to partitionsAssignmentEpoch in PartitionState
-            sm.removeStaleContainers();
+            long staleContainerCnt = sm.removeStaleContainers();
+            log.debug("removed stale container count : {}", staleContainerCnt);
         } catch (Exception e) {
             log.error("Error in onPartitionsAssigned", e);
             throw e;

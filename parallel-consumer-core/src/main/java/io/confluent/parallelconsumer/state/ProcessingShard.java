@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2024 Confluent, Inc.
+ * Copyright (C) 2020-2025 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -112,17 +112,15 @@ public class ProcessingShard<K, V> {
     // 2. will cause the consumer to paused consuming new messages indefinitely
     public List<WorkContainer<K, V>> removeStaleWorkContainersFromShard() {
         List<WorkContainer<K, V>> staleContainers = new ArrayList<>();
-        this.entries.entrySet()
-                .removeIf(entry -> {
-                    WorkContainer<K, V> workContainer = entry.getValue();
-                    boolean isStale = isWorkContainerStale(workContainer);
-                    if (isStale) {
-                        // decrease the AvailableWorkContainerCnt and collect stale containers
-                        dcrAvailableWorkContainerCntByDelta(1);
-                        staleContainers.add(workContainer);
-                    }
-                    return isStale;
-                });
+        var iterator = entries.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, WorkContainer<K, V>> entry = iterator.next();
+            if (isWorkContainerStale(entry.getValue())) {
+                iterator.remove();  // Safe even on ConcurrentSkipListMap
+                dcrAvailableWorkContainerCntByDelta(1);
+                staleContainers.add(entry.getValue());
+            }
+        }
         return staleContainers;
     }
 
@@ -133,6 +131,7 @@ public class ProcessingShard<K, V> {
         var workTaken = new ArrayList<WorkContainer<K, V>>();
 
         var iterator = entries.entrySet().iterator();
+        boolean hasStaleWorkContainer = false;
         while (workTaken.size() < workToGetDelta && iterator.hasNext()) {
             var workContainer = iterator.next().getValue();
 
@@ -160,8 +159,16 @@ public class ProcessingShard<K, V> {
                 //  recrods of the same key to different partitions. In which case, there's no way PC can make sure all
                 //  records of that belong to the shard are able to even be processed by the same PC instance, so it doesn't
                 //  matter.
-                log.trace("Partition for shard {} is blocked for work taking, stopping shard scan", this);
-                break;
+
+                if (isWorkContainerStale(workContainer)) {
+                    // remove stale container and deduct on availableWorkContainerCnt
+                    log.debug("shard {} there are still stale work container, need to remove container : {}", this, workContainer);
+                    dcrAvailableWorkContainerCntByDelta(1);
+                    iterator.remove();
+                } else {
+                    log.trace("Partition for shard {} is blocked for work taking, stopping shard scan", this);
+                    break;
+                }
             }
         }
 
@@ -174,6 +181,7 @@ public class ProcessingShard<K, V> {
         // Remove from retry queue as picked for submission to work pool - filter to only remove work containers that have
         // previously failed - as retry queue won't have any that didn't previously fail.
         retryQueue.removeAll(workTaken.stream().filter(WorkContainer::hasPreviouslyFailed).collect(Collectors.toList()));
+
         dcrAvailableWorkContainerCntByDelta(workTaken.size());
 
         return workTaken;

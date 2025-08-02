@@ -20,6 +20,7 @@ endif::[]
 
 * fix: close parallel consumer on transactional mode when InvalidPidMappingException (#830)
 * fix: support kafka-clients 3.9.0 (#841)
+* fix: Paused consumption across multiple consumers (#857)
 
 == 0.5.3.2
 
