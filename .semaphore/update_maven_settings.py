@@ -4,8 +4,8 @@ import xml.dom.minidom
 
 
 def get_environment_variables():
-    username = os.getenv("SONATYPE_OSSRH_USER")
-    password = os.getenv("SONATYPE_OSSRH_PASSWORD")
+    username = os.getenv("CENTRAL_TOKEN_USERNAME")
+    password = os.getenv("CENTRAL_TOKEN_PASSWORD")
     server_id = os.getenv("SONATYPE_SERVER_ID")
     settings_xml_path = os.getenv("SETTINGS_XML_PATH")
 
