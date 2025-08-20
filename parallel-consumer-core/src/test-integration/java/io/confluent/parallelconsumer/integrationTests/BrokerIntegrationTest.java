@@ -1,5 +1,9 @@
 
 /*-
+ * Copyright (C) 2020-2025 Confluent, Inc.
+ */
+
+/*-
  * Copyright (C) 2020-2023 Confluent, Inc.
  */
 package io.confluent.parallelconsumer.integrationTests;
@@ -52,7 +56,7 @@ public abstract class BrokerIntegrationTest<K, V> {
     public static KafkaContainer kafkaContainer = createKafkaContainer(null);
 
     public static KafkaContainer createKafkaContainer(String logSegmentSize) {
-        KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.3.0"))
+        KafkaContainer base = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"))
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1") //transaction.state.log.replication.factor
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") //transaction.state.log.min.isr
                 .withEnv("KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS", "1") //transaction.state.log.num.partitions
