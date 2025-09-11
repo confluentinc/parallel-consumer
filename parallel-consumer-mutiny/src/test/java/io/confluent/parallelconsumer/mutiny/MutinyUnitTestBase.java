@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.mutiny;
 
+/*-
+ * Copyright (C) 2020-2022 Confluent, Inc.
+ */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;

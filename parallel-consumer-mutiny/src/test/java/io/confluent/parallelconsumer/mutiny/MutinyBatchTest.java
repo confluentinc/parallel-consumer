@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.mutiny;
 
+/*-
+ * Copyright (C) 2020-2025 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.BatchTestBase;
 import io.confluent.parallelconsumer.BatchTestMethods;

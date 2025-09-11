@@ -1,5 +1,9 @@
 package io.confluent.parallelconsumer.mutiny;
 
+/*-
+ * Copyright (C) 2020-2025 Confluent, Inc.
+ */
+
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.smallrye.mutiny.Uni;
@@ -44,7 +48,6 @@ class MutinyPCTest extends MutinyUnitTestBase {
             log.info("Mutiny user function: {}", ctx);
             msgs.add(ctx);
             threads.add(Thread.currentThread().getName());
-
             // return a Uni for async processing
             return Uni.createFrom().item(String.format("result: %d:%s", ctx.getSingleConsumerRecord().offset(), ctx.getSingleConsumerRecord().value()));
         });
@@ -61,7 +64,7 @@ class MutinyPCTest extends MutinyUnitTestBase {
                             .atLeastOffset(4);
 
                     assertWithMessage("The user-defined function should be executed by the scheduler")
-                            .that(threads.stream().allMatch(thread -> thread.startsWith("pc-pool")))
+                            .that(threads.stream().allMatch(thread -> thread.startsWith("pool")))
                             .isTrue();
                 });
     }
@@ -94,7 +97,7 @@ class MutinyPCTest extends MutinyUnitTestBase {
                         }
                     })
                     // simulate async delay
-                    .onItem().delayIt().by(Duration.ofMillis((int) (100 * Math.random())))
+                    .onItem().delayIt().by(Duration.ofMillis(Math.max(1, (int) (100 * Math.random()))))
                     .onItem().invoke(s -> {
                         log.trace("User function after delay. Records pending: {}, removing from processing: {}", msgs.size(), ctx);
                         int currentConcurrentRecords = msgs.size();

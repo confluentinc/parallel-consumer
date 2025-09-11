@@ -40,7 +40,7 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
     private static final String MUTINY_TYPE = "mutiny.x-type";
 
     private final Supplier<Executor> executorSupplier;
-    private final Supplier<Executor> defaultExecutorSupplier = Infrastructure::getDefaultExecutor;
+    private final Supplier<Executor> defaultExecutorSupplier = Infrastructure::getDefaultWorkerPool;
 
     public MutinyProcessor(ParallelConsumerOptions<K, V> options, Supplier<Executor> newExecutorSupplier) {
         super(options);
