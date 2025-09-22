@@ -103,7 +103,10 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
                     )
                     .onItem()
                     .transformToMulti(result -> {
-                        if (result instanceof Multi<?> multi) {
+                        if(result == null) {
+                            return Multi.createFrom().empty();
+                        }
+                        else if (result instanceof Multi<?> multi) {
                             return multi;                 // unwrap Multi
                         } else {
                             return Multi.createFrom().item(result); // wrap single item as Multi
@@ -114,7 +117,8 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
                     .runSubscriptionOn(getExecutor())
                     .subscribe().with(
                             ignored -> onComplete(pollContext),
-                            throwable -> onError(pollContext, throwable)
+                            throwable -> onError(pollContext, throwable),
+                            () -> onComplete(pollContext)
                     );
 
             log.trace("asyncPoll - user function finished ok.");
