@@ -116,7 +116,7 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
                     .invoke(signal -> log.trace("onItem {}", signal))
                     .runSubscriptionOn(getExecutor())
                     .subscribe().with(
-                            ignored -> onComplete(pollContext),
+                            ignored -> {},
                             throwable -> onError(pollContext, throwable),
                             () -> onComplete(pollContext)
                     );
