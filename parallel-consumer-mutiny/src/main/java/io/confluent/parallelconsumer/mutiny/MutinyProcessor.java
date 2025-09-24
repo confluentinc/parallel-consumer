@@ -39,12 +39,11 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
      */
     private static final String MUTINY_TYPE = "mutiny.x-type";
 
-    private final Supplier<Executor> executorSupplier;
-    private final Supplier<Executor> defaultExecutorSupplier = Infrastructure::getDefaultWorkerPool;
+    private final Executor executor;
 
     public MutinyProcessor(ParallelConsumerOptions<K, V> options, Supplier<Executor> newExecutorSupplier) {
         super(options);
-        this.executorSupplier = (newExecutorSupplier == null) ? defaultExecutorSupplier : newExecutorSupplier;
+        this.executor = (newExecutorSupplier == null) ? Infrastructure.getDefaultWorkerPool() : newExecutorSupplier.get();
     }
     
     public MutinyProcessor(ParallelConsumerOptions<K, V> options) {
@@ -114,7 +113,7 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
                     })
                     .onItem()
                     .invoke(signal -> log.trace("onItem {}", signal))
-                    .runSubscriptionOn(getExecutor())
+                    .runSubscriptionOn(this.executor)
                     .subscribe().with(
                             ignored -> {},
                             throwable -> onError(pollContext, throwable),
@@ -148,9 +147,5 @@ public class MutinyProcessor<K, V> extends ExternalEngine<K, V> {
             wc.onUserFunctionFailure(throwable);
             addToMailbox(pollContext, wc);
         });
-    }
-
-    private Executor getExecutor() {
-        return this.executorSupplier.get();
     }
 }
