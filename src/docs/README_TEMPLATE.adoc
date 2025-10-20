@@ -362,7 +362,7 @@ As an illustrative example of relative performance, given:
 |Key
 |10,000
 |2.128s
-|As key space is t he same as the number of messages, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
+|As key space is the same as the number of messages, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
 
 |Unordered
 |20 (not relevant)
