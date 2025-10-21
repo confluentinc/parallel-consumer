@@ -162,6 +162,10 @@ public class PartitionState<K, V> {
     @Getter
     private final long partitionsAssignmentEpoch;
 
+    /**
+     * Additional flag to prevent unnecessary commit if no records has been processed yet.
+     * especially to prevent incorrect commit of offsetHighestSucceeded when partition just assigned
+     */
     @Getter
     private boolean needToCommit = false;
 
