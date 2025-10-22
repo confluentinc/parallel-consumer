@@ -794,7 +794,7 @@ You can access the retry count of a record through it's wrapped `WorkContainer` 
 .Example retry delay function implementing exponential backoff
 [source,java,indent=0]
 ----
-        final double multiplier = 0.5;
+        final double multiplier = 2.0;
         final int baseDelaySecond = 1;
 
         ParallelConsumerOptions.<String, String>builder()
