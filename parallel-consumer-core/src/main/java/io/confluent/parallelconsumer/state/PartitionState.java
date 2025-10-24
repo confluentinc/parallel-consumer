@@ -212,7 +212,7 @@ public class PartitionState<K, V> {
         offsetData.getIncompleteOffsets()
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
-        this.offsetHighestSucceeded = this.offsetHighestSeen ; // we need to make sure offset in OffsetAndMetadata -1 is the correct processed offset
+        this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
