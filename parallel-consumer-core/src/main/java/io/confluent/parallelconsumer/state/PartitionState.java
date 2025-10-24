@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.state;
 
 /*-
- * Copyright (C) 2020-2024 Confluent, Inc.
+ * Copyright (C) 2020-2025 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
@@ -162,6 +162,14 @@ public class PartitionState<K, V> {
     @Getter
     private final long partitionsAssignmentEpoch;
 
+    /**
+     * Additional flag to prevent unnecessary commit if no records has been processed yet.
+     * especially to prevent incorrect commit of offsetHighestSucceeded when partition just assigned
+     */
+    @Getter
+    @Setter
+    private boolean needToCommit = false;
+
     private long lastCommittedOffset;
     private Gauge lastCommittedOffsetGauge;
     private Gauge highestSeenOffsetGauge;
@@ -274,6 +282,7 @@ public class PartitionState<K, V> {
         if (thisOffset > highestSucceeded) {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
             this.offsetHighestSucceeded = thisOffset;
+            needToCommit = true;
         }
     }
 
@@ -397,7 +406,7 @@ public class PartitionState<K, V> {
     }
 
     public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
-        if (isDirty()) {
+        if (isDirty() && needToCommit) {
             // setting the flag so that any subsequent offset completed while commit is being performed could mark state as dirty
             // and retain the dirty state on commit completion.
             stateChangedSinceCommitStart = false;
