@@ -167,6 +167,7 @@ public class PartitionState<K, V> {
      * especially to prevent incorrect commit of offsetHighestSucceeded when partition just assigned
      */
     @Getter
+    @Setter
     private boolean needToCommit = false;
 
     private long lastCommittedOffset;
@@ -211,7 +212,7 @@ public class PartitionState<K, V> {
         offsetData.getIncompleteOffsets()
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
-        this.offsetHighestSucceeded = this.offsetHighestSeen - 1; // we need to make sure offset in OffsetAndMetadata -1 is the correct processed offset
+        this.offsetHighestSucceeded = this.offsetHighestSeen ; // we need to make sure offset in OffsetAndMetadata -1 is the correct processed offset
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
