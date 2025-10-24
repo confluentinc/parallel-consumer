@@ -172,6 +172,7 @@ public class PartitionState<K, V> {
     private DistributionSummary ratioPayloadUsedDistributionSummary;
     private DistributionSummary ratioMetadataSpaceUsedDistributionSummary;
     private final PCMetrics pcMetrics;
+    private final OffsetMapCodecManager<K, V> om;
 
     /**
      * Additional flag to prevent overwriting dirty state that was updated during commit execution window - so that any
@@ -195,6 +196,7 @@ public class PartitionState<K, V> {
         this.pcMetrics = module.pcMetrics();
         initStateFromOffsetData(offsetData);
         initMetrics();
+        this.om = new OffsetMapCodecManager<>(pcModule);
     }
 
     private void initStateFromOffsetData(OffsetMapCodecManager.HighestOffsetAndIncompletes offsetData) {
@@ -487,7 +489,6 @@ public class PartitionState<K, V> {
 
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
-            OffsetMapCodecManager<K, V> om = new OffsetMapCodecManager<>(this.module);
             long offsetOfNextExpectedMessage = getOffsetToCommit();
             var offsetRange = getOffsetHighestSucceeded() - offsetOfNextExpectedMessage;
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
