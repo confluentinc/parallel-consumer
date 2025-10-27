@@ -364,7 +364,7 @@ As an illustrative example of relative performance, given:
 |Key
 |10,000
 |2.128s
-|As key space is t he same as the number of messages, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
+|As key space is the same as the number of messages, this is similar (but restricted by max concurrency settings) as having a *single consumer* instance and *partition* _per key_. 10,000 msgs * avg processing time 2.5ms = ~2.5s.
 
 |Unordered
 |20 (not relevant)
@@ -794,7 +794,7 @@ You can access the retry count of a record through it's wrapped `WorkContainer` 
 .Example retry delay function implementing exponential backoff
 [source,java,indent=0]
 ----
-        final double multiplier = 0.5;
+        final double multiplier = 2.0;
         final int baseDelaySecond = 1;
 
         ParallelConsumerOptions.<String, String>builder()
@@ -1534,11 +1534,19 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.3.4
+
+=== Fixes
+
+* fix: keep instantiated OffsetMapCodecManager so that metrics will not be recreated every commit (#859)
+
 == 0.5.3.3
 
 === Fixes
 
 * fix: close parallel consumer on transactional mode when InvalidPidMappingException (#830)
+* fix: support kafka-clients 3.9.0 (#841)
+* fix: Paused consumption across multiple consumers (#857)
 
 == 0.5.3.2
 

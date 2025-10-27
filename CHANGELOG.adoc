@@ -14,12 +14,19 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.3.4
+
+=== Fixes
+
+* fix: keep instantiated OffsetMapCodecManager so that metrics will not be recreated every commit (#859)
+
 == 0.5.3.3
 
 === Fixes
 
 * fix: close parallel consumer on transactional mode when InvalidPidMappingException (#830)
 * fix: support kafka-clients 3.9.0 (#841)
+* fix: Paused consumption across multiple consumers (#857)
 
 == 0.5.3.2
 
