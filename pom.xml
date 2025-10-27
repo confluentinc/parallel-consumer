@@ -105,7 +105,7 @@
         <mockito.version>5.12.0</mockito.version>
         <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>1.0.0</jabel.version>
-        <logback.version>1.5.13</logback.version>
+        <logback.version>1.5.19</logback.version>
         <micrometer-core.version>1.13.0</micrometer-core.version>
     </properties>
 
