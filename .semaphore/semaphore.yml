@@ -28,8 +28,11 @@ global_job_config:
   prologue:
     commands:
       - sem-version java 17
+      - export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+      - echo "JAVA_HOME set to $JAVA_HOME"
       - checkout
       - git fetch --unshallow
+
 
 blocks:
   - name: Build
@@ -38,6 +41,7 @@ blocks:
       jobs:
         - name: Build and Test
           commands:
+            - rm -rf .m2/io/confluent
             - ./mvnw --batch-mode -q -Pci -U clean install -DskipTests
             - ./mvnw --batch-mode -Pci verify
       epilogue:
