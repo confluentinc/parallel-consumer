@@ -97,7 +97,7 @@ public class ConsumerOffsetCommitter<K, V> extends AbstractOffsetCommitter<K, V>
                 log.debug("Committing offsets Async");
                 consumerMgr.commitAsync(offsetsToSend, (offsets, exception) -> {
                     if (exception != null) {
-                        log.error("Error committing offsets", exception);
+                        log.error("Error committing offsets: {}, exception: ", offsets, exception);
                         // todo keep work in limbo until async response is received?
                     }
                 });
