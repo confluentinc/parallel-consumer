@@ -183,7 +183,6 @@ class PartitionStateCommittedOffsetTest {
                 new TreeSet<>(Arrays.asList(completedOffset, incompleteOffset)));
         PartitionState<String, String> state = new PartitionState<>(0, mu.getModule(), tp, offsetData);
         state.onSuccess(completedOffset);
-        state.setNeedToCommit(true);
 
         // fetch committable/completed offset
         OffsetAndMetadata offsetAndMetadata = state.getCommitDataIfDirty().get();

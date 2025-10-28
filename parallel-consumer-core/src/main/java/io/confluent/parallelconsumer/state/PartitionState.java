@@ -163,12 +163,11 @@ public class PartitionState<K, V> {
     private final long partitionsAssignmentEpoch;
 
     /**
-     * Additional flag to prevent unnecessary commit if no records has been processed yet.
-     * especially to prevent incorrect commit of offsetHighestSucceeded when partition just assigned
+     * we need to persist the last incompletes offset when size is 1, to avoid wrongly commit with offsetHighestSucceeded
+     * if the incompletes is empty
      */
     @Getter
-    @Setter
-    private boolean needToCommit = false;
+    private Long lastProcessedOffset = null;
 
     private long lastCommittedOffset;
     private Gauge lastCommittedOffsetGauge;
@@ -213,6 +212,7 @@ public class PartitionState<K, V> {
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
+        this.lastProcessedOffset = null;
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -262,6 +262,9 @@ public class PartitionState<K, V> {
 
     public void onSuccess(long offset) {
         //noinspection OptionalAssignedToNull - null check to see if key existed
+        if (this.incompleteOffsets.size() == 1) {
+            this.lastCommittedOffset = offset;
+        }
         boolean removedFromIncompletes = this.incompleteOffsets.remove(offset) != null; // NOSONAR
         assert (removedFromIncompletes);
 
@@ -282,7 +285,6 @@ public class PartitionState<K, V> {
         if (thisOffset > highestSucceeded) {
             log.trace("Updating highest completed - was: {} now: {}", highestSucceeded, thisOffset);
             this.offsetHighestSucceeded = thisOffset;
-            needToCommit = true;
         }
     }
 
@@ -406,7 +408,7 @@ public class PartitionState<K, V> {
     }
 
     public Optional<OffsetAndMetadata> getCommitDataIfDirty() {
-        if (isDirty() && needToCommit) {
+        if (isDirty()) {
             // setting the flag so that any subsequent offset completed while commit is being performed could mark state as dirty
             // and retain the dirty state on commit completion.
             stateChangedSinceCommitStart = false;
@@ -474,7 +476,7 @@ public class PartitionState<K, V> {
         boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
 
         if (incompleteOffsetsWasEmpty) {
-            return currentOffsetHighestSeen;
+            return lastProcessedOffset == null ? currentOffsetHighestSeen : lastProcessedOffset;
         } else {
             return firstIncompleteOffset - 1;
         }
