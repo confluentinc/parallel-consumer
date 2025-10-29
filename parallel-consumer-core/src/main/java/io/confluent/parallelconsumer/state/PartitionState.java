@@ -212,7 +212,7 @@ public class PartitionState<K, V> {
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
-        this.lastProcessedOffset = null;
+        clearLastProcessedOffset();
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -226,7 +226,7 @@ public class PartitionState<K, V> {
     public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         lastCommittedOffset = committed.offset();
         // clear up lastProcessedOffset after commit
-        lastProcessedOffset = null;
+        clearLastProcessedOffset();
         setClean();
     }
 
@@ -239,6 +239,10 @@ public class PartitionState<K, V> {
     private void setDirty() {
         stateChangedSinceCommitStart = true;
         setDirty(true);
+    }
+
+    private void clearLastProcessedOffset() {
+        lastProcessedOffset = null;
     }
 
     // todo rename isRecordComplete()
@@ -382,6 +386,7 @@ public class PartitionState<K, V> {
             // truncate
             final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(bootstrapPolledOffset, false);
             incompletesToPrune.forEach(incompleteOffsets::remove);
+            clearLastProcessedOffset();
         } else if (pollBelowExpected) {
             // reset to lower offset detected, so we need to reset our state to match
             log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) for partition {} of topic {} - truncating state - all records " +
