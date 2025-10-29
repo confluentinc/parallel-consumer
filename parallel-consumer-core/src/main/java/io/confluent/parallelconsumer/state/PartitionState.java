@@ -164,7 +164,9 @@ public class PartitionState<K, V> {
 
     /**
      * we need to persist the last incompletes offset when size is 1, to avoid wrongly commit with offsetHighestSucceeded
-     * if the incompletes is empty, since we expect incompletes offset should be always higher than committed offset
+     * if the incompletes is empty, since we expect incompletes offset should be always higher than committed offset。
+     * While race condition should be rare since commit is not frequent and incompletes normally contains multi-offsets and this will
+     * not be used for commit offset
      */
     @Getter
     private Long lastProcessedOffset = null;
@@ -225,8 +227,10 @@ public class PartitionState<K, V> {
 
     public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         lastCommittedOffset = committed.offset();
-        // clear up lastProcessedOffset after commit
-        clearLastProcessedOffset();
+        // clear up lastProcessedOffset after commit, only commit when the offset matches to avoid race condition
+        if (lastCommittedOffset == lastProcessedOffset) {
+            clearLastProcessedOffset();
+        }
         setClean();
     }
 
