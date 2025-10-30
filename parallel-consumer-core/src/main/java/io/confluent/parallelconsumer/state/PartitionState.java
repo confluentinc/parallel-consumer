@@ -228,7 +228,7 @@ public class PartitionState<K, V> {
     public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         lastCommittedOffset = committed.offset();
         // clear up lastProcessedOffset after commit, only commit when the offset matches to avoid race condition
-        if (lastCommittedOffset == lastProcessedOffset) {
+        if (lastProcessedOffset != null && lastCommittedOffset == lastProcessedOffset) {
             clearLastProcessedOffset();
         }
         setClean();
