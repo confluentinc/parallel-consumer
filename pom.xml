@@ -36,6 +36,7 @@
         <module>parallel-consumer-core</module>
         <module>parallel-consumer-vertx</module>
         <module>parallel-consumer-reactor</module>
+        <module>parallel-consumer-mutiny</module>
         <module>parallel-consumer-examples</module>
     </modules>
 
@@ -406,7 +407,7 @@
             <dependency>
                 <groupId>org.awaitility</groupId>
                 <artifactId>awaitility</artifactId>
-                <version>4.2.0</version>
+                <version>4.3.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
@@ -440,7 +441,7 @@
             <dependency>
                 <groupId>me.tongfei</groupId>
                 <artifactId>progressbar</artifactId>
-                <version>0.10.0</version>
+                <version>0.10.1</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
@@ -475,7 +476,7 @@
                 <groupId>org.junit-pioneer</groupId>
                 <artifactId>junit-pioneer</artifactId>
                 <scope>test</scope>
-                <version>2.2.0</version>
+                <version>2.3.0</version>
             </dependency>
             <dependency>
                 <groupId>com.github.tomakehurst</groupId>
@@ -824,7 +825,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-project-info-reports-plugin</artifactId>
-                <version>3.4.5</version>
+                <version>3.9.0</version>
             </plugin>
             <plugin>
                 <groupId>org.projectlombok</groupId>
@@ -918,7 +919,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-project-info-reports-plugin</artifactId>
-                    <version>3.4.5</version>
+                    <version>3.9.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

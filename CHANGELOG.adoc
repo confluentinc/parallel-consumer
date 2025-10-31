@@ -14,6 +14,12 @@ ifndef::github_name[]
 toc::[]
 endif::[]
 
+== 0.5.3.4
+
+=== Fixes
+
+* fix: keep instantiated OffsetMapCodecManager so that metrics will not be recreated every commit (#859)
+
 == 0.5.3.3
 
 === Fixes
