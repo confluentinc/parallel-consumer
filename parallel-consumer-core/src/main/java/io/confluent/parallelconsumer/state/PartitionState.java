@@ -4,6 +4,7 @@ package io.confluent.parallelconsumer.state;
  * Copyright (C) 2020-2025 Confluent, Inc.
  */
 
+import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.internal.BrokerPollSystem;
 import io.confluent.parallelconsumer.internal.EpochAndRecordsMap;
 import io.confluent.parallelconsumer.internal.PCModule;
@@ -162,15 +163,6 @@ public class PartitionState<K, V> {
     @Getter
     private final long partitionsAssignmentEpoch;
 
-    /**
-     * we need to persist the last incompletes offset when size is 1, to avoid wrongly commit with offsetHighestSucceeded
-     * if the incompletes is empty, since we expect incompletes offset should be always higher than committed offset。
-     * While race condition should be rare since commit is not frequent and incompletes normally contains multi-offsets and this will
-     * not be used for commit offset
-     */
-    @Getter
-    private Long lastProcessedOffset = null;
-
     private long lastCommittedOffset;
     private Gauge lastCommittedOffsetGauge;
     private Gauge highestSeenOffsetGauge;
@@ -216,7 +208,6 @@ public class PartitionState<K, V> {
                 .forEach(offset -> incompleteOffsets.put(offset, Optional.empty()));
 
         this.offsetHighestSucceeded = this.offsetHighestSeen; // by definition, as we only encode up to the highest seen offset (inclusive)
-        clearLastProcessedOffset();
     }
 
     private void maybeRaiseHighestSeenOffset(final long offset) {
@@ -229,10 +220,6 @@ public class PartitionState<K, V> {
 
     public void onOffsetCommitSuccess(OffsetAndMetadata committed) { //NOSONAR
         lastCommittedOffset = committed.offset();
-        // clear up lastProcessedOffset after commit, only commit when the offset matches to avoid race condition
-        if (lastProcessedOffset != null && lastCommittedOffset == lastProcessedOffset) {
-            clearLastProcessedOffset();
-        }
         setClean();
     }
 
@@ -245,10 +232,6 @@ public class PartitionState<K, V> {
     private void setDirty() {
         stateChangedSinceCommitStart = true;
         setDirty(true);
-    }
-
-    private void clearLastProcessedOffset() {
-        lastProcessedOffset = null;
     }
 
     // todo rename isRecordComplete()
@@ -274,9 +257,6 @@ public class PartitionState<K, V> {
 
     public void onSuccess(long offset) {
         //noinspection OptionalAssignedToNull - null check to see if key existed
-        if (this.incompleteOffsets.size() == 1) {
-            this.lastCommittedOffset = offset;
-        }
         boolean removedFromIncompletes = this.incompleteOffsets.remove(offset) != null; // NOSONAR
         assert (removedFromIncompletes);
 
@@ -392,7 +372,6 @@ public class PartitionState<K, V> {
             // truncate
             final NavigableSet<Long> incompletesToPrune = incompleteOffsets.keySet().headSet(bootstrapPolledOffset, false);
             incompletesToPrune.forEach(incompleteOffsets::remove);
-            clearLastProcessedOffset();
         } else if (pollBelowExpected) {
             // reset to lower offset detected, so we need to reset our state to match
             log.warn("Bootstrap polled offset has been reset to an earlier offset ({}) for partition {} of topic {} - truncating state - all records " +
@@ -432,8 +411,11 @@ public class PartitionState<K, V> {
 
     // visible for testing
     protected OffsetAndMetadata createOffsetAndMetadata() {
-        Optional<String> payloadOpt = tryToEncodeOffsets();
-        long nextOffset = getOffsetToCommit();
+        // use tuple to make sure getOffsetToCommit is invoked only once to avoid dirty read
+        // and commit the wrong offset
+        ParallelConsumer.Tuple<Optional<String>, Long> tuple = tryToEncodeOffsets();
+        Optional<String> payloadOpt = tuple.getLeft();
+        long nextOffset = tuple.getRight();
         return payloadOpt
                 .map(encodedOffsets -> new OffsetAndMetadata(nextOffset, encodedOffsets))
                 .orElseGet(() -> new OffsetAndMetadata(nextOffset));
@@ -489,7 +471,7 @@ public class PartitionState<K, V> {
         boolean incompleteOffsetsWasEmpty = firstIncompleteOffset == null;
 
         if (incompleteOffsetsWasEmpty) {
-            return lastProcessedOffset == null ? currentOffsetHighestSeen : lastProcessedOffset;
+            return currentOffsetHighestSeen;
         } else {
             return firstIncompleteOffset - 1;
         }
@@ -503,29 +485,30 @@ public class PartitionState<K, V> {
      *
      * @return if possible, the String encoded offset map
      */
-    private Optional<String> tryToEncodeOffsets() {
+    private ParallelConsumer.Tuple<Optional<String>, Long> tryToEncodeOffsets() {
+        long offsetOfNextExpectedMessage = getOffsetToCommit();
+
         if (incompleteOffsets.isEmpty()) {
             setAllowedMoreRecords(true);
-            return empty();
+            return ParallelConsumer.Tuple.pairOf(empty(), offsetOfNextExpectedMessage);
         }
 
         try {
             // todo refactor use of null shouldn't be needed. Is OffsetMapCodecManager stateful? remove null #233
-            long offsetOfNextExpectedMessage = getOffsetToCommit();
             var offsetRange = getOffsetHighestSucceeded() - offsetOfNextExpectedMessage;
             String offsetMapPayload = om.makeOffsetMetadataPayload(offsetOfNextExpectedMessage, this);
             ratioPayloadUsedDistributionSummary.record(offsetMapPayload.length() / (double) offsetRange);
             ratioMetadataSpaceUsedDistributionSummary.record(offsetMapPayload.length() / (double) OffsetMapCodecManager.DefaultMaxMetadataSize);
             boolean mustStrip = updateBlockFromEncodingResult(offsetMapPayload);
             if (mustStrip) {
-                return empty();
+                return ParallelConsumer.Tuple.pairOf(empty(), offsetOfNextExpectedMessage);
             } else {
-                return of(offsetMapPayload);
+                return ParallelConsumer.Tuple.pairOf(of(offsetMapPayload), offsetOfNextExpectedMessage);
             }
         } catch (NoEncodingPossibleException e) {
             setAllowedMoreRecords(false);
             log.warn("No encodings could be used to encode the offset map, skipping. Warning: messages might be replayed on rebalance.", e);
-            return empty();
+            return ParallelConsumer.Tuple.pairOf(empty(), offsetOfNextExpectedMessage);
         }
     }
 
