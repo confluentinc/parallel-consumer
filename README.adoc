@@ -1129,6 +1129,12 @@ Gauge `pc.shards.size{subsystem=shardmanager}`
 
 Number of records queued for processing across all shards
 
+**Max Shards Size**
+
+Gauge `pc.shards.max.size{subsystem=shardmanager}`
+
+The number of queued records in the shards with the most queued records
+
 ==== Work Manager
 
 **Inflight Records**
