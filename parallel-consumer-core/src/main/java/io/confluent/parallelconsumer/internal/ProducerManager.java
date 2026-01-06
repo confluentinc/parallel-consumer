@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -68,6 +69,8 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
      */
     @Getter
     private ReentrantReadWriteLock producerTransactionLock;
+
+    private final ReentrantLock beginTransactionLock = new ReentrantLock();
 
     public ProducerManager(ProducerWrapper<K, V> newProducer,
                            ConsumerManager<K, V> newConsumer,
@@ -155,14 +158,19 @@ public class ProducerManager<K, V> extends AbstractOffsetCommitter<K, V> impleme
     }
 
     /**
-     * Pessimistic lock (synchronized method) on beginning a transaction
+     * Pessimistic lock (ReentrantLock) on beginning a transaction
      * <p>
      * Thread safe.
      */
-    private synchronized void syncBeginTransaction() {
-        boolean txNotBegunAlready = !producerWrapper.isTransactionOpen();
-        if (txNotBegunAlready) {
-            beginTransaction();
+    private void syncBeginTransaction() {
+        beginTransactionLock.lock();
+        try {
+            boolean txNotBegunAlready = !producerWrapper.isTransactionOpen();
+            if (txNotBegunAlready) {
+                beginTransaction();
+            }
+        } finally {
+            beginTransactionLock.unlock();
         }
     }
 

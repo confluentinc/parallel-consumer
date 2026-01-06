@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static io.confluent.csid.utils.StringUtils.msg;
@@ -53,7 +54,7 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
      * vert.x.
      */
     @Override
-    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+    protected ExecutorService setupWorkerPool(int poolSize) {
         return super.setupWorkerPool(1);
     }
 
