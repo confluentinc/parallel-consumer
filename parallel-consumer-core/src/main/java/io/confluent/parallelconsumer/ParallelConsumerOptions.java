@@ -570,4 +570,36 @@ public class ParallelConsumerOptions<K, V> {
      */
     @Builder.Default
     public final boolean ignoreReflectiveAccessExceptionsForAutoCommitDisabledCheck = false;
+
+    /**
+     * Defines the strategy for batching records.
+     * Determines how records are grouped into batches when using KEY or PARTITION ordering.
+     */
+    public enum BatchStrategy {
+        /**
+         * Strict sequential processing. This is the default.
+         * <p>
+         * Only one record is processed at a time for the same Shard (Key or Partition).
+         * Even if batchSize is set, batches will be filled with records of different Shards.
+         */
+        SEQUENTIAL,
+
+        /**
+         * Allows batching for the same Shard, but a batch can contain multiple Shards mixed together.
+         * Retrieves multiple records within the Shard-level lock to increase throughput.
+         */
+        BATCH_MULTIPLEX,
+
+        /**
+         * Allows batching for the same Shard, and enforces that a single batch contains only one Shard.
+         * Use this when atomic batch processing per Shard (Key or Partition) is required.
+         */
+        BATCH_BY_SHARD
+    }
+
+    /**
+     * The batch strategy to use.
+     */
+    @Builder.Default
+    private final BatchStrategy batchStrategy = BatchStrategy.SEQUENTIAL;
 }

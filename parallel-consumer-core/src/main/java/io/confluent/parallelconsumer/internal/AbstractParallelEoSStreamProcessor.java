@@ -9,6 +9,7 @@ import io.confluent.csid.utils.TimeUtils;
 import io.confluent.parallelconsumer.*;
 import io.confluent.parallelconsumer.metrics.PCMetrics;
 import io.confluent.parallelconsumer.metrics.PCMetricsDef;
+import io.confluent.parallelconsumer.state.ShardKey;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import io.micrometer.core.instrument.Gauge;
@@ -1043,7 +1044,44 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
         int maxBatchSize = options.getBatchSize();
+        ParallelConsumerOptions.BatchStrategy strategy = options.getBatchStrategy();
+
+        if (strategy == ParallelConsumerOptions.BatchStrategy.BATCH_BY_SHARD) {
+            return partitionByKeyAndSize(workToProcess, maxBatchSize);
+        }
         return partition(workToProcess, maxBatchSize);
+    }
+
+    private List<List<WorkContainer<K, V>>> partitionByKeyAndSize(List<WorkContainer<K, V>> sourceCollection, int maxBatchSize) {
+        List<List<WorkContainer<K, V>>> listOfBatches = new ArrayList<>();
+        List<WorkContainer<K, V>> batchInConstruction = new ArrayList<>();
+
+        Object lastKey = null;
+
+        for (WorkContainer<K, V> item : sourceCollection) {
+            Object currentKey = ShardKey.of(item, options.getOrdering());
+
+            // Check if we need to start a new batch
+            // 1. If the current batch is full
+            // 2. If the key has changed (and the batch is not empty)
+            boolean isBatchFull = batchInConstruction.size() >= maxBatchSize;
+            boolean isKeyChanged = !batchInConstruction.isEmpty() && !Objects.equals(lastKey, currentKey);
+
+            if (isBatchFull || isKeyChanged) {
+                listOfBatches.add(batchInConstruction);
+                batchInConstruction = new ArrayList<>();
+            }
+
+            batchInConstruction.add(item);
+            lastKey = currentKey;
+        }
+
+        // Add the last batch if it has any items
+        if (!batchInConstruction.isEmpty()) {
+            listOfBatches.add(batchInConstruction);
+        }
+
+        return listOfBatches;
     }
 
     private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
