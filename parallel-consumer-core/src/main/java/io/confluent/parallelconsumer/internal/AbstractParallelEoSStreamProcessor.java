@@ -1047,12 +1047,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         ParallelConsumerOptions.BatchStrategy strategy = options.getBatchStrategy();
 
         if (strategy == ParallelConsumerOptions.BatchStrategy.BATCH_BY_SHARD) {
-            return partitionByKeyAndSize(workToProcess, maxBatchSize);
+            // "Shard" depends on ordering:
+            // KEY => topic+key, PARTITION/UNORDERED => topic-partition.
+            return partitionByShardAndSize(workToProcess, maxBatchSize);
         }
         return partition(workToProcess, maxBatchSize);
     }
 
-    private List<List<WorkContainer<K, V>>> partitionByKeyAndSize(List<WorkContainer<K, V>> sourceCollection, int maxBatchSize) {
+    private List<List<WorkContainer<K, V>>> partitionByShardAndSize(List<WorkContainer<K, V>> sourceCollection, int maxBatchSize) {
         List<List<WorkContainer<K, V>>> listOfBatches = new ArrayList<>();
         List<WorkContainer<K, V>> batchInConstruction = new ArrayList<>();
 

@@ -573,26 +573,39 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * Defines the strategy for batching records.
-     * Determines how records are grouped into batches when using KEY or PARTITION ordering.
+     * <p>
+     * Behavior by ordering mode:
+     * <ul>
+     *     <li>{@link ProcessingOrder#KEY} / {@link ProcessingOrder#PARTITION}: strategy controls how many records can
+     *     be taken from a shard in a single scheduling cycle and whether batches can mix shards.</li>
+     *     <li>{@link ProcessingOrder#UNORDERED}: take-from-shard flow is not restricted by strategy. Batch grouping
+     *     still applies; with {@link BatchStrategy#BATCH_BY_SHARD}, a shard maps to topic-partition.</li>
+     * </ul>
      */
     public enum BatchStrategy {
         /**
-         * Strict sequential processing. This is the default.
+         * Strict sequential processing for ordered modes. This is the default.
          * <p>
          * Only one record is processed at a time for the same Shard (Key or Partition).
          * Even if batchSize is set, batches will be filled with records of different Shards.
+         * <p>
+         * In {@link ProcessingOrder#UNORDERED}, this behaves as size-based batching and does not limit shard taking.
          */
         SEQUENTIAL,
 
         /**
          * Allows batching for the same Shard, but a batch can contain multiple Shards mixed together.
-         * Retrieves multiple records within the Shard-level lock to increase throughput.
+         * Retrieves multiple records within the Shard-level lock to increase throughput in ordered modes.
+         * <p>
+         * In {@link ProcessingOrder#UNORDERED}, this is equivalent to {@link #SEQUENTIAL}.
          */
         BATCH_MULTIPLEX,
 
         /**
          * Allows batching for the same Shard, and enforces that a single batch contains only one Shard.
          * Use this when atomic batch processing per Shard (Key or Partition) is required.
+         * <p>
+         * In {@link ProcessingOrder#UNORDERED}, this means one topic-partition per batch.
          */
         BATCH_BY_SHARD
     }

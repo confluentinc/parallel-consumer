@@ -149,6 +149,7 @@ public class ProcessingShard<K, V> {
                     addToSlowWorkMaybe(slowWork, workContainer);
                 }
 
+                // Strategy-based take limits apply only when ordering is KEY/PARTITION.
                 if (isOrderRestricted()) {
                     ParallelConsumerOptions.BatchStrategy strategy = options.getBatchStrategy();
 
