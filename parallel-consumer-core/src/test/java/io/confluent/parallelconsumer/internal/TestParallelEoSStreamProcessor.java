@@ -10,6 +10,7 @@ import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -33,6 +34,17 @@ public class TestParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStr
             final List<WorkContainer<K, V>> activeWorkContainers) {
 
         return super.runUserFunction(dummyFunction, callback , activeWorkContainers);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<List<WorkContainer<K, V>>> makeBatchesForTest(List<WorkContainer<K, V>> workToProcess) {
+        try {
+            Method method = AbstractParallelEoSStreamProcessor.class.getDeclaredMethod("makeBatches", List.class);
+            method.setAccessible(true);
+            return (List<List<WorkContainer<K, V>>>) method.invoke(this, workToProcess);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException("Unable to invoke makeBatches", e);
+        }
     }
 
     public void setWm(WorkManager wm) {
