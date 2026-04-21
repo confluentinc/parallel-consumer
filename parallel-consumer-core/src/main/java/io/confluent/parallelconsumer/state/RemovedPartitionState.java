@@ -64,8 +64,18 @@ public class RemovedPartitionState<K, V> extends PartitionState<K, V> {
 
     @Override
     public void maybeRegisterNewPollBatchAsWork(@NonNull EpochAndRecordsMap<K, V>.RecordsAndEpoch recordsAndEpoch) {
-        // no-op
-        log.warn("Dropping polled record batch for partition no longer assigned. WC: {}", recordsAndEpoch);
+        // no-op -- the partition is no longer assigned to this consumer, so the polled batch is dropped.
+        // Keep WARN concise (topic-partition + size + epoch) so it stays readable when many partitions are
+        // dropped at once (e.g. during rebalances) and isn't truncated by downstream log tooling. The full
+        // RecordsAndEpoch (which can be large) is emitted separately at DEBUG for detailed troubleshooting.
+        // See https://github.com/confluentinc/parallel-consumer/issues/631
+        log.warn("Dropping polled record batch for partition no longer assigned: {} ({} records, epoch {})",
+                recordsAndEpoch.getTopicPartition(),
+                recordsAndEpoch.getRecords().size(),
+                recordsAndEpoch.getEpochOfPartitionAtPoll());
+        if (log.isDebugEnabled()) {
+            log.debug("Full dropped batch for {}: {}", recordsAndEpoch.getTopicPartition(), recordsAndEpoch);
+        }
     }
 
     /**
