@@ -1351,12 +1351,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } catch (Exception e) {
             // handle fail
             var cause = e.getCause();
+            // Keep the primary error log line short (record count + partitions) so it stays readable
+            // when the user function throws for large batches; dumping the whole PollContext toString
+            // (which transitively prints every ConsumerRecord in the batch) tends to get truncated by
+            // downstream log tooling and can surface user-payload data inside error logs. The full
+            // context is still available at DEBUG for troubleshooting.
+            // See https://github.com/confluentinc/parallel-consumer/issues/640
+            long recordCount = context.getPollContext().size();
+            var partitions = context.getPollContext().getByTopicPartitionMap().keySet();
             String msg = msg("Exception caught in user function running stage, registering WC as failed, returning to" +
-                    " mailbox. Context: {}", context, e);
+                    " mailbox. partitions={} records={}", partitions, recordCount);
             if (cause instanceof PCRetriableException) {
                 log.debug("Explicit " + PCRetriableException.class.getSimpleName() + " caught, logging at DEBUG only. " + msg, e);
             } else {
                 log.error(msg, e);
+                if (log.isDebugEnabled()) {
+                    log.debug("Full PollContext for the failed user function batch: {}", context);
+                }
             }
 
             for (var wc : workContainerBatch) {
