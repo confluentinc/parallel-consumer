@@ -31,8 +31,8 @@ blocks :
             - chmod +x .semaphore/initgpg.sh
             - . .semaphore/initgpg.sh
             - export SONATYPE_SERVER_ID=central
-            - export CENTRAL_TOKEN_USERNAME=$(vault kv get --field=user_token_username v1/ci/kv/sonatype/confluent)
-            - export CENTRAL_TOKEN_PASSWORD=$(vault kv get --field=user_token_password v1/ci/kv/sonatype/confluent)
+            - . vault-get-secret --vault-role=default --secret-key=SONATYPE_TOKEN_USERNAME --export-as=CENTRAL_TOKEN_USERNAME sonatype
+            - . vault-get-secret --vault-role=default --secret-key=SONATYPE_TOKEN_PASSWORD --export-as=CENTRAL_TOKEN_PASSWORD sonatype
             - export SETTINGS_XML_PATH="$HOME/.m2/settings.xml"
             - python .semaphore/update_maven_settings.py # Update maven settings with Sonatype credentials
             - ./mvnw --batch-mode clean deploy -Pmaven-central -Pci -Dgpg.passphrase=$PASSPHRASE -DskipTests
