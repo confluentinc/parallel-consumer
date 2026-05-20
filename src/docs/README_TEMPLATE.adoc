@@ -43,7 +43,16 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 
-image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
+// image:https://maven-badges.herokuapp.com/maven-central/io.confluent.parallelconsumer/parallel-consumer-parent/badge.svg?style=flat[link=https://mvnrepository.com/artifact/io.confluent.parallelconsumer/parallel-consumer-parent,Latest Parallel Consumer on Maven Central]
+
+[NOTE]
+====
+Please note that this project is no longer maintained.
+
+Similar functionality is available with https://kafka.apache.org/40/javadoc/org/apache/kafka/clients/consumer/KafkaShareConsumer.html[Share Consumers] in Apache Kafka
+====
+
+---
 
 // Github actions disabled since codecov
 //image:https://github.com/confluentinc/parallel-consumer/actions/workflows/maven.yml/badge.svg[Java 8 Unit Test GitHub] +
