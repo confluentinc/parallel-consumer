@@ -59,8 +59,17 @@ public class ProcessingShard<K, V> {
 
     public void addWorkContainer(WorkContainer<K, V> wc) {
         long key = wc.offset();
-        if (entries.containsKey(key)) {
-            log.debug("Entry for {} already exists in shard queue, dropping record", wc);
+        WorkContainer<K, V> existing = entries.get(key);
+        if (existing != null) {
+            // Check if the existing entry is stale and should be replaced
+            if (isWorkContainerStale(existing)) {
+                log.debug("Replacing stale entry (epoch {}) for offset {} with fresh one (epoch {})",
+                        existing.getEpoch(), key, wc.getEpoch());
+                entries.put(key, wc);
+                // availableWorkContainerCnt stays the same since we're replacing, not adding
+            } else {
+                log.debug("Entry for {} already exists in shard queue, dropping record", wc);
+            }
         } else {
             entries.put(key, wc);
             availableWorkContainerCnt.incrementAndGet();
