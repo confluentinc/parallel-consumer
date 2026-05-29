@@ -1551,6 +1551,7 @@ endif::[]
 === Fixes
 
 * fix: keep instantiated OffsetMapCodecManager so that metrics will not be recreated every commit (#859)
+* feature: add batchStrategy to allow taking multiple records from the same shard in single batch construction
 
 == 0.5.3.3
 

@@ -136,21 +136,39 @@ public class ProcessingShard<K, V> {
             var workContainer = iterator.next().getValue();
 
             if (pm.couldBeTakenAsWork(workContainer)) {
+                boolean taken = false;
+
                 if (workContainer.isAvailableToTakeAsWork()) {
                     log.trace("Taking {} as work", workContainer);
 
                     workContainer.onQueueingForExecution();
                     workTaken.add(workContainer);
+                    taken = true;
                 } else {
                     log.trace("Skipping {} as work, not available to take as work", workContainer);
                     addToSlowWorkMaybe(slowWork, workContainer);
                 }
 
+                // Strategy-based take limits apply only when ordering is KEY/PARTITION.
                 if (isOrderRestricted()) {
-                    // can't take any more work from this shard, due to ordering restrictions
-                    // processing blocked on this shard, continue to next shard
-                    log.trace("Processing by {}, so have cannot get more messages on this ({}) shardEntry.", this.options.getOrdering(), getKey());
-                    break;
+                    ParallelConsumerOptions.BatchStrategy strategy = options.getBatchStrategy();
+
+                    // Allow continuing to gather work if both conditions are met:
+                    // 1. Strategy is NOT strictly SEQUENTIAL
+                    // 2. The current batch size hasn't reached the configured limit
+                    boolean batchingAllowed = (strategy != ParallelConsumerOptions.BatchStrategy.SEQUENTIAL);
+                    boolean batchIsNotFull = workTaken.size() < options.getBatchSize();
+
+                    if (taken && batchingAllowed && batchIsNotFull) {
+                        log.trace("Batching strategy {} enabled. Batch not full ({}/{}), continuing to gather work for shard {}",
+                                strategy, workTaken.size(), options.getBatchSize(), getKey());
+                        // Loop continues to fetch the next available record in this shard
+                    } else {
+                        // Stop gathering for this shard if strictly sequential or batch is full
+                        log.trace("Stopping work gather for ordered shard {} (Strategy: {}, Count: {})",
+                                getKey(), strategy, workTaken.size());
+                        break;
+                    }
                 }
             } else {
                 // break, assuming all work in this shard, is for the same ShardKey, which is always on the same

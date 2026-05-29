@@ -30,7 +30,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.threeten.extra.MutableClock;
 import pl.tlinkowski.unij.api.UniLists;
@@ -39,13 +41,18 @@ import pl.tlinkowski.unij.api.UniMaps;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.BatchStrategy.BATCH_BY_SHARD;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.BatchStrategy.BATCH_MULTIPLEX;
+import static io.confluent.parallelconsumer.ParallelConsumerOptions.BatchStrategy.SEQUENTIAL;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.*;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static pl.tlinkowski.unij.api.UniLists.of;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Needs to run in {@link ExecutionMode#SAME_THREAD} because it manipulates the static state in
@@ -167,6 +174,38 @@ public class WorkManagerTest {
         //
         gottenWork = wm.getWorkIfAvailable();
         assertThat(gottenWork).isEmpty();
+    }
+
+    /** Verifies work selection count across ordering and batch strategy combinations. */
+    @ParameterizedTest(name = "{index}: {0} / {1} -> {2}")
+    @MethodSource("batchStrategyWorkSelectionCases")
+    void workSelectionFollowsBatchStrategy(ParallelConsumerOptions.ProcessingOrder order,
+                                          ParallelConsumerOptions.BatchStrategy strategy,
+                                          List<Integer> expectedOffsets) {
+        setupWorkManager(ParallelConsumerOptions.builder()
+                .ordering(order)
+                .batchStrategy(strategy)
+                .batchSize(2)
+                .build());
+
+        registerSomeWork();
+
+        var gottenWork = wm.getWorkIfAvailable(10);
+        assertOffsets(gottenWork, expectedOffsets);
+    }
+
+    private static Stream<Arguments> batchStrategyWorkSelectionCases() {
+        return Stream.of(
+                arguments(KEY, SEQUENTIAL, of(0)),
+                arguments(KEY, BATCH_MULTIPLEX, of(0, 1)),
+                arguments(KEY, BATCH_BY_SHARD, of(0, 1)),
+                arguments(PARTITION, SEQUENTIAL, of(0)),
+                arguments(PARTITION, BATCH_MULTIPLEX, of(0, 1)),
+                arguments(PARTITION, BATCH_BY_SHARD, of(0, 1)),
+                arguments(UNORDERED, SEQUENTIAL, of(0, 1, 2)),
+                arguments(UNORDERED, BATCH_MULTIPLEX, of(0, 1, 2)),
+                arguments(UNORDERED, BATCH_BY_SHARD, of(0, 1, 2))
+        );
     }
 
     @Test
