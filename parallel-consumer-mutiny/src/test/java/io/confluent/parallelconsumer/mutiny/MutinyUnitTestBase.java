@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.mutiny;
 
 /*-
- * Copyright (C) 2020-2022 Confluent, Inc.
+ * Copyright (C) 2020-2025 Confluent, Inc.
  */
 
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
