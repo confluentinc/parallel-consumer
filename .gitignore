@@ -31,6 +31,9 @@ hs_err_pid*
 # JENV
 .java-version
 
+# VS Code
+.vscode/
+
 delombok/
 **/*.releaseBackup
 
