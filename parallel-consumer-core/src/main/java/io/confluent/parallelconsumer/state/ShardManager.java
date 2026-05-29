@@ -83,6 +83,7 @@ public class ShardManager<K, V> {
     private Optional<ShardKey> iterationResumePoint = Optional.empty();
 
     private Gauge shardsSizeGauge;
+    private Gauge shardsMaxSizeGauge;
     private Gauge numberOfShardsGauge;
 
     private final PCMetrics pcMetrics;
@@ -302,7 +303,10 @@ public class ShardManager<K, V> {
         shardsSizeGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.SHARDS_SIZE,
                 this, shardManager -> shardManager.processingShards.values().stream()
                         .mapToInt(processingShard -> processingShard.getEntries().size()).sum());
+        shardsMaxSizeGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.SHARDS_MAX_SIZE,
+                this, shardManager -> shardManager.processingShards.values().stream()
+                        .mapToInt(processingShard -> processingShard.getEntries().size()).max().orElse(0));
         numberOfShardsGauge = pcMetrics.gaugeFromMetricDef(PCMetricsDef.NUMBER_OF_SHARDS,
-                this, shardManager -> shardManager.processingShards.keySet().size());
+                this, shardManager -> shardManager.processingShards.size());
     }
 }

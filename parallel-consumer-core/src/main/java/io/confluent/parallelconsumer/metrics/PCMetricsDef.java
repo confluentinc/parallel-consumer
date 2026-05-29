@@ -38,6 +38,7 @@ public enum PCMetricsDef {
 
     INCOMPLETE_OFFSETS_TOTAL("incomplete.offsets.total", "Total number of incomplete offsets", PCMetricsSubsystem.SHARD_MANAGER, GAUGE),
     SHARDS_SIZE("shards.size", "Number of records queued for processing across all shards", PCMetricsSubsystem.SHARD_MANAGER, GAUGE),
+    SHARDS_MAX_SIZE("shards.max.size", "The number of queued records in the shards with the most queued records", PCMetricsSubsystem.SHARD_MANAGER, GAUGE),
 
 
     //TODO: Not implemented yet - add to Metrics.adoc when implemented

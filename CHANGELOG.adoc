@@ -20,6 +20,10 @@ endif::[]
 
 * fix: keep instantiated OffsetMapCodecManager so that metrics will not be recreated every commit (#859)
 
+=== Improvements
+
+* improvement: add metric to monitor the maximum number of queued records for the shard
+
 == 0.5.3.3
 
 === Fixes
