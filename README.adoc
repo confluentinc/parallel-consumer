@@ -1283,6 +1283,15 @@ https://github.com/confluentinc/parallel-consumer/issues[GitHub issues], and clo
 * Integration tests require a https://docs.docker.com/docker-for-mac/[running locally accessible Docker host].
 * Has a Maven `profile` setup for IntelliJ Idea, but not Eclipse for example.
 
+=== Build JDK and bytecode level
+
+The parent `pom.xml` sets `source.version` to **17** and `release.target` to **8**. Command-line builds compile Java 17 source but emit Java 8 bytecode using the https://github.com/bsideup/jabel[Jabel] javac annotation processor (see the `maven-compiler-plugin` configuration).
+
+* Install **JDK 17 or newer** to build from the shell. A JDK older than 17 cannot compile this repository.
+* Dependencies such as SmallRye Mutiny reference APIs added after Java 8 (for example `java.util.concurrent.Flow`). You still build with a modern JDK; Jabel is what targets Java 8 bytecode for project sources.
+* IntelliJ IDEA activates the `intellij-idea-only` Maven profile, which raises `release` and target to match `source.version` inside the IDE. Plain `mvn` uses Jabel with `--release 8` as configured in the parent POM.
+* Surefire and Failsafe run tests with `${java.home}` from the JDK that launched Maven (`jvm.location`), unless you switch profiles such as `jvm8-release` for specialised release testing.
+
 === Notes
 
 The unit test code is set to run at a very high frequency, which can make it difficult to read debug logs (or impossible).
