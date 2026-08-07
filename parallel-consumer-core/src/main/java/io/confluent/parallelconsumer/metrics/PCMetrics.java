@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.ToDoubleFunction;
 
 import static java.util.Collections.singleton;
@@ -48,6 +49,8 @@ public class PCMetrics {
     private final AtomicBoolean isClosed = new AtomicBoolean(true);
 
     private final boolean isNoop;
+
+    private final ReentrantLock lock = new ReentrantLock();
 
     /**
      * @param meterRegistry: meterRegistry to use for meter registration - configured through
@@ -200,18 +203,23 @@ public class PCMetrics {
     /**
      * Closes PCMetrics object and cleans up all meters from registry - should be recreated before using it again.
      */
-    public synchronized void close() {
-        if (this.isClosed.getAndSet(true)) {
-            //Instance already closed - warn and ignore.
-            log.warn("Trying to close PCMetrics instance that is already closed.");
-            return;
-        }
-        log.debug("Closing PCMetrics");
-        // clean up the instance resources
-        this.registeredMeters.forEach(this.meterRegistry::remove);
-        this.registeredMeters.clear();
-        if (isNoop) {
-            this.meterRegistry.close();
+    public void close() {
+        lock.lock();
+        try {
+            if (this.isClosed.getAndSet(true)) {
+                //Instance already closed - warn and ignore.
+                log.warn("Trying to close PCMetrics instance that is already closed.");
+                return;
+            }
+            log.debug("Closing PCMetrics");
+            // clean up the instance resources
+            this.registeredMeters.forEach(this.meterRegistry::remove);
+            this.registeredMeters.clear();
+            if (isNoop) {
+                this.meterRegistry.close();
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -223,9 +231,14 @@ public class PCMetrics {
      *
      * @param meter to remove.
      */
-    public synchronized void removeMeter(Meter meter) {
-        if (meter != null) {
-            removeMeter(meter.getId());
+    public void removeMeter(Meter meter) {
+        lock.lock();
+        try {
+            if (meter != null) {
+                removeMeter(meter.getId());
+            }
+        } finally {
+            lock.unlock();
         }
     }
 

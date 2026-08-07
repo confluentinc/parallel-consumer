@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
@@ -120,7 +121,7 @@ public class VertxParallelEoSStreamProcessor<K, V> extends ExternalEngine<K, V>
      * vert.x.
      */
     @Override
-    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+    protected ExecutorService setupWorkerPool(int poolSize) {
         return super.setupWorkerPool(1);
     }
 

@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -116,7 +117,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * The pool which is used for running the users' supplied function
      */
     @Getter(PROTECTED)
-    protected final Supplier<ThreadPoolExecutor> workerThreadPool;
+    protected final Supplier<ExecutorService> workerThreadPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -195,6 +196,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Used to request a commit asap
      */
     private final AtomicBoolean commitCommand = new AtomicBoolean(false);
+
+    private final ReentrantLock commitLock = new ReentrantLock();
 
     /**
      * Multiple of {@link ParallelConsumerOptions#getMaxConcurrency()} to have in our processing queue, in order to make
@@ -298,7 +301,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         this.dynamicExtraLoadFactor = module.dynamicExtraLoadFactor();
 
-        workerThreadPool = SupplierUtils.memoize(() -> setupWorkerPool(newOptions.getMaxConcurrency()));
+        workerThreadPool = SupplierUtils.memoize(() -> {
+            ExecutorService executor = setupWorkerPool(newOptions.getMaxConcurrency());
+
+            if (!options.isUseVirtualThreads() && !(executor instanceof ThreadPoolExecutor)) {
+                log.warn("Virtual Threads are disabled but the configured worker pool ({}) is not a ThreadPoolExecutor. " +
+                                "Pool metrics and queue-based backpressure that rely on ThreadPoolExecutor internals will be unavailable.",
+                        executor.getClass().getName());
+            }
+            return executor;
+        });
 
         this.wm = module.workManager();
 
@@ -345,7 +357,26 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    protected ThreadPoolExecutor setupWorkerPool(int poolSize) {
+    protected ExecutorService setupWorkerPool(int poolSize) {
+        if (options.isUseVirtualThreads()) {
+            // Reflection is required here because this module targets Java 8 bytecode, while
+            // Thread.ofVirtual()/Executors.newThreadPerTaskExecutor() only exist on JDK 21+.
+            try {
+                // Thread.ofVirtual().name("pc-vt-").factory()
+                Object builder = Class.forName("java.lang.Thread").getMethod("ofVirtual").invoke(null);
+                Class<?> builderClass = Class.forName("java.lang.Thread$Builder");
+                builderClass.getMethod("name", String.class, long.class).invoke(builder, "pc-vt-", 0);
+                ThreadFactory factory = (ThreadFactory) builderClass.getMethod("factory").invoke(builder);
+
+                // Executors.newThreadPerTaskExecutor(factory)
+                return (ExecutorService) java.util.concurrent.Executors.class
+                        .getMethod("newThreadPerTaskExecutor", ThreadFactory.class)
+                        .invoke(null, factory);
+            } catch (Exception e) {
+                throw new IllegalStateException("Virtual threads not supported on this JVM", e);
+            }
+        }
+
         ThreadFactory defaultFactory;
         try {
             defaultFactory = InitialContext.doLookup(options.getManagedThreadFactory());
@@ -679,11 +710,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         log.debug("Shutting down execution pool...");
         //Clear scheduled but not started work in execution pool
-        workerThreadPool.get().getQueue().clear();
+        clearWorkerQueue();
         //request graceful shutdown
         workerThreadPool.get().shutdown();
-        if (workerThreadPool.get().getActiveCount() > 0) {
-            log.info("Inflight work in execution pool: {}, letting to finish on shutdown with timeout: {}", workerThreadPool.get().getActiveCount(), timeout);
+        if (getPoolActiveCount() > 0) {
+            log.info("Inflight work in execution pool: {}, letting to finish on shutdown with timeout: {}", getPoolActiveCount(), timeout);
         }
 
         log.debug("Awaiting worker pool termination...");
@@ -708,8 +739,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
         awaitingInflightProcessingCompletionOnShutdown.getAndSet(false);
 
-        if (workerThreadPool.get().getActiveCount() > 0) {
-            log.warn("Clean execution pool termination failed - some threads still active despite await and interrupt - is user function swallowing interrupted exception? Threads still not done count: {}", workerThreadPool.get().getActiveCount());
+        if (getPoolActiveCount() > 0) {
+            log.warn("Clean execution pool termination failed - some threads still active despite await and interrupt - is user function swallowing interrupted exception? Threads still not done count: {}", getPoolActiveCount());
         }
         log.debug("Worker pool terminated.");
 
@@ -986,7 +1017,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         queueStatsLimiter.performIfNotLimited(() -> {
             int queueSize = getNumberOfUserFunctionsQueued();
             log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
-                    workerThreadPool.get().getActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+                    getPoolActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
         });
 
         return gotWorkCount;
@@ -1105,7 +1136,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     protected int getQueueTargetLoaded() {
         //noinspection unchecked
-        return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor();
+        ExecutorService executor = workerThreadPool.get();
+        if (executor instanceof ThreadPoolExecutor) {
+            return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor();
+        } else {
+            return getPoolLoadTarget();
+        }
     }
 
     /**
@@ -1140,12 +1176,22 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private boolean isPoolQueueLow() {
-        int queueSize = getNumberOfUserFunctionsQueued();
-        int queueTarget = getPoolLoadTarget();
-        boolean workAmountBelowTarget = queueSize <= queueTarget;
-        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
-                workAmountBelowTarget, queueSize, queueTarget);
-        return workAmountBelowTarget;
+        ExecutorService executor = workerThreadPool.get();
+
+        // Platform Threads
+        if (executor instanceof ThreadPoolExecutor) {
+            int queueSize = getNumberOfUserFunctionsQueued();
+            int queueTarget = getPoolLoadTarget();
+            boolean workAmountBelowTarget = queueSize <= queueTarget;
+            log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {};",
+                    workAmountBelowTarget, queueSize, queueTarget);
+            return workAmountBelowTarget;
+        }
+
+        // Virtual Threads
+        int activeCount = wm.getNumberRecordsOutForProcessing();
+        int maxConcurrency = options.getTargetAmountOfRecordsInFlight();
+        return activeCount <= maxConcurrency;
     }
 
     private void drain() {
@@ -1183,7 +1229,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
             if (log.isDebugEnabled()) {
                 log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                        timeToBlockFor, workerThreadPool.get().getActiveCount(), getNumberOfUserFunctionsQueued());
+                        timeToBlockFor, getPoolActiveCount(), getNumberOfUserFunctionsQueued());
             }
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
@@ -1278,7 +1324,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private int getNumberOfUserFunctionsQueued() {
-        return workerThreadPool.get().getQueue().size();
+        // Platform Threads
+        ExecutorService executor = workerThreadPool.get();
+        if (executor instanceof ThreadPoolExecutor) {
+            return ((ThreadPoolExecutor) executor).getQueue().size();
+        }
+
+        // Virtual Threads does not queue.
+        return 0;
     }
 
 
@@ -1305,12 +1358,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Visible for testing
      */
     protected void commitOffsetsThatAreReady() throws TimeoutException, InterruptedException {
-        log.trace("Synchronizing on commitCommand...");
-        synchronized (commitCommand) {
+        log.trace("Synchronizing on commitLock...");
+        commitLock.lock();
+        try {
             log.debug("Committing offsets that are ready...");
             committer.retrieveOffsetsAndCommit();
             clearCommitCommand();
             this.lastCommitTime = Instant.now();
+        } finally {
+            commitLock.unlock();
         }
     }
 
@@ -1483,8 +1539,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     public void requestCommitAsap() {
         log.debug("Registering command to commit next chance");
-        synchronized (commitCommand) {
+        commitLock.lock();
+        try {
             this.commitCommand.set(true);
+        } finally {
+            commitLock.unlock();
         }
         notifySomethingToDo();
     }
@@ -1517,18 +1576,45 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private boolean isCommandedToCommit() {
-        synchronized (commitCommand) {
+        commitLock.lock();
+        try {
             return this.commitCommand.get();
+        } finally {
+            commitLock.unlock();
         }
     }
 
     private void clearCommitCommand() {
-        synchronized (commitCommand) {
+        commitLock.lock();
+        try {
             if (commitCommand.get()) {
                 log.debug("Command to commit asap received, clearing");
                 this.commitCommand.set(false);
             }
+        } finally {
+            commitLock.unlock();
         }
+    }
+
+    private int getPoolActiveCount() {
+        ExecutorService executor = workerThreadPool.get();
+
+        // Platform Threads
+        if (executor instanceof ThreadPoolExecutor) {
+            return ((ThreadPoolExecutor) executor).getActiveCount();
+        }
+
+        // Virtual Threads
+        return wm.getNumberRecordsOutForProcessing();
+    }
+
+    private void clearWorkerQueue() {
+        // Platform Threads
+        ExecutorService executor = workerThreadPool.get();
+        if (executor instanceof ThreadPoolExecutor) {
+            ((ThreadPoolExecutor) executor).getQueue().clear();
+        }
+        // Virtual Threads do not have a task queue that can be cleared.
     }
 
 }
