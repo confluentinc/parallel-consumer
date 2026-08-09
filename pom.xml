@@ -106,7 +106,7 @@
         <truth-generator-maven-plugin.version>0.1.1</truth-generator-maven-plugin.version>
         <jabel.version>1.0.0</jabel.version>
         <logback.version>1.5.19</logback.version>
-        <micrometer-core.version>1.13.0</micrometer-core.version>
+        <micrometer-core.version>1.14.0</micrometer-core.version>
     </properties>
 
     <profiles>
