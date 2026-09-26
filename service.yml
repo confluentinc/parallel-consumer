@@ -4,7 +4,7 @@
 
 name: parallel-consumer
 lang: java
-lang_version: 17
+lang_version: "17"
 github:
     enable: true
     repo_name: confluentinc/parallel-consumer
