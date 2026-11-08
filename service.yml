@@ -4,26 +4,22 @@
 
 name: parallel-consumer
 lang: java
-lang_version: 17
-github:
-    enable: true
-    repo_name: confluentinc/parallel-consumer
+lang_version: '17'
 git:
-    enable: true
+  enable: true
 semaphore:
-    enable: true
-    pipeline_enable: false
-    tasks:
-      - name: release
-        scheduled: False
-        branch: "master"
-        pipeline_file: .semaphore/release.yml
-        parameters:
-          - name: PROJECT_VERSION
-            required: True
-            default_value: "X.Y.Z"
-          - name: NEXT_PROJECT_VERSION
-            required: True
-            default_value: "X.Y.Z-SNAPSHOT"
+  enable: true
+  pipeline_enable: false
+  tasks:
+    - name: release
+      branch: master
+      pipeline_file: .semaphore/release.yml
+      parameters:
+        - name: PROJECT_VERSION
+          required: true
+          default_value: X.Y.Z
+        - name: NEXT_PROJECT_VERSION
+          required: true
+          default_value: X.Y.Z-SNAPSHOT
 sonarqube:
   enable: false
